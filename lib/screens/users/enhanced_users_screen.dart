@@ -832,7 +832,7 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
     }
 
     return FloatingActionButton.extended(
-      onPressed: () => Get.dialog(UserFormDialog(role: widget.role)),
+      onPressed: () => Get.dialog(AddUserScreen(role: widget.role)),
       label: Text('Add ${widget.role.capitalize}'),
       icon: Icon(Icons.add),
       backgroundColor: Colors.blue[600],
