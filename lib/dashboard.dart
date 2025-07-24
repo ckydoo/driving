@@ -1,215 +1,219 @@
+// lib/dashboard_updated.dart
 import 'package:driving/controllers/billing_controller.dart';
 import 'package:driving/controllers/user_controller.dart';
-import 'package:driving/reports/course.dart';
-import 'package:driving/screens/billing/billing_screen.dart';
-import 'package:driving/screens/course/course_screen.dart';
-import 'package:driving/screens/fleet/fleet_screen.dart';
-import 'package:driving/screens/schedule/schedule_screen.dart';
-import 'package:driving/screens/users/users_screen.dart';
+import 'package:driving/widgets/main_layout.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
-class DashboardScreen extends StatelessWidget {
-  const DashboardScreen({Key? key}) : super(key: key);
+class UpdatedDashboardScreen extends StatelessWidget {
+  const UpdatedDashboardScreen({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return CompleteMainLayout();
+  }
+}
+
+class DashboardContent extends StatelessWidget {
+  const DashboardContent({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     final userController = Get.find<UserController>();
     final billingController = Get.find<BillingController>();
 
-    return Scaffold(
-      body: Row(
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Left Sidebar
-          Container(
-            width: 250,
-            color: Colors.blueGrey[900],
-            child: Column(
+          // Welcome Section
+          _buildWelcomeSection(),
+          const SizedBox(height: 24),
+
+          // Statistics Cards
+          Obx(() {
+            final totalStudents = userController.users
+                .where((user) => user.role == 'student')
+                .length;
+            final totalIncome = billingController.invoices
+                .where((invoice) => invoice.status == 'paid')
+                .fold<double>(0, (sum, invoice) => sum + invoice.amountPaid);
+            final unpaidInvoices = billingController.invoices
+                .fold<double>(0, (sum, invoice) => sum + invoice.balance);
+
+            return Row(
               children: [
-                // Scrollable sidebar items
                 Expanded(
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Text(
-                            'DRIVING SCHOOL',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        Divider(color: Colors.white54),
-                        _buildSidebarItem(Icons.dashboard, 'Dashboard', () {}),
-                        _buildSidebarItem(Icons.book, 'Courses', () {
-                          Get.to(() => CourseScreen());
-                        }),
-                        _buildSidebarItem(Icons.people, 'Students', () {
-                          Get.to(() => UsersScreen(role: 'student'));
-                        }),
-                        _buildSidebarItem(Icons.people, 'Instructors', () {
-                          Get.to(() => UsersScreen(role: 'instructor'));
-                        }),
-                        _buildSidebarItem(Icons.car_crash, 'Vehicles', () {
-                          Get.to(() => FleetScreen());
-                        }),
-                        _buildSidebarItem(
-                            Icons.attach_money, 'Payments & Invoices', () {
-                          Get.to(() => BillingScreen());
-                        }),
-                        _buildSidebarItem(Icons.schedule, 'Bookings', () {
-                          Get.to(() => ScheduleScreen());
-                        }),
-                        _buildSidebarItem(Icons.people, 'Users', () {
-                          Get.to(() => UsersScreen(role: 'admin'));
-                        }),
-                        _buildReportsDropdown(),
-                        _buildSidebarItem(Icons.settings, 'Settings', () {}),
-                      ],
-                    ),
+                  child: _buildStatCard(
+                    'Total Students',
+                    '$totalStudents',
+                    Icons.school,
+                    Colors.blue,
                   ),
                 ),
-                // Version text at the bottom
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Text(
-                    'v1.0.0',
-                    style: TextStyle(
-                      color: Colors.white54,
-                      fontSize: 12,
-                    ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _buildStatCard(
+                    'Total Income',
+                    '\$${totalIncome.toStringAsFixed(2)}',
+                    Icons.attach_money,
+                    Colors.green,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _buildStatCard(
+                    'Unpaid Amount',
+                    '\$${unpaidInvoices.toStringAsFixed(2)}',
+                    Icons.payment,
+                    Colors.orange,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _buildStatCard(
+                    'Active Instructors',
+                    '${userController.users.where((user) => user.role == 'instructor' && user.status == 'Active').length}',
+                    Icons.person,
+                    Colors.purple,
+                  ),
+                ),
+              ],
+            );
+          }),
+
+          const SizedBox(height: 32),
+
+          // Quick Actions Section
+          _buildQuickActionsSection(),
+
+          const SizedBox(height: 32),
+
+          // Charts or Additional Reports
+          Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: _buildRecentActivitiesCard(),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                flex: 1,
+                child: _buildQuickStatsCard(),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWelcomeSection() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.blue[600]!, Colors.blue[800]!],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Welcome back!',
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Here\'s what\'s happening with your driving school today.',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.white.withOpacity(0.9),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  onPressed: () {},
+                  icon: Icon(Icons.analytics),
+                  label: Text('View Analytics'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.blue[800],
+                    padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                   ),
                 ),
               ],
             ),
           ),
-          // Main Content Area
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Dashboard',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  SizedBox(height: 16),
-                  // Statistics Cards - Now using Obx to update dynamically
-                  Obx(() {
-                    // Calculate data here
-                    final totalStudents = userController.users
-                        .where((user) => user.role == 'student')
-                        .length;
-                    final totalIncome = billingController.invoices
-                        .where((invoice) =>
-                            invoice.status == 'paid') // Check status here
-                        .fold<double>(
-                            0, (sum, invoice) => sum + (invoice.amountPaid));
-                    final unpaidInvoices = billingController.invoices
-                        // We now calculate based on the balance directly
-                        .fold<double>(
-                            0, (sum, invoice) => sum + invoice.balance);
+          Icon(
+            Icons.school,
+            size: 80,
+            color: Colors.white.withOpacity(0.3),
+          ),
+        ],
+      ),
+    );
+  }
 
-                    return Row(
-                      children: [
-                        _buildStatCard(
-                            'Total Students', '$totalStudents', Colors.blue),
-                        SizedBox(width: 16),
-                        _buildStatCard(
-                            'Income',
-                            '\$${totalIncome.toStringAsFixed(2)}',
-                            Colors.green),
-                        SizedBox(width: 16),
-                        _buildStatCard(
-                            'Unpaid Invoices',
-                            '\$${unpaidInvoices.toStringAsFixed(2)}',
-                            Colors.orange),
-                      ],
-                    );
-                  }),
-                  SizedBox(height: 32),
-                  // Charts or Additional Reports
-                  Expanded(
-                    child: Row(
-                      children: [
-                        Expanded(
-                          flex: 2,
-                          child: Card(
-                            child: Padding(
-                              padding: const EdgeInsets.all(16.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Student Growth',
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  SizedBox(height: 16),
-                                  // Placeholder for a chart
-                                  Container(
-                                    height: 200,
-                                    color: Colors.grey[200],
-                                    child: Center(
-                                      child: Text(
-                                        'Chart Placeholder',
-                                        style: TextStyle(color: Colors.grey),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        SizedBox(width: 16),
-                        Expanded(
-                          flex: 1,
-                          child: Card(
-                            child: Padding(
-                              padding: const EdgeInsets.all(16.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Class Attendance',
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  SizedBox(height: 16),
-                                  // Placeholder for a chart
-                                  Container(
-                                    height: 200,
-                                    color: Colors.grey[200],
-                                    child: Center(
-                                      child: Text(
-                                        'Chart Placeholder',
-                                        style: TextStyle(color: Colors.grey),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+  Widget _buildStatCard(
+      String title, String value, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            spreadRadius: 1,
+            blurRadius: 3,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, color: color, size: 24),
               ),
+              Icon(Icons.trending_up, color: Colors.green, size: 16),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[800],
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey[600],
             ),
           ),
         ],
@@ -217,67 +221,298 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
-  // Helper method to build sidebar items
-  Widget _buildSidebarItem(IconData icon, String title, VoidCallback onTap) {
-    return ListTile(
-      leading: Icon(icon, color: Colors.white),
-      title: Text(
-        title,
-        style: TextStyle(color: Colors.white),
-      ),
-      onTap: onTap,
+  Widget _buildQuickActionsSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Quick Actions',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: Colors.grey[800],
+          ),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: _buildQuickActionCard(
+                'Add Student',
+                'Register a new student',
+                Icons.person_add,
+                Colors.blue,
+                () {},
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildQuickActionCard(
+                'Schedule Lesson',
+                'Book a new lesson',
+                Icons.calendar_today,
+                Colors.green,
+                () {},
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildQuickActionCard(
+                'Create Invoice',
+                'Generate new invoice',
+                Icons.receipt,
+                Colors.orange,
+                () {},
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildQuickActionCard(
+                'Add Vehicle',
+                'Register new vehicle',
+                Icons.directions_car,
+                Colors.purple,
+                () {},
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
-  // Helper method to build statistic cards
-  Widget _buildStatCard(String title, String value, Color color) {
-    return Expanded(
-      child: Card(
-        color: color,
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
+  Widget _buildQuickActionCard(
+    String title,
+    String subtitle,
+    IconData icon,
+    Color color,
+    VoidCallback onTap,
+  ) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            spreadRadius: 1,
+            blurRadius: 3,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                Container(
+                  padding: EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icon, color: color, size: 24),
                 ),
-              ),
-              SizedBox(height: 8),
-              Text(
-                value,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
+                const SizedBox(height: 12),
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey[800],
+                  ),
+                  textAlign: TextAlign.center,
                 ),
-              ),
-            ],
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[600],
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildReportsDropdown() {
-    return ExpansionTile(
-      leading: const Icon(Icons.bar_chart, color: Colors.white),
-      title: const Text(
-        'Reports',
-        style: TextStyle(color: Colors.white),
+  Widget _buildRecentActivitiesCard() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            spreadRadius: 1,
+            blurRadius: 3,
+            offset: Offset(0, 2),
+          ),
+        ],
       ),
-      children: <Widget>[
-        _buildSidebarItem(Icons.person, 'User Reports', () {}),
-        _buildSidebarItem(Icons.book, 'Course Reports', () {
-          Get.to(() => CourseReportsScreen());
-        }),
-        _buildSidebarItem(Icons.calendar_today, 'Schedule Reports', () {}),
-        _buildSidebarItem(Icons.attach_money, 'Billing Reports', () {}),
-        _buildSidebarItem(Icons.directions_car, 'Fleet Reports', () {}),
-      ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Recent Activities',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[800],
+            ),
+          ),
+          const SizedBox(height: 16),
+          _buildActivityItem(
+            'New student John Doe registered',
+            '2 hours ago',
+            Icons.person_add,
+            Colors.blue,
+          ),
+          _buildActivityItem(
+            'Lesson completed by Sarah Smith',
+            '4 hours ago',
+            Icons.check_circle,
+            Colors.green,
+          ),
+          _buildActivityItem(
+            'Payment received from Mike Johnson',
+            '6 hours ago',
+            Icons.payment,
+            Colors.orange,
+          ),
+          _buildActivityItem(
+            'New vehicle added to fleet',
+            '1 day ago',
+            Icons.directions_car,
+            Colors.purple,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActivityItem(
+    String title,
+    String time,
+    IconData icon,
+    Color color,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Container(
+            padding: EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: color, size: 16),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey[800],
+                  ),
+                ),
+                Text(
+                  time,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickStatsCard() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            spreadRadius: 1,
+            blurRadius: 3,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Today\'s Overview',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[800],
+            ),
+          ),
+          const SizedBox(height: 16),
+          _buildStatRow('Scheduled Lessons', '12', Colors.blue),
+          _buildStatRow('Completed Lessons', '8', Colors.green),
+          _buildStatRow('Pending Payments', '5', Colors.orange),
+          _buildStatRow('Active Instructors', '6', Colors.purple),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatRow(String label, String value, Color color) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey[700],
+            ),
+          ),
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

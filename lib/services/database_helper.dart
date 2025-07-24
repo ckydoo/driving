@@ -258,6 +258,180 @@ class DatabaseHelper {
         FOREIGN KEY (studentId) REFERENCES users(id)
     )
     ''');
+
+    // **IMPORTANT: Create default admin user immediately after table creation**
+    await _createDefaultAdminUser(db);
+
+    print('Database tables created and default admin user inserted');
+  }
+
+// Create default admin user - called during database creation
+  Future<void> _createDefaultAdminUser(Database db) async {
+    try {
+      // Check if any admin users exist
+      final adminCount = await db.rawQuery(
+        'SELECT COUNT(*) as count FROM users WHERE LOWER(role) = ?',
+        ['admin'],
+      );
+
+      final count = adminCount.first['count'] as int;
+
+      if (count == 0) {
+        // Hash the password: admin123
+        const hashedPassword =
+            'c7ad44cbad762a5da0a452f9e854fdc1e0e7a52a38015f23f3eab1d80b931dd472634dfac71cd34ebc35d16ab7fb8a90c81f975113d6c7538dc69dd8de9077ec';
+
+        await db.insert('users', {
+          'fname': 'System',
+          'lname': 'Administrator',
+          'email': 'admin@drivingschool.com',
+          'password': hashedPassword,
+          'gender': 'Male',
+          'phone': '+1234567890',
+          'address': '123 Main Street',
+          'date_of_birth': '1980-01-01',
+          'role': 'admin',
+          'status': 'Active',
+          'idnumber': 'ADMIN001',
+          'created_at': DateTime.now().toIso8601String(),
+        });
+
+        print('✅ Default admin user created successfully');
+        print('📧 Email: admin@drivingschool.com');
+        print('🔑 Password: admin123');
+
+        // Also create a sample instructor for testing
+        await db.insert('users', {
+          'fname': 'John',
+          'lname': 'Instructor',
+          'email': 'instructor@drivingschool.com',
+          'password': hashedPassword, // Same password: admin123
+          'gender': 'Male',
+          'phone': '+1234567891',
+          'address': '456 Oak Street',
+          'date_of_birth': '1985-05-15',
+          'role': 'instructor',
+          'status': 'Active',
+          'idnumber': 'INST001',
+          'created_at': DateTime.now().toIso8601String(),
+        });
+
+        // Create a sample student for testing
+        await db.insert('users', {
+          'fname': 'Jane',
+          'lname': 'Student',
+          'email': 'student@drivingschool.com',
+          'password': hashedPassword, // Same password: admin123
+          'gender': 'Female',
+          'phone': '+1234567892',
+          'address': '789 Pine Street',
+          'date_of_birth': '1995-03-20',
+          'role': 'student',
+          'status': 'Active',
+          'idnumber': 'STU001',
+          'created_at': DateTime.now().toIso8601String(),
+        });
+
+        print('✅ Sample users created for testing');
+      } else {
+        print('ℹ️ Admin user already exists');
+      }
+    } catch (e) {
+      print('❌ Error creating default admin user: $e');
+    }
+  }
+
+// Add this method to manually create users if needed
+  Future<void> ensureDefaultUsersExist() async {
+    final db = await database;
+    await _createDefaultAdminUser(db);
+  }
+
+  Future<Map<String, dynamic>?> getUserByEmail(String email) async {
+    final db = await database;
+    final results = await db.query(
+      'users',
+      where: 'LOWER(email) = ?',
+      whereArgs: [email.toLowerCase()],
+      limit: 1,
+    );
+
+    if (results.isNotEmpty) {
+      return results.first;
+    }
+    return null;
+  }
+
+  Future<Map<String, dynamic>?> getUserById(int id) async {
+    final db = await database;
+    final results = await db.query(
+      'users',
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+
+    if (results.isNotEmpty) {
+      return results.first;
+    }
+    return null;
+  }
+
+  Future<bool> emailExists(String email) async {
+    final user = await getUserByEmail(email);
+    return user != null;
+  }
+
+  Future<void> updateUserPassword(int userId, String hashedPassword) async {
+    final db = await database;
+    await db.update(
+      'users',
+      {'password': hashedPassword},
+      where: 'id = ?',
+      whereArgs: [userId],
+    );
+  }
+
+  Future<void> updateUserLastLogin(int userId) async {
+    final db = await database;
+    await db.update(
+      'users',
+      {'last_login': DateTime.now().toIso8601String()},
+      where: 'id = ?',
+      whereArgs: [userId],
+    );
+  }
+
+// Create default admin user if none exists
+  Future<void> createDefaultAdmin() async {
+    final db = await database;
+    final adminCount = await db.rawQuery(
+      'SELECT COUNT(*) as count FROM users WHERE LOWER(role) = ?',
+      ['admin'],
+    );
+
+    final count = adminCount.first['count'] as int;
+
+    if (count == 0) {
+      // Create default admin user
+      await db.insert('users', {
+        'fname': 'System',
+        'lname': 'Administrator',
+        'email': 'admin@drivingschool.com',
+        'password':
+            'c7ad44cbad762a5da0a452f9e854fdc1e0e7a52a38015f23f3eab1d80b931dd472634dfac71cd34ebc35d16ab7fb8a90c81f975113d6c7538dc69dd8de9077ec', // admin123 hashed
+        'gender': 'Male',
+        'phone': '+1234567890',
+        'address': '123 Main Street',
+        'date_of_birth': '1980-01-01',
+        'role': 'admin',
+        'status': 'Active',
+        'idnumber': 'ADMIN001',
+        'created_at': DateTime.now().toIso8601String(),
+      });
+
+      print('Default admin user created: admin@drivingschool.com / admin123');
+    }
   }
 
   // ==================== CRUD Methods for Each Table ====================

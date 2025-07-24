@@ -50,6 +50,8 @@ dependencies:
   csv: ^5.0.1
   table_calendar: ^3.0.8
   flutter_local_notifications: ^18.0.1
+  crypto: ^3.0.3  # Added for password hashing
+
 
 
 
