@@ -60,7 +60,10 @@ class StudentInvoiceScreen extends StatelessWidget {
           itemCount: studentInvoices.length,
           itemBuilder: (context, index) {
             final invoice = studentInvoices[index];
-            return InvoiceCard(invoice: invoice);
+            return InvoiceCard(
+              invoice: invoice,
+              student: student,
+            );
           },
         );
       }),
@@ -70,8 +73,13 @@ class StudentInvoiceScreen extends StatelessWidget {
 
 class InvoiceCard extends StatelessWidget {
   final Invoice invoice;
+  final User student;
 
-  const InvoiceCard({Key? key, required this.invoice}) : super(key: key);
+  const InvoiceCard({
+    Key? key,
+    required this.invoice,
+    required this.student,
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -140,8 +148,10 @@ class InvoiceCard extends StatelessWidget {
                       children: [
                         if (invoice.balance > 0)
                           ElevatedButton(
-                            onPressed: () =>
-                                Get.dialog(PaymentDialog(invoice: invoice)),
+                            onPressed: () => Get.dialog(PaymentDialog(
+                              invoice: invoice,
+                              studentName: '${student.fname} ${student.lname}',
+                            )),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.blue.shade700,
                               foregroundColor: Colors.white,

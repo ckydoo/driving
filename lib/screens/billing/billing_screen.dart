@@ -366,28 +366,25 @@ class _BillingScreenState extends State<BillingScreen> {
               if (studentInvoices.any((invoice) => invoice.balance > 0))
                 Expanded(
                   flex: 2,
-                  child: Expanded(
-                    flex: 2,
-                    child: ElevatedButton(
-                      onPressed: () =>
-                          _showPaymentDialog(context, studentInvoices),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors
-                            .blue.shade700, // A prominent background color
-                        foregroundColor: Colors.white, // Text color
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 12), // Padding
-                        textStyle: const TextStyle(
-                            fontWeight: FontWeight.w500), // Bold text
-                        shape: RoundedRectangleBorder(
-                          // Rounded corners
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        elevation: 5, // A subtle shadow
-                        shadowColor: Colors.blue.shade900, // Shadow color
+                  child: ElevatedButton(
+                    onPressed: () =>
+                        _showPaymentDialog(context, studentInvoices, student),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor:
+                          Colors.blue.shade700, // A prominent background color
+                      foregroundColor: Colors.white, // Text color
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12), // Padding
+                      textStyle: const TextStyle(
+                          fontWeight: FontWeight.w500), // Bold text
+                      shape: RoundedRectangleBorder(
+                        // Rounded corners
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      child: const Text('Add Payment'),
+                      elevation: 5, // A subtle shadow
+                      shadowColor: Colors.blue.shade900, // Shadow color
                     ),
+                    child: const Text('Add Payment'),
                   ),
                 )
             ],
@@ -397,13 +394,15 @@ class _BillingScreenState extends State<BillingScreen> {
     );
   }
 
-  void _showPaymentDialog(BuildContext context, List<Invoice> studentInvoices) {
+  void _showPaymentDialog(
+      BuildContext context, List<Invoice> studentInvoices, User student) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return PaymentDialog(
-            invoice:
-                studentInvoices.first); // Assuming we pay the first invoice
+            invoice: studentInvoices.first,
+            studentName:
+                '${student.fname} ${student.lname}'); // Assuming we pay the first invoice
       },
     );
   }

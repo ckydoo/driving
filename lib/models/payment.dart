@@ -13,6 +13,7 @@ class Payment {
     required this.amount,
     required this.method,
     required this.paymentDate,
+    String? notes,
   });
 
   factory Payment.fromJson(Map<String, dynamic> json) => Payment(
