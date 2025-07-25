@@ -1,50 +1,66 @@
+// lib/screens/schedule/schedule_screen.dart
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:intl/intl.dart';
 import 'package:table_calendar/table_calendar.dart';
+import 'package:intl/intl.dart';
+import '../../controllers/schedule_controller.dart';
+import '../../controllers/user_controller.dart';
+import '../../controllers/course_controller.dart';
+import '../../controllers/fleet_controller.dart';
+import '../../models/schedule.dart';
+import '../../models/user.dart';
+import '../../models/course.dart';
+import '../../models/fleet.dart';
 
 class ScheduleScreen extends StatefulWidget {
   @override
   _ScheduleScreenState createState() => _ScheduleScreenState();
 }
 
-class _ScheduleScreenState extends State<ScheduleScreen>
-    with TickerProviderStateMixin {
-  late final TabController _tabController;
-  final Rx<DateTime> _focusedDay = DateTime.now().obs;
-  final Rx<DateTime?> _selectedDay = Rx<DateTime?>(null);
-  String _currentView = 'month'; // month, week, day
+class _ScheduleScreenState extends State<ScheduleScreen> {
+  // Controllers
+  final ScheduleController scheduleController = Get.find<ScheduleController>();
+  final UserController userController = Get.find<UserController>();
+  final CourseController courseController = Get.find<CourseController>();
+  final FleetController fleetController = Get.find<FleetController>();
 
-  // Filter variables
+  // Calendar state
+  final ValueNotifier<DateTime> _focusedDay = ValueNotifier(DateTime.now());
+  final ValueNotifier<DateTime> _selectedDay = ValueNotifier(DateTime.now());
+  String _currentView = 'month';
+
+  // Filter state
   String? _selectedInstructorFilter;
   String? _selectedStudentFilter;
   String? _selectedStatusFilter;
-  bool _showFilters = false;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    // Ensure data is loaded
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadAllData();
+    });
+  }
+
+  Future<void> _loadAllData() async {
+    await scheduleController.fetchSchedules();
+    await userController.fetchUsers();
+    await courseController.fetchCourses();
+    await fleetController.fetchFleet();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[50],
-      appBar: _buildAppBar(),
       body: Column(
         children: [
-          _buildViewToggle(),
-          if (_showFilters) _buildFilterSection(),
+          _buildHeader(),
+          _buildFilters(),
           Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildCalendarView(),
-                _buildListView(),
-                _buildAnalyticsView(),
-              ],
-            ),
+            child: _currentView == 'list'
+                ? _buildListView()
+                : _buildCalendarView(),
           ),
         ],
       ),
@@ -52,520 +68,402 @@ class _ScheduleScreenState extends State<ScheduleScreen>
     );
   }
 
-  PreferredSizeWidget _buildAppBar() {
-    return AppBar(
-      elevation: 0,
-      backgroundColor: Colors.white,
-      foregroundColor: Colors.black87,
-      title: Text(
-        'Schedule Management',
-        style: TextStyle(fontWeight: FontWeight.w600),
-      ),
-      actions: [
-        IconButton(
-          icon: Icon(
-              _showFilters ? Icons.filter_list : Icons.filter_list_outlined),
-          onPressed: () => setState(() => _showFilters = !_showFilters),
-          tooltip: 'Toggle Filters',
-        ),
-        IconButton(
-          icon: Icon(Icons.refresh),
-          onPressed: _refreshData,
-          tooltip: 'Refresh',
-        ),
-        PopupMenuButton<String>(
-          onSelected: _handleMenuAction,
-          itemBuilder: (context) => [
-            PopupMenuItem(value: 'export', child: Text('Export Schedule')),
-            PopupMenuItem(value: 'settings', child: Text('Settings')),
-            PopupMenuItem(value: 'bulk_actions', child: Text('Bulk Actions')),
-          ],
-        ),
-      ],
-      bottom: TabBar(
-        controller: _tabController,
-        indicatorColor: Theme.of(context).primaryColor,
-        labelColor: Theme.of(context).primaryColor,
-        unselectedLabelColor: Colors.grey,
-        tabs: [
-          Tab(icon: Icon(Icons.calendar_month), text: 'Calendar'),
-          Tab(icon: Icon(Icons.list), text: 'List'),
-          Tab(icon: Icon(Icons.analytics), text: 'Analytics'),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildViewToggle() {
+  Widget _buildHeader() {
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.grey.shade200,
             blurRadius: 4,
-            offset: Offset(0, 2),
+            spreadRadius: 1,
           ),
         ],
       ),
       child: Row(
         children: [
-          Text('View: ', style: TextStyle(fontWeight: FontWeight.w500)),
-          SegmentedButton<String>(
-            segments: [
-              ButtonSegment(value: 'month', label: Text('Month')),
-              ButtonSegment(value: 'week', label: Text('Week')),
-              ButtonSegment(value: 'day', label: Text('Day')),
-            ],
-            selected: {_currentView},
-            onSelectionChanged: (Set<String> newSelection) {
-              setState(() => _currentView = newSelection.first);
-            },
+          IconButton(
+            onPressed: _previousPeriod,
+            icon: Icon(Icons.chevron_left),
           ),
-          Spacer(),
-          _buildQuickActions(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildQuickActions() {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        IconButton(
-          icon: Icon(Icons.today, size: 20),
-          onPressed: () => _focusedDay.value = DateTime.now(),
-          tooltip: 'Go to Today',
-        ),
-        IconButton(
-          icon: Icon(Icons.search, size: 20),
-          onPressed: _showSearchDialog,
-          tooltip: 'Search',
-        ),
-      ],
-    );
-  }
-
-  Widget _buildFilterSection() {
-    return AnimatedContainer(
-      duration: Duration(milliseconds: 300),
-      padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.blue[50],
-        border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Filters',
-            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
-          ),
-          SizedBox(height: 12),
-          Wrap(
-            spacing: 12,
-            runSpacing: 8,
-            children: [
-              _buildFilterChip('Instructor', _selectedInstructorFilter,
-                  (value) => setState(() => _selectedInstructorFilter = value)),
-              _buildFilterChip('Student', _selectedStudentFilter,
-                  (value) => setState(() => _selectedStudentFilter = value)),
-              _buildFilterChip('Status', _selectedStatusFilter,
-                  (value) => setState(() => _selectedStatusFilter = value)),
-            ],
-          ),
-          if (_hasActiveFilters()) ...[
-            SizedBox(height: 8),
-            Row(
-              children: [
-                TextButton.icon(
-                  onPressed: _clearAllFilters,
-                  icon: Icon(Icons.clear, size: 16),
-                  label: Text('Clear All'),
+          Expanded(
+            child: Center(
+              child: Text(
+                _getHeaderText(),
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
                 ),
-                Spacer(),
-                Text(
-                  '${_getFilteredCount()} lessons found',
-                  style: TextStyle(color: Colors.grey[600]),
-                ),
-              ],
+              ),
             ),
-          ],
+          ),
+          IconButton(
+            onPressed: _nextPeriod,
+            icon: Icon(Icons.chevron_right),
+          ),
+          IconButton(
+            onPressed: _showDatePicker,
+            icon: Icon(Icons.today),
+          ),
+          PopupMenuButton<String>(
+            icon: Icon(Icons.view_module),
+            onSelected: (value) {
+              setState(() {
+                _currentView = value;
+              });
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(value: 'month', child: Text('Month View')),
+              PopupMenuItem(value: 'week', child: Text('Week View')),
+              PopupMenuItem(value: 'day', child: Text('Day View')),
+              PopupMenuItem(value: 'list', child: Text('List View')),
+            ],
+          ),
+          IconButton(
+            onPressed: _refreshData,
+            icon: Icon(Icons.refresh),
+          ),
+          IconButton(
+            onPressed: _showSearchDialog,
+            icon: Icon(Icons.search),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildFilterChip(
-      String label, String? value, Function(String?) onChanged) {
-    return FilterChip(
-      label: Text(value ?? label),
-      selected: value != null,
-      onSelected: (selected) {
-        if (selected) {
-          _showFilterOptions(label, onChanged);
-        } else {
-          onChanged(null);
-        }
-      },
-      avatar: value != null ? Icon(Icons.check, size: 16) : null,
+  Widget _buildFilters() {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildFilterDropdown(
+              'Instructor',
+              _selectedInstructorFilter,
+              _getInstructorOptions(),
+              (value) => setState(() => _selectedInstructorFilter = value),
+            ),
+          ),
+          SizedBox(width: 8),
+          Expanded(
+            child: _buildFilterDropdown(
+              'Student',
+              _selectedStudentFilter,
+              _getStudentOptions(),
+              (value) => setState(() => _selectedStudentFilter = value),
+            ),
+          ),
+          SizedBox(width: 8),
+          Expanded(
+            child: _buildFilterDropdown(
+              'Status',
+              _selectedStatusFilter,
+              ['Scheduled', 'Completed', 'Cancelled', 'In Progress'],
+              (value) => setState(() => _selectedStatusFilter = value),
+            ),
+          ),
+          if (_hasActiveFilters())
+            TextButton(
+              onPressed: _clearFilters,
+              child: Text('Clear (${_getFilteredCount()}/${_getTotalCount()})'),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterDropdown(
+    String label,
+    String? value,
+    List<String> options,
+    Function(String?) onChanged,
+  ) {
+    return DropdownButtonFormField<String>(
+      decoration: InputDecoration(
+        labelText: label,
+        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+      value: value,
+      items: [
+        DropdownMenuItem<String>(value: null, child: Text('All')),
+        ...options.map((option) => DropdownMenuItem(
+              value: option,
+              child: Text(option),
+            )),
+      ],
+      onChanged: onChanged,
     );
   }
 
   Widget _buildCalendarView() {
-    return Container(
-      color: Colors.white,
-      child: Column(
+    return Obx(() {
+      if (scheduleController.isLoading.value) {
+        return Center(child: CircularProgressIndicator());
+      }
+
+      return Column(
         children: [
-          _buildCalendarHeader(),
-          Expanded(
-            child: TableCalendar(
-              firstDay: DateTime.utc(2020),
-              lastDay: DateTime.utc(2030),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border(
+                bottom: BorderSide(color: Colors.grey.shade200),
+              ),
+            ),
+            child: TableCalendar<Schedule>(
+              firstDay: DateTime.utc(2020, 1, 1),
+              lastDay: DateTime.utc(2030, 12, 31),
               focusedDay: _focusedDay.value,
-              selectedDayPredicate: (day) => isSameDay(_selectedDay.value, day),
               calendarFormat: _getCalendarFormat(),
               eventLoader: _getEventsForDay,
               startingDayOfWeek: StartingDayOfWeek.monday,
               calendarStyle: CalendarStyle(
                 outsideDaysVisible: false,
-                weekendTextStyle: TextStyle(color: Colors.red[400]),
-                holidayTextStyle: TextStyle(color: Colors.red[400]),
-                selectedDecoration: BoxDecoration(
-                  color: Theme.of(context).primaryColor,
-                  shape: BoxShape.circle,
-                ),
-                todayDecoration: BoxDecoration(
-                  color: Theme.of(context).primaryColor.withOpacity(0.3),
-                  shape: BoxShape.circle,
-                ),
+                weekendTextStyle: TextStyle(color: Colors.red.shade400),
+                holidayTextStyle: TextStyle(color: Colors.red.shade400),
                 markerDecoration: BoxDecoration(
-                  color: Colors.orange,
+                  color: Colors.blue,
                   shape: BoxShape.circle,
                 ),
-                markersMaxCount: 3,
-                markersAlignment: Alignment.bottomCenter,
-              ),
-              headerStyle: HeaderStyle(
-                formatButtonVisible: false,
-                titleCentered: true,
-                leftChevronVisible: false,
-                rightChevronVisible: false,
               ),
               onDaySelected: _onDaySelected,
-              onPageChanged: (focusedDay) => _focusedDay.value = focusedDay,
+              onFormatChanged: (format) {
+                setState(() {
+                  switch (format) {
+                    case CalendarFormat.month:
+                      _currentView = 'month';
+                      break;
+                    case CalendarFormat.twoWeeks:
+                    case CalendarFormat.week:
+                      _currentView = 'week';
+                      break;
+                  }
+                });
+              },
+              onPageChanged: (focusedDay) {
+                _focusedDay.value = focusedDay;
+              },
             ),
           ),
-          if (_selectedDay.value != null) _buildDaySchedulePreview(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCalendarHeader() {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          IconButton(
-            icon: Icon(Icons.chevron_left),
-            onPressed: _previousPeriod,
-          ),
-          GestureDetector(
-            onTap: _showDatePicker,
-            child: Container(
-              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.grey[100],
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                _getHeaderText(),
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ),
-          IconButton(
-            icon: Icon(Icons.chevron_right),
-            onPressed: _nextPeriod,
+          Expanded(
+            child: _buildDayScheduleList(),
           ),
         ],
-      ),
-    );
+      );
+    });
   }
 
-  Widget _buildDaySchedulePreview() {
-    final events = _getEventsForDay(_selectedDay.value!);
+  Widget _buildDayScheduleList() {
+    return Obx(() {
+      final dayEvents = _getEventsForDay(_selectedDay.value);
 
-    return Container(
-      height: 200,
-      padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.grey[50],
-        border: Border(top: BorderSide(color: Colors.grey[200]!)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+      if (dayEvents.isEmpty) {
+        return Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
+              Icon(Icons.event_busy, size: 60, color: Colors.grey.shade400),
+              SizedBox(height: 16),
               Text(
-                DateFormat('EEEE, MMMM d').format(_selectedDay.value!),
-                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
-              ),
-              Spacer(),
-              TextButton(
-                onPressed: () => _openDayView(_selectedDay.value!),
-                child: Text('View All'),
+                'No lessons scheduled for ${DateFormat('MMM d, yyyy').format(_selectedDay.value)}',
+                style: TextStyle(color: Colors.grey.shade600),
               ),
             ],
           ),
-          SizedBox(height: 8),
-          Expanded(
-            child: events.isEmpty
-                ? Center(
-                    child: Text(
-                      'No lessons scheduled',
-                      style: TextStyle(color: Colors.grey[600]),
-                    ),
-                  )
-                : ListView.builder(
-                    itemCount: events.length,
-                    itemBuilder: (context, index) =>
-                        _buildScheduleCard(events[index]),
-                  ),
-          ),
-        ],
-      ),
-    );
+        );
+      }
+
+      return ListView.builder(
+        padding: EdgeInsets.all(16),
+        itemCount: dayEvents.length,
+        itemBuilder: (context, index) {
+          return _buildScheduleCard(dayEvents[index]);
+        },
+      );
+    });
   }
 
   Widget _buildListView() {
-    return Container(
-      color: Colors.white,
-      child: Column(
-        children: [
-          _buildListHeader(),
-          Expanded(
-            child: _buildScheduleList(),
-          ),
-        ],
-      ),
-    );
-  }
+    return Obx(() {
+      if (scheduleController.isLoading.value) {
+        return Center(child: CircularProgressIndicator());
+      }
 
-  Widget _buildListHeader() {
-    return Container(
-      padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.grey[50],
-        border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.sort, size: 20),
-          SizedBox(width: 8),
-          Text('Sort by: '),
-          DropdownButton<String>(
-            value: 'date',
-            underline: SizedBox(),
-            items: [
-              DropdownMenuItem(value: 'date', child: Text('Date')),
-              DropdownMenuItem(value: 'instructor', child: Text('Instructor')),
-              DropdownMenuItem(value: 'student', child: Text('Student')),
-              DropdownMenuItem(value: 'status', child: Text('Status')),
-            ],
-            onChanged: (value) {
-              // Handle sort change
-            },
-          ),
-          Spacer(),
-          Text('${_getTotalCount()} total lessons'),
-        ],
-      ),
-    );
-  }
+      final filteredSchedules = _getFilteredSchedules();
 
-  Widget _buildScheduleList() {
-    return ListView.builder(
-      padding: EdgeInsets.all(16),
-      itemCount: 10, // Replace with actual data
-      itemBuilder: (context, index) => _buildEnhancedScheduleCard(index),
-    );
-  }
-
-  Widget _buildEnhancedScheduleCard(int index) {
-    return Card(
-      margin: EdgeInsets.only(bottom: 12),
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: InkWell(
-        onTap: () => _openScheduleDetails(index),
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: EdgeInsets.all(16),
+      if (filteredSchedules.isEmpty) {
+        return Center(
           child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.event_busy, size: 60, color: Colors.grey.shade400),
+              SizedBox(height: 16),
+              Text(
+                'No schedules found matching your filters',
+                style: TextStyle(color: Colors.grey.shade600),
+              ),
+            ],
+          ),
+        );
+      }
+
+      // Group schedules by date
+      final groupedSchedules = <DateTime, List<Schedule>>{};
+      for (final schedule in filteredSchedules) {
+        final date = DateTime(
+          schedule.start.year,
+          schedule.start.month,
+          schedule.start.day,
+        );
+        groupedSchedules.putIfAbsent(date, () => []).add(schedule);
+      }
+
+      final sortedDates = groupedSchedules.keys.toList()..sort();
+
+      return ListView.builder(
+        padding: EdgeInsets.all(16),
+        itemCount: sortedDates.length,
+        itemBuilder: (context, index) {
+          final date = sortedDates[index];
+          final daySchedules = groupedSchedules[date]!;
+
+          return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  CircleAvatar(
-                    radius: 20,
-                    backgroundColor: Colors.blue[100],
-                    child: Text('S${index + 1}'),
-                  ),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Student Name ${index + 1}',
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        Text(
-                          'with Instructor Name',
-                          style:
-                              TextStyle(color: Colors.grey[600], fontSize: 12),
-                        ),
-                      ],
+              Container(
+                padding: EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.calendar_today, size: 16, color: Colors.blue),
+                    SizedBox(width: 8),
+                    Text(
+                      DateFormat('EEEE, MMMM d, yyyy').format(date),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue.shade700,
+                      ),
                     ),
-                  ),
-                  _buildStatusBadge('Scheduled'),
-                ],
-              ),
-              SizedBox(height: 12),
-              Row(
-                children: [
-                  _buildInfoChip(Icons.access_time, '10:00 - 11:00'),
-                  SizedBox(width: 8),
-                  _buildInfoChip(Icons.directions_car, 'ABC-123'),
-                  SizedBox(width: 8),
-                  _buildInfoChip(Icons.location_on, 'Practical'),
-                ],
-              ),
-              SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: LinearProgressIndicator(
-                      value: 0.6,
-                      backgroundColor: Colors.grey[200],
-                      valueColor: AlwaysStoppedAnimation(Colors.green),
+                    Spacer(),
+                    Text(
+                      '${daySchedules.length} lesson${daySchedules.length != 1 ? 's' : ''}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue.shade600,
+                      ),
                     ),
-                  ),
-                  SizedBox(width: 8),
-                  Text('6/10 lessons', style: TextStyle(fontSize: 12)),
-                ],
+                  ],
+                ),
               ),
               SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
+              ...daySchedules
+                  .map((schedule) => _buildScheduleCard(schedule))
+                  .toList(),
+              SizedBox(height: 16),
+            ],
+          );
+        },
+      );
+    });
+  }
+
+  Widget _buildScheduleCard(Schedule schedule) {
+    final student = _getStudentById(schedule.studentId);
+    final instructor = _getInstructorById(schedule.instructorId);
+    final course = _getCourseById(schedule.courseId);
+    final vehicle =
+        schedule.carId != null ? _getVehicleById(schedule.carId!) : null;
+
+    return Container(
+      margin: EdgeInsets.only(bottom: 8),
+      padding: EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.shade100,
+            blurRadius: 2,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: InkWell(
+        onTap: () => _showScheduleDetails(schedule),
+        child: Row(
+          children: [
+            Container(
+              width: 4,
+              height: 40,
+              decoration: BoxDecoration(
+                color: _getStatusColor(schedule.status),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  TextButton.icon(
-                    onPressed: () => _editSchedule(index),
-                    icon: Icon(Icons.edit, size: 16),
-                    label: Text('Edit'),
+                  Text(
+                    course?.name ?? 'Unknown Course',
+                    style: TextStyle(fontWeight: FontWeight.w500),
                   ),
-                  TextButton.icon(
-                    onPressed: () => _cancelSchedule(index),
-                    icon: Icon(Icons.cancel, size: 16),
-                    label: Text('Cancel'),
-                    style: TextButton.styleFrom(foregroundColor: Colors.red),
+                  SizedBox(height: 4),
+                  Text(
+                    '${DateFormat('HH:mm').format(schedule.start)} - ${DateFormat('HH:mm').format(schedule.end)}',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  ),
+                  SizedBox(height: 4),
+                  Row(
+                    children: [
+                      _buildInfoChip(
+                          Icons.person, student?.fname ?? 'Unknown Student'),
+                      SizedBox(width: 8),
+                      _buildInfoChip(Icons.school,
+                          instructor?.fname ?? 'Unknown Instructor'),
+                      if (vehicle != null) ...[
+                        SizedBox(width: 8),
+                        _buildInfoChip(Icons.directions_car, vehicle.carPlate),
+                      ],
+                    ],
                   ),
                 ],
               ),
-            ],
-          ),
+            ),
+            Column(
+              children: [
+                _buildStatusBadge(schedule.status),
+                if (schedule.attended)
+                  Container(
+                    margin: EdgeInsets.only(top: 4),
+                    padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      'Attended',
+                      style: TextStyle(
+                        color: Colors.green.shade700,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ],
         ),
       ),
-    );
-  }
-
-  Widget _buildAnalyticsView() {
-    return Container(
-      color: Colors.white,
-      padding: EdgeInsets.all(16),
-      child: Column(
-        children: [
-          _buildAnalyticsCards(),
-          SizedBox(height: 16),
-          _buildAnalyticsChart(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAnalyticsCards() {
-    return Row(
-      children: [
-        Expanded(
-            child: _buildAnalyticsCard('Today', '8', 'Lessons', Colors.blue)),
-        SizedBox(width: 12),
-        Expanded(
-            child: _buildAnalyticsCard(
-                'This Week', '42', 'Lessons', Colors.green)),
-        SizedBox(width: 12),
-        Expanded(
-            child: _buildAnalyticsCard(
-                'Completion', '87%', 'Rate', Colors.orange)),
-      ],
-    );
-  }
-
-  Widget _buildAnalyticsCard(
-      String title, String value, String subtitle, Color color) {
-    return Container(
-      padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
-          SizedBox(height: 4),
-          Text(value,
-              style: TextStyle(
-                  fontSize: 24, fontWeight: FontWeight.bold, color: color)),
-          Text(subtitle,
-              style: TextStyle(color: Colors.grey[600], fontSize: 12)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAnalyticsChart() {
-    return Container(
-      height: 200,
-      padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.grey[50],
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Center(
-        child: Text(
-          'Weekly Schedule Chart\n(Chart implementation would go here)',
-          textAlign: TextAlign.center,
-          style: TextStyle(color: Colors.grey[600]),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFABWithOptions() {
-    return FloatingActionButton.extended(
-      onPressed: _showCreateOptions,
-      icon: Icon(Icons.add),
-      label: Text('New Lesson'),
     );
   }
 
@@ -580,8 +478,11 @@ class _ScheduleScreenState extends State<ScheduleScreen>
       ),
       child: Text(
         status,
-        style:
-            TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w500),
+        style: TextStyle(
+          color: color,
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+        ),
       ),
     );
   }
@@ -598,90 +499,99 @@ class _ScheduleScreenState extends State<ScheduleScreen>
         children: [
           Icon(icon, size: 14, color: Colors.grey[600]),
           SizedBox(width: 4),
-          Text(text, style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+          Text(
+            text.length > 10 ? '${text.substring(0, 10)}...' : text,
+            style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildScheduleCard(dynamic event) {
-    return Container(
-      margin: EdgeInsets.only(bottom: 8),
-      padding: EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey[200]!),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 4,
-            height: 40,
-            decoration: BoxDecoration(
-              color: Colors.blue,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Mock Lesson',
-                    style: TextStyle(fontWeight: FontWeight.w500)),
-                Text('10:00 - 11:00',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 12)),
-              ],
-            ),
-          ),
-          _buildStatusBadge('Scheduled'),
-        ],
-      ),
+  Widget _buildFABWithOptions() {
+    return FloatingActionButton.extended(
+      onPressed: _showCreateOptions,
+      icon: Icon(Icons.add),
+      label: Text('New Lesson'),
     );
   }
 
-  // Helper methods
-  Color _getStatusColor(String status) {
-    switch (status.toLowerCase()) {
-      case 'scheduled':
-        return Colors.blue;
-      case 'completed':
-        return Colors.green;
-      case 'cancelled':
-        return Colors.red;
-      case 'in_progress':
-        return Colors.orange;
-      default:
-        return Colors.grey;
-    }
+  // Helper methods for getting data
+  User? _getStudentById(int id) {
+    return userController.users.firstWhereOrNull(
+      (user) => user.id == id && user.role.toLowerCase() == 'student',
+    );
   }
 
-  CalendarFormat _getCalendarFormat() {
-    switch (_currentView) {
-      case 'week':
-        return CalendarFormat.week;
-      case 'day':
-        return CalendarFormat.week; // TableCalendar doesn't have day format
-      default:
-        return CalendarFormat.month;
-    }
+  User? _getInstructorById(int id) {
+    return userController.users.firstWhereOrNull(
+      (user) => user.id == id && user.role.toLowerCase() == 'instructor',
+    );
   }
 
-  String _getHeaderText() {
-    switch (_currentView) {
-      case 'week':
-        return 'Week of ${DateFormat('MMM d').format(_focusedDay.value)}';
-      case 'day':
-        return DateFormat('EEEE, MMMM d').format(_focusedDay.value);
-      default:
-        return DateFormat('MMMM yyyy').format(_focusedDay.value);
-    }
+  Course? _getCourseById(int id) {
+    return courseController.courses.firstWhereOrNull(
+      (course) => course.id == id,
+    );
   }
 
-  List<dynamic> _getEventsForDay(DateTime day) {
-    // Mock data - replace with actual data from controller
-    return day.day % 3 == 0 ? ['Mock Event'] : [];
+  Fleet? _getVehicleById(int id) {
+    return fleetController.fleet.firstWhereOrNull(
+      (vehicle) => vehicle.id == id,
+    );
+  }
+
+  List<String> _getInstructorOptions() {
+    return userController.users
+        .where((user) => user.role.toLowerCase() == 'instructor')
+        .map((user) => '${user.fname} ${user.lname}')
+        .toList();
+  }
+
+  List<String> _getStudentOptions() {
+    return userController.users
+        .where((user) => user.role.toLowerCase() == 'student')
+        .map((user) => '${user.fname} ${user.lname}')
+        .toList();
+  }
+
+  List<Schedule> _getEventsForDay(DateTime day) {
+    return _getFilteredSchedules().where((schedule) {
+      return isSameDay(schedule.start, day);
+    }).toList();
+  }
+
+  List<Schedule> _getFilteredSchedules() {
+    return scheduleController.schedules.where((schedule) {
+      // Filter by instructor
+      if (_selectedInstructorFilter != null) {
+        final instructor = _getInstructorById(schedule.instructorId);
+        final instructorName =
+            instructor != null ? '${instructor.fname} ${instructor.lname}' : '';
+        if (instructorName != _selectedInstructorFilter) {
+          return false;
+        }
+      }
+
+      // Filter by student
+      if (_selectedStudentFilter != null) {
+        final student = _getStudentById(schedule.studentId);
+        final studentName =
+            student != null ? '${student.fname} ${student.lname}' : '';
+        if (studentName != _selectedStudentFilter) {
+          return false;
+        }
+      }
+
+      // Filter by status
+      if (_selectedStatusFilter != null) {
+        if (schedule.status != _selectedStatusFilter) {
+          return false;
+        }
+      }
+
+      return true;
+    }).toList();
   }
 
   bool _hasActiveFilters() {
@@ -690,8 +600,21 @@ class _ScheduleScreenState extends State<ScheduleScreen>
         _selectedStatusFilter != null;
   }
 
-  int _getFilteredCount() => 15; // Mock count
-  int _getTotalCount() => 25; // Mock count
+  int _getFilteredCount() {
+    return _getFilteredSchedules().length;
+  }
+
+  int _getTotalCount() {
+    return scheduleController.schedules.length;
+  }
+
+  void _clearFilters() {
+    setState(() {
+      _selectedInstructorFilter = null;
+      _selectedStudentFilter = null;
+      _selectedStatusFilter = null;
+    });
+  }
 
   // Event handlers
   void _onDaySelected(DateTime selectedDay, DateTime focusedDay) {
@@ -730,7 +653,7 @@ class _ScheduleScreenState extends State<ScheduleScreen>
   }
 
   void _refreshData() {
-    // Implement refresh logic
+    _loadAllData();
     Get.snackbar('Info', 'Refreshing schedule data...');
   }
 
@@ -743,208 +666,242 @@ class _ScheduleScreenState extends State<ScheduleScreen>
     );
     if (date != null) {
       _focusedDay.value = date;
+      _selectedDay.value = date;
     }
   }
 
   void _showSearchDialog() {
-    // Implement search dialog
+    TextEditingController searchController = TextEditingController();
+
     Get.dialog(
       AlertDialog(
         title: Text('Search Schedule'),
         content: TextField(
+          controller: searchController,
           decoration: InputDecoration(
             hintText: 'Search by student, instructor, or course...',
             prefixIcon: Icon(Icons.search),
           ),
         ),
         actions: [
-          TextButton(onPressed: Get.back, child: Text('Cancel')),
-          ElevatedButton(onPressed: () => Get.back(), child: Text('Search')),
-        ],
-      ),
-    );
-  }
-
-  void _showFilterOptions(String filterType, Function(String?) onChanged) {
-    // Implement filter options dialog
-    Get.bottomSheet(
-      Container(
-        padding: EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Select $filterType',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-            SizedBox(height: 16),
-            // Add filter options here
-            ListTile(
-              title: Text('Option 1'),
-              onTap: () {
-                onChanged('Option 1');
-                Get.back();
-              },
-            ),
-            ListTile(
-              title: Text('Option 2'),
-              onTap: () {
-                onChanged('Option 2');
-                Get.back();
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _clearAllFilters() {
-    setState(() {
-      _selectedInstructorFilter = null;
-      _selectedStudentFilter = null;
-      _selectedStatusFilter = null;
-    });
-  }
-
-  void _handleMenuAction(String action) {
-    switch (action) {
-      case 'export':
-        Get.snackbar('Export', 'Exporting schedule...');
-        break;
-      case 'settings':
-        Get.snackbar('Settings', 'Opening settings...');
-        break;
-      case 'bulk_actions':
-        _showBulkActionsDialog();
-        break;
-    }
-  }
-
-  void _showBulkActionsDialog() {
-    Get.dialog(
-      AlertDialog(
-        title: Text('Bulk Actions'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: Icon(Icons.copy),
-              title: Text('Duplicate Selected'),
-              onTap: () => Get.back(),
-            ),
-            ListTile(
-              leading: Icon(Icons.cancel),
-              title: Text('Cancel Selected'),
-              onTap: () => Get.back(),
-            ),
-            ListTile(
-              leading: Icon(Icons.notifications),
-              title: Text('Send Reminders'),
-              onTap: () => Get.back(),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: Get.back, child: Text('Cancel')),
-        ],
-      ),
-    );
-  }
-
-  void _showCreateOptions() {
-    Get.bottomSheet(
-      Container(
-        padding: EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: Icon(Icons.add_circle, color: Colors.blue),
-              title: Text('Single Lesson'),
-              subtitle: Text('Create a single lesson'),
-              onTap: () {
-                Get.back();
-                _createSingleLesson();
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.repeat, color: Colors.green),
-              title: Text('Recurring Lessons'),
-              subtitle: Text('Create a series of lessons'),
-              onTap: () {
-                Get.back();
-                _createRecurringLessons();
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.import_export, color: Colors.orange),
-              title: Text('Import from CSV'),
-              subtitle: Text('Bulk import lessons'),
-              onTap: () {
-                Get.back();
-                _importFromCSV();
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _openDayView(DateTime date) {
-    // Navigate to detailed day view
-    Get.snackbar(
-        'Navigation', 'Opening day view for ${DateFormat.yMd().format(date)}');
-  }
-
-  void _openScheduleDetails(int index) {
-    Get.snackbar('Details', 'Opening schedule details');
-  }
-
-  void _editSchedule(int index) {
-    Get.snackbar('Edit', 'Opening edit dialog');
-  }
-
-  void _cancelSchedule(int index) {
-    Get.dialog(
-      AlertDialog(
-        title: Text('Cancel Lesson'),
-        content: Text('Are you sure you want to cancel this lesson?'),
-        actions: [
-          TextButton(onPressed: Get.back, child: Text('No')),
+          TextButton(
+            onPressed: Get.back,
+            child: Text('Cancel'),
+          ),
           ElevatedButton(
             onPressed: () {
+              // Implement search functionality
+              _performSearch(searchController.text);
               Get.back();
-              Get.snackbar('Cancelled', 'Lesson has been cancelled');
             },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: Text('Yes, Cancel'),
+            child: Text('Search'),
           ),
         ],
       ),
     );
   }
 
-  void _createSingleLesson() {
-    // Open single lesson creation dialog
-    Get.snackbar('Create', 'Opening single lesson form');
+  void _performSearch(String query) {
+    if (query.isEmpty) return;
+
+    // Find matching schedules and navigate to them
+    final matchingSchedules = scheduleController.schedules.where((schedule) {
+      final student = _getStudentById(schedule.studentId);
+      final instructor = _getInstructorById(schedule.instructorId);
+      final course = _getCourseById(schedule.courseId);
+
+      final searchText = query.toLowerCase();
+      return (student?.fname.toLowerCase().contains(searchText) ?? false) ||
+          (student?.lname.toLowerCase().contains(searchText) ?? false) ||
+          (instructor?.fname.toLowerCase().contains(searchText) ?? false) ||
+          (instructor?.lname.toLowerCase().contains(searchText) ?? false) ||
+          (course?.name.toLowerCase().contains(searchText) ?? false);
+    }).toList();
+
+    if (matchingSchedules.isNotEmpty) {
+      // Navigate to the first match
+      final firstMatch = matchingSchedules.first;
+      _selectedDay.value = firstMatch.start;
+      _focusedDay.value = firstMatch.start;
+      setState(() {
+        _currentView = 'day';
+      });
+      Get.snackbar(
+          'Search Results', '${matchingSchedules.length} schedules found');
+    } else {
+      Get.snackbar('No Results', 'No schedules found matching "$query"');
+    }
   }
 
-  void _createRecurringLessons() {
-    // Open recurring lessons dialog
-    Get.snackbar('Create', 'Opening recurring lessons form');
+  void _showCreateOptions() {
+    Get.bottomSheet(
+      Container(
+        padding: EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: Icon(Icons.add_circle, color: Colors.blue),
+              title: Text('Schedule Single Lesson'),
+              subtitle: Text('Create a one-time lesson'),
+              onTap: () {
+                Get.back();
+                _showCreateScheduleDialog(false);
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.repeat, color: Colors.green),
+              title: Text('Schedule Recurring Lessons'),
+              subtitle: Text('Create recurring lessons'),
+              onTap: () {
+                Get.back();
+                _showCreateScheduleDialog(true);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
-  void _importFromCSV() {
-    // Open CSV import dialog
-    Get.snackbar('Import', 'Opening CSV import dialog');
+  void _showCreateScheduleDialog(bool isRecurring) {
+    // This would open a dialog/screen for creating new schedules
+    Get.snackbar('Info', 'Create schedule dialog would open here');
+  }
+
+  void _showScheduleDetails(Schedule schedule) {
+    final student = _getStudentById(schedule.studentId);
+    final instructor = _getInstructorById(schedule.instructorId);
+    final course = _getCourseById(schedule.courseId);
+    final vehicle =
+        schedule.carId != null ? _getVehicleById(schedule.carId!) : null;
+
+    Get.dialog(
+      AlertDialog(
+        title: Text('Schedule Details'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildDetailRow('Course', course?.name ?? 'Unknown'),
+              _buildDetailRow(
+                  'Student',
+                  student != null
+                      ? '${student.fname} ${student.lname}'
+                      : 'Unknown'),
+              _buildDetailRow(
+                  'Instructor',
+                  instructor != null
+                      ? '${instructor.fname} ${instructor.lname}'
+                      : 'Unknown'),
+              _buildDetailRow('Date',
+                  DateFormat('EEEE, MMMM d, yyyy').format(schedule.start)),
+              _buildDetailRow('Time',
+                  '${DateFormat('HH:mm').format(schedule.start)} - ${DateFormat('HH:mm').format(schedule.end)}'),
+              _buildDetailRow('Duration', schedule.duration),
+              _buildDetailRow('Type', schedule.classType),
+              _buildDetailRow('Status', schedule.status),
+              if (vehicle != null)
+                _buildDetailRow('Vehicle',
+                    '${vehicle.make} ${vehicle.model} (${vehicle.carPlate})'),
+              if (schedule.attended) _buildDetailRow('Attendance', 'Attended'),
+              _buildDetailRow(
+                  'Lessons Completed', '${schedule.lessonsCompleted}'),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: Get.back,
+            child: Text('Close'),
+          ),
+          if (schedule.status != 'Cancelled')
+            ElevatedButton(
+              onPressed: () {
+                Get.back();
+                _showEditScheduleDialog(schedule);
+              },
+              child: Text('Edit'),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text(
+              '$label:',
+              style: TextStyle(fontWeight: FontWeight.w500),
+            ),
+          ),
+          Expanded(
+            child: Text(value),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showEditScheduleDialog(Schedule schedule) {
+    Get.snackbar('Info', 'Edit schedule dialog would open here');
+  }
+
+  // Helper methods
+  Color _getStatusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'scheduled':
+        return Colors.blue;
+      case 'completed':
+        return Colors.green;
+      case 'cancelled':
+        return Colors.red;
+      case 'in progress':
+        return Colors.orange;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  CalendarFormat _getCalendarFormat() {
+    switch (_currentView) {
+      case 'week':
+        return CalendarFormat.week;
+      case 'day':
+        return CalendarFormat.week; // TableCalendar doesn't have day format
+      default:
+        return CalendarFormat.month;
+    }
+  }
+
+  String _getHeaderText() {
+    switch (_currentView) {
+      case 'week':
+        return 'Week of ${DateFormat('MMM d').format(_focusedDay.value)}';
+      case 'day':
+        return DateFormat('EEEE, MMMM d').format(_focusedDay.value);
+      case 'list':
+        return 'All Schedules';
+      default:
+        return DateFormat('MMMM yyyy').format(_focusedDay.value);
+    }
+  }
+
+  @override
+  void dispose() {
+    _focusedDay.dispose();
+    _selectedDay.dispose();
+    super.dispose();
   }
 }

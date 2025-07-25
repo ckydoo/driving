@@ -1,46 +1,252 @@
+// lib/controllers/schedule_controller.dart
 import 'package:driving/controllers/billing_controller.dart';
 import 'package:driving/controllers/course_controller.dart';
+import 'package:driving/controllers/user_controller.dart';
 import 'package:driving/models/billing_record.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../models/schedule.dart';
 import '../services/database_helper.dart';
-import 'package:driving/widgets/create_invoice_dialog.dart'; // Import the dialog
+import 'package:driving/widgets/create_invoice_dialog.dart';
 
 class ScheduleController extends GetxController {
   final RxList<Schedule> schedules = <Schedule>[].obs;
   final RxBool isLoading = false.obs;
+  final RxString error = ''.obs;
   final DatabaseHelper _dbHelper = Get.find();
+
+  // Filtered schedules for performance
+  final RxList<Schedule> filteredSchedules = <Schedule>[].obs;
+
+  // Filter criteria
+  final RxString selectedInstructorFilter = ''.obs;
+  final RxString selectedStudentFilter = ''.obs;
+  final RxString selectedStatusFilter = ''.obs;
+  final RxString searchQuery = ''.obs;
 
   @override
   void onReady() {
-    fetchSchedules();
-    Get.find<BillingController>().fetchBillingData();
     super.onReady();
+    fetchSchedules();
+
+    // Initialize billing controller
+    try {
+      Get.find<BillingController>().fetchBillingData();
+    } catch (e) {
+      print('BillingController not found: $e');
+    }
+
+    // Set up reactive filters
+    ever(selectedInstructorFilter, (_) => _applyFilters());
+    ever(selectedStudentFilter, (_) => _applyFilters());
+    ever(selectedStatusFilter, (_) => _applyFilters());
+    ever(searchQuery, (_) => _applyFilters());
   }
 
   Future<void> fetchSchedules() async {
     try {
       isLoading(true);
+      error('');
+
       final data = await _dbHelper.getSchedules();
-      schedules.assignAll(data.map(Schedule.fromJson));
+
+      if (data.isEmpty) {
+        schedules.clear();
+        filteredSchedules.clear();
+        return;
+      }
+
+      // Convert data to Schedule objects with error handling
+      final List<Schedule> loadedSchedules = [];
+      for (final scheduleData in data) {
+        try {
+          final schedule = Schedule.fromJson(scheduleData);
+          loadedSchedules.add(schedule);
+        } catch (e) {
+          print('Error parsing schedule ${scheduleData['id']}: $e');
+          // Continue with other schedules
+        }
+      }
+
+      schedules.assignAll(loadedSchedules);
+      _applyFilters();
     } catch (e) {
-      Get.snackbar('Error', 'Failed to load schedules: ${e.toString()}');
+      error('Failed to load schedules: ${e.toString()}');
+      Get.snackbar(
+        'Error',
+        'Failed to load schedules: ${e.toString()}',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
       print("Error fetching schedules: $e");
     } finally {
       isLoading(false);
     }
   }
 
+  void _applyFilters() {
+    var filtered = schedules.where((schedule) {
+      // Apply instructor filter
+      if (selectedInstructorFilter.value.isNotEmpty) {
+        final instructor = _getInstructorById(schedule.instructorId);
+        final instructorName =
+            instructor != null ? '${instructor.fname} ${instructor.lname}' : '';
+        if (instructorName != selectedInstructorFilter.value) {
+          return false;
+        }
+      }
+
+      // Apply student filter
+      if (selectedStudentFilter.value.isNotEmpty) {
+        final student = _getStudentById(schedule.studentId);
+        final studentName =
+            student != null ? '${student.fname} ${student.lname}' : '';
+        if (studentName != selectedStudentFilter.value) {
+          return false;
+        }
+      }
+
+      // Apply status filter
+      if (selectedStatusFilter.value.isNotEmpty) {
+        if (schedule.statusDisplay != selectedStatusFilter.value) {
+          return false;
+        }
+      }
+
+      // Apply search query
+      if (searchQuery.value.isNotEmpty) {
+        final student = _getStudentById(schedule.studentId);
+        final instructor = _getInstructorById(schedule.instructorId);
+        final course = _getCourseById(schedule.courseId);
+
+        final query = searchQuery.value.toLowerCase();
+        final searchableText = [
+          student?.fname ?? '',
+          student?.lname ?? '',
+          instructor?.fname ?? '',
+          instructor?.lname ?? '',
+          course?.name ?? '',
+          schedule.classType,
+          schedule.status,
+        ].join(' ').toLowerCase();
+
+        if (!searchableText.contains(query)) {
+          return false;
+        }
+      }
+
+      return true;
+    }).toList();
+
+    filteredSchedules.assignAll(filtered);
+  }
+
+  // Helper methods to get related data
+  dynamic _getStudentById(int id) {
+    try {
+      final userController = Get.find<UserController>();
+      return userController.users.firstWhereOrNull(
+        (user) => user.id == id && user.role.toLowerCase() == 'student',
+      );
+    } catch (e) {
+      print('UserController not found: $e');
+      return null;
+    }
+  }
+
+  dynamic _getInstructorById(int id) {
+    try {
+      final userController = Get.find<UserController>();
+      return userController.users.firstWhereOrNull(
+        (user) => user.id == id && user.role.toLowerCase() == 'instructor',
+      );
+    } catch (e) {
+      print('UserController not found: $e');
+      return null;
+    }
+  }
+
+  dynamic _getCourseById(int id) {
+    try {
+      final courseController = Get.find<CourseController>();
+      return courseController.courses.firstWhereOrNull(
+        (course) => course.id == id,
+      );
+    } catch (e) {
+      print('CourseController not found: $e');
+      return null;
+    }
+  }
+
+  // Filter methods
+  void setInstructorFilter(String? instructor) {
+    selectedInstructorFilter.value = instructor ?? '';
+  }
+
+  void setStudentFilter(String? student) {
+    selectedStudentFilter.value = student ?? '';
+  }
+
+  void setStatusFilter(String? status) {
+    selectedStatusFilter.value = status ?? '';
+  }
+
+  void setSearchQuery(String query) {
+    searchQuery.value = query;
+  }
+
+  void clearFilters() {
+    selectedInstructorFilter.value = '';
+    selectedStudentFilter.value = '';
+    selectedStatusFilter.value = '';
+    searchQuery.value = '';
+  }
+
+  bool get hasActiveFilters {
+    return selectedInstructorFilter.value.isNotEmpty ||
+        selectedStudentFilter.value.isNotEmpty ||
+        selectedStatusFilter.value.isNotEmpty ||
+        searchQuery.value.isNotEmpty;
+  }
+
+  // Get schedules for a specific day
+  List<Schedule> getSchedulesForDay(DateTime day) {
+    return filteredSchedules.where((schedule) {
+      return schedule.start.year == day.year &&
+          schedule.start.month == day.month &&
+          schedule.start.day == day.day;
+    }).toList()
+      ..sort((a, b) => a.start.compareTo(b.start));
+  }
+
+  // Get upcoming schedules
+  List<Schedule> get upcomingSchedules {
+    final now = DateTime.now();
+    return filteredSchedules.where((schedule) {
+      return schedule.start.isAfter(now) && schedule.status != 'Cancelled';
+    }).toList()
+      ..sort((a, b) => a.start.compareTo(b.start));
+  }
+
+  // Get today's schedules
+  List<Schedule> get todaySchedules {
+    return getSchedulesForDay(DateTime.now());
+  }
+
+  // Attendance management
   Future<void> toggleAttendance(int scheduleId, bool attended) async {
     try {
+      isLoading(true);
+
       final index = schedules.indexWhere((s) => s.id == scheduleId);
-      if (index == -1) return;
+      if (index == -1) {
+        Get.snackbar('Error', 'Schedule not found');
+        return;
+      }
 
       final schedule = schedules[index];
-      final lessonsChange = attended
-          ? schedule.lessonsDeducted
-          : -schedule.lessonsDeducted; // Calculate change
+      final lessonsChange =
+          attended ? schedule.lessonsDeducted : -schedule.lessonsDeducted;
 
       // Create temporary schedule with proposed changes
       final tempSchedule = schedule.copyWith(
@@ -71,110 +277,77 @@ class ScheduleController extends GetxController {
 
       schedules[index] = updated;
       schedules.refresh();
+      _applyFilters();
 
-      // Update billing record status
+      // Update billing record status if billing controller exists
+      try {
+        final billingController = Get.find<BillingController>();
+        final invoice = billingController.invoices.firstWhereOrNull(
+          (inv) =>
+              inv.studentId == schedule.studentId &&
+              inv.courseId == schedule.courseId,
+        );
+
+        if (invoice != null) {
+          final billingRecords =
+              await billingController.getBillingRecordsForInvoice(invoice.id!);
+          if (billingRecords.isNotEmpty) {
+            await billingController.updateBillingRecordStatus(
+              billingRecords.first.id!,
+              attended ? 'Completed' : 'Pending',
+            );
+          }
+        }
+      } catch (e) {
+        print('Error updating billing record: $e');
+      }
+
+      Get.snackbar(
+        'Success',
+        attended ? 'Marked as attended' : 'Marked as not attended',
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
+    } catch (e) {
+      Get.snackbar('Error', 'Failed to update attendance: ${e.toString()}');
+    } finally {
+      isLoading(false);
+    }
+  }
+
+  bool _isBilledLessonsExceeded(Schedule schedule) {
+    try {
       final billingController = Get.find<BillingController>();
       final invoice = billingController.invoices.firstWhereOrNull(
         (inv) =>
             inv.studentId == schedule.studentId &&
             inv.courseId == schedule.courseId,
       );
-      if (invoice != null) {
-        final billingRecords =
-            await billingController.getBillingRecordsForInvoice(invoice.id!);
-        if (billingRecords.isNotEmpty) {
-          // Assuming one billing record per schedule
-          await billingController.updateBillingRecordStatus(
-            billingRecords.first.id!,
-            attended ? "Completed" : "Scheduled",
-          );
-        }
-      }
+
+      if (invoice == null) return false;
+
+      final totalLessons = invoice.lessons;
+      final usedLessons = schedules
+          .where((s) =>
+              s.studentId == schedule.studentId &&
+              s.courseId == schedule.courseId &&
+              s.attended)
+          .fold<int>(0, (sum, s) => sum + s.lessonsDeducted);
+
+      final potentialAddedLessons =
+          schedule.attended ? schedule.lessonsDeducted : 0;
+
+      return (usedLessons + potentialAddedLessons) > totalLessons;
     } catch (e) {
-      Get.snackbar('Error', 'Failed to update attendance');
+      print('Error checking billing lessons: $e');
+      return false;
     }
   }
 
-  bool _isBilledLessonsExceeded(Schedule schedule) {
-    final billingController = Get.find<BillingController>();
-    final invoice = billingController.invoices.firstWhereOrNull(
-      (inv) =>
-          inv.studentId == schedule.studentId &&
-          inv.courseId == schedule.courseId,
-    );
-    // Use lessons here
-    final totalLessons = invoice?.lessons ?? 0;
-
-    if (invoice == null) return false; // Handle case where invoice is not found
-
-    // Calculate used lessons from attended schedules excluding current one
-    final usedLessons = schedules
-        .where((s) =>
-            s.studentId == schedule.studentId &&
-            s.attended &&
-            s.id != schedule.id)
-        .fold(0, (sum, s) => sum + s.lessonsDeducted);
-
-    // Add current schedule's lessons if attended
-    final potentialAddedLessons =
-        schedule.attended ? schedule.lessonsDeducted : 0;
-
-    return (usedLessons + potentialAddedLessons) > (totalLessons);
-  }
-
-  double calculateScheduleProgress(Schedule schedule) {
-    final billingController = Get.find<BillingController>();
-    final invoice = billingController.invoices.firstWhereOrNull(
-      (inv) =>
-          inv.studentId == schedule.studentId &&
-          inv.courseId == schedule.courseId,
-    );
-    // Use lessons here
-    final totalLessons = invoice?.lessons ?? 0;
-
-    if (totalLessons == 0) return 0;
-
-    final progress = (schedule.lessonsCompleted / totalLessons) * 100;
-    return progress;
-  }
-
-  Future<bool> checkAvailability(
-      int instructorId, DateTime start, DateTime end) async {
-    return !schedules.any((s) {
-      return s.instructorId == instructorId &&
-          start.isBefore(s.end) &&
-          end.isAfter(s.start) &&
-          s.status != 'Canceled'; // Only check non-canceled schedules
-    });
-  }
-
-  Future<void> deleteSchedule(int scheduleId) async {
-    try {
-      isLoading(true);
-      await _dbHelper.deleteSchedule(scheduleId);
-      schedules.removeWhere((s) => s.id == scheduleId);
-      schedules.refresh();
-    } catch (e) {
-      Get.snackbar('Error', 'Failed to delete schedule');
-    } finally {
-      isLoading(false);
-    }
-  }
-
+  // Schedule management
   Future<void> addOrUpdateSchedule(Schedule schedule) async {
     try {
-      print("addOrUpdateSchedule called with schedule: ${schedule.toJson()}");
       isLoading(true);
-
-      // // Validate session duration
-      // final minutes = schedule.end.difference(schedule.start).inMinutes;
-      // if (minutes <= 0 || minutes % 30 != 0) {
-      //   Get.snackbar(
-      //       'Invalid Duration', 'Sessions must be in 30-minute increments',
-      //       backgroundColor: Colors.red);
-      //   print('Sessions must be in 30-minute increments');
-      //   return;
-      // }
 
       // Check availability
       if (!await checkAvailability(
@@ -188,167 +361,120 @@ class ScheduleController extends GetxController {
         return;
       }
 
-      final billingController = Get.find<BillingController>();
-      final invoice = billingController.invoices.firstWhereOrNull(
-        (inv) =>
-            inv.studentId == schedule.studentId &&
-            inv.courseId == schedule.courseId,
-      );
-
-      final exists = schedules.any((s) => s.id == schedule.id);
-      print("Schedule exists: $exists");
-      if (exists) {
-        print("Updating schedule");
-        final index = schedules.indexWhere((s) => s.id == schedule.id);
-        schedules[index] = schedule;
-        await _dbHelper.updateSchedule(schedule.toJson());
-        print("Schedule updated");
-      } else {
-        print("Inserting schedule");
+      if (schedule.id == null) {
+        // Adding new schedule
         final id = await _dbHelper.insertSchedule(schedule.toJson());
-        print("Schedule inserted with id: $id");
         final newSchedule = schedule.copyWith(id: id);
         schedules.add(newSchedule);
-
-        if (invoice != null) {
-          // Calculate billing amount
-          double billingAmount = _calculateBillingAmount(newSchedule);
-
-          // Create billing record
-          BillingRecord billingRecord = BillingRecord(
-            scheduleId: newSchedule.id!,
-            invoiceId: invoice.id!,
-            studentId: newSchedule.studentId,
-            amount: billingAmount,
-            dueDate: newSchedule.start.add(Duration(days: 14)), // Example
-            status: "Scheduled", createdAt: DateTime.now(),
-            description: "Billing for schedule ${newSchedule.id}",
-          );
-          int billingRecordId =
-              await billingController.insertBillingRecord(billingRecord);
-          print("Billing record created with id: $billingRecordId");
-        } else {
-          // Invoice not found: Prompt user
-          print(
-              "Invoice not found for student ${newSchedule.studentId} and course ${newSchedule.courseId}");
-          Get.snackbar(
-            "Billing",
-            "Invoice not found. Please create an invoice for this student and course.",
-            snackPosition: SnackPosition.BOTTOM,
-            duration: Duration(seconds: 5),
-            mainButton: TextButton(
-              onPressed: () {
-                Get.back(); // Close the snackbar
-                Get.dialog(CreateInvoiceDialog(// Use your dialog
-                    //  studentId: newSchedule.studentId,
-                    //  courseId: newSchedule.courseId,
-                    ));
-              },
-              child: Text("Create Invoice"),
-            ),
-          );
+      } else {
+        // Updating existing schedule
+        await _dbHelper.updateSchedule(schedule.toJson());
+        final index = schedules.indexWhere((s) => s.id == schedule.id);
+        if (index != -1) {
+          schedules[index] = schedule;
         }
       }
 
       schedules.refresh();
-      print("Schedules refreshed");
-    } catch (e, stackTrace) {
-      print("Error in addOrUpdateSchedule: $e");
-      print("StackTrace: $stackTrace");
-      Get.snackbar('Error', 'Failed to add/update schedule: ${e.toString()}');
+      _applyFilters();
+
+      Get.snackbar(
+        'Success',
+        schedule.id == null
+            ? 'Schedule created successfully'
+            : 'Schedule updated successfully',
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
+    } catch (e) {
+      Get.snackbar('Error', 'Failed to save schedule: ${e.toString()}');
     } finally {
       isLoading(false);
-      print("isLoading set to false");
     }
   }
 
-  List<Schedule> getDailySchedules(DateTime day) {
-    return schedules
-        .where((s) =>
-            s.start.year == day.year &&
-            s.start.month == day.month &&
-            s.start.day == day.day)
-        .toList();
-  }
-
-  Future<void> updateLessonCompletion(int scheduleId, bool completed) async {
-    try {
-      final index = schedules.indexWhere((s) => s.id == scheduleId);
-      if (index == -1) return;
-
-      final schedule = schedules[index];
-      final lessonsChange =
-          completed ? schedule.lessonsDeducted : -schedule.lessonsDeducted;
-      final newCount = schedule.lessonsCompleted + lessonsChange;
-
-      final updated = schedule.copyWith(
-        lessonsCompleted: newCount,
-      );
-
-      await _dbHelper.updateSchedule({
-        'id': scheduleId,
-        'lessonsCompleted': newCount,
-      });
-
-      schedules[index] = updated;
-      schedules.refresh();
-    } catch (e) {
-      Get.snackbar('Error', 'Failed to update lesson completion');
-    }
-  }
-
-  double calculateCourseProgress(int studentId) {
-    final billingController = Get.find<BillingController>();
-    final invoice = billingController.invoices.firstWhereOrNull(
-      (inv) => inv.studentId == studentId,
-    );
-    // Use lessons here
-    final totalLessons = invoice?.lessons ?? 0;
-
-    if (totalLessons == 0) return 0;
-
-    final completedLessons = schedules
-        .where((s) => s.studentId == studentId && s.attended)
-        .fold(0, (sum, s) => sum + s.lessonsDeducted);
-
-    return (completedLessons / totalLessons) * 100;
-  }
-
-  int getTotalCompletedLessons(int studentId) {
-    return schedules
-        .where((s) => s.studentId == studentId && s.attended)
-        .fold(0, (sum, s) => sum + s.lessonsDeducted);
+  Future<bool> checkAvailability(
+      int instructorId, DateTime start, DateTime end) async {
+    return !schedules.any((s) {
+      return s.instructorId == instructorId &&
+          start.isBefore(s.end) &&
+          end.isAfter(s.start) &&
+          s.status != 'Cancelled';
+    });
   }
 
   Future<void> cancelSchedule(int scheduleId) async {
     try {
       isLoading(true);
-      final schedule = schedules.firstWhere((s) => s.id == scheduleId);
-      final updatedSchedule = schedule.copyWith(status: 'Canceled');
-      await _dbHelper.updateSchedule(updatedSchedule.toJson());
-      final index = schedules.indexWhere((s) => s.id == scheduleId);
-      schedules[index] = updatedSchedule;
-      schedules.refresh();
 
-      // Handle billing implications of cancellation here
-      final billingController = Get.find<BillingController>();
-      final invoice = billingController.invoices.firstWhereOrNull(
-        (inv) =>
-            inv.studentId == schedule.studentId &&
-            inv.courseId == schedule.courseId,
-      );
-      if (invoice != null) {
-        // Remove billing record
-        final billingRecords =
-            await billingController.getBillingRecordsForInvoice(invoice.id!);
-        if (billingRecords.isNotEmpty) {
-          // Assuming one billing record per schedule
-          await _dbHelper.deleteBillingRecord(
-              billingRecords.first.id!); // Add this method to DatabaseHelper
-        }
+      final index = schedules.indexWhere((s) => s.id == scheduleId);
+      if (index == -1) {
+        Get.snackbar('Error', 'Schedule not found');
+        return;
       }
+
+      final schedule = schedules[index];
+      final cancelledSchedule = schedule.copyWith(status: 'Cancelled');
+
+      await _dbHelper.updateSchedule({
+        'id': scheduleId,
+        'status': 'Cancelled',
+      });
+
+      schedules[index] = cancelledSchedule;
+      schedules.refresh();
+      _applyFilters();
+
+      // Handle billing record cleanup if needed
+      try {
+        final billingController = Get.find<BillingController>();
+        final invoice = billingController.invoices.firstWhereOrNull(
+          (inv) =>
+              inv.studentId == schedule.studentId &&
+              inv.courseId == schedule.courseId,
+        );
+
+        if (invoice != null) {
+          final billingRecords =
+              await billingController.getBillingRecordsForInvoice(invoice.id!);
+          if (billingRecords.isNotEmpty) {
+            await _dbHelper.deleteBillingRecord(billingRecords.first.id!);
+          }
+        }
+      } catch (e) {
+        print('Error handling billing record: $e');
+      }
+
+      Get.snackbar(
+        'Success',
+        'Schedule cancelled successfully',
+        backgroundColor: Colors.orange,
+        colorText: Colors.white,
+      );
     } catch (e) {
-      Get.snackbar('Error', 'Failed to cancel schedule');
+      Get.snackbar('Error', 'Failed to cancel schedule: ${e.toString()}');
+    } finally {
+      isLoading(false);
+    }
+  }
+
+  Future<void> deleteSchedule(int scheduleId) async {
+    try {
+      isLoading(true);
+
+      await _dbHelper.deleteSchedule(scheduleId);
+      schedules.removeWhere((s) => s.id == scheduleId);
+      schedules.refresh();
+      _applyFilters();
+
+      Get.snackbar(
+        'Success',
+        'Schedule deleted successfully',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    } catch (e) {
+      Get.snackbar('Error', 'Failed to delete schedule: ${e.toString()}');
     } finally {
       isLoading(false);
     }
@@ -357,42 +483,79 @@ class ScheduleController extends GetxController {
   Future<void> rescheduleSchedule(int scheduleId, Schedule newSchedule) async {
     try {
       isLoading(true);
-      await cancelSchedule(scheduleId); // Cancel the original
 
-      // Add the new schedule
-      final id = await _dbHelper.insertSchedule(newSchedule.toJson());
-      schedules.add(newSchedule.copyWith(id: id));
-      schedules.refresh();
+      await cancelSchedule(scheduleId);
+      await addOrUpdateSchedule(newSchedule);
 
-      Get.snackbar('Success', 'Schedule rescheduled');
+      Get.snackbar(
+        'Success',
+        'Schedule rescheduled successfully',
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
     } catch (e) {
-      Get.snackbar('Error', 'Failed to reschedule schedule');
+      Get.snackbar('Error', 'Failed to reschedule: ${e.toString()}');
     } finally {
       isLoading(false);
     }
   }
 
-  // Helper functions:
+  // Progress calculation
+  double calculateScheduleProgress(Schedule schedule) {
+    try {
+      final billingController = Get.find<BillingController>();
+      final invoice = billingController.invoices.firstWhereOrNull(
+        (inv) =>
+            inv.studentId == schedule.studentId &&
+            inv.courseId == schedule.courseId,
+      );
 
-  double _calculateBillingAmount(Schedule schedule) {
-    // Get billing data
-    final billingController = Get.find<BillingController>();
-    final invoice = billingController.invoices.firstWhereOrNull(
-      (inv) => inv.studentId == schedule.studentId,
-    );
+      final totalLessons = invoice?.lessons ?? 0;
+      if (totalLessons == 0) return 0;
 
-    // Logic to calculate billing amount based on schedule details
-    // (e.g., course price, duration)
-    final courseController = Get.find<CourseController>();
-    courseController.courses
-        .firstWhere((course) => course.id == schedule.courseId);
-    // final pricePerLesson = course.price / course.lessons; // Removed
-    // return pricePerLesson * schedule.lessonsDeducted;
+      final progress = (schedule.lessonsCompleted / totalLessons) * 100;
+      return progress.clamp(0.0, 100.0);
+    } catch (e) {
+      print('Error calculating progress: $e');
+      return 0;
+    }
+  }
 
-    // Fetch price per lesson from invoice
-    final pricePerLesson =
-        invoice?.pricePerLesson ?? 0; // Use pricePerLesson from invoice
+  // Statistics
+  Map<String, int> get scheduleStats {
+    final stats = <String, int>{
+      'total': schedules.length,
+      'scheduled': 0,
+      'completed': 0,
+      'cancelled': 0,
+      'inProgress': 0,
+      'upcoming': 0,
+      'today': 0,
+    };
 
-    return pricePerLesson * schedule.lessonsDeducted;
+    final now = DateTime.now();
+
+    for (final schedule in schedules) {
+      final status = schedule.statusDisplay.toLowerCase();
+
+      if (stats.containsKey(status)) {
+        stats[status] = stats[status]! + 1;
+      }
+
+      if (schedule.isUpcoming) {
+        stats['upcoming'] = stats['upcoming']! + 1;
+      }
+
+      if (schedule.isToday) {
+        stats['today'] = stats['today']! + 1;
+      }
+    }
+
+    return stats;
+  }
+
+  // Refresh data
+  void refreshData() {
+    fetchSchedules();
   }
 }

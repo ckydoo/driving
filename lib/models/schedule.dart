@@ -1,6 +1,4 @@
-// FileName: MultipleFiles/schedule.dart
-// Existing content...
-
+// lib/models/schedule.dart
 import 'billing.dart';
 import 'payment.dart';
 
@@ -17,6 +15,7 @@ class Schedule {
   final String status;
   final bool attended;
   int lessonsCompleted;
+  final int lessonsDeducted; // Added missing property
   final Billing? billing;
   final List<Payment> payments;
   final bool hasPaidOverHalf;
@@ -38,6 +37,7 @@ class Schedule {
     required this.classType,
     this.status = 'Scheduled',
     this.attended = false,
+    this.lessonsDeducted = 1, // Default to 1 lesson per schedule
     this.billing,
     this.payments = const [],
     this.hasPaidOverHalf = false,
@@ -57,9 +57,10 @@ class Schedule {
         instructorId: json['instructor'] ?? 0,
         carId: json['car'] ?? 0,
         classType: json['class_type'] ?? '',
-        status: json['status'] ?? 'Unknown',
+        status: json['status'] ?? 'Scheduled',
         attended: json['attended'] == 1,
         lessonsCompleted: json['lessonsCompleted'] ?? 0,
+        lessonsDeducted: json['lessonsDeducted'] ?? 1,
         // Parse new fields
         isRecurring: json['is_recurring'] == 1,
         recurrencePattern: json['recurrence_pattern'],
@@ -79,6 +80,8 @@ class Schedule {
         'class_type': classType,
         'status': status,
         'attended': attended ? 1 : 0,
+        'lessonsCompleted': lessonsCompleted,
+        'lessonsDeducted': lessonsDeducted,
         // Add new fields to toJson
         'is_recurring': isRecurring ? 1 : 0,
         'recurrence_pattern': recurrencePattern,
@@ -105,10 +108,10 @@ class Schedule {
     String? status,
     bool? attended,
     int? lessonsCompleted,
+    int? lessonsDeducted,
     Billing? billing,
     List<Payment>? payments,
     bool? hasPaidOverHalf,
-    // Add new fields to copyWith
     bool? isRecurring,
     String? recurrencePattern,
     DateTime? recurrenceEndDate,
@@ -126,18 +129,41 @@ class Schedule {
       status: status ?? this.status,
       attended: attended ?? this.attended,
       lessonsCompleted: lessonsCompleted ?? this.lessonsCompleted,
+      lessonsDeducted: lessonsDeducted ?? this.lessonsDeducted,
       billing: billing ?? this.billing,
       payments: payments ?? this.payments,
       hasPaidOverHalf: hasPaidOverHalf ?? this.hasPaidOverHalf,
-      // Copy new fields
       isRecurring: isRecurring ?? this.isRecurring,
       recurrencePattern: recurrencePattern ?? this.recurrencePattern,
       recurrenceEndDate: recurrenceEndDate ?? this.recurrenceEndDate,
     );
   }
 
-  int get lessonsDeducted {
-    final totalMinutes = end.difference(start).inMinutes;
-    return (totalMinutes / 30).ceil();
+  // Helper methods
+  bool get isUpcoming {
+    return start.isAfter(DateTime.now()) && status != 'Cancelled';
+  }
+
+  bool get isPast {
+    return end.isBefore(DateTime.now());
+  }
+
+  bool get isToday {
+    final now = DateTime.now();
+    return start.year == now.year &&
+        start.month == now.month &&
+        start.day == now.day;
+  }
+
+  bool get isInProgress {
+    final now = DateTime.now();
+    return now.isAfter(start) && now.isBefore(end) && status != 'Cancelled';
+  }
+
+  String get statusDisplay {
+    if (isInProgress) return 'In Progress';
+    if (isPast && attended) return 'Completed';
+    if (isPast && !attended && status != 'Cancelled') return 'Missed';
+    return status;
   }
 }

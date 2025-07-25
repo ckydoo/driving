@@ -447,162 +447,158 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
   }
 
   Widget _buildOverviewTab() {
-    return SingleChildScrollView(
-      child: Padding(
-        padding: EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Course Information',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey[800],
-              ),
+    return Padding(
+      padding: EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Course Information',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[800],
             ),
-            SizedBox(height: 16),
-            _buildInfoRow(Icons.school, 'Course Name', course!.name),
-            _buildInfoRow(Icons.attach_money, 'Price', '\$${course!.price}'),
-            _buildInfoRow(Icons.circle, 'Status', course!.status),
-            _buildInfoRow(Icons.calendar_today, 'Created',
-                DateFormat('MMM dd, yyyy').format(course!.createdAt)),
-            SizedBox(height: 24),
-            Text(
-              'Performance Summary',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey[800],
-              ),
+          ),
+          SizedBox(height: 16),
+          _buildInfoRow(Icons.school, 'Course Name', course!.name),
+          _buildInfoRow(Icons.attach_money, 'Price', '\$${course!.price}'),
+          _buildInfoRow(Icons.circle, 'Status', course!.status),
+          _buildInfoRow(Icons.calendar_today, 'Created',
+              DateFormat('MMM dd, yyyy').format(course!.createdAt)),
+          SizedBox(height: 24),
+          Text(
+            'Performance Summary',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[800],
             ),
-            SizedBox(height: 16),
-            Container(
-              padding: EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.blue[50],
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.blue[200]!),
-              ),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('Enrollment Rate'),
-                      Text('${_totalEnrollments} students',
-                          style: TextStyle(fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                  SizedBox(height: 5),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('Completion Rate'),
-                      Text(
-                          '${_totalEnrollments > 0 ? ((_completedLessons / _totalEnrollments) * 100).toStringAsFixed(1) : 0}%',
-                          style: TextStyle(fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                  SizedBox(height: 5),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('Revenue per Student'),
-                      Text(
-                          '\$${_activeStudents > 0 ? (_totalRevenue / _activeStudents).toStringAsFixed(2) : 0}',
-                          style: TextStyle(fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                ],
-              ),
+          ),
+          SizedBox(height: 16),
+          Container(
+            padding: EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.blue[50],
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.blue[200]!),
             ),
-          ],
-        ),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Enrollment Rate'),
+                    Text('${_totalEnrollments} students',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                SizedBox(height: 5),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Completion Rate'),
+                    Text(
+                        '${_totalEnrollments > 0 ? ((_completedLessons / _totalEnrollments) * 100).toStringAsFixed(1) : 0}%',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                SizedBox(height: 5),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Revenue per Student'),
+                    Text(
+                        '\$${_activeStudents > 0 ? (_totalRevenue / _activeStudents).toStringAsFixed(2) : 0}',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildStudentsTab() {
-    return SingleChildScrollView(
-      child: Padding(
-        padding: EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Recent Enrollments',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey[800],
-              ),
+    return Padding(
+      padding: EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Recent Enrollments',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[800],
             ),
-            SizedBox(height: 16),
-            Expanded(
-              child: _recentEnrollments.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.people_outline,
-                              size: 64, color: Colors.grey[400]),
-                          SizedBox(height: 16),
-                          Text(
-                            'No enrollments yet',
-                            style: TextStyle(color: Colors.grey[600]),
-                          ),
-                        ],
-                      ),
-                    )
-                  : ListView.builder(
-                      itemCount: _recentEnrollments.length,
-                      itemBuilder: (context, index) {
-                        final enrollment = _recentEnrollments[index];
-                        return Card(
-                          margin: EdgeInsets.only(bottom: 8),
-                          child: ListTile(
-                            leading: CircleAvatar(
-                              backgroundColor:
-                                  _getStatusColor(enrollment['status']),
-                              child: Icon(
-                                Icons.person,
-                                color: Colors.white,
-                                size: 20,
-                              ),
-                            ),
-                            title: Text(enrollment['studentName']),
-                            subtitle: Text(
-                              'Enrolled: ${DateFormat('MMM dd, yyyy').format(enrollment['enrollmentDate'])}',
-                            ),
-                            trailing: Container(
-                              padding: EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: _getStatusColor(enrollment['status'])
-                                    .withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(
-                                enrollment['status'],
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: _getStatusColor(enrollment['status']),
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                            onTap: () {
-                              // Navigate to student details
-                              // Navigator.push(...);
-                            },
-                          ),
-                        );
-                      },
+          ),
+          SizedBox(height: 16),
+          Expanded(
+            child: _recentEnrollments.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.people_outline,
+                            size: 64, color: Colors.grey[400]),
+                        SizedBox(height: 16),
+                        Text(
+                          'No enrollments yet',
+                          style: TextStyle(color: Colors.grey[600]),
+                        ),
+                      ],
                     ),
-            ),
-          ],
-        ),
+                  )
+                : ListView.builder(
+                    itemCount: _recentEnrollments.length,
+                    itemBuilder: (context, index) {
+                      final enrollment = _recentEnrollments[index];
+                      return Card(
+                        margin: EdgeInsets.only(bottom: 8),
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor:
+                                _getStatusColor(enrollment['status']),
+                            child: Icon(
+                              Icons.person,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                          ),
+                          title: Text(enrollment['studentName']),
+                          subtitle: Text(
+                            'Enrolled: ${DateFormat('MMM dd, yyyy').format(enrollment['enrollmentDate'])}',
+                          ),
+                          trailing: Container(
+                            padding: EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: _getStatusColor(enrollment['status'])
+                                  .withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              enrollment['status'],
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: _getStatusColor(enrollment['status']),
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          onTap: () {
+                            // Navigate to student details
+                            // Navigator.push(...);
+                          },
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
       ),
     );
   }

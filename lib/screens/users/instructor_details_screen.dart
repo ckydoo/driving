@@ -4,7 +4,6 @@ import 'package:driving/controllers/fleet_controller.dart';
 import 'package:driving/controllers/schedule_controller.dart';
 import 'package:driving/controllers/user_controller.dart';
 import 'package:driving/models/user.dart';
-import 'package:driving/screens/schedule/daily_schedule_screen.dart';
 import 'package:driving/services/database_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -436,13 +435,13 @@ class _InstructorDetailsScreenState extends State<InstructorDetailsScreen> {
                         trailing: Icon(Icons.arrow_forward_ios,
                             size: 16, color: Colors.grey.shade600),
                         onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (context) => DailyScheduleScreen(
-                                selectedDate: schedule.start,
-                              ),
-                            ),
-                          );
+                          // Navigator.of(context).push(
+                          //   MaterialPageRoute(
+                          //     builder: (context) => DailyScheduleScreen(
+                          //       selectedDate: schedule.start,
+                          //     ),
+                          //   ),
+                          // );
                         },
                       );
                     },

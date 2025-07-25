@@ -1,17 +1,22 @@
 // lib/main_final.dart
 import 'package:driving/controllers/navigation_controller.dart';
 import 'package:driving/services/app_bindings.dart';
+import 'package:driving/services/app_initialization.dart';
 import 'package:driving/widgets/main_layout.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-void main() {
+void main() async {
   // Initialize FFI for Windows
   sqfliteFfiInit();
 
   // Set the database factory to use FFI
   databaseFactory = databaseFactoryFfi;
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize the app with migration
+  await AppInitialization.initialize();
 
   runApp(MyApp());
 }
