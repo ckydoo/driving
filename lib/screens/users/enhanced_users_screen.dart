@@ -721,7 +721,7 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
                   IconButton(
                     icon: Icon(Icons.edit, size: 18, color: Colors.blue[600]),
                     onPressed: () => Get.dialog(
-                      UserFormDialog(user: user, role: widget.role),
+                      AddUserScreen(user: user, role: widget.role),
                     ),
                     tooltip: 'Edit',
                   ),

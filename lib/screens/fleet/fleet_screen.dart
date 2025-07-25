@@ -1,685 +1,1061 @@
-import 'dart:io';
-
-import 'package:csv/csv.dart';
-import 'package:driving/models/user.dart';
+// lib/screens/fleet/enhanced_vehicle_screen.dart
+import 'package:driving/controllers/schedule_controller.dart';
 import 'package:driving/screens/fleet/fleet_details_screen.dart';
 import 'package:driving/widgets/fleet_form_dialog.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:intl/intl.dart';
 import '../../controllers/fleet_controller.dart';
 import '../../controllers/user_controller.dart';
 import '../../models/fleet.dart';
+import '../../models/user.dart';
 
-class FleetScreen extends GetView<FleetController> {
+class FleetScreen extends StatefulWidget {
   const FleetScreen({Key? key}) : super(key: key);
 
   @override
-  Widget build(BuildContext context) {
-    final userController = Get.find<UserController>();
-    final fleetController = Get.find<FleetController>();
+  _FleetScreenState createState() => _FleetScreenState();
+}
 
+class _FleetScreenState extends State<FleetScreen>
+    with SingleTickerProviderStateMixin {
+  final FleetController fleetController = Get.find<FleetController>();
+  final UserController userController = Get.find<UserController>();
+  final ScheduleController scheduleController = Get.find<ScheduleController>();
+
+  final TextEditingController _searchController = TextEditingController();
+  List<Fleet> _vehicles = [];
+  List<Fleet> _searchResults = [];
+  List<int> _selectedVehicles = [];
+  bool _isMultiSelectionActive = false;
+  bool _isAllSelected = false;
+  String _sortBy = 'make';
+  bool _sortAscending = true;
+  String _filterStatus = 'all';
+  bool _isLoading = true;
+
+  // Pagination variables
+  int _currentPage = 1;
+  int _rowsPerPage = 12;
+
+  // Tab controller for different views
+  late TabController _tabController;
+
+  // Smart recommendations
+  List<Map<String, dynamic>> _recommendations = [];
+  List<Map<String, dynamic>> _quickStats = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+    _loadVehicles();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadVehicles() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      await fleetController.fetchFleet();
+      await userController.fetchUsers();
+      await scheduleController.fetchSchedules();
+
+      setState(() {
+        _vehicles = fleetController.fleet;
+        _searchResults = List.from(_vehicles);
+        _sortVehicles();
+        _filterVehicles();
+        _generateQuickStats();
+        _generateRecommendations();
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      Get.snackbar(
+        'Error',
+        'Failed to load vehicles: $e',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    }
+  }
+
+  void _searchVehicles(String query) {
+    setState(() {
+      if (query.isEmpty) {
+        _searchResults = List.from(_vehicles);
+      } else {
+        _searchResults = _vehicles
+            .where((vehicle) =>
+                vehicle.make.toLowerCase().contains(query.toLowerCase()) ||
+                vehicle.model.toLowerCase().contains(query.toLowerCase()) ||
+                vehicle.carPlate.toLowerCase().contains(query.toLowerCase()) ||
+                _getInstructorName(vehicle.instructor)
+                    .toLowerCase()
+                    .contains(query.toLowerCase()))
+            .toList();
+      }
+      _filterVehicles();
+      _sortVehicles();
+      _currentPage = 1;
+    });
+  }
+
+  void _sortVehicles() {
+    setState(() {
+      _searchResults.sort((a, b) {
+        dynamic aValue, bValue;
+        switch (_sortBy) {
+          case 'make':
+            aValue = '${a.make} ${a.model}'.toLowerCase();
+            bValue = '${b.make} ${b.model}'.toLowerCase();
+            break;
+          case 'year':
+            aValue = int.parse(a.modelYear);
+            bValue = int.parse(b.modelYear);
+            break;
+          case 'plate':
+            aValue = a.carPlate.toLowerCase();
+            bValue = b.carPlate.toLowerCase();
+            break;
+          case 'instructor':
+            aValue = _getInstructorName(a.instructor).toLowerCase();
+            bValue = _getInstructorName(b.instructor).toLowerCase();
+            break;
+          default:
+            aValue = '${a.make} ${a.model}'.toLowerCase();
+            bValue = '${b.make} ${b.model}'.toLowerCase();
+        }
+        return _sortAscending
+            ? aValue.compareTo(bValue)
+            : bValue.compareTo(aValue);
+      });
+    });
+  }
+
+  void _filterVehicles() {
+    setState(() {
+      if (_filterStatus == 'assigned') {
+        _searchResults =
+            _searchResults.where((vehicle) => vehicle.instructor != 0).toList();
+      } else if (_filterStatus == 'unassigned') {
+        _searchResults =
+            _searchResults.where((vehicle) => vehicle.instructor == 0).toList();
+      }
+    });
+  }
+
+  void _generateQuickStats() {
+    final totalVehicles = _vehicles.length;
+    final assignedVehicles = _vehicles.where((v) => v.instructor != 0).length;
+    final unassignedVehicles = totalVehicles - assignedVehicles;
+
+    // Calculate average vehicle age
+    final currentYear = DateTime.now().year;
+    final avgAge = _vehicles.isNotEmpty
+        ? _vehicles
+                .map((v) => currentYear - int.parse(v.modelYear))
+                .reduce((a, b) => a + b) /
+            _vehicles.length
+        : 0.0;
+
+    // Get unique makes
+    final uniqueMakes = _vehicles.map((v) => v.make).toSet().length;
+
+    _quickStats = [
+      {
+        'title': 'Total Vehicles',
+        'value': totalVehicles.toString(),
+        'icon': Icons.directions_car,
+        'color': Colors.blue,
+        'subtitle': '$uniqueMakes different makes',
+      },
+      {
+        'title': 'Assigned',
+        'value': assignedVehicles.toString(),
+        'icon': Icons.person_pin,
+        'color': Colors.green,
+        'subtitle':
+            '${((assignedVehicles / totalVehicles) * 100).toStringAsFixed(1)}% utilization',
+      },
+      {
+        'title': 'Available',
+        'value': unassignedVehicles.toString(),
+        'icon': Icons.car_rental,
+        'color': Colors.orange,
+        'subtitle': 'Ready for assignment',
+      },
+      {
+        'title': 'Avg. Age',
+        'value': '${avgAge.toStringAsFixed(1)} yrs',
+        'icon': Icons.access_time,
+        'color': Colors.purple,
+        'subtitle': 'Fleet average',
+      },
+    ];
+  }
+
+  void _generateRecommendations() {
+    _recommendations.clear();
+
+    // Unassigned vehicles
+    final unassignedVehicles = _vehicles.where((v) => v.instructor == 0).length;
+    if (unassignedVehicles > 0) {
+      _recommendations.add({
+        'type': 'warning',
+        'title': 'Unassigned Vehicles',
+        'description':
+            '$unassignedVehicles vehicles are not assigned to instructors.',
+        'action': 'Assign Instructors',
+        'icon': Icons.assignment_ind,
+        'color': Colors.orange,
+        'priority': 'high',
+        'onTap': () => _showUnassignedVehicles(),
+      });
+    }
+
+    // Old vehicles that might need replacement
+    final currentYear = DateTime.now().year;
+    final oldVehicles = _vehicles
+        .where((v) => currentYear - int.parse(v.modelYear) > 10)
+        .length;
+    if (oldVehicles > 0) {
+      _recommendations.add({
+        'type': 'info',
+        'title': 'Vehicle Replacement',
+        'description': '$oldVehicles vehicles are over 10 years old.',
+        'action': 'Review Fleet',
+        'icon': Icons.update,
+        'color': Colors.blue,
+        'priority': 'medium',
+        'onTap': () => _showOldVehicles(),
+      });
+    }
+
+    // Instructors without vehicles
+    final instructors = userController.users
+        .where((u) => u.role.toLowerCase() == 'instructor')
+        .toList();
+    final assignedInstructorIds = _vehicles.map((v) => v.instructor).toSet();
+    final unassignedInstructors =
+        instructors.where((i) => !assignedInstructorIds.contains(i.id)).length;
+
+    if (unassignedInstructors > 0) {
+      _recommendations.add({
+        'type': 'warning',
+        'title': 'Instructors Need Vehicles',
+        'description':
+            '$unassignedInstructors instructors don\'t have assigned vehicles.',
+        'action': 'Add Vehicles',
+        'icon': Icons.add_circle,
+        'color': Colors.red,
+        'priority': 'high',
+        'onTap': () => _showUnassignedInstructors(),
+      });
+    }
+
+    // Fleet utilization analysis
+    final utilizationRate = _vehicles.isNotEmpty
+        ? (_vehicles.where((v) => v.instructor != 0).length /
+                _vehicles.length) *
+            100
+        : 0.0;
+
+    if (utilizationRate > 95) {
+      _recommendations.add({
+        'type': 'success',
+        'title': 'Excellent Utilization',
+        'description':
+            'Fleet utilization is at ${utilizationRate.toStringAsFixed(1)}%.',
+        'action': 'View Details',
+        'icon': Icons.trending_up,
+        'color': Colors.green,
+        'priority': 'info',
+        'onTap': () => _showUtilizationDetails(),
+      });
+    } else if (utilizationRate < 70) {
+      _recommendations.add({
+        'type': 'suggestion',
+        'title': 'Low Utilization',
+        'description':
+            'Fleet utilization is only ${utilizationRate.toStringAsFixed(1)}%.',
+        'action': 'Optimize Fleet',
+        'icon': Icons.trending_down,
+        'color': Colors.blue,
+        'priority': 'medium',
+        'onTap': () => _showOptimizationSuggestions(),
+      });
+    }
+
+    // Maintenance recommendations based on age
+    final maintenanceNeeded =
+        _vehicles.where((v) => currentYear - int.parse(v.modelYear) > 5).length;
+    if (maintenanceNeeded > 0) {
+      _recommendations.add({
+        'type': 'info',
+        'title': 'Maintenance Planning',
+        'description':
+            '$maintenanceNeeded vehicles may need increased maintenance.',
+        'action': 'Plan Maintenance',
+        'icon': Icons.build,
+        'color': Colors.grey,
+        'priority': 'low',
+        'onTap': () => _showMaintenanceSchedule(),
+      });
+    }
+  }
+
+  String _getInstructorName(int instructorId) {
+    if (instructorId == 0) return 'Unassigned';
+
+    final instructor = userController.users.firstWhereOrNull(
+      (user) =>
+          user.id == instructorId && user.role.toLowerCase() == 'instructor',
+    );
+
+    return instructor != null
+        ? '${instructor.fname} ${instructor.lname}'
+        : 'Unknown Instructor';
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Vehicle Management',
-          style: TextStyle(
+      backgroundColor: Colors.grey[100],
+      body: Column(
+        children: [
+          // Header with stats and controls
+          Container(
+            padding: EdgeInsets.all(16),
             color: Colors.white,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        backgroundColor: Colors.blue.shade800,
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.white),
-            onPressed: () async {
-              await userController.fetchUsers();
-              await fleetController.fetchFleet();
-            },
-          ),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(60.0),
-          child: Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: Row(
+            child: Column(
               children: [
-                // Search Bar
-                Expanded(
-                  child: TextField(
-                    decoration: InputDecoration(
-                      hintText: 'Search vehicles...',
-                      hintStyle: TextStyle(color: Colors.grey.shade600),
-                      prefixIcon:
-                          Icon(Icons.search, color: Colors.grey.shade600),
-                      filled: true,
-                      fillColor: Colors.grey.shade100,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8.0),
-                        borderSide: BorderSide.none,
-                      ),
-                      contentPadding:
-                          const EdgeInsets.symmetric(vertical: 12.0),
-                    ),
-                    onChanged: (value) {
-                      fleetController.searchFleet(value); // Update search query
+                // Quick stats cards
+                SizedBox(
+                  height: 120,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _quickStats.length,
+                    itemBuilder: (context, index) {
+                      final stat = _quickStats[index];
+                      return Container(
+                        width: 200,
+                        margin: EdgeInsets.only(right: 16),
+                        child: _buildStatCard(stat),
+                      );
                     },
                   ),
                 ),
-                const SizedBox(
-                    width: 8), // Spacing between search bar and buttons
-                // Import Button
-                IconButton(
-                  icon: const Icon(Icons.upload, color: Colors.white),
-                  onPressed: () {
-                    _showImportDialog();
-                  },
-                ),
-                // Export Button
-                IconButton(
-                  icon: const Icon(
-                    Icons.download,
-                    color: Colors.white,
-                  ),
-                  onPressed: () {
-                    _showExportDialog();
-                  },
+                SizedBox(height: 16),
+
+                // Search and filters
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: TextField(
+                        controller: _searchController,
+                        decoration: InputDecoration(
+                          hintText: 'Search vehicles, plates, instructors...',
+                          prefixIcon: Icon(Icons.search),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          contentPadding: EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        onChanged: _searchVehicles,
+                      ),
+                    ),
+                    SizedBox(width: 16),
+
+                    // Assignment filter
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey[300]!),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: DropdownButton<String>(
+                        value: _filterStatus,
+                        underline: Container(),
+                        items: [
+                          DropdownMenuItem(
+                              value: 'all', child: Text('All Vehicles')),
+                          DropdownMenuItem(
+                              value: 'assigned', child: Text('Assigned')),
+                          DropdownMenuItem(
+                              value: 'unassigned', child: Text('Available')),
+                        ],
+                        onChanged: (value) {
+                          setState(() {
+                            _filterStatus = value!;
+                            _filterVehicles();
+                            _currentPage = 1;
+                          });
+                        },
+                      ),
+                    ),
+                    SizedBox(width: 16),
+
+                    // Sort dropdown
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey[300]!),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: DropdownButton<String>(
+                        value: _sortBy,
+                        underline: Container(),
+                        items: [
+                          DropdownMenuItem(
+                              value: 'make', child: Text('Sort by Make')),
+                          DropdownMenuItem(
+                              value: 'year', child: Text('Sort by Year')),
+                          DropdownMenuItem(
+                              value: 'plate', child: Text('Sort by Plate')),
+                          DropdownMenuItem(
+                              value: 'instructor',
+                              child: Text('Sort by Instructor')),
+                        ],
+                        onChanged: (value) {
+                          setState(() {
+                            _sortBy = value!;
+                            _sortVehicles();
+                          });
+                        },
+                      ),
+                    ),
+                    SizedBox(width: 8),
+                    IconButton(
+                      icon: Icon(_sortAscending
+                          ? Icons.arrow_upward
+                          : Icons.arrow_downward),
+                      onPressed: () {
+                        setState(() {
+                          _sortAscending = !_sortAscending;
+                          _sortVehicles();
+                        });
+                      },
+                    ),
+
+                    Spacer(),
+                    Text('${_searchResults.length} vehicles found'),
+                  ],
                 ),
               ],
             ),
           ),
-        ),
-      ),
-      body: Obx(() {
-        if (fleetController.isLoading.value || userController.isLoading.value) {
-          return const Center(
-            child: CircularProgressIndicator(
-              color: Colors.blue,
-            ),
-          );
-        }
 
-        // Check if a search has been performed and no results were found
-        if (fleetController.searchQuery.isNotEmpty &&
-            fleetController.searchedFleet.isEmpty) {
-          return const Center(
-            child: Text(
-              'No vehicles found',
-              style: TextStyle(
-                color: Colors.grey,
-                fontSize: 18,
+          // Tab bar
+          Container(
+            color: Colors.white,
+            child: TabBar(
+              controller: _tabController,
+              labelColor: Colors.blue[600],
+              unselectedLabelColor: Colors.grey[600],
+              indicatorColor: Colors.blue[600],
+              tabs: [
+                Tab(icon: Icon(Icons.grid_view), text: 'Grid View'),
+                Tab(icon: Icon(Icons.list), text: 'List View'),
+                Tab(icon: Icon(Icons.lightbulb), text: 'Recommendations'),
+              ],
+            ),
+          ),
+
+          // Multi-selection bar
+          if (_isMultiSelectionActive)
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              color: Colors.blue[50],
+              child: Row(
+                children: [
+                  Checkbox(
+                    value: _isAllSelected,
+                    onChanged: _toggleSelectAll,
+                  ),
+                  Text('${_selectedVehicles.length} selected'),
+                  Spacer(),
+                  TextButton.icon(
+                    icon: Icon(Icons.assignment_ind, color: Colors.blue),
+                    label: Text('Assign Instructors',
+                        style: TextStyle(color: Colors.blue)),
+                    onPressed: _selectedVehicles.isNotEmpty
+                        ? () => _bulkAssignInstructors()
+                        : null,
+                  ),
+                  TextButton.icon(
+                    icon: Icon(Icons.delete, color: Colors.red),
+                    label: Text('Delete Selected',
+                        style: TextStyle(color: Colors.red)),
+                    onPressed: _selectedVehicles.isNotEmpty
+                        ? () => _deleteSelectedVehicles()
+                        : null,
+                  ),
+                ],
               ),
             ),
-          );
-        }
 
-        // Determine which list to use
-        final List<Fleet> fleetList = fleetController.searchedFleet.isNotEmpty
-            ? fleetController.searchedFleet
-            : fleetController.fleet;
-
-        if (fleetList.isEmpty) {
-          return const Center(
-            child: Text(
-              'No vehicles found',
-              style: TextStyle(
-                color: Colors.grey,
-                fontSize: 18,
-              ),
-            ),
-          );
-        }
-
-        return Column(
-          children: [
-            _buildHeaderRow(),
-            Expanded(
-              child: Card(
-                elevation: 4,
-                margin: const EdgeInsets.all(16.0),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: ListView.builder(
-                  itemCount: fleetList.length,
-                  itemBuilder: (context, index) {
-                    final vehicle = fleetList[index];
-                    return _buildDataRow(vehicle, index);
-                  },
-                ),
-              ),
-            ),
-            _buildPagination(),
-          ],
-        );
-      }),
-      floatingActionButton: ValueListenableBuilder<bool>(
-        valueListenable: fleetController.isMultiSelectionActive,
-        builder: (context, value, child) {
-          return FloatingActionButton.extended(
-            onPressed: value
-                ? () {
-                    _showMultiDeleteConfirmationDialog();
-                  }
-                : () {
-                    Get.dialog(const FleetFormDialog());
-                  },
-            label: value
-                ? Row(
+          // Content
+          Expanded(
+            child: _isLoading
+                ? Center(child: CircularProgressIndicator())
+                : TabBarView(
+                    controller: _tabController,
                     children: [
-                      Icon(Icons.delete_sweep, color: Colors.white),
-                      SizedBox(width: 8),
-                      Text('Delete Selected',
-                          style: TextStyle(color: Colors.white)),
-                    ],
-                  )
-                : Row(
-                    children: [
-                      Icon(Icons.add, color: Colors.white),
-                      SizedBox(width: 8),
-                      Text('Add Vehicle',
-                          style: TextStyle(color: Colors.white)),
+                      _buildGridView(),
+                      _buildListView(),
+                      _buildRecommendationsView(),
                     ],
                   ),
-            backgroundColor: value ? Colors.redAccent : Colors.blue.shade800,
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () async {
+          final result = await Get.dialog<bool>(
+            FleetFormDialog(),
           );
+          if (result == true) {
+            _loadVehicles();
+          }
         },
+        label: Text('Add Vehicle'),
+        icon: Icon(Icons.add),
+        backgroundColor: Colors.blue[600],
       ),
     );
   }
 
-  // Method to show Import Dialog
-  void _showImportDialog() {
-    final fleetController = Get.find<FleetController>();
+  Widget _buildStatCard(Map<String, dynamic> stat) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(stat['icon'], color: stat['color'], size: 24),
+                Spacer(),
+                Text(
+                  stat['value'],
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey[800],
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 8),
+            Text(
+              stat['title'],
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: Colors.grey[700],
+              ),
+            ),
+            Text(
+              stat['subtitle'],
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[500],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
-    Get.defaultDialog(
-      title: 'Import Vehicles',
-      content: Column(
+  Widget _buildGridView() {
+    final vehicles = _getPaginatedVehicles();
+
+    return Column(
+      children: [
+        Expanded(
+          child: Container(
+            padding: EdgeInsets.all(16),
+            child: GridView.builder(
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+                childAspectRatio: 1.1,
+              ),
+              itemCount: vehicles.length,
+              itemBuilder: (context, index) {
+                final vehicle = vehicles[index];
+                return _buildVehicleGridCard(vehicle);
+              },
+            ),
+          ),
+        ),
+        _buildPagination(),
+      ],
+    );
+  }
+
+  Widget _buildVehicleGridCard(Fleet vehicle) {
+    final isSelected = _selectedVehicles.contains(vehicle.id);
+    final instructorName = _getInstructorName(vehicle.instructor);
+    final isAssigned = vehicle.instructor != 0;
+    final currentYear = DateTime.now().year;
+    final vehicleAge = currentYear - int.parse(vehicle.modelYear);
+
+    return Card(
+      elevation: isSelected ? 8 : 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: isSelected
+            ? BorderSide(color: Colors.blue[400]!, width: 2)
+            : BorderSide.none,
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => FleetDetailsScreen(fleetId: vehicle.id!),
+            ),
+          );
+        },
+        onLongPress: () => _toggleVehicleSelection(vehicle.id!),
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  if (_isMultiSelectionActive)
+                    Checkbox(
+                      value: isSelected,
+                      onChanged: (value) =>
+                          _toggleVehicleSelection(vehicle.id!),
+                    ),
+                  Spacer(),
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color:
+                          isAssigned ? Colors.green[100] : Colors.orange[100],
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      isAssigned ? 'Assigned' : 'Available',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                        color:
+                            isAssigned ? Colors.green[800] : Colors.orange[800],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 8),
+              Icon(
+                Icons.directions_car,
+                size: 32,
+                color: isAssigned ? Colors.blue[400] : Colors.grey[400],
+              ),
+              SizedBox(height: 12),
+              Text(
+                '${vehicle.make} ${vehicle.model}',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey[800],
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              SizedBox(height: 4),
+              Text(
+                vehicle.carPlate,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.blue[600],
+                ),
+              ),
+              SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.calendar_today, size: 12, color: Colors.grey[500]),
+                  SizedBox(width: 4),
+                  Text(
+                    vehicle.modelYear,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                  if (vehicleAge > 5) ...[
+                    SizedBox(width: 8),
+                    Icon(Icons.warning, size: 12, color: Colors.orange[600]),
+                  ],
+                ],
+              ),
+              SizedBox(height: 4),
+              Row(
+                children: [
+                  Icon(Icons.person, size: 12, color: Colors.grey[500]),
+                  SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      instructorName,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey[600],
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildListView() {
+    final vehicles = _getPaginatedVehicles();
+
+    return Column(
+      children: [
+        Expanded(
+          child: Container(
+            margin: EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.withOpacity(0.1),
+                  spreadRadius: 1,
+                  blurRadius: 3,
+                  offset: Offset(0, 1),
+                ),
+              ],
+            ),
+            child: ListView.separated(
+              itemCount: vehicles.length,
+              separatorBuilder: (context, index) => Divider(height: 1),
+              itemBuilder: (context, index) {
+                final vehicle = vehicles[index];
+                return _buildVehicleListTile(vehicle);
+              },
+            ),
+          ),
+        ),
+        _buildPagination(),
+      ],
+    );
+  }
+
+  Widget _buildVehicleListTile(Fleet vehicle) {
+    final isSelected = _selectedVehicles.contains(vehicle.id);
+    final instructorName = _getInstructorName(vehicle.instructor);
+    final isAssigned = vehicle.instructor != 0;
+    final currentYear = DateTime.now().year;
+    final vehicleAge = currentYear - int.parse(vehicle.modelYear);
+
+    return ListTile(
+      leading: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Instructions
-          ExpansionTile(
-            title: const Text('Import Instructions'),
+          if (_isMultiSelectionActive)
+            Checkbox(
+              value: isSelected,
+              onChanged: (value) => _toggleVehicleSelection(vehicle.id!),
+            ),
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: isAssigned ? Colors.blue[100] : Colors.grey[100],
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              Icons.directions_car,
+              color: isAssigned ? Colors.blue[600] : Colors.grey[600],
+            ),
+          ),
+        ],
+      ),
+      title: Text(
+        '${vehicle.make} ${vehicle.model}',
+        style: TextStyle(fontWeight: FontWeight.w500),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Plate: ${vehicle.carPlate} • Year: ${vehicle.modelYear}'),
+          SizedBox(height: 4),
+          Row(
             children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isAssigned ? Colors.green[100] : Colors.orange[100],
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  isAssigned ? 'Assigned' : 'Available',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: isAssigned ? Colors.green[800] : Colors.orange[800],
+                  ),
+                ),
+              ),
+              if (vehicleAge > 10) ...[
+                SizedBox(width: 8),
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.red[100],
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    'Old',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.red[800],
+                    ),
+                  ),
+                ),
+              ] else if (vehicleAge > 5) ...[
+                SizedBox(width: 8),
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.orange[100],
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    'Aging',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.orange[800],
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+      trailing: PopupMenuButton<String>(
+        onSelected: (value) async {
+          switch (value) {
+            case 'edit':
+              final result = await Get.dialog<bool>(
+                FleetFormDialog(vehicle: vehicle),
+              );
+              if (result == true) {
+                _loadVehicles();
+              }
+              break;
+            case 'assign':
+              _assignInstructor(vehicle);
+              break;
+            case 'delete':
+              _deleteVehicle(vehicle);
+              break;
+          }
+        },
+        itemBuilder: (context) => [
+          PopupMenuItem(
+            value: 'edit',
+            child: Row(
+              children: [
+                Icon(Icons.edit, size: 20),
+                SizedBox(width: 8),
+                Text('Edit'),
+              ],
+            ),
+          ),
+          PopupMenuItem(
+            value: 'assign',
+            child: Row(
+              children: [
+                Icon(Icons.assignment_ind, size: 20),
+                SizedBox(width: 8),
+                Text(isAssigned ? 'Reassign' : 'Assign Instructor'),
+              ],
+            ),
+          ),
+          PopupMenuItem(
+            value: 'delete',
+            child: Row(
+              children: [
+                Icon(Icons.delete, size: 20, color: Colors.red),
+                SizedBox(width: 8),
+                Text('Delete', style: TextStyle(color: Colors.red)),
+              ],
+            ),
+          ),
+        ],
+      ),
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => FleetDetailsScreen(fleetId: vehicle.id!),
+          ),
+        );
+      },
+      onLongPress: () => _toggleVehicleSelection(vehicle.id!),
+    );
+  }
+
+  Widget _buildRecommendationsView() {
+    return Container(
+      padding: EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Smart Recommendations',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[800],
+            ),
+          ),
+          Text(
+            'AI-powered insights to optimize your vehicle fleet',
+            style: TextStyle(color: Colors.grey[600]),
+          ),
+          SizedBox(height: 24),
+          Expanded(
+            child: _recommendations.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.lightbulb_outline,
+                            size: 64, color: Colors.grey[400]),
+                        SizedBox(height: 16),
+                        Text(
+                          'No recommendations at this time',
+                          style: TextStyle(
+                            fontSize: 18,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        Text(
+                          'Your fleet management is optimized!',
+                          style: TextStyle(color: Colors.grey[500]),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: _recommendations.length,
+                    itemBuilder: (context, index) {
+                      final recommendation = _recommendations[index];
+                      return _buildRecommendationCard(recommendation);
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRecommendationCard(Map<String, dynamic> recommendation) {
+    Color cardColor;
+    switch (recommendation['type']) {
+      case 'warning':
+        cardColor = Colors.orange[50]!;
+        break;
+      case 'success':
+        cardColor = Colors.green[50]!;
+        break;
+      case 'info':
+        cardColor = Colors.blue[50]!;
+        break;
+      default:
+        cardColor = Colors.grey[50]!;
+    }
+
+    return Card(
+      margin: EdgeInsets.only(bottom: 16),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: recommendation['onTap'],
+        child: Container(
+          padding: EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: cardColor,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: recommendation['color'].withOpacity(0.3)),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                recommendation['icon'],
+                size: 32,
+                color: recommendation['color'],
+              ),
+              SizedBox(width: 16),
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      '1. Download the sample CSV template below.\n'
-                      '2. Fill in the template with your vehicle data.\n'
-                      '3. Ensure the CSV file has the following columns:\n'
-                      '   - Car No\n'
-                      '   - Make\n'
-                      '   - Model\n'
-                      '   - Car Plate\n'
-                      '   - Instructor ID\n'
-                      '   - Model Year\n'
-                      '4. Upload the CSV file using the "Import" button.',
-                      style: TextStyle(fontSize: 14),
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: () async {
-                        // Generate and download the sample CSV template
-                        final csvData = const ListToCsvConverter().convert(
-                          [
-                            [
-                              'Car No',
-                              'Make',
-                              'Model',
-                              'Car Plate',
-                              'Instructor ID',
-                              'Model Year'
-                            ], // Header row
-                            [
-                              '1',
-                              'Toyota',
-                              'Corolla',
-                              'ABC123',
-                              '1',
-                              '2020'
-                            ], // Example row
-                          ],
-                        );
-
-                        // Save the CSV file
-                        final String? filePath =
-                            await FilePicker.platform.saveFile(
-                          dialogTitle: 'Save Sample CSV Template',
-                          fileName: 'fleet_template.csv',
-                          allowedExtensions: ['csv'],
-                        );
-
-                        if (filePath != null) {
-                          final file = File(filePath);
-                          await file.writeAsString(csvData);
-                          Get.snackbar(
-                            'Template Downloaded',
-                            'Sample CSV template saved to $filePath',
-                            backgroundColor: Colors.green,
-                            colorText: Colors.white,
-                          );
-                        } else {
-                          Get.snackbar(
-                            'Download Cancelled',
-                            'No file path selected.',
-                            backgroundColor: Colors.red,
-                            colorText: Colors.white,
-                          );
-                        }
-                      },
-                      child: const Text('Download Sample CSV Template'),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          const Text('Upload a CSV file to import vehicles.'),
-        ],
-      ),
-      confirm: TextButton(
-        onPressed: () async {
-          // Pick CSV file
-          final FilePickerResult? result = await FilePicker.platform.pickFiles(
-            type: FileType.custom,
-            allowedExtensions: ['csv'],
-          );
-
-          if (result != null && result.files.single.path != null) {
-            final file = File(result.files.single.path!);
-            final csvString = await file.readAsString();
-
-            // Parse CSV data
-            final csvData = const CsvToListConverter().convert(csvString);
-
-            // Validate CSV format
-            if (csvData.isNotEmpty) {
-              // Check if the header row matches the expected format
-              final expectedHeaders = [
-                'Car No',
-                'Make',
-                'Model',
-                'Car Plate',
-                'Instructor ID',
-                'Model Year'
-              ];
-              final actualHeaders =
-                  csvData[0].map((header) => header.toString()).toList();
-
-              if (actualHeaders.length == expectedHeaders.length &&
-                  actualHeaders
-                      .every((header) => expectedHeaders.contains(header))) {
-                // Process the CSV data
-                final newFleet = <Fleet>[];
-                final errors = <String>[];
-
-                for (var i = 1; i < csvData.length; i++) {
-                  final row = csvData[i];
-
-                  // Validate row length
-                  if (row.length != 6) {
-                    errors.add('Row ${i + 1}: Invalid number of columns.');
-                    continue;
-                  }
-
-                  // Validate Car No
-                  final carNo = row[0].toString();
-                  if (carNo.isEmpty || int.tryParse(carNo) == null) {
-                    errors.add('Row ${i + 1}: Invalid Car No.');
-                    continue;
-                  }
-
-                  // Validate Car Plate
-                  final carPlate = row[3].toString();
-                  if (carPlate.isEmpty) {
-                    errors.add('Row ${i + 1}: Car Plate is required.');
-                    continue;
-                  }
-
-                  // Check for duplicates
-                  if (fleetController.fleet
-                      .any((vehicle) => vehicle.carPlate == carPlate)) {
-                    errors.add(
-                        'Row ${i + 1}: Car Plate $carPlate already exists.');
-                    continue;
-                  }
-                  if (fleetController.fleet
-                      .any((vehicle) => vehicle.carPlate == carPlate)) {
-                    errors.add(
-                        'Row ${i + 1}: Car Plate $carPlate already exists.');
-                    continue;
-                  }
-
-                  // Validate Instructor ID
-                  final instructorId = int.tryParse(row[4].toString());
-                  if (instructorId == null) {
-                    errors.add('Row ${i + 1}: Invalid Instructor ID.');
-                    continue;
-                  }
-
-                  // Validate Model Year
-                  final modelYear = row[5].toString();
-                  if (modelYear.isEmpty || int.tryParse(modelYear) == null) {
-                    errors.add('Row ${i + 1}: Invalid Model Year.');
-                    continue;
-                  }
-
-                  // Add valid vehicle to the new fleet list
-                  newFleet.add(Fleet(
-                    id: null, // Auto-generated by the backend
-                    make: row[1].toString(),
-                    model: row[2].toString(),
-                    carPlate: carPlate,
-                    instructor: instructorId,
-                    modelYear: modelYear,
-                  ));
-                }
-
-                if (errors.isNotEmpty) {
-                  // Show errors
-                  Get.defaultDialog(
-                    title: 'Import Errors',
-                    content: SingleChildScrollView(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: errors.map((error) => Text(error)).toList(),
+                    Text(
+                      recommendation['title'],
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey[800],
                       ),
                     ),
-                    confirm: TextButton(
-                      onPressed: () {
-                        Get.back();
-                      },
-                      child: const Text('OK'),
-                    ),
-                  );
-                } else {
-                  // Save the new fleet data to the database
-                  await fleetController.saveFleet(newFleet);
-                  Get.snackbar(
-                    'Import Successful',
-                    '${newFleet.length} vehicles imported.',
-                    backgroundColor: Colors.green,
-                    colorText: Colors.white,
-                  );
-                }
-              } else {
-                Get.snackbar(
-                  'Invalid CSV Format',
-                  'The CSV file must have the following columns: Car No, Make, Model, Car Plate, Instructor ID, Model Year.',
-                  backgroundColor: Colors.red,
-                  colorText: Colors.white,
-                );
-              }
-            } else {
-              Get.snackbar(
-                'Invalid CSV File',
-                'The CSV file is empty or improperly formatted.',
-                backgroundColor: Colors.red,
-                colorText: Colors.white,
-              );
-            }
-          } else {
-            Get.snackbar(
-              'Import Cancelled',
-              'No file selected.',
-              backgroundColor: Colors.red,
-              colorText: Colors.white,
-            );
-          }
-
-          Get.back();
-        },
-        child: const Text('Import'),
-      ),
-      cancel: TextButton(
-        onPressed: () {
-          Get.back();
-        },
-        child: const Text('Cancel'),
-      ),
-    );
-  }
-
-  // Method to show Export Dialog
-  void _showExportDialog() {
-    final fleetController = Get.find<FleetController>();
-
-    Get.defaultDialog(
-      title: 'Export Vehicles',
-      content: const Text('Export the current list of vehicles to a CSV file.'),
-      confirm: TextButton(
-        onPressed: () async {
-          // Convert fleet data to CSV
-          final csvData = const ListToCsvConverter().convert(
-            [
-              [
-                'Make',
-                'Model',
-                'Car Plate',
-                'Instructor',
-                'Year'
-              ], // Header row
-              ...fleetController.fleet.map((vehicle) => [
-                    vehicle.make,
-                    vehicle.model,
-                    vehicle.carPlate,
-                    vehicle.instructor.toString(),
-                    vehicle.modelYear,
-                  ]),
-            ],
-          );
-
-          // Sanitize file name
-          final timestamp = DateTime.now()
-              .toIso8601String()
-              .replaceAll(RegExp(r'[:\.]'), '_');
-          final fileName = 'fleet_export_$timestamp.csv';
-
-          // Save CSV file
-          final String? filePath = await FilePicker.platform.saveFile(
-            dialogTitle: 'Save CSV File',
-            fileName: fileName,
-            allowedExtensions: ['csv'],
-          );
-
-          if (filePath != null) {
-            final file = File(filePath);
-            await file.writeAsString(csvData);
-
-            // Show success dialog
-            Get.defaultDialog(
-              title: 'Export Successful',
-              content: Text('Fleet data exported to $filePath'),
-              confirm: TextButton(
-                onPressed: () {
-                  Get.back(); // Close the success dialog
-                  Get.back(); // Go back to the fleet list
-                },
-                child: const Text('OK'),
-              ),
-            );
-          } else {
-            Get.snackbar(
-              'Export Cancelled',
-              'No file path selected.',
-              backgroundColor: Colors.red,
-              colorText: Colors.white,
-            );
-            Get.back(); // Go back to the fleet list
-          }
-        },
-        child: const Text('Export'),
-      ),
-      cancel: TextButton(
-        onPressed: () {
-          Get.back(); // Go back to the fleet list
-        },
-        child: const Text('Cancel'),
-      ),
-    );
-  }
-
-  Widget _buildHeaderRow() {
-    final fleetController = Get.find<FleetController>();
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-      child: Row(
-        children: [
-          Checkbox(
-            value: fleetController.isAllSelected.value,
-            onChanged: (bool? value) {
-              fleetController.toggleSelectAll(value!);
-            },
-          ),
-          Expanded(
-            flex: 2,
-            child: Text(
-              'Make/Model',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Colors.blue.shade800,
-              ),
-            ),
-          ),
-          Expanded(
-            flex: 1,
-            child: Text(
-              'Plate',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Colors.blue.shade800,
-              ),
-            ),
-          ),
-          Expanded(
-            flex: 2,
-            child: Text(
-              'Instructor',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Colors.blue.shade800,
-              ),
-            ),
-          ),
-          Expanded(
-            flex: 1,
-            child: Text(
-              'Year',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Colors.blue.shade800,
-              ),
-            ),
-          ),
-          Expanded(
-            flex: 1,
-            child: Text(
-              '',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Colors.blue.shade800,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDataRow(Fleet vehicle, int index) {
-    final fleetController = Get.find<FleetController>();
-
-    String _getInstructorName(int instructorId) {
-      final userController = Get.find<UserController>();
-
-      if (userController.isLoading.value) return 'Loading...';
-
-      if (userController.users.isEmpty) {
-        return 'Loading...';
-      }
-
-      final instructor = userController.users.firstWhere(
-        (user) =>
-            user.id == instructorId && user.role.toLowerCase() == 'instructor',
-        orElse: () => User(
-          id: -1,
-          fname: 'Unknown',
-          lname: 'Instructor',
-          email: '',
-          date_of_birth: DateTime.now(),
-          password: '',
-          role: '',
-          status: '',
-          created_at: DateTime.now(),
-          gender: '',
-          phone: '',
-          address: '',
-          idnumber: '',
-        ),
-      );
-
-      return instructor.id == -1
-          ? 'Unknown Instructor'
-          : '${instructor.fname} ${instructor.lname}';
-    }
-
-    return Container(
-      color: index % 2 == 0 ? Colors.grey.shade100 : Colors.white,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-        child: InkWell(
-          onTap: () {
-            Navigator.of(Get.context!).push(
-              MaterialPageRoute(
-                builder: (context) => FleetDetailsScreen(
-                  fleetId: vehicle.id!,
-                ),
-              ),
-            );
-          },
-          child: Row(
-            children: [
-              Checkbox(
-                value: fleetController.selectedFleet.contains(vehicle.id),
-                onChanged: (bool? value) {
-                  fleetController.toggleFleetSelection(vehicle.id!);
-                  if (fleetController.isAllSelected.value && value == false) {
-                    fleetController.isAllSelected(false);
-                  }
-                },
-              ),
-              Expanded(
-                  flex: 2, child: Text('${vehicle.make} ${vehicle.model}')),
-              Expanded(flex: 1, child: Text(vehicle.carPlate)),
-              Expanded(
-                  flex: 2, child: Text(_getInstructorName(vehicle.instructor))),
-              Expanded(flex: 1, child: Text(vehicle.modelYear)),
-              Expanded(
-                flex: 1,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    IconButton(
-                      icon: Icon(Icons.edit, color: Colors.blue),
-                      onPressed: () {
-                        Get.dialog(FleetFormDialog(vehicle: vehicle));
-                      },
-                    ),
-                    IconButton(
-                      icon: Icon(Icons.delete, color: Colors.red),
-                      onPressed: () {
-                        _showDeleteConfirmationDialog(vehicle.id!);
-                      },
+                    SizedBox(height: 4),
+                    Text(
+                      recommendation['description'],
+                      style: TextStyle(color: Colors.grey[600]),
                     ),
                   ],
                 ),
+              ),
+              SizedBox(width: 16),
+              ElevatedButton(
+                onPressed: recommendation['onTap'],
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: recommendation['color'],
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: Text(recommendation['action']),
               ),
             ],
           ),
@@ -689,46 +1065,44 @@ class FleetScreen extends GetView<FleetController> {
   }
 
   Widget _buildPagination() {
-    final fleetController = Get.find<FleetController>();
+    final totalPages = (_searchResults.length / _rowsPerPage).ceil();
 
-    return Padding(
-      padding: const EdgeInsets.only(
-          left: 16.0, right: 200.0, top: 40.0, bottom: 16.0),
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: Colors.grey[300]!)),
+      ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          IconButton(
-            icon: const Icon(Icons.arrow_back_ios, color: Colors.blue),
-            onPressed: () {
-              fleetController.goToPreviousPage();
-            },
+          Text(
+            'Showing ${((_currentPage - 1) * _rowsPerPage) + 1}-${(_currentPage * _rowsPerPage).clamp(0, _searchResults.length)} of ${_searchResults.length}',
+            style: TextStyle(color: Colors.grey[600]),
           ),
-          Obx(() => Text(
-                'Page ${fleetController.currentPage} of ${fleetController.totalPages}',
-                style: TextStyle(
-                  color: Colors.grey.shade700,
-                  fontWeight: FontWeight.bold,
-                ),
-              )),
+          Spacer(),
           IconButton(
-            icon: const Icon(Icons.arrow_forward_ios, color: Colors.blue),
-            onPressed: () {
-              fleetController.goToNextPage();
-            },
+            icon: Icon(Icons.chevron_left),
+            onPressed: _currentPage > 1 ? _goToPreviousPage : null,
           ),
+          Text('$_currentPage of $totalPages'),
+          IconButton(
+            icon: Icon(Icons.chevron_right),
+            onPressed: _currentPage < totalPages ? _goToNextPage : null,
+          ),
+          SizedBox(width: 16),
           DropdownButton<int>(
-            value: 10,
-            items: [10, 25, 50, 100].map((int value) {
+            value: _rowsPerPage,
+            items: [6, 12, 24, 48].map((int value) {
               return DropdownMenuItem<int>(
                 value: value,
-                child: Text(
-                  '$value rows',
-                  style: TextStyle(color: Colors.grey.shade700),
-                ),
+                child: Text('$value per page'),
               );
             }).toList(),
             onChanged: (int? value) {
-              // Implement rows per page change
+              setState(() {
+                _rowsPerPage = value!;
+                _currentPage = 1;
+              });
             },
           ),
         ],
@@ -736,49 +1110,477 @@ class FleetScreen extends GetView<FleetController> {
     );
   }
 
-  void _showDeleteConfirmationDialog(int id) {
-    final fleetController = Get.find<FleetController>();
+  List<Fleet> _getPaginatedVehicles() {
+    final startIndex = (_currentPage - 1) * _rowsPerPage;
+    final endIndex = startIndex + _rowsPerPage;
+    if (startIndex >= _searchResults.length) {
+      return [];
+    }
+    return _searchResults.sublist(startIndex,
+        endIndex > _searchResults.length ? _searchResults.length : endIndex);
+  }
 
-    Get.defaultDialog(
-      title: 'Confirm Delete',
-      content: const Text('Are you sure you want to delete this vehicle?'),
-      confirm: TextButton(
-        onPressed: () {
-          fleetController.deleteFleet(id);
-          Get.back();
-        },
-        child: const Text('Delete'),
+  void _goToPreviousPage() {
+    if (_currentPage > 1) {
+      setState(() {
+        _currentPage--;
+        _selectedVehicles.clear();
+        _isMultiSelectionActive = false;
+        _isAllSelected = false;
+      });
+    }
+  }
+
+  void _goToNextPage() {
+    final totalPages = (_searchResults.length / _rowsPerPage).ceil();
+    if (_currentPage < totalPages) {
+      setState(() {
+        _currentPage++;
+        _selectedVehicles.clear();
+        _isMultiSelectionActive = false;
+        _isAllSelected = false;
+      });
+    }
+  }
+
+  void _toggleVehicleSelection(int fleetId) {
+    setState(() {
+      if (_selectedVehicles.contains(fleetId)) {
+        _selectedVehicles.remove(fleetId);
+      } else {
+        _selectedVehicles.add(fleetId);
+      }
+      _isMultiSelectionActive = _selectedVehicles.isNotEmpty;
+      _isAllSelected =
+          _selectedVehicles.length == _getPaginatedVehicles().length;
+    });
+  }
+
+  void _toggleSelectAll(bool? value) {
+    setState(() {
+      _isAllSelected = value ?? false;
+      if (_isAllSelected) {
+        _selectedVehicles =
+            _getPaginatedVehicles().map((vehicle) => vehicle.id!).toList();
+      } else {
+        _selectedVehicles.clear();
+      }
+      _isMultiSelectionActive = _selectedVehicles.isNotEmpty;
+    });
+  }
+
+  void _deleteVehicle(Fleet vehicle) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete Vehicle'),
+        content: Text(
+            'Are you sure you want to delete "${vehicle.make} ${vehicle.model}" (${vehicle.carPlate})?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: Text('Delete'),
+          ),
+        ],
       ),
-      cancel: TextButton(
-        onPressed: () {
-          Get.back();
-        },
-        child: const Text('Cancel'),
+    );
+
+    if (confirmed == true) {
+      try {
+        await fleetController.deleteFleet(vehicle.id!);
+        _loadVehicles();
+        Get.snackbar(
+          'Success',
+          'Vehicle deleted successfully',
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+        );
+      } catch (e) {
+        Get.snackbar(
+          'Error',
+          'Failed to delete vehicle: $e',
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+        );
+      }
+    }
+  }
+
+  void _deleteSelectedVehicles() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete Selected Vehicles'),
+        content: Text(
+            'Are you sure you want to delete ${_selectedVehicles.length} selected vehicles?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: Text('Delete All'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        for (int fleetId in _selectedVehicles) {
+          await fleetController.deleteFleet(fleetId);
+        }
+        setState(() {
+          _selectedVehicles.clear();
+          _isMultiSelectionActive = false;
+          _isAllSelected = false;
+        });
+        _loadVehicles();
+        Get.snackbar(
+          'Success',
+          'Selected vehicles deleted successfully',
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+        );
+      } catch (e) {
+        Get.snackbar(
+          'Error',
+          'Failed to delete vehicles: $e',
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+        );
+      }
+    }
+  }
+
+  void _assignInstructor(Fleet vehicle) {
+    final availableInstructors = userController.users
+        .where((u) => u.role.toLowerCase() == 'instructor')
+        .where((instructor) => !_vehicles
+            .any((v) => v.instructor == instructor.id && v.id != vehicle.id))
+        .toList();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Assign Instructor'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Select an instructor for ${vehicle.make} ${vehicle.model}:'),
+            SizedBox(height: 16),
+            Container(
+              width: double.maxFinite,
+              child: availableInstructors.isEmpty
+                  ? Text('No available instructors')
+                  : Column(
+                      children: availableInstructors
+                          .map(
+                            (instructor) => ListTile(
+                              title: Text(
+                                  '${instructor.fname} ${instructor.lname}'),
+                              subtitle: Text(instructor.email),
+                              onTap: () async {
+                                Navigator.pop(context);
+                                await _updateVehicleInstructor(
+                                    vehicle, instructor.id!);
+                              },
+                            ),
+                          )
+                          .toList(),
+                    ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Cancel'),
+          ),
+        ],
       ),
     );
   }
 
-  void _showMultiDeleteConfirmationDialog() {
-    final fleetController = Get.find<FleetController>();
-    Get.defaultDialog(
-      title: 'Confirm Multi-Delete',
-      content: Text(
-          'Are you sure you want to delete the selected ${fleetController.selectedFleet.length} vehicles?'),
-      confirm: TextButton(
-        onPressed: () {
-          fleetController.selectedFleet.forEach((id) {
-            fleetController.deleteFleet(id);
-          });
-          fleetController.toggleSelectAll(false);
-          Get.back();
-        },
-        child: const Text('Delete All'),
+  Future<void> _updateVehicleInstructor(Fleet vehicle, int instructorId) async {
+    try {
+      final updatedVehicle = Fleet(
+        id: vehicle.id,
+        carPlate: vehicle.carPlate,
+        make: vehicle.make,
+        model: vehicle.model,
+        modelYear: vehicle.modelYear,
+        instructor: instructorId,
+      );
+
+      await fleetController.handleFleet(updatedVehicle, isUpdate: true);
+      _loadVehicles();
+
+      final instructor =
+          userController.users.firstWhere((u) => u.id == instructorId);
+      Get.snackbar(
+        'Success',
+        'Vehicle assigned to ${instructor.fname} ${instructor.lname}',
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
+    } catch (e) {
+      Get.snackbar(
+        'Error',
+        'Failed to assign instructor: $e',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    }
+  }
+
+  void _bulkAssignInstructors() {
+    Get.snackbar(
+      'Feature Coming Soon',
+      'Bulk instructor assignment will be available in the next update',
+      backgroundColor: Colors.blue,
+      colorText: Colors.white,
+    );
+  }
+
+  // Recommendation action methods
+  void _showUnassignedVehicles() {
+    final unassignedVehicles =
+        _vehicles.where((v) => v.instructor == 0).toList();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Unassigned Vehicles'),
+        content: Container(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('These vehicles need instructor assignment:'),
+              SizedBox(height: 16),
+              ...unassignedVehicles.map((vehicle) => ListTile(
+                    leading: Icon(Icons.directions_car, color: Colors.orange),
+                    title: Text('${vehicle.make} ${vehicle.model}'),
+                    subtitle: Text(vehicle.carPlate),
+                    trailing: TextButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _assignInstructor(vehicle);
+                      },
+                      child: Text('Assign'),
+                    ),
+                  )),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Close'),
+          ),
+        ],
       ),
-      cancel: TextButton(
-        onPressed: () {
-          Get.back();
-        },
-        child: const Text('Cancel'),
+    );
+  }
+
+  void _showOldVehicles() {
+    final currentYear = DateTime.now().year;
+    final oldVehicles = _vehicles
+        .where((v) => currentYear - int.parse(v.modelYear) > 10)
+        .toList();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Aging Fleet'),
+        content: Container(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('These vehicles are over 10 years old:'),
+              SizedBox(height: 16),
+              ...oldVehicles.map((vehicle) => ListTile(
+                    leading: Icon(Icons.warning, color: Colors.red),
+                    title: Text('${vehicle.make} ${vehicle.model}'),
+                    subtitle: Text(
+                        '${vehicle.modelYear} (${currentYear - int.parse(vehicle.modelYear)} years old)'),
+                    trailing: TextButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        Get.dialog(FleetFormDialog(vehicle: vehicle));
+                      },
+                      child: Text('Update'),
+                    ),
+                  )),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showUnassignedInstructors() {
+    final instructors = userController.users
+        .where((u) => u.role.toLowerCase() == 'instructor')
+        .toList();
+    final assignedInstructorIds = _vehicles.map((v) => v.instructor).toSet();
+    final unassignedInstructors = instructors
+        .where((i) => !assignedInstructorIds.contains(i.id))
+        .toList();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Instructors Without Vehicles'),
+        content: Container(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('These instructors need vehicle assignments:'),
+              SizedBox(height: 16),
+              ...unassignedInstructors.map((instructor) => ListTile(
+                    leading: Icon(Icons.person, color: Colors.red),
+                    title: Text('${instructor.fname} ${instructor.lname}'),
+                    subtitle: Text(instructor.email),
+                    trailing: TextButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        Get.dialog(FleetFormDialog());
+                      },
+                      child: Text('Add Vehicle'),
+                    ),
+                  )),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showUtilizationDetails() {
+    final utilizationRate = _vehicles.isNotEmpty
+        ? (_vehicles.where((v) => v.instructor != 0).length /
+                _vehicles.length) *
+            100
+        : 0.0;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Fleet Utilization'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(
+              value: utilizationRate / 100,
+              backgroundColor: Colors.grey[300],
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.green),
+            ),
+            SizedBox(height: 16),
+            Text(
+              '${utilizationRate.toStringAsFixed(1)}%',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.green,
+              ),
+            ),
+            Text('Fleet Utilization'),
+            SizedBox(height: 16),
+            Text('Excellent! Your fleet is highly utilized.'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Great!'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showOptimizationSuggestions() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Fleet Optimization'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Suggestions to improve fleet utilization:'),
+            SizedBox(height: 16),
+            Text('• Assign unassigned vehicles to instructors'),
+            Text('• Consider selling older, unused vehicles'),
+            Text('• Hire more instructors if demand is high'),
+            Text('• Review vehicle maintenance schedules'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Thanks'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showMaintenanceSchedule() {
+    final currentYear = DateTime.now().year;
+    final maintenanceVehicles = _vehicles
+        .where((v) => currentYear - int.parse(v.modelYear) > 5)
+        .toList();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Maintenance Planning'),
+        content: Container(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Vehicles that may need increased maintenance:'),
+              SizedBox(height: 16),
+              ...maintenanceVehicles.map((vehicle) => ListTile(
+                    leading: Icon(Icons.build, color: Colors.grey),
+                    title: Text('${vehicle.make} ${vehicle.model}'),
+                    subtitle: Text(
+                        '${currentYear - int.parse(vehicle.modelYear)} years old'),
+                  )),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Close'),
+          ),
+        ],
       ),
     );
   }

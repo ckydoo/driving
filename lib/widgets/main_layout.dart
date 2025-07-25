@@ -371,9 +371,12 @@ class CompleteMainLayout extends StatelessWidget {
       case 'courses':
         return CourseScreen();
       case 'students':
-        return EnhancedUsersScreen(role: 'student');
+        // Create a new instance each time to ensure proper state
+        return EnhancedUsersScreen(role: 'student', key: ValueKey('students'));
       case 'instructors':
-        return EnhancedUsersScreen(role: 'instructor');
+        // Create a new instance each time to ensure proper state
+        return EnhancedUsersScreen(
+            role: 'instructor', key: ValueKey('instructors'));
       case 'vehicles':
         return FleetScreen();
       case 'billing':

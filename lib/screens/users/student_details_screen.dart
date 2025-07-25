@@ -37,7 +37,10 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen> {
   @override
   void initState() {
     super.initState();
-    _loadStudentData();
+    // Use post frame callback to avoid build phase issues
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadStudentData();
+    });
   }
 
   Future<void> _fetchStudentNotes() async {
@@ -46,6 +49,67 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen> {
     setState(() {
       _studentNotes = notes;
     });
+  }
+
+  Future<void> _fetchStudentAttachments() async {
+    final attachments = await DatabaseHelper.instance
+        .getAttachmentsForStudent(widget.studentId);
+    setState(() {
+      _studentAttachments = attachments;
+    });
+  }
+
+  Future<void> _loadStudentData() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // Check if we already have the student data
+      User? existingStudent = userController.users
+          .firstWhereOrNull((user) => user.id == widget.studentId);
+
+      // Only fetch users if we don't have the student data or users list is empty
+      if (existingStudent == null || userController.users.isEmpty) {
+        await userController.fetchUsers();
+      }
+
+      // Load other data
+      await Future.wait([
+        courseController.fetchCourses(),
+        scheduleController.fetchSchedules(),
+        billingController.fetchBillingData(),
+        _fetchStudentNotes(),
+        _fetchStudentAttachments(),
+      ]);
+
+      // Get the student after all data is loaded
+      setState(() {
+        student = userController.users
+            .firstWhereOrNull((user) => user.id == widget.studentId);
+        _isLoading = false;
+      });
+
+      if (student == null) {
+        Get.snackbar(
+          'Error',
+          'Student not found',
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+        );
+        Navigator.of(context as BuildContext).pop();
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      Get.snackbar(
+        'Error',
+        'Failed to load student data: ${e.toString()}',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    }
   }
 
   @override
@@ -62,28 +126,36 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen> {
       ),
       body: _isLoading
           ? Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Student Information
-                  _buildStudentInfoCard(),
-                  SizedBox(height: 16),
-                  // Invoices
-                  _buildInvoicesSection(),
-                  SizedBox(height: 16),
-                  // Schedules
-                  _buildSchedulesSection(),
-                  SizedBox(height: 16),
-                  // Attachments
-                  _buildAttachmentsSection(),
-                  SizedBox(height: 16),
-                  // Notes
-                  _buildNotesSection(),
-                ],
-              ),
-            ),
+          : student == null
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.error, size: 64, color: Colors.red),
+                      SizedBox(height: 16),
+                      Text(
+                        'Student not found',
+                        style: TextStyle(fontSize: 18, color: Colors.red),
+                      ),
+                    ],
+                  ),
+                )
+              : SingleChildScrollView(
+                  padding: EdgeInsets.all(16.0),
+                  child: Column(
+                    children: [
+                      _buildStudentInfoCard(),
+                      SizedBox(height: 16),
+                      _buildSchedulesCard(),
+                      SizedBox(height: 16),
+                      _buildBillingCard(),
+                      SizedBox(height: 16),
+                      _buildNotesCard(),
+                      SizedBox(height: 16),
+                      _buildAttachmentsCard(),
+                    ],
+                  ),
+                ),
     );
   }
 
@@ -91,49 +163,102 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen> {
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
       ),
       child: Padding(
         padding: EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Student Information',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.blue.shade800,
-              ),
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 30,
+                  backgroundColor: Colors.blue.shade100,
+                  child: Text(
+                    '${student!.fname[0]}${student!.lname[0]}'.toUpperCase(),
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue.shade800,
+                    ),
+                  ),
+                ),
+                SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${student!.fname} ${student!.lname}',
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue.shade800,
+                        ),
+                      ),
+                      Text(
+                        'ID: ${student!.idnumber}',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                      Container(
+                        padding:
+                            EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: student!.status.toLowerCase() == 'active'
+                              ? Colors.green.shade100
+                              : Colors.orange.shade100,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          student!.status,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: student!.status.toLowerCase() == 'active'
+                                ? Colors.green.shade800
+                                : Colors.orange.shade800,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            Divider(color: Colors.grey.shade300),
-            SizedBox(height: 8),
-            _buildInfoRow('Name', '${student!.fname} ${student!.lname}'),
+            Divider(height: 24),
+            _buildInfoRow('Email', student!.email, Icons.email),
+            _buildInfoRow('Phone', student!.phone, Icons.phone),
+            _buildInfoRow('Address', student!.address, Icons.location_on),
             _buildInfoRow(
-                'DOB', DateFormat.yMd().format(student!.date_of_birth)),
-            _buildInfoRow('ID Number', student!.idnumber),
-            _buildInfoRow('Gender', student!.gender),
-            _buildInfoRow('Email', student!.email),
-            _buildInfoRow('Phone', student!.phone),
-            _buildInfoRow('Address', student!.address),
+                'Date of Birth',
+                DateFormat('yyyy-MM-dd').format(student!.date_of_birth),
+                Icons.calendar_today),
+            _buildInfoRow('Gender', student!.gender, Icons.person),
             _buildInfoRow(
-                'Registered on', DateFormat.yMd().format(student!.created_at)),
+                'Joined',
+                DateFormat('yyyy-MM-dd').format(student!.created_at),
+                Icons.date_range),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildInfoRow(String label, String value) {
+  Widget _buildInfoRow(String label, String value, IconData icon) {
     return Padding(
-      padding: EdgeInsets.symmetric(vertical: 4.0),
+      padding: EdgeInsets.symmetric(vertical: 4),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Icon(icon, size: 16, color: Colors.grey.shade600),
+          SizedBox(width: 8),
           Text(
             '$label: ',
             style: TextStyle(
-              fontWeight: FontWeight.bold,
+              fontWeight: FontWeight.w500,
               color: Colors.grey.shade700,
             ),
           ),
@@ -148,368 +273,343 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen> {
     );
   }
 
-  Widget _buildInvoicesSection() {
-    final studentInvoices = billingController.invoices
-        .where((invoice) => invoice.studentId == student!.id)
+  Widget _buildSchedulesCard() {
+    final studentSchedules = scheduleController.schedules
+        .where((schedule) => schedule.studentId == widget.studentId)
         .toList();
+
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
       ),
       child: Padding(
         padding: EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Invoices',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.blue.shade800,
-              ),
-            ),
-            Divider(color: Colors.grey.shade300),
-            SizedBox(height: 8),
-            if (studentInvoices.isEmpty)
-              Padding(
-                padding: EdgeInsets.only(top: 8.0),
-                child: Text(
-                  'No invoices found for this student.',
-                  style: TextStyle(color: Colors.grey.shade600),
+            Row(
+              children: [
+                Icon(Icons.schedule, color: Colors.blue.shade800),
+                SizedBox(width: 8),
+                Text(
+                  'Schedule (${studentSchedules.length})',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue.shade800,
+                  ),
                 ),
-              ),
-            if (studentInvoices.isNotEmpty)
-              ListView.separated(
-                shrinkWrap: true,
-                physics: NeverScrollableScrollPhysics(),
-                itemCount: studentInvoices.length,
-                separatorBuilder: (context, index) =>
-                    Divider(color: Colors.grey.shade300),
-                itemBuilder: (context, index) {
-                  final invoice = studentInvoices[index];
-                  return ListTile(
-                    title: Text('Invoice #${invoice.id}'),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Total: ${invoice.formattedTotal}'),
-                        Text(
-                            'Due Date: ${DateFormat.yMd().format(invoice.dueDate)}'),
-                        Text('Status: ${invoice.status}'),
-                      ],
-                    ),
-                    trailing: Icon(Icons.arrow_forward_ios,
-                        size: 16, color: Colors.grey.shade600),
-                    onTap: () {
-                      // Navigate to invoice details screen
+                Spacer(),
+                ElevatedButton.icon(
+                  icon: Icon(Icons.add, size: 16),
+                  label: Text('Add Lesson'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue.shade800,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () {
+                    // Navigate to add schedule
+                  },
+                ),
+              ],
+            ),
+            Divider(height: 16),
+            studentSchedules.isEmpty
+                ? Text(
+                    'No scheduled lessons',
+                    style: TextStyle(color: Colors.grey.shade600),
+                  )
+                : ListView.separated(
+                    shrinkWrap: true,
+                    physics: NeverScrollableScrollPhysics(),
+                    itemCount: studentSchedules.length,
+                    separatorBuilder: (context, index) =>
+                        Divider(color: Colors.grey.shade300),
+                    itemBuilder: (context, index) {
+                      final schedule = studentSchedules[index];
+                      final instructor = userController.users.firstWhereOrNull(
+                        (user) => user.id == schedule.instructorId,
+                      );
+
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(
+                          '${DateFormat.yMd().add_jm().format(schedule.start)} - ${DateFormat.jm().format(schedule.end)}',
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Course: ${schedule.classType}'),
+                            Text(
+                                'Instructor: ${instructor?.fname ?? 'Unknown'} ${instructor?.lname ?? 'Instructor'}'),
+                            Text('Status: ${schedule.status}'),
+                          ],
+                        ),
+                        trailing: Icon(Icons.arrow_forward_ios,
+                            size: 16, color: Colors.grey.shade600),
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => DailyScheduleScreen(
+                                selectedDate: schedule.start,
+                              ),
+                            ),
+                          );
+                        },
+                      );
                     },
-                  );
-                },
-              ),
+                  ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildSchedulesSection() {
-    final studentSchedules = scheduleController.schedules
-        .where((schedule) => schedule.studentId == student!.id)
+  Widget _buildBillingCard() {
+    final studentInvoices = billingController.invoices
+        .where((invoice) => invoice.studentId == widget.studentId)
         .toList();
+
+    final totalBalance = studentInvoices.fold<double>(
+        0.0, (sum, invoice) => sum + invoice.balance);
+
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
       ),
       child: Padding(
         padding: EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Schedules',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.blue.shade800,
-              ),
+            Row(
+              children: [
+                Icon(Icons.payment, color: Colors.blue.shade800),
+                SizedBox(width: 8),
+                Text(
+                  'Billing Information',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue.shade800,
+                  ),
+                ),
+              ],
             ),
-            Divider(color: Colors.grey.shade300),
+            Divider(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Total Outstanding Balance:',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                Text(
+                  '\$${totalBalance.toStringAsFixed(2)}',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: totalBalance > 0 ? Colors.red : Colors.green,
+                  ),
+                ),
+              ],
+            ),
             SizedBox(height: 8),
-            if (studentSchedules.isEmpty)
-              Padding(
-                padding: EdgeInsets.only(top: 8.0),
-                child: Text(
-                  'No schedules found for this student.',
-                  style: TextStyle(color: Colors.grey.shade600),
+            Text(
+              'Invoices: ${studentInvoices.length}',
+              style: TextStyle(color: Colors.grey.shade600),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNotesCard() {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Padding(
+        padding: EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.note, color: Colors.blue.shade800),
+                SizedBox(width: 8),
+                Text(
+                  'Notes (${_studentNotes.length})',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue.shade800,
+                  ),
+                ),
+              ],
+            ),
+            Divider(height: 16),
+            TextField(
+              controller: _noteController,
+              decoration: InputDecoration(
+                hintText: 'Add a note...',
+                border: OutlineInputBorder(),
+                suffixIcon: IconButton(
+                  icon: Icon(Icons.send),
+                  onPressed: _addNote,
                 ),
               ),
-            if (studentSchedules.isNotEmpty)
-              ListView.separated(
-                shrinkWrap: true,
-                physics: NeverScrollableScrollPhysics(),
-                itemCount: studentSchedules.length,
-                separatorBuilder: (context, index) =>
-                    Divider(color: Colors.grey.shade300),
-                itemBuilder: (context, index) {
-                  final schedule = studentSchedules[index];
-                  final instructor = userController.users.firstWhere(
-                    (user) => user.id == schedule.instructorId,
-                    orElse: () => User(
-                      fname: 'Unknown',
-                      lname: 'Instructor',
-                      id: 0,
-                      email: '',
-                      password: '',
-                      gender: '',
-                      phone: '',
-                      address: '',
-                      date_of_birth: DateTime.now(),
-                      role: '',
-                      status: '',
-                      idnumber: '',
-                      created_at: DateTime.now(),
-                    ),
-                  );
-                  return ListTile(
-                    title: Text(
-                      '${DateFormat.yMd().add_jm().format(schedule.start)} - ${DateFormat.jm().format(schedule.end)}',
-                    ),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Course: ${schedule.classType}'),
-                        Text(
-                            'Instructor: ${instructor.fname} ${instructor.lname}'),
-                        Text('Status: ${schedule.status}'),
-                      ],
-                    ),
-                    trailing: Icon(Icons.arrow_forward_ios,
-                        size: 16, color: Colors.grey.shade600),
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (context) =>
-                              DailyScheduleScreen(selectedDate: schedule.start),
+              maxLines: 2,
+            ),
+            SizedBox(height: 16),
+            _studentNotes.isEmpty
+                ? Text(
+                    'No notes available',
+                    style: TextStyle(color: Colors.grey.shade600),
+                  )
+                : ListView.separated(
+                    shrinkWrap: true,
+                    physics: NeverScrollableScrollPhysics(),
+                    itemCount: _studentNotes.length,
+                    separatorBuilder: (context, index) =>
+                        Divider(color: Colors.grey.shade300),
+                    itemBuilder: (context, index) {
+                      final note = _studentNotes[index];
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(note['note']),
+                        subtitle: Text(
+                          '${DateFormat.yMd().add_jm().format(DateTime.parse(note['created_at']))}',
+                          style: TextStyle(color: Colors.grey.shade600),
+                        ),
+                        trailing: IconButton(
+                          icon: Icon(Icons.delete, color: Colors.red),
+                          onPressed: () => _deleteNote(note['id']),
                         ),
                       );
                     },
-                  );
-                },
-              ),
+                  ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildAttachmentsSection() {
+  Widget _buildAttachmentsCard() {
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
       ),
       child: Padding(
         padding: EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Attachments',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.blue.shade800,
-              ),
-            ),
-            Divider(color: Colors.grey.shade300),
-            SizedBox(height: 8),
-            ElevatedButton.icon(
-              onPressed: () async {
-                FilePickerResult? result =
-                    await FilePicker.platform.pickFiles();
-                if (result != null && result.files.isNotEmpty) {
-                  PlatformFile file = result.files.first;
-                  String? attachmentPath = await _uploadFile(file);
-                  if (attachmentPath != null) {
-                    await _saveAttachmentToDatabase(
-                        student!.id!, attachmentPath, file.name);
-                    await _fetchStudentAttachments();
-                    setState(() {});
-                  }
-                }
-              },
-              icon: Icon(Icons.upload),
-              label: Text('Upload Attachment'),
-              style: ElevatedButton.styleFrom(
-                foregroundColor: Colors.white,
-                backgroundColor: Colors.blue.shade800,
-              ),
-            ),
-            SizedBox(height: 16),
-            if (_studentAttachments.isEmpty)
-              Padding(
-                padding: EdgeInsets.only(top: 8.0),
-                child: Text(
-                  'No attachments found for this student.',
-                  style: TextStyle(color: Colors.grey.shade600),
+            Row(
+              children: [
+                Icon(Icons.attach_file, color: Colors.blue.shade800),
+                SizedBox(width: 8),
+                Text(
+                  'Attachments (${_studentAttachments.length})',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue.shade800,
+                  ),
                 ),
-              ),
-            if (_studentAttachments.isNotEmpty)
-              ListView.separated(
-                shrinkWrap: true,
-                physics: NeverScrollableScrollPhysics(),
-                itemCount: _studentAttachments.length,
-                separatorBuilder: (context, index) =>
-                    Divider(color: Colors.grey.shade300),
-                itemBuilder: (context, index) {
-                  final attachment = _studentAttachments[index];
-                  return ListTile(
-                    title: Text(attachment['name']),
-                    subtitle: Text(
-                      'Uploaded on: ${DateFormat.yMd().add_jm().format(DateTime.parse(attachment['created_at']))}',
-                      style: TextStyle(color: Colors.grey.shade600),
-                    ),
-                    trailing: IconButton(
-                      icon: Icon(Icons.delete, color: Colors.red),
-                      onPressed: () => _deleteAttachment(attachment['id']),
-                    ),
-                    onTap: () => _launchURL(attachment['attachment']),
-                  );
-                },
-              ),
+                Spacer(),
+                ElevatedButton.icon(
+                  icon: Icon(Icons.upload_file, size: 16),
+                  label: Text('Upload'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue.shade800,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: _uploadFile,
+                ),
+              ],
+            ),
+            Divider(height: 16),
+            _studentAttachments.isEmpty
+                ? Text(
+                    'No attachments',
+                    style: TextStyle(color: Colors.grey.shade600),
+                  )
+                : ListView.separated(
+                    shrinkWrap: true,
+                    physics: NeverScrollableScrollPhysics(),
+                    itemCount: _studentAttachments.length,
+                    separatorBuilder: (context, index) =>
+                        Divider(color: Colors.grey.shade300),
+                    itemBuilder: (context, index) {
+                      final attachment = _studentAttachments[index];
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.file_present),
+                        title: Text(attachment['name']),
+                        subtitle: Text(
+                          DateFormat.yMd()
+                              .add_jm()
+                              .format(DateTime.parse(attachment['created_at'])),
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: Icon(Icons.visibility),
+                              onPressed: () =>
+                                  _viewAttachment(attachment['attachment']),
+                            ),
+                            IconButton(
+                              icon: Icon(Icons.delete, color: Colors.red),
+                              onPressed: () =>
+                                  _deleteAttachment(attachment['id']),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildNotesSection() {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Padding(
-        padding: EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Notes',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.blue.shade800,
-              ),
-            ),
-            Divider(color: Colors.grey.shade300),
-            SizedBox(height: 8),
-            TextFormField(
-              decoration: InputDecoration(
-                labelText: 'Write a note...',
-                border: OutlineInputBorder(),
-              ),
-              maxLines: 3,
-              controller: _noteController,
-            ),
-            SizedBox(height: 8),
-            ElevatedButton.icon(
-              onPressed: () async {
-                String noteText = _noteController.text;
-                if (noteText.isNotEmpty) {
-                  await _saveNoteToDatabase(student!.id!, noteText);
-                  _noteController.clear();
-                  await _fetchStudentNotes();
-                }
-              },
-              icon: Icon(Icons.add),
-              label: Text('Add Note'),
-              style: ElevatedButton.styleFrom(
-                foregroundColor: Colors.white,
-                backgroundColor: Colors.blue.shade800,
-              ),
-            ),
-            SizedBox(height: 16),
-            if (_studentNotes.isEmpty)
-              Padding(
-                padding: EdgeInsets.only(top: 8.0),
-                child: Text(
-                  'No notes found for this student.',
-                  style: TextStyle(color: Colors.grey.shade600),
-                ),
-              ),
-            if (_studentNotes.isNotEmpty)
-              ListView.separated(
-                shrinkWrap: true,
-                physics: NeverScrollableScrollPhysics(),
-                itemCount: _studentNotes.length,
-                separatorBuilder: (context, index) =>
-                    Divider(color: Colors.grey.shade300),
-                itemBuilder: (context, index) {
-                  final note = _studentNotes[index];
-                  return ListTile(
-                    title: Text(note['note']),
-                    subtitle: Text(
-                      '${DateFormat.yMd().add_jm().format(DateTime.parse(note['created_at']))}',
-                      style: TextStyle(color: Colors.grey.shade600),
-                    ),
-                    trailing: IconButton(
-                      icon: Icon(Icons.delete, color: Colors.red),
-                      onPressed: () => _deleteNote(note['id']),
-                    ),
-                  );
-                },
-              ),
-          ],
-        ),
-      ),
-    );
+  void _addNote() async {
+    if (_noteController.text.trim().isNotEmpty) {
+      await _saveNoteToDatabase(widget.studentId, _noteController.text.trim());
+      _noteController.clear();
+      await _fetchStudentNotes();
+    }
   }
 
-  Future<void> _loadStudentData() async {
-    setState(() {
-      _isLoading = true;
-    });
-    await userController.fetchUsers();
-    await courseController.fetchCourses();
-    await scheduleController.fetchSchedules();
-    await billingController.fetchBillingData();
-    await _fetchStudentNotes();
-    await _fetchStudentAttachments();
-    setState(() {
-      student = userController.users
-          .firstWhere((user) => user.id == widget.studentId);
-      _isLoading = false;
-    });
+  Future<void> _uploadFile() async {
+    FilePickerResult? result = await FilePicker.platform.pickFiles();
+    if (result != null) {
+      PlatformFile file = result.files.first;
+      String? filePath = await _saveFileLocally(file);
+      if (filePath != null) {
+        await _saveAttachmentToDatabase(widget.studentId, filePath, file.name);
+        await _fetchStudentAttachments();
+      }
+    }
   }
 
-  Future<void> _deleteAttachment(int attachmentId) async {
-    await DatabaseHelper.instance.deleteAttachment(attachmentId);
-
-    await _fetchStudentAttachments(); // Refresh attachments
-  }
-
-  Future<void> _deleteNote(int noteId) async {
-    await DatabaseHelper.instance.deleteNote(noteId);
-    await _fetchStudentNotes(); // Refresh notes
-  }
-
-  Future<String?> _uploadFile(PlatformFile file) async {
+  Future<String?> _saveFileLocally(PlatformFile file) async {
     try {
-      // 1. Get the application documents directory
       final appDir = await getApplicationDocumentsDirectory();
       final localPath = appDir.path;
-
-      // 2. Create a new file in the local directory
       final newFile = File('$localPath/${file.name}');
-
-      // 3. Write the file content
-      await newFile.writeAsBytes(file.bytes!); // Use file.bytes!
-
-      // 4. Return the local file path
+      await newFile.writeAsBytes(file.bytes!);
       return newFile.path;
     } catch (e) {
       print('Error saving file: $e');
@@ -519,39 +619,37 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen> {
 
   Future<void> _saveAttachmentToDatabase(
       int studentId, String attachmentPath, String fileName) async {
-    // Implement database insertion for attachments
     await DatabaseHelper.instance.insertAttachment({
-      'uploaded_by': 1, //  Replace with the current user ID
+      'uploaded_by': 1,
       'attachment_for': studentId,
       'name': fileName,
-      'attachment': attachmentPath, // Store the local path
+      'attachment': attachmentPath,
       'created_at': DateTime.now().toIso8601String(),
     });
   }
 
   Future<void> _saveNoteToDatabase(int studentId, String noteText) async {
-    // Implement database insertion for notes
     await DatabaseHelper.instance.insertNote({
-      'note_by': 1, //  Replace with the current user ID
+      'note_by': 1,
       'note_for': studentId,
       'note': noteText,
       'created_at': DateTime.now().toIso8601String(),
     });
   }
 
-  Future<void> _fetchStudentAttachments() async {
-    final attachments = await DatabaseHelper.instance
-        .getAttachmentsForStudent(widget.studentId);
-    setState(() {
-      _studentAttachments = attachments;
-    });
+  Future<void> _deleteAttachment(int attachmentId) async {
+    await DatabaseHelper.instance.deleteAttachment(attachmentId);
+    await _fetchStudentAttachments();
   }
 
-  _launchURL(String filePath) async {
+  Future<void> _deleteNote(int noteId) async {
+    await DatabaseHelper.instance.deleteNote(noteId);
+    await _fetchStudentNotes();
+  }
+
+  void _viewAttachment(String filePath) async {
     final file = File(filePath);
     if (await file.exists()) {
-      print("File path: ${file.path}");
-      // For example, if it's an image:
       Navigator.of(context as BuildContext).push(
         MaterialPageRoute(
           builder: (context) => Scaffold(
@@ -563,7 +661,12 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen> {
         ),
       );
     } else {
-      throw Exception('File does not exist at $filePath');
+      Get.snackbar(
+        'Error',
+        'File does not exist',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
     }
   }
 }

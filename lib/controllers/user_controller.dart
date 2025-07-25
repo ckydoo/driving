@@ -8,6 +8,9 @@ class UserController extends GetxController {
   final RxBool isLoading = false.obs;
   final RxString error = ''.obs;
 
+  // Keep track of the last fetched role to avoid unnecessary fetches
+  String? _lastFetchedRole;
+
   List<User> get users => _users;
   List<User> get students => _users.where((u) => u.role == 'student').toList();
   List<User> get instructors =>
@@ -15,7 +18,7 @@ class UserController extends GetxController {
 
   RxList<User> searchedUser = <User>[].obs;
   RxList<int> selectedUser = <int>[].obs;
-  final searchQuery = ''.obs; // Observable search query
+  final searchQuery = ''.obs;
   RxBool isAllSelected = false.obs;
 
   // Pagination variables
@@ -23,20 +26,18 @@ class UserController extends GetxController {
   final RxInt _currentPage = 1.obs;
   int get currentPage => _currentPage.value;
   int get totalPages => (_users.length / _rowsPerPage).ceil();
-  // Add this ValueNotifier
+
   final ValueNotifier<bool> isMultiSelectionActive = ValueNotifier<bool>(false);
 
   @override
   void onInit() {
     super.onInit();
-    // Initialize users immediately when controller is created
     ever(_users, (_) => print('Users list updated: ${_users.length} users'));
   }
 
   @override
   void onReady() {
-    // Fetch users when controller is ready
-    fetchUsers();
+    // Don't automatically fetch users here - let screens request what they need
     super.onReady();
   }
 
@@ -47,14 +48,29 @@ class UserController extends GetxController {
 
       print('UserController: Fetching users with role: $role');
 
+      // Always fetch fresh data, especially when role changes
       final data =
           await DatabaseHelper.instance.getUsers(role: role?.toLowerCase());
       final List<User> users = data.map((json) => User.fromJson(json)).toList();
 
       print('UserController: Fetched ${users.length} users from database');
 
-      // Update the observable list - this will trigger UI updates
+      // If a specific role is requested, filter and return only those users
+      List<User> filteredUsers;
+      if (role != null) {
+        filteredUsers = users
+            .where((user) => user.role.toLowerCase() == role.toLowerCase())
+            .toList();
+        print('UserController: Filtered to ${filteredUsers.length} ${role}s');
+      } else {
+        filteredUsers = users;
+      }
+
+      // Update the observable list with ALL users (for global access)
       _users.assignAll(users);
+
+      // Update the last fetched role
+      _lastFetchedRole = role;
 
       // Clear any previous search results when fetching new data
       searchedUser.clear();
@@ -63,9 +79,9 @@ class UserController extends GetxController {
       isMultiSelectionActive.value = false;
 
       print(
-          'UserController: Updated observable list with ${_users.length} users');
+          'UserController: Updated observable list with ${_users.length} total users, returning ${filteredUsers.length} filtered users');
 
-      return users;
+      return filteredUsers;
     } catch (e) {
       error(e.toString());
       print('UserController: Error fetching users - ${e.toString()}');
@@ -82,86 +98,107 @@ class UserController extends GetxController {
     }
   }
 
+  // Add a method to get users by role from the existing list (avoid refetch)
+  List<User> getUsersByRole(String role) {
+    return _users
+        .where((user) => user.role.toLowerCase() == role.toLowerCase())
+        .toList();
+  }
+
+  // Add a method to refresh users for a specific role
+  Future<List<User>> refreshUsersForRole(String role) async {
+    print('UserController: Refreshing users for role: $role');
+    return await fetchUsers(role: role);
+  }
+
   Future<void> handleUser(User user, {bool isUpdate = false}) async {
     try {
       isLoading(true);
       error('');
 
       print(
-          'UserController: ${isUpdate ? 'Updating' : 'Creating'} user: ${user.fname} ${user.lname}');
+          'UserController: ${isUpdate ? 'Updating' : 'Adding'} user: ${user.fname} ${user.lname}');
 
-      if (isUpdate) {
+      if (isUpdate && user.id != null) {
         await DatabaseHelper.instance.updateUser(user);
         // Update the user in the local list
         final index = _users.indexWhere((u) => u.id == user.id);
         if (index != -1) {
           _users[index] = user;
-          print('UserController: Updated user in local list at index $index');
         }
+        print('UserController: User updated successfully');
       } else {
         final newUserId = await DatabaseHelper.instance.insertUser(user);
-        // Add the new user to the local list with the generated ID
-        final newUser = User(
-          id: newUserId,
-          fname: user.fname,
-          lname: user.lname,
-          email: user.email,
-          password: user.password,
-          gender: user.gender,
-          phone: user.phone,
-          address: user.address,
-          date_of_birth: user.date_of_birth,
-          role: user.role,
-          status: user.status,
-          idnumber: user.idnumber,
-          created_at: user.created_at,
-        );
-        _users.add(newUser);
-        print(
-            'UserController: Added new user to local list with ID: $newUserId');
+        user.id = newUserId;
+        // Add the new user to the local list
+        _users.add(user);
+        print('UserController: User added successfully with ID: $newUserId');
       }
 
-      // Refresh the list to ensure consistency
-      _users.refresh();
+      Get.snackbar(
+        'Success',
+        '${user.fname} ${user.lname} ${isUpdate ? 'updated' : 'added'} successfully',
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+        duration: const Duration(seconds: 3),
+      );
     } catch (e) {
       error(e.toString());
       print(
-          'UserController: Error ${isUpdate ? 'updating' : 'creating'} user - ${e.toString()}');
+          'UserController: Error ${isUpdate ? 'updating' : 'adding'} user - ${e.toString()}');
       Get.snackbar(
         'Error',
-        'User operation failed: ${e.toString()}',
+        '${isUpdate ? 'Update' : 'Add'} failed: ${e.toString()}',
         backgroundColor: Colors.red,
         colorText: Colors.white,
         duration: const Duration(seconds: 4),
       );
-      rethrow; // Re-throw to allow UI to handle the error
+      rethrow;
     } finally {
       isLoading(false);
     }
   }
 
-  Future<void> deleteUser(int id) async {
+  Future<void> deleteUser(int userId) async {
     try {
       isLoading(true);
       error('');
 
-      print('UserController: Deleting user with ID: $id');
-
-      await DatabaseHelper.instance.deleteUser(id);
-
-      // Remove from local list
-      final removedUser = _users.firstWhereOrNull((user) => user.id == id);
-      _users.removeWhere((user) => user.id == id);
-
-      // Remove from selected users if it was selected
-      selectedUser.remove(id);
-      if (selectedUser.isEmpty) {
-        isMultiSelectionActive.value = false;
-        isAllSelected(false);
-      }
+      final userToDelete = _users.firstWhere(
+        (user) => user.id == userId,
+        orElse: () => User(
+          fname: 'Unknown',
+          lname: 'User',
+          id: userId,
+          email: '',
+          password: '',
+          gender: '',
+          phone: '',
+          address: '',
+          date_of_birth: DateTime.now(),
+          role: '',
+          status: '',
+          idnumber: '',
+          created_at: DateTime.now(),
+        ),
+      );
 
       print(
-          'UserController: Removed user ${removedUser?.fname ?? 'Unknown'} from local list');
+          'UserController: Deleting user: ${userToDelete.fname} ${userToDelete.lname}');
+
+      await DatabaseHelper.instance.deleteUser(userId);
+      _users.removeWhere((user) => user.id == userId);
+
+      print(
+          'UserController: User deleted successfully from database and local list');
+
+      Get.snackbar(
+        'Success',
+        '${userToDelete.fname} ${userToDelete.lname != 'User' ? userToDelete.lname : 'Unknown'} deleted successfully',
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+        duration: const Duration(seconds: 3),
+      );
     } catch (e) {
       error(e.toString());
       print('UserController: Error deleting user - ${e.toString()}');
@@ -172,6 +209,7 @@ class UserController extends GetxController {
         colorText: Colors.white,
         duration: const Duration(seconds: 4),
       );
+      rethrow;
     } finally {
       isLoading(false);
     }
@@ -195,6 +233,14 @@ class UserController extends GetxController {
       isAllSelected(false);
 
       print('UserController: Successfully deleted ${userIds.length} users');
+
+      Get.snackbar(
+        'Success',
+        'Successfully deleted ${userIds.length} users',
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+        duration: const Duration(seconds: 3),
+      );
     } catch (e) {
       error(e.toString());
       print('UserController: Error deleting multiple users - ${e.toString()}');
@@ -205,6 +251,7 @@ class UserController extends GetxController {
         colorText: Colors.white,
         duration: const Duration(seconds: 4),
       );
+      rethrow;
     } finally {
       isLoading(false);
     }
@@ -244,69 +291,26 @@ class UserController extends GetxController {
     return (userList.length / _rowsPerPage).ceil();
   }
 
-  void goToPreviousPage() {
-    if (_currentPage.value > 1) {
-      _currentPage.value--;
-    }
-  }
-
-  void goToNextPage() {
+  void nextPage() {
     if (_currentPage.value < totalPagesForCurrentView) {
       _currentPage.value++;
     }
   }
 
-  void resetToFirstPage() {
-    _currentPage.value = 1;
-  }
-
-  void toggleUserSelection(int id) {
-    if (selectedUser.contains(id)) {
-      selectedUser.remove(id);
-    } else {
-      selectedUser.add(id);
+  void previousPage() {
+    if (_currentPage.value > 1) {
+      _currentPage.value--;
     }
-    isMultiSelectionActive.value = selectedUser.isNotEmpty;
-
-    // Update select all state
-    final currentList = searchedUser.isNotEmpty ? searchedUser : _users;
-    isAllSelected.value = selectedUser.length == currentList.length;
   }
 
-  void toggleSelectAll(bool value) {
-    isAllSelected.value = value;
-    if (value) {
-      final currentList = searchedUser.isNotEmpty ? searchedUser : _users;
-      selectedUser.assignAll(currentList.map((user) => user.id!));
-    } else {
-      selectedUser.clear();
+  void goToPage(int page) {
+    if (page >= 1 && page <= totalPagesForCurrentView) {
+      _currentPage.value = page;
     }
-    isMultiSelectionActive.value = selectedUser.isNotEmpty;
-  }
-
-  // Get user by ID
-  User? getUserById(int id) {
-    return _users.firstWhereOrNull((user) => user.id == id);
-  }
-
-  // Get users by role with real-time updates
-  List<User> getUsersByRole(String role) {
-    return _users
-        .where((user) => user.role.toLowerCase() == role.toLowerCase())
-        .toList();
-  }
-
-  // Get active users only
-  List<User> get activeUsers =>
-      _users.where((user) => user.status.toLowerCase() == 'active').toList();
-
-  // Refresh users data
-  Future<void> refreshUsers() async {
-    await fetchUsers();
   }
 
   // Clear all data (useful for logout)
-  void clearAllData() {
+  void clearData() {
     _users.clear();
     searchedUser.clear();
     selectedUser.clear();
@@ -314,6 +318,7 @@ class UserController extends GetxController {
     isAllSelected.value = false;
     isMultiSelectionActive.value = false;
     _currentPage.value = 1;
+    _lastFetchedRole = null;
     error.value = '';
   }
 }

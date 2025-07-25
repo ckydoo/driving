@@ -1,3 +1,7 @@
+// lib/screens/course/enhanced_course_screen.dart
+import 'package:driving/controllers/billing_controller.dart';
+import 'package:driving/controllers/schedule_controller.dart';
+import 'package:driving/controllers/user_controller.dart';
 import 'package:driving/models/course.dart';
 import 'package:driving/screens/course/courses_details_screen.dart';
 import 'package:flutter/material.dart';
@@ -15,226 +19,529 @@ class CourseScreen extends StatefulWidget {
   _CourseScreenState createState() => _CourseScreenState();
 }
 
-class _CourseScreenState extends State<CourseScreen> {
+class _CourseScreenState extends State<CourseScreen>
+    with SingleTickerProviderStateMixin {
   final CourseController controller = Get.find<CourseController>();
+  final UserController userController = Get.find<UserController>();
+  final BillingController billingController = Get.find<BillingController>();
+  final ScheduleController scheduleController = Get.find<ScheduleController>();
+
   final TextEditingController _searchController = TextEditingController();
+  List<Course> _courses = [];
   List<Course> _searchResults = [];
   List<int> _selectedCourses = [];
   bool _isMultiSelectionActive = false;
   bool _isAllSelected = false;
+  String _sortBy = 'name';
+  bool _sortAscending = true;
+  String _filterStatus = 'all';
+  bool _isLoading = true;
 
   // Pagination variables
   int _currentPage = 1;
-  int _rowsPerPage = 10;
+  int _rowsPerPage = 12;
+
+  // Tab controller for different views
+  late TabController _tabController;
+  int _currentViewIndex = 0;
+
+  // Smart recommendations
+  List<Map<String, dynamic>> _recommendations = [];
+  List<Map<String, dynamic>> _quickStats = [];
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 3, vsync: this);
     _loadCourses();
+    _generateRecommendations();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadCourses() async {
-    await controller.fetchCourses();
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      await controller.fetchCourses();
+      await userController.fetchUsers();
+      await billingController.fetchBillingData();
+      await scheduleController.fetchSchedules();
+
+      setState(() {
+        _courses = controller.courses;
+        _searchResults = List.from(_courses);
+        _sortCourses();
+        _filterCourses();
+        _generateQuickStats();
+        _generateRecommendations();
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   void _searchCourses(String query) {
-    if (query.isEmpty) {
-      setState(() {
-        _searchResults = [];
-      });
-      return;
-    }
-    final results = controller.courses
-        .where((course) =>
-            course.name.toLowerCase().contains(query.toLowerCase()) ||
-            course.status.toLowerCase().contains(query.toLowerCase()))
-        .toList();
     setState(() {
-      _searchResults = results;
-    });
-  }
-
-  void _toggleCourseSelection(int courseId) {
-    setState(() {
-      if (_selectedCourses.contains(courseId)) {
-        _selectedCourses.remove(courseId);
+      if (query.isEmpty) {
+        _searchResults = List.from(_courses);
       } else {
-        _selectedCourses.add(courseId);
+        _searchResults = _courses
+            .where((course) =>
+                course.name.toLowerCase().contains(query.toLowerCase()) ||
+                course.status.toLowerCase().contains(query.toLowerCase()))
+            .toList();
       }
-      _isMultiSelectionActive = _selectedCourses.isNotEmpty;
-      _isAllSelected = controller.courses.isNotEmpty &&
-          _selectedCourses.length == controller.courses.length;
+      _filterCourses();
+      _sortCourses();
+      _currentPage = 1;
     });
   }
 
-  void _toggleSelectAll(bool value) {
+  void _sortCourses() {
     setState(() {
-      _isAllSelected = value;
-      _selectedCourses = value && controller.courses.isNotEmpty
-          ? controller.courses.map((course) => course.id!).toList()
-          : [];
-      _isMultiSelectionActive = _selectedCourses.isNotEmpty;
+      _searchResults.sort((a, b) {
+        dynamic aValue, bValue;
+        switch (_sortBy) {
+          case 'name':
+            aValue = a.name.toLowerCase();
+            bValue = b.name.toLowerCase();
+            break;
+          case 'price':
+            aValue = a.price;
+            bValue = b.price;
+            break;
+          case 'status':
+            aValue = a.status.toLowerCase();
+            bValue = b.status.toLowerCase();
+            break;
+          case 'created':
+            aValue = a.createdAt;
+            bValue = b.createdAt;
+            break;
+          default:
+            aValue = a.name.toLowerCase();
+            bValue = b.name.toLowerCase();
+        }
+        return _sortAscending
+            ? aValue.compareTo(bValue)
+            : bValue.compareTo(aValue);
+      });
     });
   }
 
-  List<Course> _getPaginatedCourses() {
-    final courses =
-        _searchResults.isNotEmpty ? _searchResults : controller.courses;
-    final startIndex = (_currentPage - 1) * _rowsPerPage;
-    final endIndex = startIndex + _rowsPerPage;
-    if (startIndex >= courses.length) {
-      return [];
+  void _filterCourses() {
+    if (_filterStatus != 'all') {
+      setState(() {
+        _searchResults = _searchResults
+            .where((course) =>
+                course.status.toLowerCase() == _filterStatus.toLowerCase())
+            .toList();
+      });
     }
-    return courses.sublist(
-        startIndex, endIndex > courses.length ? courses.length : endIndex);
   }
 
-  int _getTotalPages() {
-    final courses =
-        _searchResults.isNotEmpty ? _searchResults : controller.courses;
-    return (courses.length / _rowsPerPage).ceil();
+  void _generateQuickStats() {
+    final activeCourses =
+        _courses.where((c) => c.status.toLowerCase() == 'active').length;
+    final totalRevenue = billingController.invoices.fold<double>(
+        0.0, (sum, invoice) => sum + invoice.totalAmountCalculated);
+    final totalEnrollments = billingController.invoices.length;
+    final avgCoursePrice = _courses.isNotEmpty
+        ? _courses.fold<double>(0.0, (sum, course) => sum + course.price) /
+            _courses.length
+        : 0.0;
+
+    _quickStats = [
+      {
+        'title': 'Active Courses',
+        'value': activeCourses.toString(),
+        'icon': Icons.school,
+        'color': Colors.green,
+        'subtitle': '${_courses.length - activeCourses} inactive',
+      },
+      {
+        'title': 'Total Revenue',
+        'value': '\$${totalRevenue.toStringAsFixed(2)}',
+        'icon': Icons.attach_money,
+        'color': Colors.blue,
+        'subtitle': 'From ${totalEnrollments} enrollments',
+      },
+      {
+        'title': 'Avg. Course Price',
+        'value': '\$${avgCoursePrice.toStringAsFixed(2)}',
+        'icon': Icons.trending_up,
+        'color': Colors.orange,
+        'subtitle': 'Across all courses',
+      },
+      {
+        'title': 'Total Enrollments',
+        'value': totalEnrollments.toString(),
+        'icon': Icons.people,
+        'color': Colors.purple,
+        'subtitle': 'Students enrolled',
+      },
+    ];
   }
 
-  void _goToPreviousPage() {
-    setState(() {
-      if (_currentPage > 1) {
-        _currentPage--;
-      }
-    });
-  }
+  void _generateRecommendations() {
+    _recommendations.clear();
 
-  void _goToNextPage() {
-    setState(() {
-      if (_currentPage < _getTotalPages()) {
-        _currentPage++;
-      }
-    });
+    // Low enrollment courses
+    final lowEnrollmentCourses = _courses.where((course) {
+      final enrollments = billingController.invoices
+          .where((invoice) => scheduleController.schedules
+              .any((s) => s.classType == course.name))
+          .length;
+      return enrollments < 5 && course.status.toLowerCase() == 'active';
+    }).length;
+
+    if (lowEnrollmentCourses > 0) {
+      _recommendations.add({
+        'type': 'warning',
+        'title': 'Low Enrollment Alert',
+        'description':
+            '$lowEnrollmentCourses courses have fewer than 5 enrollments.',
+        'action': 'Review Pricing',
+        'icon': Icons.trending_down,
+        'color': Colors.orange,
+        'priority': 'medium',
+        'onTap': () => _showLowEnrollmentCourses(),
+      });
+    }
+
+    // Price optimization
+    final highPricedCourses = _courses.where((c) => c.price > 1000).length;
+    if (highPricedCourses > 0) {
+      _recommendations.add({
+        'type': 'suggestion',
+        'title': 'Price Optimization',
+        'description': '$highPricedCourses courses are priced above \$1000.',
+        'action': 'Review Pricing',
+        'icon': Icons.price_change,
+        'color': Colors.blue,
+        'priority': 'low',
+        'onTap': () => _showPricingAnalysis(),
+      });
+    }
+
+    // Inactive courses cleanup
+    final inactiveCourses =
+        _courses.where((c) => c.status.toLowerCase() == 'inactive').length;
+    if (inactiveCourses > 3) {
+      _recommendations.add({
+        'type': 'info',
+        'title': 'Course Cleanup',
+        'description': '$inactiveCourses inactive courses taking up space.',
+        'action': 'Archive Courses',
+        'icon': Icons.cleaning_services,
+        'color': Colors.grey,
+        'priority': 'low',
+        'onTap': () => _showInactiveCourses(),
+      });
+    }
+
+    // Success metrics
+    final recentCourses = _courses
+        .where((c) =>
+            c.createdAt.isAfter(DateTime.now().subtract(Duration(days: 30))))
+        .length;
+    if (recentCourses > 0) {
+      _recommendations.add({
+        'type': 'success',
+        'title': 'Course Growth',
+        'description': '$recentCourses new courses added this month.',
+        'action': 'View Details',
+        'icon': Icons.trending_up,
+        'color': Colors.green,
+        'priority': 'info',
+        'onTap': () => _showRecentCourses(),
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final courses = _getPaginatedCourses();
     return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Course Management',
-          style: TextStyle(
+      backgroundColor: Colors.grey[100],
+      body: Column(
+        children: [
+          // Header with stats and controls
+          Container(
+            padding: EdgeInsets.all(16),
             color: Colors.white,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        backgroundColor: Colors.blue.shade800,
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.white),
-            onPressed: () {
-              _loadCourses();
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.download, color: Colors.white),
-            onPressed: () {
-              _showExportDialog();
-            },
-          ),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(60.0),
-          child: Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: Row(
+            child: Column(
               children: [
-                Expanded(
-                  child: TextField(
-                    controller: _searchController,
-                    decoration: InputDecoration(
-                      hintText: 'Search courses...',
-                      hintStyle: TextStyle(color: Colors.grey.shade600),
-                      prefixIcon:
-                          Icon(Icons.search, color: Colors.grey.shade600),
-                      filled: true,
-                      fillColor: Colors.grey.shade100,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8.0),
-                        borderSide: BorderSide.none,
-                      ),
-                      contentPadding:
-                          const EdgeInsets.symmetric(vertical: 12.0),
-                    ),
-                    onChanged: _searchCourses,
+                // Quick stats cards
+                SizedBox(
+                  height: 120,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _quickStats.length,
+                    itemBuilder: (context, index) {
+                      final stat = _quickStats[index];
+                      return Container(
+                        width: 200,
+                        margin: EdgeInsets.only(right: 16),
+                        child: _buildStatCard(stat),
+                      );
+                    },
                   ),
                 ),
-                const SizedBox(width: 8),
+                SizedBox(height: 16),
+
+                // Search and filters
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: TextField(
+                        controller: _searchController,
+                        decoration: InputDecoration(
+                          hintText: 'Search courses...',
+                          prefixIcon: Icon(Icons.search),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          contentPadding: EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        onChanged: _searchCourses,
+                      ),
+                    ),
+                    SizedBox(width: 16),
+
+                    // Status filter
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey[300]!),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: DropdownButton<String>(
+                        value: _filterStatus,
+                        underline: Container(),
+                        items: [
+                          DropdownMenuItem(
+                              value: 'all', child: Text('All Status')),
+                          DropdownMenuItem(
+                              value: 'active', child: Text('Active')),
+                          DropdownMenuItem(
+                              value: 'inactive', child: Text('Inactive')),
+                        ],
+                        onChanged: (value) {
+                          setState(() {
+                            _filterStatus = value!;
+                            _filterCourses();
+                            _currentPage = 1;
+                          });
+                        },
+                      ),
+                    ),
+                    SizedBox(width: 16),
+
+                    // Sort dropdown
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey[300]!),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: DropdownButton<String>(
+                        value: _sortBy,
+                        underline: Container(),
+                        items: [
+                          DropdownMenuItem(
+                              value: 'name', child: Text('Sort by Name')),
+                          DropdownMenuItem(
+                              value: 'price', child: Text('Sort by Price')),
+                          DropdownMenuItem(
+                              value: 'status', child: Text('Sort by Status')),
+                          DropdownMenuItem(
+                              value: 'created', child: Text('Sort by Date')),
+                        ],
+                        onChanged: (value) {
+                          setState(() {
+                            _sortBy = value!;
+                            _sortCourses();
+                          });
+                        },
+                      ),
+                    ),
+                    SizedBox(width: 8),
+                    IconButton(
+                      icon: Icon(_sortAscending
+                          ? Icons.arrow_upward
+                          : Icons.arrow_downward),
+                      onPressed: () {
+                        setState(() {
+                          _sortAscending = !_sortAscending;
+                          _sortCourses();
+                        });
+                      },
+                    ),
+
+                    Spacer(),
+                    Text('${_searchResults.length} courses found'),
+                  ],
+                ),
               ],
             ),
           ),
-        ),
-      ),
-      body: Obx(() {
-        if (controller.isLoading.value) {
-          return const Center(child: CircularProgressIndicator());
-        }
 
-        // If no courses are available and no search query is active
-        if (controller.courses.isEmpty && _searchController.text.isEmpty) {
-          return const Center(child: Text('No courses found'));
-        }
+          // Tab bar
+          Container(
+            color: Colors.white,
+            child: TabBar(
+              controller: _tabController,
+              labelColor: Colors.blue[600],
+              unselectedLabelColor: Colors.grey[600],
+              indicatorColor: Colors.blue[600],
+              tabs: [
+                Tab(icon: Icon(Icons.grid_view), text: 'Grid View'),
+                Tab(icon: Icon(Icons.list), text: 'List View'),
+                Tab(icon: Icon(Icons.lightbulb), text: 'Recommendations'),
+              ],
+            ),
+          ),
 
-        // Otherwise, build the course list
-        return _buildCourseList(controller.courses);
-      }),
-      floatingActionButton: _isMultiSelectionActive
-          ? FloatingActionButton.extended(
-              onPressed: () {
-                _showMultiDeleteConfirmationDialog();
-              },
-              label: Row(
+          // Multi-selection bar
+          if (_isMultiSelectionActive)
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              color: Colors.blue[50],
+              child: Row(
                 children: [
-                  Icon(Icons.delete_sweep, color: Colors.white),
-                  SizedBox(width: 8),
-                  Text('Delete Selected',
-                      style: TextStyle(color: Colors.white)),
+                  Checkbox(
+                    value: _isAllSelected,
+                    onChanged: _toggleSelectAll,
+                  ),
+                  Text('${_selectedCourses.length} selected'),
+                  Spacer(),
+                  TextButton.icon(
+                    icon: Icon(Icons.edit, color: Colors.blue),
+                    label:
+                        Text('Bulk Edit', style: TextStyle(color: Colors.blue)),
+                    onPressed: _selectedCourses.isNotEmpty
+                        ? () => _bulkEditCourses()
+                        : null,
+                  ),
+                  TextButton.icon(
+                    icon: Icon(Icons.delete, color: Colors.red),
+                    label: Text('Delete Selected',
+                        style: TextStyle(color: Colors.red)),
+                    onPressed: _selectedCourses.isNotEmpty
+                        ? () => _deleteSelectedCourses()
+                        : null,
+                  ),
                 ],
               ),
-              backgroundColor: Colors.redAccent,
-            )
-          : FloatingActionButton(
-              child: const Icon(Icons.add, color: Colors.white),
-              backgroundColor: Colors.blue.shade800,
-              onPressed: () => Get.dialog(const CourseFormDialog()),
             ),
+
+          // Content
+          Expanded(
+            child: _isLoading
+                ? Center(child: CircularProgressIndicator())
+                : TabBarView(
+                    controller: _tabController,
+                    children: [
+                      _buildGridView(),
+                      _buildListView(),
+                      _buildRecommendationsView(),
+                    ],
+                  ),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () async {
+          final result = await Get.dialog<bool>(
+            CourseFormDialog(),
+          );
+          if (result == true) {
+            _loadCourses();
+          }
+        },
+        label: Text('Add Course'),
+        icon: Icon(Icons.add),
+        backgroundColor: Colors.blue[600],
+      ),
     );
   }
 
-  Widget _buildCourseList(List<Course> courses) {
-    // Check if a search query is active and no results were found
-    if (_searchController.text.isNotEmpty && _searchResults.isEmpty) {
-      return const Center(child: Text('No matching courses found'));
-    }
+  Widget _buildStatCard(Map<String, dynamic> stat) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(stat['icon'], color: stat['color'], size: 24),
+                Spacer(),
+                Text(
+                  stat['value'],
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey[800],
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 8),
+            Text(
+              stat['title'],
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: Colors.grey[700],
+              ),
+            ),
+            Text(
+              stat['subtitle'],
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[500],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
-    // If no courses are available (e.g., no data or no search results)
-    if (controller.courses.isEmpty) {
-      return const Center(child: Text('No courses found'));
-    }
+  Widget _buildGridView() {
+    final courses = _getPaginatedCourses();
 
-    // Otherwise, display the list of courses
     return Column(
       children: [
-        _buildHeaderRow(),
         Expanded(
-          child: Card(
-            elevation: 4,
-            margin: const EdgeInsets.all(16.0),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: ListView.builder(
-              itemCount: controller.courses.length,
+          child: Container(
+            padding: EdgeInsets.all(16),
+            child: GridView.builder(
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+                childAspectRatio: 1.2,
+              ),
+              itemCount: courses.length,
               itemBuilder: (context, index) {
-                final course = controller.courses[index];
-                return _buildDataRow(course, index);
+                final course = courses[index];
+                return _buildCourseGridCard(course);
               },
             ),
           ),
@@ -244,105 +551,93 @@ class _CourseScreenState extends State<CourseScreen> {
     );
   }
 
-  Widget _buildHeaderRow() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-      child: Row(
-        children: [
-          Checkbox(
-            value: _isAllSelected,
-            onChanged: (bool? value) {
-              _toggleSelectAll(value!);
-            },
-          ),
-          Expanded(
-            flex: 2,
-            child: Text(
-              'Course Name',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Colors.blue.shade800,
-              ),
-            ),
-          ),
-          Expanded(
-            flex: 2,
-            child: Text(
-              'Price',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Colors.blue.shade800,
-              ),
-            ),
-          ),
-          Expanded(
-            flex: 2,
-            child: Text(
-              'Status',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Colors.blue.shade800,
-              ),
-            ),
-          ),
-          Expanded(
-            flex: 1,
-            child: Text(
-              '',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Colors.blue.shade800,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _buildCourseGridCard(Course course) {
+    final isSelected = _selectedCourses.contains(course.id);
+    final enrollments = billingController.invoices
+        .where((invoice) =>
+            scheduleController.schedules.any((s) => s.classType == course.name))
+        .length;
 
-  Widget _buildDataRow(Course course, int index) {
-    return Container(
-      color: index % 2 == 0 ? Colors.grey.shade100 : Colors.white,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-        child: InkWell(
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (context) => CourseDetailsScreen(courseId: course.id!),
-              ),
-            );
-          },
-          child: Row(
+    return Card(
+      elevation: isSelected ? 8 : 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: isSelected
+            ? BorderSide(color: Colors.blue[400]!, width: 2)
+            : BorderSide.none,
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => CourseDetailsScreen(courseId: course.id!),
+            ),
+          );
+        },
+        onLongPress: () => _toggleCourseSelection(course.id!),
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Checkbox(
-                value: _selectedCourses.contains(course.id),
-                onChanged: (bool? value) {
-                  _toggleCourseSelection(course.id!);
-                },
+              Row(
+                children: [
+                  if (_isMultiSelectionActive)
+                    Checkbox(
+                      value: isSelected,
+                      onChanged: (value) => _toggleCourseSelection(course.id!),
+                    ),
+                  Spacer(),
+                  _buildStatusChip(course.status),
+                ],
               ),
-              Expanded(flex: 2, child: Text(course.name)),
-              Expanded(flex: 2, child: Text('\$${course.price}')),
-              Expanded(flex: 2, child: Text(course.status)),
-              Expanded(
-                flex: 1,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    IconButton(
-                      icon: Icon(Icons.edit, color: Colors.blue),
-                      onPressed: () => Get.dialog(
-                        CourseFormDialog(course: course),
-                      ),
-                    ),
-                    IconButton(
-                      icon: Icon(Icons.delete, color: Colors.red),
-                      onPressed: () {
-                        _showDeleteConfirmationDialog(course.id!);
-                      },
-                    ),
-                  ],
+              SizedBox(height: 8),
+              Icon(
+                Icons.school,
+                size: 32,
+                color: course.status.toLowerCase() == 'active'
+                    ? Colors.blue[400]
+                    : Colors.grey[400],
+              ),
+              SizedBox(height: 12),
+              Text(
+                course.name,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey[800],
                 ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.attach_money, size: 16, color: Colors.green[600]),
+                  Text(
+                    '\$${course.price}',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.green[600],
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 4),
+              Row(
+                children: [
+                  Icon(Icons.people, size: 14, color: Colors.grey[500]),
+                  SizedBox(width: 4),
+                  Text(
+                    '$enrollments enrollments',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[500],
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -351,41 +646,355 @@ class _CourseScreenState extends State<CourseScreen> {
     );
   }
 
-  Widget _buildPagination() {
-    return Padding(
-      padding: const EdgeInsets.only(
-          left: 16.0, right: 200.0, top: 40.0, bottom: 16.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          IconButton(
-            icon: const Icon(Icons.arrow_back_ios, color: Colors.blue),
-            onPressed: () {
-              _goToPreviousPage();
-            },
-          ),
-          Text(
-            'Page $_currentPage of ${_getTotalPages()}',
-            style: TextStyle(
-              color: Colors.grey.shade700,
-              fontWeight: FontWeight.bold,
+  Widget _buildListView() {
+    final courses = _getPaginatedCourses();
+
+    return Column(
+      children: [
+        Expanded(
+          child: Container(
+            margin: EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.withOpacity(0.1),
+                  spreadRadius: 1,
+                  blurRadius: 3,
+                  offset: Offset(0, 1),
+                ),
+              ],
+            ),
+            child: ListView.separated(
+              itemCount: courses.length,
+              separatorBuilder: (context, index) => Divider(height: 1),
+              itemBuilder: (context, index) {
+                final course = courses[index];
+                return _buildCourseListTile(course);
+              },
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.arrow_forward_ios, color: Colors.blue),
-            onPressed: () {
-              _goToNextPage();
-            },
+        ),
+        _buildPagination(),
+      ],
+    );
+  }
+
+  Widget _buildCourseListTile(Course course) {
+    final isSelected = _selectedCourses.contains(course.id);
+    final enrollments = billingController.invoices
+        .where((invoice) =>
+            scheduleController.schedules.any((s) => s.classType == course.name))
+        .length;
+
+    return ListTile(
+      leading: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_isMultiSelectionActive)
+            Checkbox(
+              value: isSelected,
+              onChanged: (value) => _toggleCourseSelection(course.id!),
+            ),
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: course.status.toLowerCase() == 'active'
+                  ? Colors.blue[100]
+                  : Colors.grey[100],
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              Icons.school,
+              color: course.status.toLowerCase() == 'active'
+                  ? Colors.blue[600]
+                  : Colors.grey[600],
+            ),
           ),
+        ],
+      ),
+      title: Text(
+        course.name,
+        style: TextStyle(fontWeight: FontWeight.w500),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+              '$enrollments enrollments • Created ${_formatDate(course.createdAt)}'),
+          SizedBox(height: 4),
+          Row(
+            children: [
+              _buildStatusChip(course.status),
+              SizedBox(width: 8),
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.green[100],
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '\$${course.price}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.green[800],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+      trailing: PopupMenuButton<String>(
+        onSelected: (value) async {
+          switch (value) {
+            case 'edit':
+              final result = await Get.dialog<bool>(
+                CourseFormDialog(course: course),
+              );
+              if (result == true) {
+                _loadCourses();
+              }
+              break;
+            case 'delete':
+              _deleteCourse(course);
+              break;
+            case 'duplicate':
+              _duplicateCourse(course);
+              break;
+          }
+        },
+        itemBuilder: (context) => [
+          PopupMenuItem(
+            value: 'edit',
+            child: Row(
+              children: [
+                Icon(Icons.edit, size: 20),
+                SizedBox(width: 8),
+                Text('Edit'),
+              ],
+            ),
+          ),
+          PopupMenuItem(
+            value: 'duplicate',
+            child: Row(
+              children: [
+                Icon(Icons.copy, size: 20),
+                SizedBox(width: 8),
+                Text('Duplicate'),
+              ],
+            ),
+          ),
+          PopupMenuItem(
+            value: 'delete',
+            child: Row(
+              children: [
+                Icon(Icons.delete, size: 20, color: Colors.red),
+                SizedBox(width: 8),
+                Text('Delete', style: TextStyle(color: Colors.red)),
+              ],
+            ),
+          ),
+        ],
+      ),
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => CourseDetailsScreen(courseId: course.id!),
+          ),
+        );
+      },
+      onLongPress: () => _toggleCourseSelection(course.id!),
+    );
+  }
+
+  Widget _buildRecommendationsView() {
+    return Container(
+      padding: EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Smart Recommendations',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[800],
+            ),
+          ),
+          Text(
+            'AI-powered insights to optimize your course management',
+            style: TextStyle(color: Colors.grey[600]),
+          ),
+          SizedBox(height: 24),
+          Expanded(
+            child: _recommendations.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.lightbulb_outline,
+                            size: 64, color: Colors.grey[400]),
+                        SizedBox(height: 16),
+                        Text(
+                          'No recommendations at this time',
+                          style: TextStyle(
+                            fontSize: 18,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        Text(
+                          'Your course management is on track!',
+                          style: TextStyle(color: Colors.grey[500]),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: _recommendations.length,
+                    itemBuilder: (context, index) {
+                      final recommendation = _recommendations[index];
+                      return _buildRecommendationCard(recommendation);
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRecommendationCard(Map<String, dynamic> recommendation) {
+    Color cardColor;
+    switch (recommendation['type']) {
+      case 'urgent':
+        cardColor = Colors.red[50]!;
+        break;
+      case 'warning':
+        cardColor = Colors.orange[50]!;
+        break;
+      case 'success':
+        cardColor = Colors.green[50]!;
+        break;
+      default:
+        cardColor = Colors.blue[50]!;
+    }
+
+    return Card(
+      margin: EdgeInsets.only(bottom: 16),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: recommendation['onTap'],
+        child: Container(
+          padding: EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: cardColor,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: recommendation['color'].withOpacity(0.3)),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                recommendation['icon'],
+                size: 32,
+                color: recommendation['color'],
+              ),
+              SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      recommendation['title'],
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey[800],
+                      ),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      recommendation['description'],
+                      style: TextStyle(color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(width: 16),
+              ElevatedButton(
+                onPressed: recommendation['onTap'],
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: recommendation['color'],
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: Text(recommendation['action']),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatusChip(String status) {
+    final isActive = status.toLowerCase() == 'active';
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: isActive ? Colors.green[100] : Colors.grey[100],
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        status,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          color: isActive ? Colors.green[800] : Colors.grey[800],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPagination() {
+    final totalPages = (_searchResults.length / _rowsPerPage).ceil();
+
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: Colors.grey[300]!)),
+      ),
+      child: Row(
+        children: [
+          Text(
+            'Showing ${((_currentPage - 1) * _rowsPerPage) + 1}-${(_currentPage * _rowsPerPage).clamp(0, _searchResults.length)} of ${_searchResults.length}',
+            style: TextStyle(color: Colors.grey[600]),
+          ),
+          Spacer(),
+          IconButton(
+            icon: Icon(Icons.chevron_left),
+            onPressed: _currentPage > 1 ? _goToPreviousPage : null,
+          ),
+          Text('$_currentPage of $totalPages'),
+          IconButton(
+            icon: Icon(Icons.chevron_right),
+            onPressed: _currentPage < totalPages ? _goToNextPage : null,
+          ),
+          SizedBox(width: 16),
           DropdownButton<int>(
             value: _rowsPerPage,
-            items: [10, 25, 50, 100].map((int value) {
+            items: [6, 12, 24, 48].map((int value) {
               return DropdownMenuItem<int>(
                 value: value,
-                child: Text(
-                  '$value rows',
-                  style: TextStyle(color: Colors.grey.shade700),
-                ),
+                child: Text('$value per page'),
               );
             }).toList(),
             onChanged: (int? value) {
@@ -400,112 +1009,452 @@ class _CourseScreenState extends State<CourseScreen> {
     );
   }
 
-  void _showDeleteConfirmationDialog(int id) {
-    Get.defaultDialog(
-      title: 'Confirm Delete',
-      content: const Text('Are you sure you want to delete this course?'),
-      confirm: TextButton(
-        onPressed: () {
-          controller.deleteCourse(id);
-          _loadCourses();
-          Get.back();
-        },
-        child: const Text('Delete'),
+  List<Course> _getPaginatedCourses() {
+    final startIndex = (_currentPage - 1) * _rowsPerPage;
+    final endIndex = startIndex + _rowsPerPage;
+    if (startIndex >= _searchResults.length) {
+      return [];
+    }
+    return _searchResults.sublist(startIndex,
+        endIndex > _searchResults.length ? _searchResults.length : endIndex);
+  }
+
+  void _goToPreviousPage() {
+    if (_currentPage > 1) {
+      setState(() {
+        _currentPage--;
+        _selectedCourses.clear();
+        _isMultiSelectionActive = false;
+        _isAllSelected = false;
+      });
+    }
+  }
+
+  void _goToNextPage() {
+    final totalPages = (_searchResults.length / _rowsPerPage).ceil();
+    if (_currentPage < totalPages) {
+      setState(() {
+        _currentPage++;
+        _selectedCourses.clear();
+        _isMultiSelectionActive = false;
+        _isAllSelected = false;
+      });
+    }
+  }
+
+  void _toggleCourseSelection(int courseId) {
+    setState(() {
+      if (_selectedCourses.contains(courseId)) {
+        _selectedCourses.remove(courseId);
+      } else {
+        _selectedCourses.add(courseId);
+      }
+      _isMultiSelectionActive = _selectedCourses.isNotEmpty;
+      _isAllSelected = _selectedCourses.length == _getPaginatedCourses().length;
+    });
+  }
+
+  void _toggleSelectAll(bool? value) {
+    setState(() {
+      _isAllSelected = value ?? false;
+      if (_isAllSelected) {
+        _selectedCourses =
+            _getPaginatedCourses().map((course) => course.id!).toList();
+      } else {
+        _selectedCourses.clear();
+      }
+      _isMultiSelectionActive = _selectedCourses.isNotEmpty;
+    });
+  }
+
+  void _deleteCourse(Course course) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete Course'),
+        content: Text(
+            'Are you sure you want to delete "${course.name}"? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: Text('Delete'),
+          ),
+        ],
       ),
-      cancel: TextButton(
-        onPressed: () {
-          Get.back();
-        },
-        child: const Text('Cancel'),
+    );
+
+    if (confirmed == true) {
+      try {
+        await controller.deleteCourse(course.id!);
+        _loadCourses();
+        Get.snackbar(
+          'Success',
+          'Course "${course.name}" deleted successfully',
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+        );
+      } catch (e) {
+        Get.snackbar(
+          'Error',
+          'Failed to delete course: $e',
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+        );
+      }
+    }
+  }
+
+  void _deleteSelectedCourses() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete Selected Courses'),
+        content: Text(
+            'Are you sure you want to delete ${_selectedCourses.length} selected courses? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: Text('Delete All'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        for (int courseId in _selectedCourses) {
+          await controller.deleteCourse(courseId);
+        }
+        setState(() {
+          _selectedCourses.clear();
+          _isMultiSelectionActive = false;
+          _isAllSelected = false;
+        });
+        _loadCourses();
+        Get.snackbar(
+          'Success',
+          'Selected courses deleted successfully',
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+        );
+      } catch (e) {
+        Get.snackbar(
+          'Error',
+          'Failed to delete courses: $e',
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+        );
+      }
+    }
+  }
+
+  void _duplicateCourse(Course course) async {
+    final duplicatedCourse = Course(
+      name: '${course.name} (Copy)',
+      price: course.price,
+      status: 'inactive', // Start as inactive
+      createdAt: DateTime.now(),
+    );
+
+    try {
+      await controller.handleCourse(duplicatedCourse, isUpdate: false);
+      _loadCourses();
+      Get.snackbar(
+        'Success',
+        'Course duplicated successfully',
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
+    } catch (e) {
+      Get.snackbar(
+        'Error',
+        'Failed to duplicate course: $e',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    }
+  }
+
+  void _bulkEditCourses() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Bulk Edit Courses'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+                'Select an action for ${_selectedCourses.length} selected courses:'),
+            SizedBox(height: 16),
+            ListTile(
+              leading: Icon(Icons.check_circle, color: Colors.green),
+              title: Text('Activate All'),
+              onTap: () {
+                Navigator.pop(context);
+                _bulkUpdateStatus('active');
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.pause_circle, color: Colors.orange),
+              title: Text('Deactivate All'),
+              onTap: () {
+                Navigator.pop(context);
+                _bulkUpdateStatus('inactive');
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Cancel'),
+          ),
+        ],
       ),
     );
   }
 
-  void _showMultiDeleteConfirmationDialog() {
-    Get.defaultDialog(
-      title: 'Confirm Multi-Delete',
-      content: Text(
-          'Are you sure you want to delete the selected ${_selectedCourses.length} courses?'),
-      confirm: TextButton(
-        onPressed: () {
-          _selectedCourses.forEach((id) {
-            controller.deleteCourse(id);
-          });
-          _toggleSelectAll(false);
-          _loadCourses();
-          Get.back();
-        },
-        child: const Text('Delete All'),
-      ),
-      cancel: TextButton(
-        onPressed: () {
-          Get.back();
-        },
-        child: const Text('Cancel'),
-      ),
-    );
+  void _bulkUpdateStatus(String newStatus) async {
+    try {
+      for (int courseId in _selectedCourses) {
+        final course = _courses.firstWhere((c) => c.id == courseId);
+        final updatedCourse = Course(
+          id: course.id,
+          name: course.name,
+          price: course.price,
+          status: newStatus,
+          createdAt: course.createdAt,
+        );
+        await controller.handleCourse(updatedCourse, isUpdate: true);
+      }
+
+      setState(() {
+        _selectedCourses.clear();
+        _isMultiSelectionActive = false;
+        _isAllSelected = false;
+      });
+      _loadCourses();
+
+      Get.snackbar(
+        'Success',
+        'Courses updated successfully',
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
+    } catch (e) {
+      Get.snackbar(
+        'Error',
+        'Failed to update courses: $e',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    }
   }
 
-  void _showExportDialog() {
-    Get.defaultDialog(
-      title: 'Export Courses',
-      content: const Text('Export the current list of courses to a CSV file.'),
-      confirm: TextButton(
-        onPressed: () async {
-          // Convert course data to CSV
-          final csvData = const ListToCsvConverter().convert(
-            [
-              ['Course Name', 'Price', 'Status'], // Header row
-              ...controller.courses.map((course) => [
-                    course.name,
-                    '\$${course.price}',
-                    course.status,
-                  ]),
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final difference = now.difference(date).inDays;
+
+    if (difference == 0) {
+      return 'Today';
+    } else if (difference == 1) {
+      return 'Yesterday';
+    } else if (difference < 7) {
+      return '$difference days ago';
+    } else if (difference < 30) {
+      return '${(difference / 7).floor()} weeks ago';
+    } else {
+      return '${date.day}/${date.month}/${date.year}';
+    }
+  }
+
+  // Recommendation action methods
+  void _showLowEnrollmentCourses() {
+    final lowEnrollmentCourses = _courses.where((course) {
+      final enrollments = billingController.invoices
+          .where((invoice) => scheduleController.schedules
+              .any((s) => s.classType == course.name))
+          .length;
+      return enrollments < 5 && course.status.toLowerCase() == 'active';
+    }).toList();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Low Enrollment Courses'),
+        content: Container(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('These courses have fewer than 5 enrollments:'),
+              SizedBox(height: 16),
+              ...lowEnrollmentCourses.map((course) => ListTile(
+                    leading: Icon(Icons.school, color: Colors.orange),
+                    title: Text(course.name),
+                    subtitle: Text('\$${course.price}'),
+                    trailing: TextButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        Get.dialog(CourseFormDialog(course: course));
+                      },
+                      child: Text('Edit'),
+                    ),
+                  )),
             ],
-          );
-          // Sanitize file name
-          final timestamp = DateTime.now()
-              .toIso8601String()
-              .replaceAll(RegExp(r'[:\.]'), '_');
-          final fileName = 'courses_export_$timestamp.csv';
-          // Save CSV file
-          final String? filePath = await FilePicker.platform.saveFile(
-            dialogTitle: 'Save CSV File',
-            fileName: fileName,
-            allowedExtensions: ['csv'],
-          );
-          if (filePath != null) {
-            final file = File(filePath);
-            await file.writeAsString(csvData);
-            // Show success dialog
-            Get.defaultDialog(
-              title: 'Export Successful',
-              content: Text('Course data exported to $filePath'),
-              confirm: TextButton(
-                onPressed: () {
-                  Get.back(); // Close the success dialog
-                  Get.back(); // Go back to the course list
-                },
-                child: const Text('OK'),
-              ),
-            );
-          } else {
-            Get.snackbar(
-              'Export Cancelled',
-              'No file path selected.',
-              backgroundColor: Colors.red,
-              colorText: Colors.white,
-            );
-            Get.back(); // Go back to the course list
-          }
-        },
-        child: const Text('Export'),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Close'),
+          ),
+        ],
       ),
-      cancel: TextButton(
-        onPressed: () {
-          Get.back(); // Go back to the course list
-        },
-        child: const Text('Cancel'),
+    );
+  }
+
+  void _showPricingAnalysis() {
+    final highPricedCourses = _courses.where((c) => c.price > 1000).toList();
+    final avgPrice =
+        _courses.fold<double>(0, (sum, c) => sum + c.price) / _courses.length;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Pricing Analysis'),
+        content: Container(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Average course price: \${avgPrice.toStringAsFixed(2)}'),
+              SizedBox(height: 16),
+              Text('High-priced courses (>\$1000):'),
+              SizedBox(height: 8),
+              ...highPricedCourses.map((course) => ListTile(
+                    leading: Icon(Icons.attach_money, color: Colors.red),
+                    title: Text(course.name),
+                    subtitle: Text('\${course.price}'),
+                    trailing: TextButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        Get.dialog(CourseFormDialog(course: course));
+                      },
+                      child: Text('Adjust'),
+                    ),
+                  )),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showInactiveCourses() {
+    final inactiveCourses =
+        _courses.where((c) => c.status.toLowerCase() == 'inactive').toList();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Inactive Courses'),
+        content: Container(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Consider archiving these inactive courses:'),
+              SizedBox(height: 16),
+              ...inactiveCourses.map((course) => ListTile(
+                    leading: Icon(Icons.archive, color: Colors.grey),
+                    title: Text(course.name),
+                    subtitle:
+                        Text('Inactive since ${_formatDate(course.createdAt)}'),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        TextButton(
+                          onPressed: () async {
+                            await controller.deleteCourse(course.id!);
+                            Navigator.pop(context);
+                            _loadCourses();
+                          },
+                          child: Text('Delete',
+                              style: TextStyle(color: Colors.red)),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            Get.dialog(CourseFormDialog(course: course));
+                          },
+                          child: Text('Edit'),
+                        ),
+                      ],
+                    ),
+                  )),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showRecentCourses() {
+    final recentCourses = _courses
+        .where((c) =>
+            c.createdAt.isAfter(DateTime.now().subtract(Duration(days: 30))))
+        .toList();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Recent Courses'),
+        content: Container(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Courses added in the last 30 days:'),
+              SizedBox(height: 16),
+              ...recentCourses.map((course) => ListTile(
+                    leading: Icon(Icons.new_releases, color: Colors.green),
+                    title: Text(course.name),
+                    subtitle: Text('Added ${_formatDate(course.createdAt)}'),
+                    trailing: _buildStatusChip(course.status),
+                  )),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Close'),
+          ),
+        ],
       ),
     );
   }
