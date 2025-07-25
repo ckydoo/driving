@@ -4,6 +4,7 @@ import 'package:driving/models/course.dart';
 import 'package:driving/models/fleet.dart';
 import 'package:driving/models/payment.dart';
 import 'package:driving/models/user.dart';
+import 'package:driving/services/database_helper_extensions.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite_common/sqlite_api.dart';
 import 'package:path/path.dart';
@@ -261,7 +262,6 @@ class DatabaseHelper {
 
     // **IMPORTANT: Create default admin user immediately after table creation**
     await _createDefaultAdminUser(db);
-
     print('Database tables created and default admin user inserted');
   }
 
