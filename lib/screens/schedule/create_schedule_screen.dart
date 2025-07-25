@@ -1,58 +1,46 @@
-// lib/screens/schedule/create_schedule_screen.dart
+// lib/screens/schedule/single_schedule_screen.dart
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
+import '../../models/schedule.dart';
 import '../../controllers/schedule_controller.dart';
 import '../../controllers/user_controller.dart';
 import '../../controllers/course_controller.dart';
 import '../../controllers/fleet_controller.dart';
-import '../../models/schedule.dart';
-import '../../models/user.dart';
-import '../../models/course.dart';
-import '../../models/fleet.dart';
 
-class CreateScheduleScreen extends StatefulWidget {
-  final Schedule? existingSchedule; // For editing existing schedules
+class SingleScheduleScreen extends StatefulWidget {
+  final Schedule? existingSchedule;
 
-  const CreateScheduleScreen({Key? key, this.existingSchedule})
+  const SingleScheduleScreen({Key? key, this.existingSchedule})
       : super(key: key);
 
   @override
-  _CreateScheduleScreenState createState() => _CreateScheduleScreenState();
+  _SingleScheduleScreenState createState() => _SingleScheduleScreenState();
 }
 
-class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
+class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+  final _scheduleController = Get.find<ScheduleController>();
+  final _userController = Get.find<UserController>();
+  final _courseController = Get.find<CourseController>();
+  final _fleetController = Get.find<FleetController>();
 
-  // Controllers
-  final ScheduleController scheduleController = Get.find<ScheduleController>();
-  final UserController userController = Get.find<UserController>();
-  final CourseController courseController = Get.find<CourseController>();
-  final FleetController fleetController = Get.find<FleetController>();
+  // Form fields
+  DateTime _selectedDate = DateTime.now();
+  TimeOfDay _startTime = TimeOfDay.now();
+  TimeOfDay _endTime =
+      TimeOfDay.now().replacing(hour: TimeOfDay.now().hour + 1);
 
-  // Form state
-  bool _isLoading = false;
-  DateTime? _selectedDate;
-  TimeOfDay? _startTime;
-  TimeOfDay? _endTime;
-  User? _selectedStudent;
-  User? _selectedInstructor;
-  Course? _selectedCourse;
-  Fleet? _selectedVehicle;
+  var _selectedStudent;
+  var _selectedInstructor;
+  var _selectedCourse;
+  var _selectedVehicle;
   String _selectedClassType = 'Practical';
   String _selectedStatus = 'Scheduled';
 
-  // Form controllers
-  final TextEditingController _notesController = TextEditingController();
+  bool _isLoading = false;
 
-  // Class type options
-  final List<String> _classTypes = [
-    'Practical',
-    'Theory',
-    'Mock Test',
-    'Road Test'
-  ];
+  final List<String> _classTypes = ['Practical', 'Theory'];
   final List<String> _statusOptions = ['Scheduled', 'Confirmed', 'Pending'];
 
   @override
@@ -63,62 +51,41 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
 
   void _initializeForm() {
     if (widget.existingSchedule != null) {
-      // Pre-populate form for editing
       final schedule = widget.existingSchedule!;
       _selectedDate = schedule.start;
       _startTime = TimeOfDay.fromDateTime(schedule.start);
       _endTime = TimeOfDay.fromDateTime(schedule.end);
-      _selectedStudent = userController.users.firstWhereOrNull(
+      _selectedClassType = schedule.classType;
+      _selectedStatus = schedule.status;
+
+      // Find related entities
+      _selectedStudent = _userController.users.firstWhereOrNull(
         (user) => user.id == schedule.studentId,
       );
-      _selectedInstructor = userController.users.firstWhereOrNull(
+      _selectedInstructor = _userController.users.firstWhereOrNull(
         (user) => user.id == schedule.instructorId,
       );
-      _selectedCourse = courseController.courses.firstWhereOrNull(
+      _selectedCourse = _courseController.courses.firstWhereOrNull(
         (course) => course.id == schedule.courseId,
       );
       if (schedule.carId != null) {
-        _selectedVehicle = fleetController.fleet.firstWhereOrNull(
+        _selectedVehicle = _fleetController.fleet.firstWhereOrNull(
           (vehicle) => vehicle.id == schedule.carId,
         );
       }
-      _selectedClassType = schedule.classType;
-      _selectedStatus = schedule.status;
-    } else {
-      // Set defaults for new schedule
-      _selectedDate = DateTime.now().add(Duration(hours: 1));
-      _startTime = TimeOfDay.now();
-      _endTime = TimeOfDay(
-        hour: (TimeOfDay.now().hour + 1) % 24,
-        minute: TimeOfDay.now().minute,
-      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      key: _scaffoldMessengerKey,
       appBar: AppBar(
         title: Text(widget.existingSchedule != null
             ? 'Edit Schedule'
-            : 'Create Schedule'),
-        actions: [
-          TextButton(
-            onPressed: _isLoading ? null : _saveSchedule,
-            child: _isLoading
-                ? SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : Text(
-                    widget.existingSchedule != null ? 'Update' : 'Create',
-                    style: TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.bold),
-                  ),
-          ),
-        ],
+            : 'Create Single Schedule'),
+        backgroundColor: Colors.blue,
+        foregroundColor: Colors.white,
+        elevation: 0,
       ),
       body: Form(
         key: _formKey,
@@ -127,19 +94,13 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildSectionHeader('Basic Information'),
-              _buildBasicInfoSection(),
-              SizedBox(height: 24),
-              _buildSectionHeader('Date & Time'),
               _buildDateTimeSection(),
               SizedBox(height: 24),
-              _buildSectionHeader('Participants'),
               _buildParticipantsSection(),
               SizedBox(height: 24),
-              _buildSectionHeader('Additional Details'),
-              _buildAdditionalDetailsSection(),
+              _buildDetailsSection(),
               SizedBox(height: 32),
-              _buildActionButtons(),
+              _buildSaveButton(),
             ],
           ),
         ),
@@ -147,215 +108,47 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
     );
   }
 
-  Widget _buildSectionHeader(String title) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: 12),
-      child: Text(
-        title,
-        style: TextStyle(
-          fontSize: 18,
-          fontWeight: FontWeight.bold,
-          color: Colors.blue.shade700,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBasicInfoSection() {
-    return Card(
-      elevation: 2,
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          children: [
-            // Course Selection
-            DropdownButtonFormField<Course>(
-              decoration: InputDecoration(
-                labelText: 'Course *',
-                prefixIcon: Icon(Icons.school),
-                border: OutlineInputBorder(),
-              ),
-              value: _selectedCourse,
-              items: courseController.courses.map((course) {
-                return DropdownMenuItem<Course>(
-                  value: course,
-                  child: Text(course.name),
-                );
-              }).toList(),
-              onChanged: (course) {
-                setState(() {
-                  _selectedCourse = course;
-                });
-              },
-              validator: (value) {
-                if (value == null) {
-                  return 'Please select a course';
-                }
-                return null;
-              },
-            ),
-
-            SizedBox(height: 16),
-
-            // Class Type Selection
-            DropdownButtonFormField<String>(
-              decoration: InputDecoration(
-                labelText: 'Class Type *',
-                prefixIcon: Icon(Icons.class_),
-                border: OutlineInputBorder(),
-              ),
-              value: _selectedClassType,
-              items: _classTypes.map((type) {
-                return DropdownMenuItem<String>(
-                  value: type,
-                  child: Text(type),
-                );
-              }).toList(),
-              onChanged: (type) {
-                setState(() {
-                  _selectedClassType = type!;
-                  // Auto-clear vehicle selection for theory classes
-                  if (type == 'Theory') {
-                    _selectedVehicle = null;
-                  }
-                });
-              },
-            ),
-
-            SizedBox(height: 16),
-
-            // Status Selection
-            DropdownButtonFormField<String>(
-              decoration: InputDecoration(
-                labelText: 'Status',
-                prefixIcon: Icon(Icons.info_outline),
-                border: OutlineInputBorder(),
-              ),
-              value: _selectedStatus,
-              items: _statusOptions.map((status) {
-                return DropdownMenuItem<String>(
-                  value: status,
-                  child: Text(status),
-                );
-              }).toList(),
-              onChanged: (status) {
-                setState(() {
-                  _selectedStatus = status!;
-                });
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildDateTimeSection() {
     return Card(
-      elevation: 2,
       child: Padding(
         padding: EdgeInsets.all(16),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Date Selection
-            InkWell(
-              onTap: _selectDate,
-              child: InputDecorator(
-                decoration: InputDecoration(
-                  labelText: 'Date *',
-                  prefixIcon: Icon(Icons.calendar_today),
-                  border: OutlineInputBorder(),
-                ),
-                child: Text(
-                  _selectedDate != null
-                      ? DateFormat('EEEE, MMMM d, yyyy').format(_selectedDate!)
-                      : 'Select Date',
-                  style: TextStyle(
-                    color: _selectedDate != null
-                        ? Colors.black
-                        : Colors.grey.shade600,
-                  ),
-                ),
-              ),
+            Text(
+              'Date & Time',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
-
             SizedBox(height: 16),
 
-            // Time Selection Row
-            Row(
-              children: [
-                Expanded(
-                  child: InkWell(
-                    onTap: () => _selectTime(true),
-                    child: InputDecorator(
-                      decoration: InputDecoration(
-                        labelText: 'Start Time *',
-                        prefixIcon: Icon(Icons.access_time),
-                        border: OutlineInputBorder(),
-                      ),
-                      child: Text(
-                        _startTime != null
-                            ? _startTime!.format(context)
-                            : 'Select Time',
-                        style: TextStyle(
-                          color: _startTime != null
-                              ? Colors.black
-                              : Colors.grey.shade600,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                SizedBox(width: 16),
-                Expanded(
-                  child: InkWell(
-                    onTap: () => _selectTime(false),
-                    child: InputDecorator(
-                      decoration: InputDecoration(
-                        labelText: 'End Time *',
-                        prefixIcon: Icon(Icons.access_time_filled),
-                        border: OutlineInputBorder(),
-                      ),
-                      child: Text(
-                        _endTime != null
-                            ? _endTime!.format(context)
-                            : 'Select Time',
-                        style: TextStyle(
-                          color: _endTime != null
-                              ? Colors.black
-                              : Colors.grey.shade600,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+            // Date Selection
+            ListTile(
+              leading: Icon(Icons.calendar_today, color: Colors.blue),
+              title: Text('Date'),
+              subtitle: Text(DateFormat.yMMMd().format(_selectedDate)),
+              trailing: Icon(Icons.arrow_forward_ios),
+              onTap: _selectDate,
             ),
 
-            if (_getDurationText().isNotEmpty) ...[
-              SizedBox(height: 12),
-              Container(
-                padding: EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.blue.shade200),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.timer, size: 16, color: Colors.blue.shade700),
-                    SizedBox(width: 8),
-                    Text(
-                      'Duration: ${_getDurationText()}',
-                      style: TextStyle(
-                        color: Colors.blue.shade700,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+            Divider(),
+
+            // Start Time
+            ListTile(
+              leading: Icon(Icons.access_time, color: Colors.green),
+              title: Text('Start Time'),
+              subtitle: Text(_startTime.format(context)),
+              trailing: Icon(Icons.arrow_forward_ios),
+              onTap: () => _selectTime(true),
+            ),
+
+            // End Time
+            ListTile(
+              leading: Icon(Icons.access_time_filled, color: Colors.orange),
+              title: Text('End Time'),
+              subtitle: Text(_endTime.format(context)),
+              trailing: Icon(Icons.arrow_forward_ios),
+              onTap: () => _selectTime(false),
+            ),
           ],
         ),
       ),
@@ -364,104 +157,77 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
 
   Widget _buildParticipantsSection() {
     return Card(
-      elevation: 2,
       child: Padding(
         padding: EdgeInsets.all(16),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Text(
+              'Participants',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 16),
+
+            // Course Selection
+            _buildDropdown<dynamic>(
+              label: 'Course',
+              icon: Icons.book,
+              value: _selectedCourse,
+              items: _courseController.courses,
+              onChanged: (value) => setState(() => _selectedCourse = value),
+              displayText: (item) => item?.name ?? 'Select Course',
+              validator: (value) =>
+                  value == null ? 'Please select a course' : null,
+            ),
+
+            SizedBox(height: 16),
+
             // Student Selection
-            DropdownButtonFormField<User>(
-              decoration: InputDecoration(
-                labelText: 'Student *',
-                prefixIcon: Icon(Icons.person),
-                border: OutlineInputBorder(),
-              ),
+            _buildDropdown<dynamic>(
+              label: 'Student',
+              icon: Icons.person,
               value: _selectedStudent,
-              items: userController.users
-                  .where((user) => user.role.toLowerCase() == 'student')
-                  .map((student) {
-                return DropdownMenuItem<User>(
-                  value: student,
-                  child: Text('${student.fname} ${student.lname}'),
-                );
-              }).toList(),
-              onChanged: (student) {
-                setState(() {
-                  _selectedStudent = student;
-                });
-              },
-              validator: (value) {
-                if (value == null) {
-                  return 'Please select a student';
-                }
-                return null;
-              },
+              items: _userController.users
+                  .where((user) => user.role == 'student')
+                  .toList(),
+              onChanged: (value) => setState(() => _selectedStudent = value),
+              displayText: (item) => item != null
+                  ? '${item.fname} ${item.lname}'
+                  : 'Select Student',
+              validator: (value) =>
+                  value == null ? 'Please select a student' : null,
             ),
 
             SizedBox(height: 16),
 
             // Instructor Selection
-            DropdownButtonFormField<User>(
-              decoration: InputDecoration(
-                labelText: 'Instructor *',
-                prefixIcon: Icon(Icons.school),
-                border: OutlineInputBorder(),
-              ),
+            _buildDropdown<dynamic>(
+              label: 'Instructor',
+              icon: Icons.person_pin,
               value: _selectedInstructor,
-              items: userController.users
-                  .where((user) => user.role.toLowerCase() == 'instructor')
-                  .map((instructor) {
-                return DropdownMenuItem<User>(
-                  value: instructor,
-                  child: Text('${instructor.fname} ${instructor.lname}'),
-                );
-              }).toList(),
-              onChanged: (instructor) {
-                setState(() {
-                  _selectedInstructor = instructor;
-                });
-              },
-              validator: (value) {
-                if (value == null) {
-                  return 'Please select an instructor';
-                }
-                return null;
-              },
+              items: _userController.users
+                  .where((user) => user.role == 'instructor')
+                  .toList(),
+              onChanged: (value) => setState(() => _selectedInstructor = value),
+              displayText: (item) => item != null
+                  ? '${item.fname} ${item.lname}'
+                  : 'Select Instructor',
+              validator: (value) =>
+                  value == null ? 'Please select an instructor' : null,
             ),
 
             SizedBox(height: 16),
 
-            // Vehicle Selection (only for practical classes)
-            DropdownButtonFormField<Fleet>(
-              decoration: InputDecoration(
-                labelText: _selectedClassType == 'Theory'
-                    ? 'Vehicle (Not Required)'
-                    : 'Vehicle',
-                prefixIcon: Icon(Icons.directions_car),
-                border: OutlineInputBorder(),
-                enabled: _selectedClassType != 'Theory',
-              ),
+            // Vehicle Selection (Optional)
+            _buildDropdown<dynamic>(
+              label: 'Vehicle (Optional)',
+              icon: Icons.directions_car,
               value: _selectedVehicle,
-              items: fleetController.fleet.map((vehicle) {
-                return DropdownMenuItem<Fleet>(
-                  value: vehicle,
-                  child: Text(
-                      '${vehicle.make} ${vehicle.model} (${vehicle.carPlate})'),
-                );
-              }).toList(),
-              onChanged: _selectedClassType == 'Theory'
-                  ? null
-                  : (vehicle) {
-                      setState(() {
-                        _selectedVehicle = vehicle;
-                      });
-                    },
-              validator: (value) {
-                if (_selectedClassType != 'Theory' && value == null) {
-                  return 'Please select a vehicle for practical classes';
-                }
-                return null;
-              },
+              items: _fleetController.fleet,
+              onChanged: (value) => setState(() => _selectedVehicle = value),
+              displayText: (item) => item != null
+                  ? '${item.make} ${item.model} - ${item.carPlate}'
+                  : 'Select Vehicle',
             ),
           ],
         ),
@@ -469,279 +235,136 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
     );
   }
 
-  Widget _buildAdditionalDetailsSection() {
+  Widget _buildDetailsSection() {
     return Card(
-      elevation: 2,
       child: Padding(
         padding: EdgeInsets.all(16),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            TextFormField(
-              controller: _notesController,
-              decoration: InputDecoration(
-                labelText: 'Notes (Optional)',
-                prefixIcon: Icon(Icons.note),
-                border: OutlineInputBorder(),
-                hintText: 'Add any additional notes or instructions...',
-              ),
-              maxLines: 3,
-              maxLength: 500,
+            Text(
+              'Additional Details',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
 
             SizedBox(height: 16),
 
-            // Availability Check
-            if (_selectedInstructor != null &&
-                _selectedDate != null &&
-                _startTime != null &&
-                _endTime != null)
-              _buildAvailabilityCheck(),
+            // Status
+            _buildDropdown<String>(
+              label: 'Status',
+              icon: Icons.flag,
+              value: _selectedStatus,
+              items: _statusOptions,
+              onChanged: (value) => setState(() => _selectedStatus = value!),
+              displayText: (item) => item ?? 'Select Status',
+              validator: (value) =>
+                  value == null ? 'Please select a status' : null,
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildAvailabilityCheck() {
-    return FutureBuilder<bool>(
-      future: _checkAvailability(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return Container(
-            padding: EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade100,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-                SizedBox(width: 12),
-                Text('Checking availability...'),
-              ],
-            ),
-          );
-        }
-
-        final isAvailable = snapshot.data ?? false;
-        return Container(
-          padding: EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: isAvailable ? Colors.green.shade50 : Colors.red.shade50,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: isAvailable ? Colors.green.shade200 : Colors.red.shade200,
-            ),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                isAvailable ? Icons.check_circle : Icons.error,
-                color:
-                    isAvailable ? Colors.green.shade700 : Colors.red.shade700,
-                size: 20,
-              ),
-              SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  isAvailable
-                      ? 'Instructor is available at this time'
-                      : 'Instructor is not available at this time',
-                  style: TextStyle(
-                    color: isAvailable
-                        ? Colors.green.shade700
-                        : Colors.red.shade700,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            ],
-          ),
+  Widget _buildDropdown<T>({
+    required String label,
+    required IconData icon,
+    required T? value,
+    required List<T> items,
+    required Function(T?) onChanged,
+    required String Function(T?) displayText,
+    String? Function(T?)? validator,
+  }) {
+    return DropdownButtonFormField<T>(
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon),
+        border: OutlineInputBorder(),
+      ),
+      value: value,
+      items: items.map((item) {
+        return DropdownMenuItem<T>(
+          value: item,
+          child: Text(displayText(item)),
         );
-      },
+      }).toList(),
+      onChanged: onChanged,
+      validator: validator,
     );
   }
 
-  Widget _buildActionButtons() {
-    return Column(
-      children: [
-        SizedBox(
-          width: double.infinity,
-          height: 50,
-          child: ElevatedButton(
-            onPressed: _isLoading ? null : _saveSchedule,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue.shade600,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            child: _isLoading
-                ? Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2,
-                        ),
-                      ),
-                      SizedBox(width: 12),
-                      Text('Saving...'),
-                    ],
-                  )
-                : Text(
-                    widget.existingSchedule != null
-                        ? 'Update Schedule'
-                        : 'Create Schedule',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
+  Widget _buildSaveButton() {
+    return SizedBox(
+      width: double.infinity,
+      height: 48,
+      child: ElevatedButton(
+        onPressed: _isLoading ? null : _saveSchedule,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.blue,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+        child: _isLoading
+            ? Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
                       color: Colors.white,
                     ),
                   ),
-          ),
-        ),
-        SizedBox(height: 12),
-        SizedBox(
-          width: double.infinity,
-          height: 50,
-          child: OutlinedButton(
-            onPressed: _isLoading ? null : () => Get.back(),
-            style: OutlinedButton.styleFrom(
-              side: BorderSide(color: Colors.grey.shade400),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
+                  SizedBox(width: 8),
+                  Text('Saving...'),
+                ],
+              )
+            : Text(
+                widget.existingSchedule != null
+                    ? 'Update Schedule'
+                    : 'Create Schedule',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
-            ),
-            child: Text(
-              'Cancel',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-                color: Colors.grey.shade700,
-              ),
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 
-  // Event handlers
   Future<void> _selectDate() async {
-    final date = await showDatePicker(
+    final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: _selectedDate ?? DateTime.now(),
+      initialDate: _selectedDate,
       firstDate: DateTime.now(),
       lastDate: DateTime.now().add(Duration(days: 365)),
     );
-
-    if (date != null) {
+    if (picked != null && picked != _selectedDate) {
       setState(() {
-        _selectedDate = date;
+        _selectedDate = picked;
       });
     }
   }
 
   Future<void> _selectTime(bool isStartTime) async {
-    final time = await showTimePicker(
+    final TimeOfDay? picked = await showTimePicker(
       context: context,
-      initialTime: isStartTime
-          ? (_startTime ?? TimeOfDay.now())
-          : (_endTime ??
-              TimeOfDay(hour: (TimeOfDay.now().hour + 1) % 24, minute: 0)),
+      initialTime: isStartTime ? _startTime : _endTime,
     );
-
-    if (time != null) {
+    if (picked != null) {
       setState(() {
         if (isStartTime) {
-          _startTime = time;
-          // Auto-adjust end time to be 1 hour after start time
-          if (_endTime == null || _endTime!.hour <= time.hour) {
-            _endTime = TimeOfDay(
-              hour: (time.hour + 1) % 24,
-              minute: time.minute,
-            );
-          }
+          _startTime = picked;
+          // Automatically set end time to 1 hour later
+          _endTime = TimeOfDay(
+            hour: (picked.hour + 1) % 24,
+            minute: picked.minute,
+          );
         } else {
-          // Validate that end time is after start time
-          if (_startTime != null) {
-            final startMinutes = _startTime!.hour * 60 + _startTime!.minute;
-            final endMinutes = time.hour * 60 + time.minute;
-
-            if (endMinutes <= startMinutes) {
-              _scaffoldMessengerKey.currentState?.showSnackBar(
-                SnackBar(
-                  content: Text('End time must be after start time'),
-                  backgroundColor: Colors.red,
-                ),
-              );
-              return;
-            }
-          }
-          _endTime = time;
+          _endTime = picked;
         }
       });
     }
-  }
-
-  String _getDurationText() {
-    if (_startTime == null || _endTime == null) return '';
-
-    final startMinutes = _startTime!.hour * 60 + _startTime!.minute;
-    final endMinutes = _endTime!.hour * 60 + _endTime!.minute;
-    final durationMinutes = endMinutes - startMinutes;
-
-    if (durationMinutes <= 0) return '';
-
-    final hours = durationMinutes ~/ 60;
-    final minutes = durationMinutes % 60;
-
-    if (hours > 0 && minutes > 0) {
-      return '${hours}h ${minutes}m';
-    } else if (hours > 0) {
-      return '${hours}h';
-    } else {
-      return '${minutes}m';
-    }
-  }
-
-  Future<bool> _checkAvailability() async {
-    if (_selectedInstructor == null ||
-        _selectedDate == null ||
-        _startTime == null ||
-        _endTime == null) {
-      return false;
-    }
-
-    final startDateTime = DateTime(
-      _selectedDate!.year,
-      _selectedDate!.month,
-      _selectedDate!.day,
-      _startTime!.hour,
-      _startTime!.minute,
-    );
-
-    final endDateTime = DateTime(
-      _selectedDate!.year,
-      _selectedDate!.month,
-      _selectedDate!.day,
-      _endTime!.hour,
-      _endTime!.minute,
-    );
-
-    return await scheduleController.checkAvailability(
-      _selectedInstructor!.id!,
-      startDateTime,
-      endDateTime,
-    );
   }
 
   Future<void> _saveSchedule() async {
@@ -749,35 +372,30 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
       return;
     }
 
-    // Additional validations
-    if (_selectedDate == null) {
-      _scaffoldMessengerKey.currentState?.showSnackBar(
-        SnackBar(
-          content: Text('Please select a date'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
+    // Validate time selection
+    final startDateTime = DateTime(
+      _selectedDate.year,
+      _selectedDate.month,
+      _selectedDate.day,
+      _startTime.hour,
+      _startTime.minute,
+    );
 
-    if (_startTime == null || _endTime == null) {
-      _scaffoldMessengerKey.currentState?.showSnackBar(
-        SnackBar(
-          content: Text('Please select start and end times'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
+    final endDateTime = DateTime(
+      _selectedDate.year,
+      _selectedDate.month,
+      _selectedDate.day,
+      _endTime.hour,
+      _endTime.minute,
+    );
 
-    // Check availability
-    final isAvailable = await _checkAvailability();
-    if (!isAvailable) {
-      _scaffoldMessengerKey.currentState?.showSnackBar(
-        SnackBar(
-          content: Text('Instructor is not available at the selected time'),
-          backgroundColor: Colors.red,
-        ),
+    if (endDateTime.isBefore(startDateTime) ||
+        endDateTime.isAtSameMomentAs(startDateTime)) {
+      Get.snackbar(
+        'Invalid Time',
+        'End time must be after start time',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
       );
       return;
     }
@@ -787,22 +405,6 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
     });
 
     try {
-      final startDateTime = DateTime(
-        _selectedDate!.year,
-        _selectedDate!.month,
-        _selectedDate!.day,
-        _startTime!.hour,
-        _startTime!.minute,
-      );
-
-      final endDateTime = DateTime(
-        _selectedDate!.year,
-        _selectedDate!.month,
-        _selectedDate!.day,
-        _endTime!.hour,
-        _endTime!.minute,
-      );
-
       final schedule = Schedule(
         id: widget.existingSchedule?.id,
         start: startDateTime,
@@ -813,30 +415,35 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
         carId: _selectedVehicle?.id,
         classType: _selectedClassType,
         status: _selectedStatus,
-        attended: widget.existingSchedule?.attended ?? false,
-        lessonsCompleted: widget.existingSchedule?.lessonsCompleted ?? 0,
+        // Single schedule specific fields
+        isRecurring: false,
+        recurrencePattern: null,
+        recurrenceEndDate: null,
       );
 
-      await scheduleController.addOrUpdateSchedule(schedule);
+      await _scheduleController.addOrUpdateSchedule(schedule);
 
-      Get.back(result: true);
+      Get.snackbar(
+        'Success',
+        widget.existingSchedule != null
+            ? 'Schedule updated successfully'
+            : 'Schedule created successfully',
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
+
+      Get.back();
     } catch (e) {
-      _scaffoldMessengerKey.currentState?.showSnackBar(
-        SnackBar(
-          content: Text('Failed to save schedule: ${e.toString()}'),
-          backgroundColor: Colors.red,
-        ),
+      Get.snackbar(
+        'Error',
+        'Failed to save schedule: $e',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
       );
     } finally {
       setState(() {
         _isLoading = false;
       });
     }
-  }
-
-  @override
-  void dispose() {
-    _notesController.dispose();
-    super.dispose();
   }
 }

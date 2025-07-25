@@ -1,4 +1,6 @@
 // lib/screens/schedule/schedule_screen.dart
+import 'package:driving/screens/schedule/create_schedule_screen.dart';
+import 'package:driving/screens/schedule/recurring_schedule_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:table_calendar/table_calendar.dart';
@@ -769,8 +771,11 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   void _showCreateScheduleDialog(bool isRecurring) {
-    // This would open a dialog/screen for creating new schedules
-    Get.snackbar('Info', 'Create schedule dialog would open here');
+    if (isRecurring) {
+      Get.to(() => RecurringScheduleScreen());
+    } else {
+      Get.to(() => SingleScheduleScreen());
+    }
   }
 
   void _showScheduleDetails(Schedule schedule) {
