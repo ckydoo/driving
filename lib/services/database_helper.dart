@@ -4,7 +4,6 @@ import 'package:driving/models/course.dart';
 import 'package:driving/models/fleet.dart';
 import 'package:driving/models/payment.dart';
 import 'package:driving/models/user.dart';
-import 'package:driving/services/database_helper_extensions.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite_common/sqlite_api.dart';
 import 'package:path/path.dart';

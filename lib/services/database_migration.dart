@@ -1,5 +1,4 @@
 // lib/services/database_migration.dart
-import 'package:driving/services/database_helper_extensions.dart';
 import 'package:sqflite_common/sqlite_api.dart';
 import 'database_helper.dart';
 
@@ -69,7 +68,6 @@ class DatabaseMigration {
     try {
       final dbHelper = DatabaseHelper.instance;
       final schedules = await dbHelper.getSchedules();
-      await dbHelper.createEnhancedSchedulesTable();
 
       if (schedules.isEmpty) {
         print('No schedules found. Consider adding sample data for testing.');

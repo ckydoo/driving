@@ -1,7 +1,6 @@
 // lib/services/final_app_bindings.dart
 import 'package:driving/controllers/billing_controller.dart';
 import 'package:driving/controllers/course_controller.dart';
-import 'package:driving/controllers/enhanced_schedule_controller.dart';
 import 'package:driving/controllers/fleet_controller.dart';
 import 'package:driving/controllers/navigation_controller.dart';
 import 'package:driving/controllers/schedule_controller.dart';
@@ -17,7 +16,6 @@ class FinalAppBindings extends Bindings {
 
     // Navigation
     Get.put(NavigationController(), permanent: true);
-    Get.put(EnhancedScheduleController());
 
     // Controllers - Use the original UserController but ensure proper filtering
     Get.lazyPut(() => UserController(), fenix: true);

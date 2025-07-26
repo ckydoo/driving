@@ -1,6 +1,5 @@
 // lib/widgets/complete_main_layout.dart
 import 'package:driving/dashboard.dart';
-import 'package:driving/screens/schedule/enhanced_schedule_dashboard.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../controllers/navigation_controller.dart';
@@ -383,7 +382,7 @@ class CompleteMainLayout extends StatelessWidget {
       case 'billing':
         return BillingScreen();
       case 'schedules':
-        return EnhancedScheduleDashboard();
+        return ScheduleScreen();
       case 'users':
         return EnhancedUsersScreen(role: 'admin');
       case 'course_reports':
