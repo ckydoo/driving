@@ -1,4 +1,4 @@
-// lib/controllers/settings_controller.dart
+// lib/controllers/enhanced_settings_controller.dart
 import 'package:driving/controllers/billing_controller.dart';
 import 'package:driving/controllers/schedule_controller.dart';
 import 'package:flutter/material.dart';
@@ -9,6 +9,7 @@ class SettingsController extends GetxController {
   // Scheduling Settings
   final RxBool enforceBillingValidation = true.obs;
   final RxBool checkInstructorAvailability = true.obs;
+  final RxBool enforceWorkingHours = true.obs; // NEW
   final RxBool autoAssignVehicles = true.obs;
   final RxDouble defaultLessonDuration = 1.5.obs; // hours
 
@@ -16,6 +17,8 @@ class SettingsController extends GetxController {
   final RxBool showLowLessonWarning = true.obs;
   final RxInt lowLessonThreshold = 3.obs;
   final RxBool preventOverScheduling = true.obs;
+  final RxBool autoCreateBillingRecords = true.obs; // NEW
+  final RxBool countScheduledLessons = true.obs; // NEW
 
   // Instructor Settings
   final RxString workingHoursStart = '09:00'.obs;
@@ -51,6 +54,8 @@ class SettingsController extends GetxController {
           prefs.getBool('enforce_billing_validation') ?? true;
       checkInstructorAvailability.value =
           prefs.getBool('check_instructor_availability') ?? true;
+      enforceWorkingHours.value =
+          prefs.getBool('enforce_working_hours') ?? true; // NEW
       autoAssignVehicles.value = prefs.getBool('auto_assign_vehicles') ?? true;
       defaultLessonDuration.value =
           prefs.getDouble('default_lesson_duration') ?? 1.5;
@@ -61,6 +66,10 @@ class SettingsController extends GetxController {
       lowLessonThreshold.value = prefs.getInt('low_lesson_threshold') ?? 3;
       preventOverScheduling.value =
           prefs.getBool('prevent_over_scheduling') ?? true;
+      autoCreateBillingRecords.value =
+          prefs.getBool('auto_create_billing_records') ?? true; // NEW
+      countScheduledLessons.value =
+          prefs.getBool('count_scheduled_lessons') ?? true; // NEW
 
       // Instructor Settings
       workingHoursStart.value =
@@ -107,7 +116,7 @@ class SettingsController extends GetxController {
     }
   }
 
-  // Scheduling Settings Methods
+  // Enhanced Scheduling Settings Methods
   void toggleBillingValidation(bool value) {
     enforceBillingValidation.value = value;
     _saveSetting('enforce_billing_validation', value);
@@ -126,6 +135,20 @@ class SettingsController extends GetxController {
     _saveSetting('check_instructor_availability', value);
   }
 
+  void toggleWorkingHoursEnforcement(bool value) {
+    // NEW
+    enforceWorkingHours.value = value;
+    _saveSetting('enforce_working_hours', value);
+    Get.snackbar(
+      'Setting Updated',
+      value
+          ? 'Working hours enforcement enabled'
+          : 'Lessons can be scheduled outside working hours',
+      backgroundColor: value ? Colors.green : Colors.orange,
+      colorText: Colors.white,
+    );
+  }
+
   void toggleAutoAssignVehicles(bool value) {
     autoAssignVehicles.value = value;
     _saveSetting('auto_assign_vehicles', value);
@@ -136,7 +159,7 @@ class SettingsController extends GetxController {
     _saveSetting('default_lesson_duration', hours);
   }
 
-  // Billing Settings Methods
+  // Enhanced Billing Settings Methods
   void toggleLowLessonWarning(bool value) {
     showLowLessonWarning.value = value;
     _saveSetting('show_low_lesson_warning', value);
@@ -150,6 +173,34 @@ class SettingsController extends GetxController {
   void togglePreventOverScheduling(bool value) {
     preventOverScheduling.value = value;
     _saveSetting('prevent_over_scheduling', value);
+  }
+
+  void toggleAutoCreateBillingRecords(bool value) {
+    // NEW
+    autoCreateBillingRecords.value = value;
+    _saveSetting('auto_create_billing_records', value);
+    Get.snackbar(
+      'Setting Updated',
+      value
+          ? 'Billing records will be created automatically when lessons are completed'
+          : 'Billing records must be created manually',
+      backgroundColor: value ? Colors.green : Colors.orange,
+      colorText: Colors.white,
+    );
+  }
+
+  void toggleCountScheduledLessons(bool value) {
+    // NEW
+    countScheduledLessons.value = value;
+    _saveSetting('count_scheduled_lessons', value);
+    Get.snackbar(
+      'Setting Updated',
+      value
+          ? 'Scheduled lessons count towards lesson balance'
+          : 'Only attended lessons count towards balance',
+      backgroundColor: value ? Colors.blue : Colors.orange,
+      colorText: Colors.white,
+    );
   }
 
   // Instructor Settings Methods
@@ -170,7 +221,301 @@ class SettingsController extends GetxController {
     _saveSetting('allow_back_to_back', value);
   }
 
-  // Notification Settings Methods
+  // Enhanced Validation Methods
+  bool canScheduleStudent(int studentId, int courseId,
+      {int additionalLessons = 1}) {
+    if (!enforceBillingValidation.value) {
+      return true; // Skip validation if disabled
+    }
+
+    try {
+      final billingController = Get.find<BillingController>();
+      final invoice = billingController.invoices.firstWhereOrNull(
+        (inv) => inv.studentId == studentId && inv.courseId == courseId,
+      );
+
+      if (invoice == null) {
+        return false; // No invoice found
+      }
+
+      final scheduleController = Get.find<ScheduleController>();
+
+      // Count attended lessons
+      final attendedLessons = scheduleController.schedules
+          .where((s) =>
+              s.studentId == studentId && s.courseId == courseId && s.attended)
+          .fold<int>(0, (sum, s) => sum + (s.lessonsCompleted ?? 1));
+
+      // Count scheduled lessons if setting is enabled
+      final scheduledLessons = countScheduledLessons.value
+          ? scheduleController.schedules
+              .where((s) =>
+                  s.studentId == studentId &&
+                  s.courseId == courseId &&
+                  !s.attended &&
+                  s.status != 'Cancelled')
+              .fold<int>(0, (sum, s) => sum + (s.lessonsCompleted ?? 1))
+          : 0;
+
+      final totalUsedLessons = attendedLessons + scheduledLessons;
+      final remainingLessons = invoice.lessons - totalUsedLessons;
+
+      return remainingLessons >= additionalLessons;
+    } catch (e) {
+      print('Error checking student scheduling eligibility: $e');
+      return false;
+    }
+  }
+
+  bool isInstructorAvailable(int instructorId, DateTime start, DateTime end) {
+    if (!checkInstructorAvailability.value) {
+      return true; // Skip check if disabled
+    }
+
+    try {
+      final scheduleController = Get.find<ScheduleController>();
+
+      // Check for conflicts with existing schedules
+      final hasConflict = scheduleController.schedules.any((s) {
+        if (s.instructorId != instructorId || s.status == 'Cancelled') {
+          return false;
+        }
+
+        // Check if times overlap
+        return start.isBefore(s.end) && end.isAfter(s.start);
+      });
+
+      if (hasConflict) return false;
+
+      // Check break time requirements if not allowing back-to-back
+      if (!allowBackToBackLessons.value) {
+        final breakDuration = Duration(minutes: breakBetweenLessons.value);
+
+        final hasBreakConflict = scheduleController.schedules.any((s) {
+          if (s.instructorId != instructorId || s.status == 'Cancelled') {
+            return false;
+          }
+
+          // Check if new lesson starts too soon after existing lesson ends
+          final timeBetween = start.difference(s.end);
+          if (timeBetween > Duration.zero && timeBetween < breakDuration) {
+            return true;
+          }
+
+          // Check if new lesson ends too close to existing lesson start
+          final timeBeforeNext = s.start.difference(end);
+          if (timeBeforeNext > Duration.zero &&
+              timeBeforeNext < breakDuration) {
+            return true;
+          }
+
+          return false;
+        });
+
+        if (hasBreakConflict) return false;
+      }
+
+      return true;
+    } catch (e) {
+      print('Error checking instructor availability: $e');
+      return false;
+    }
+  }
+
+  bool isWithinWorkingHours(DateTime start, DateTime end) {
+    // NEW
+    if (!enforceWorkingHours.value) {
+      return true; // Skip check if disabled
+    }
+
+    try {
+      final startTime = TimeOfDay.fromDateTime(start);
+      final endTime = TimeOfDay.fromDateTime(end);
+
+      final workStart = _parseTimeOfDay(workingHoursStart.value);
+      final workEnd = _parseTimeOfDay(workingHoursEnd.value);
+
+      // Convert to minutes for easier comparison
+      final startMinutes = startTime.hour * 60 + startTime.minute;
+      final endMinutes = endTime.hour * 60 + endTime.minute;
+      final workStartMinutes = workStart.hour * 60 + workStart.minute;
+      final workEndMinutes = workEnd.hour * 60 + workEnd.minute;
+
+      return startMinutes >= workStartMinutes && endMinutes <= workEndMinutes;
+    } catch (e) {
+      print('Error checking working hours: $e');
+      return true; // Default to allow if error
+    }
+  }
+
+  TimeOfDay _parseTimeOfDay(String timeString) {
+    // NEW
+    final parts = timeString.split(':');
+    return TimeOfDay(
+      hour: int.parse(parts[0]),
+      minute: int.parse(parts[1]),
+    );
+  }
+
+  int getRemainingLessons(int studentId, int courseId) {
+    try {
+      final billingController = Get.find<BillingController>();
+      final invoice = billingController.invoices.firstWhereOrNull(
+        (inv) => inv.studentId == studentId && inv.courseId == courseId,
+      );
+
+      if (invoice == null) return 0;
+
+      final scheduleController = Get.find<ScheduleController>();
+
+      // Count attended lessons
+      final attendedLessons = scheduleController.schedules
+          .where((s) =>
+              s.studentId == studentId && s.courseId == courseId && s.attended)
+          .fold<int>(0, (sum, s) => sum + (s.lessonsCompleted ?? 1));
+
+      // Count scheduled lessons if setting is enabled
+      final scheduledLessons = countScheduledLessons.value
+          ? scheduleController.schedules
+              .where((s) =>
+                  s.studentId == studentId &&
+                  s.courseId == courseId &&
+                  !s.attended &&
+                  s.status != 'Cancelled')
+              .fold<int>(0, (sum, s) => sum + (s.lessonsCompleted ?? 1))
+          : 0;
+
+      final totalUsedLessons = attendedLessons + scheduledLessons;
+      return invoice.lessons - totalUsedLessons;
+    } catch (e) {
+      print('Error calculating remaining lessons: $e');
+      return 0;
+    }
+  }
+
+  bool shouldShowLowLessonWarning(int studentId, int courseId) {
+    if (!showLowLessonWarning.value) return false;
+
+    final remaining = getRemainingLessons(studentId, courseId);
+    return remaining <= lowLessonThreshold.value && remaining > 0;
+  }
+
+  // Enhanced export settings
+  Map<String, dynamic> exportSettings() {
+    return {
+      'enforce_billing_validation': enforceBillingValidation.value,
+      'check_instructor_availability': checkInstructorAvailability.value,
+      'enforce_working_hours': enforceWorkingHours.value, // NEW
+      'auto_assign_vehicles': autoAssignVehicles.value,
+      'default_lesson_duration': defaultLessonDuration.value,
+      'show_low_lesson_warning': showLowLessonWarning.value,
+      'low_lesson_threshold': lowLessonThreshold.value,
+      'prevent_over_scheduling': preventOverScheduling.value,
+      'auto_create_billing_records': autoCreateBillingRecords.value, // NEW
+      'count_scheduled_lessons': countScheduledLessons.value, // NEW
+      'working_hours_start': workingHoursStart.value,
+      'working_hours_end': workingHoursEnd.value,
+      'break_between_lessons': breakBetweenLessons.value,
+      'allow_back_to_back': allowBackToBackLessons.value,
+      'auto_attendance_notifications': autoAttendanceNotifications.value,
+      'schedule_conflict_alerts': scheduleConflictAlerts.value,
+      'billing_warnings': billingWarnings.value,
+      'lesson_start_reminder': lessonStartReminder.value,
+      'daily_summary_time': dailySummaryTime.value,
+      'theme': theme.value,
+      'language': language.value,
+      'date_format': dateFormat.value,
+    };
+  }
+
+  // Reset all settings to defaults (updated)
+  Future<void> resetToDefaults() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.clear();
+
+      // Reset observable values to defaults
+      enforceBillingValidation.value = true;
+      checkInstructorAvailability.value = true;
+      enforceWorkingHours.value = true; // NEW
+      autoAssignVehicles.value = true;
+      defaultLessonDuration.value = 1.5;
+
+      showLowLessonWarning.value = true;
+      lowLessonThreshold.value = 3;
+      preventOverScheduling.value = true;
+      autoCreateBillingRecords.value = true; // NEW
+      countScheduledLessons.value = true; // NEW
+
+      workingHoursStart.value = '09:00';
+      workingHoursEnd.value = '18:00';
+      breakBetweenLessons.value = 15;
+      allowBackToBackLessons.value = false;
+
+      autoAttendanceNotifications.value = true;
+      scheduleConflictAlerts.value = true;
+      billingWarnings.value = true;
+      lessonStartReminder.value = 15;
+      dailySummaryTime.value = '08:00';
+
+      theme.value = 'light';
+      language.value = 'english';
+      dateFormat.value = 'MM/dd/yyyy';
+
+      Get.snackbar(
+        'Settings Reset',
+        'All settings have been reset to defaults',
+        backgroundColor: Colors.blue,
+        colorText: Colors.white,
+      );
+    } catch (e) {
+      print('Error resetting settings: $e');
+      Get.snackbar(
+        'Error',
+        'Failed to reset settings',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    }
+  }
+
+  // Import settings (updated)
+  Future<void> importSettings(Map<String, dynamic> settings) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      settings.forEach((key, value) async {
+        if (value is bool) {
+          await prefs.setBool(key, value);
+        } else if (value is int) {
+          await prefs.setInt(key, value);
+        } else if (value is double) {
+          await prefs.setDouble(key, value);
+        } else if (value is String) {
+          await prefs.setString(key, value);
+        }
+      });
+
+      await _loadSettings(); // Reload to update observable values
+
+      Get.snackbar(
+        'Settings Imported',
+        'Settings have been successfully imported',
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
+    } catch (e) {
+      print('Error importing settings: $e');
+      Get.snackbar(
+        'Import Error',
+        'Failed to import settings',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    }
+  }
+
+  // New notification settings methods
   void toggleAutoAttendanceNotifications(bool value) {
     autoAttendanceNotifications.value = value;
     _saveSetting('auto_attendance_notifications', value);
@@ -210,214 +555,5 @@ class SettingsController extends GetxController {
   void setDateFormat(String format) {
     dateFormat.value = format;
     _saveSetting('date_format', format);
-  }
-
-  // Validation Methods
-  bool canScheduleStudent(int studentId, int courseId) {
-    if (!enforceBillingValidation.value) {
-      return true; // Skip validation if disabled
-    }
-
-    try {
-      final billingController = Get.find<BillingController>();
-      final invoice = billingController.invoices.firstWhereOrNull(
-        (inv) => inv.studentId == studentId && inv.courseId == courseId,
-      );
-
-      if (invoice == null) {
-        return false; // No invoice found
-      }
-
-      final scheduleController = Get.find<ScheduleController>();
-      final usedLessons = scheduleController.schedules
-          .where((s) =>
-              s.studentId == studentId && s.courseId == courseId && s.attended)
-          .fold<int>(0, (sum, s) => sum + s.lessonsDeducted);
-
-      final remainingLessons = invoice.lessons - usedLessons;
-      return remainingLessons > 0;
-    } catch (e) {
-      print('Error checking student scheduling eligibility: $e');
-      return false;
-    }
-  }
-
-  bool isInstructorAvailable(int instructorId, DateTime start, DateTime end) {
-    if (!checkInstructorAvailability.value) {
-      return true; // Skip check if disabled
-    }
-
-    try {
-      final scheduleController = Get.find<ScheduleController>();
-      return !scheduleController.schedules.any((s) {
-        return s.instructorId == instructorId &&
-            start.isBefore(s.end) &&
-            end.isAfter(s.start) &&
-            s.status != 'Cancelled';
-      });
-    } catch (e) {
-      print('Error checking instructor availability: $e');
-      return false;
-    }
-  }
-
-  bool isWithinWorkingHours(DateTime dateTime) {
-    final startParts = workingHoursStart.value.split(':');
-    final endParts = workingHoursEnd.value.split(':');
-
-    final workStart = TimeOfDay(
-      hour: int.parse(startParts[0]),
-      minute: int.parse(startParts[1]),
-    );
-    final workEnd = TimeOfDay(
-      hour: int.parse(endParts[0]),
-      minute: int.parse(endParts[1]),
-    );
-
-    final lessonTime = TimeOfDay.fromDateTime(dateTime);
-
-    final lessonMinutes = lessonTime.hour * 60 + lessonTime.minute;
-    final startMinutes = workStart.hour * 60 + workStart.minute;
-    final endMinutes = workEnd.hour * 60 + workEnd.minute;
-
-    return lessonMinutes >= startMinutes && lessonMinutes <= endMinutes;
-  }
-
-  int getRemainingLessons(int studentId, int courseId) {
-    try {
-      final billingController = Get.find<BillingController>();
-      final invoice = billingController.invoices.firstWhereOrNull(
-        (inv) => inv.studentId == studentId && inv.courseId == courseId,
-      );
-
-      if (invoice == null) return 0;
-
-      final scheduleController = Get.find<ScheduleController>();
-      final usedLessons = scheduleController.schedules
-          .where((s) =>
-              s.studentId == studentId && s.courseId == courseId && s.attended)
-          .fold<int>(0, (sum, s) => sum + s.lessonsDeducted);
-
-      return invoice.lessons - usedLessons;
-    } catch (e) {
-      print('Error getting remaining lessons: $e');
-      return 0;
-    }
-  }
-
-  bool shouldShowLowLessonWarning(int studentId, int courseId) {
-    if (!showLowLessonWarning.value) return false;
-
-    final remaining = getRemainingLessons(studentId, courseId);
-    return remaining <= lowLessonThreshold.value && remaining > 0;
-  }
-
-  // Reset all settings to defaults
-  Future<void> resetToDefaults() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.clear();
-
-      // Reset observable values to defaults
-      enforceBillingValidation.value = true;
-      checkInstructorAvailability.value = true;
-      autoAssignVehicles.value = true;
-      defaultLessonDuration.value = 1.5;
-
-      showLowLessonWarning.value = true;
-      lowLessonThreshold.value = 3;
-      preventOverScheduling.value = true;
-
-      workingHoursStart.value = '09:00';
-      workingHoursEnd.value = '18:00';
-      breakBetweenLessons.value = 15;
-      allowBackToBackLessons.value = false;
-
-      autoAttendanceNotifications.value = true;
-      scheduleConflictAlerts.value = true;
-      billingWarnings.value = true;
-      lessonStartReminder.value = 15;
-      dailySummaryTime.value = '08:00';
-
-      theme.value = 'light';
-      language.value = 'english';
-      dateFormat.value = 'MM/dd/yyyy';
-
-      Get.snackbar(
-        'Settings Reset',
-        'All settings have been reset to defaults',
-        backgroundColor: Colors.blue,
-        colorText: Colors.white,
-      );
-    } catch (e) {
-      print('Error resetting settings: $e');
-      Get.snackbar(
-        'Error',
-        'Failed to reset settings',
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-      );
-    }
-  }
-
-  // Export settings
-  Map<String, dynamic> exportSettings() {
-    return {
-      'enforce_billing_validation': enforceBillingValidation.value,
-      'check_instructor_availability': checkInstructorAvailability.value,
-      'auto_assign_vehicles': autoAssignVehicles.value,
-      'default_lesson_duration': defaultLessonDuration.value,
-      'show_low_lesson_warning': showLowLessonWarning.value,
-      'low_lesson_threshold': lowLessonThreshold.value,
-      'prevent_over_scheduling': preventOverScheduling.value,
-      'working_hours_start': workingHoursStart.value,
-      'working_hours_end': workingHoursEnd.value,
-      'break_between_lessons': breakBetweenLessons.value,
-      'allow_back_to_back': allowBackToBackLessons.value,
-      'auto_attendance_notifications': autoAttendanceNotifications.value,
-      'schedule_conflict_alerts': scheduleConflictAlerts.value,
-      'billing_warnings': billingWarnings.value,
-      'lesson_start_reminder': lessonStartReminder.value,
-      'daily_summary_time': dailySummaryTime.value,
-      'theme': theme.value,
-      'language': language.value,
-      'date_format': dateFormat.value,
-    };
-  }
-
-  // Import settings
-  Future<void> importSettings(Map<String, dynamic> settings) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-
-      settings.forEach((key, value) async {
-        if (value is bool) {
-          await prefs.setBool(key, value);
-        } else if (value is int) {
-          await prefs.setInt(key, value);
-        } else if (value is double) {
-          await prefs.setDouble(key, value);
-        } else if (value is String) {
-          await prefs.setString(key, value);
-        }
-      });
-
-      await _loadSettings(); // Reload to update observable values
-
-      Get.snackbar(
-        'Settings Imported',
-        'Settings have been successfully imported',
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
-      );
-    } catch (e) {
-      print('Error importing settings: $e');
-      Get.snackbar(
-        'Import Error',
-        'Failed to import settings',
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-      );
-    }
   }
 }

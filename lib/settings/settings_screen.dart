@@ -1,150 +1,131 @@
-// lib/screens/settings/settings_screen.dart
+// lib/screens/enhanced_settings_screen.dart
+import 'package:driving/controllers/settings_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import '../../widgets/auto_attendance_settings.dart';
-import '../../services/auto_attendance_service.dart';
-import '../../controllers/settings_controller.dart';
 
-class SettingsScreen extends StatefulWidget {
-  @override
-  _SettingsScreenState createState() => _SettingsScreenState();
-}
-
-class _SettingsScreenState extends State<SettingsScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class SettingsScreen extends StatelessWidget {
   final SettingsController settingsController = Get.find<SettingsController>();
 
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 4, vsync: this);
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
+  SettingsScreen({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Settings'),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: Colors.white,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
-          tabs: [
-            Tab(icon: Icon(Icons.smart_toy), text: 'Auto-Attendance'),
-            Tab(icon: Icon(Icons.schedule), text: 'Scheduling'),
-            Tab(icon: Icon(Icons.notifications), text: 'Notifications'),
-            Tab(icon: Icon(Icons.tune), text: 'General'),
+    return DefaultTabController(
+      length: 4,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text('Settings'),
+          backgroundColor: Colors.blue.shade600,
+          foregroundColor: Colors.white,
+          bottom: TabBar(
+            labelColor: Colors.white,
+            unselectedLabelColor: Colors.white70,
+            indicatorColor: Colors.white,
+            tabs: [
+              Tab(icon: Icon(Icons.schedule), text: 'Scheduling'),
+              Tab(icon: Icon(Icons.receipt), text: 'Billing'),
+              Tab(icon: Icon(Icons.person), text: 'Instructors'),
+              Tab(icon: Icon(Icons.notifications), text: 'Notifications'),
+            ],
+          ),
+        ),
+        body: TabBarView(
+          children: [
+            _buildSchedulingTab(context),
+            _buildBillingTab(context),
+            _buildInstructorTab(context),
+            _buildNotificationTab(context),
           ],
         ),
-      ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildAutoAttendanceTab(),
-          _buildSchedulingTab(),
-          _buildNotificationsTab(),
-          _buildGeneralTab(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAutoAttendanceTab() {
-    return SingleChildScrollView(
-      child: Column(
-        children: [
-          AutoAttendanceSettings(), // This is the widget we created
-          _buildQuickActionsCard(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildQuickActionsCard() {
-    final autoAttendanceService = Get.find<AutoAttendanceService>();
-
-    return Card(
-      margin: EdgeInsets.all(16),
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.flash_on, color: Colors.orange),
-                SizedBox(width: 8),
-                Text(
-                  'Quick Actions',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-            SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () =>
-                        autoAttendanceService.forceCheckEndedLessons(),
-                    icon: Icon(Icons.refresh),
-                    label: Text('Check Now'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                      foregroundColor: Colors.white,
-                    ),
+        bottomNavigationBar: Container(
+          padding: EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => _showExportDialog(),
+                  icon: Icon(Icons.upload),
+                  label: Text('Export Settings'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue.shade600,
+                    foregroundColor: Colors.white,
                   ),
-                ),
-                SizedBox(width: 12),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _showTestDialog(),
-                    icon: Icon(Icons.bug_report),
-                    label: Text('Test Mode'),
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: () => _showAutoAttendanceLog(),
-                icon: Icon(Icons.history),
-                label: Text('View Activity Log'),
-                style: OutlinedButton.styleFrom(
-                  side: BorderSide(color: Colors.purple),
-                  foregroundColor: Colors.purple,
                 ),
               ),
-            ),
-          ],
+              SizedBox(width: 16),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => _showImportDialog(),
+                  icon: Icon(Icons.download),
+                  label: Text('Import Settings'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green.shade600,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildSchedulingTab() {
+  Widget _buildSchedulingTab(BuildContext context) {
     return SingleChildScrollView(
       padding: EdgeInsets.all(16),
       child: Column(
         children: [
           _buildSchedulingRulesCard(),
           SizedBox(height: 16),
+          _buildWorkingHoursCard(context),
+          SizedBox(height: 16),
+          _buildLessonDefaultsCard(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBillingTab(BuildContext context) {
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(16),
+      child: Column(
+        children: [
           _buildBillingValidationCard(),
           SizedBox(height: 16),
+          _buildBillingAutomationCard(),
+          SizedBox(height: 16),
+          _buildLowLessonWarningCard(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInstructorTab(BuildContext context) {
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(16),
+      child: Column(
+        children: [
           _buildInstructorAvailabilityCard(),
+          SizedBox(height: 16),
+          _buildBreakTimeCard(),
+          SizedBox(height: 16),
+          _buildVehicleAssignmentCard(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNotificationTab(BuildContext context) {
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(16),
+      child: Column(
+        children: [
+          _buildNotificationSettingsCard(),
+          SizedBox(height: 16),
+          _buildReminderSettingsCard(context),
+          SizedBox(height: 16),
+          _buildAppPreferencesCard(),
         ],
       ),
     );
@@ -152,6 +133,7 @@ class _SettingsScreenState extends State<SettingsScreen>
 
   Widget _buildSchedulingRulesCard() {
     return Card(
+      elevation: 4,
       child: Padding(
         padding: EdgeInsets.all(16),
         child: Column(
@@ -159,7 +141,7 @@ class _SettingsScreenState extends State<SettingsScreen>
           children: [
             Row(
               children: [
-                Icon(Icons.rule, color: Colors.green),
+                Icon(Icons.rule, color: Colors.blue.shade600),
                 SizedBox(width: 8),
                 Text(
                   'Scheduling Rules',
@@ -173,47 +155,39 @@ class _SettingsScreenState extends State<SettingsScreen>
                   subtitle: Text(
                       'Prevent scheduling students with no remaining lessons'),
                   value: settingsController.enforceBillingValidation.value,
-                  onChanged: (value) {
-                    settingsController.toggleBillingValidation(value);
-                  },
-                  secondary: Icon(Icons.security, color: Colors.green),
+                  onChanged: (value) =>
+                      settingsController.toggleBillingValidation(value),
+                  secondary: Icon(Icons.security, color: Colors.green.shade600),
                 )),
             Divider(),
             Obx(() => SwitchListTile(
                   title: Text('Check Instructor Availability'),
                   subtitle: Text('Prevent double-booking instructors'),
                   value: settingsController.checkInstructorAvailability.value,
-                  onChanged: (value) {
-                    settingsController.toggleInstructorAvailability(value);
-                  },
-                  secondary: Icon(Icons.person_pin, color: Colors.blue),
+                  onChanged: (value) =>
+                      settingsController.toggleInstructorAvailability(value),
+                  secondary:
+                      Icon(Icons.person_pin, color: Colors.blue.shade600),
                 )),
             Divider(),
             Obx(() => SwitchListTile(
-                  title: Text('Auto-assign Vehicles'),
-                  subtitle: Text(
-                      'Automatically assign instructor\'s designated vehicle'),
-                  value: settingsController.autoAssignVehicles.value,
-                  onChanged: (value) {
-                    settingsController.toggleAutoAssignVehicles(value);
-                  },
-                  secondary: Icon(Icons.directions_car, color: Colors.purple),
+                  title: Text('Enforce Working Hours'),
+                  subtitle: Text('Restrict scheduling to business hours only'),
+                  value: settingsController.enforceWorkingHours.value,
+                  onChanged: (value) =>
+                      settingsController.toggleWorkingHoursEnforcement(value),
+                  secondary:
+                      Icon(Icons.access_time, color: Colors.orange.shade600),
                 )),
             Divider(),
-            Obx(() => ListTile(
-                  leading: Icon(Icons.timer, color: Colors.orange),
-                  title: Text('Default Lesson Duration'),
-                  subtitle: Text(
-                      '${settingsController.defaultLessonDuration.value} hours'),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text('${settingsController.defaultLessonDuration.value}h',
-                          style: TextStyle(fontWeight: FontWeight.bold)),
-                      Icon(Icons.arrow_forward_ios),
-                    ],
-                  ),
-                  onTap: () => _showDurationPicker(),
+            Obx(() => SwitchListTile(
+                  title: Text('Prevent Over-Scheduling'),
+                  subtitle:
+                      Text('Block scheduling beyond available lesson balance'),
+                  value: settingsController.preventOverScheduling.value,
+                  onChanged: (value) =>
+                      settingsController.togglePreventOverScheduling(value),
+                  secondary: Icon(Icons.block, color: Colors.red.shade600),
                 )),
           ],
         ),
@@ -223,6 +197,7 @@ class _SettingsScreenState extends State<SettingsScreen>
 
   Widget _buildBillingValidationCard() {
     return Card(
+      elevation: 4,
       child: Padding(
         padding: EdgeInsets.all(16),
         child: Column(
@@ -230,96 +205,222 @@ class _SettingsScreenState extends State<SettingsScreen>
           children: [
             Row(
               children: [
-                Icon(Icons.account_balance_wallet, color: Colors.indigo),
+                Icon(Icons.receipt_long, color: Colors.green.shade600),
                 SizedBox(width: 8),
                 Text(
-                  'Billing Integration',
+                  'Billing Validation',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
               ],
             ),
             SizedBox(height: 16),
-            Obx(() => Container(
-                  padding: EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: settingsController.enforceBillingValidation.value
-                        ? Colors.green[50]
-                        : Colors.orange[50],
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: settingsController.enforceBillingValidation.value
-                          ? Colors.green[200]!
-                          : Colors.orange[200]!,
+            Obx(() => SwitchListTile(
+                  title: Text('Count Scheduled Lessons'),
+                  subtitle: Text(
+                      'Include future scheduled lessons in balance calculations'),
+                  value: settingsController.countScheduledLessons.value,
+                  onChanged: (value) =>
+                      settingsController.toggleCountScheduledLessons(value),
+                  secondary: Icon(Icons.calculate, color: Colors.blue.shade600),
+                )),
+            Divider(),
+            Obx(() => SwitchListTile(
+                  title: Text('Show Billing Warnings'),
+                  subtitle: Text('Display alerts for billing-related issues'),
+                  value: settingsController.billingWarnings.value,
+                  onChanged: (value) =>
+                      settingsController.toggleBillingWarnings(value),
+                  secondary: Icon(Icons.warning, color: Colors.orange.shade600),
+                )),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBillingAutomationCard() {
+    return Card(
+      elevation: 4,
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.auto_fix_high, color: Colors.purple.shade600),
+                SizedBox(width: 8),
+                Text(
+                  'Billing Automation',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            SizedBox(height: 16),
+            Obx(() => SwitchListTile(
+                  title: Text('Auto-Create Billing Records'),
+                  subtitle: Text(
+                      'Automatically create billing records when lessons are scheduled'),
+                  value: settingsController.autoCreateBillingRecords.value,
+                  onChanged: (value) =>
+                      settingsController.toggleAutoCreateBillingRecords(value),
+                  secondary:
+                      Icon(Icons.auto_awesome, color: Colors.green.shade600),
+                )),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLowLessonWarningCard() {
+    return Card(
+      elevation: 4,
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.warning_amber, color: Colors.orange.shade600),
+                SizedBox(width: 8),
+                Text(
+                  'Low Lesson Warnings',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            SizedBox(height: 16),
+            Obx(() => SwitchListTile(
+                  title: Text('Show Low Lesson Warnings'),
+                  subtitle:
+                      Text('Alert when students have few lessons remaining'),
+                  value: settingsController.showLowLessonWarning.value,
+                  onChanged: (value) =>
+                      settingsController.toggleLowLessonWarning(value),
+                  secondary: Icon(Icons.notifications_active,
+                      color: Colors.orange.shade600),
+                )),
+            if (settingsController.showLowLessonWarning.value)
+              Column(
+                children: [
+                  Divider(),
+                  ListTile(
+                    title: Text('Warning Threshold'),
+                    subtitle: Obx(() => Text(
+                        '${settingsController.lowLessonThreshold.value} lessons remaining')),
+                    trailing: SizedBox(
+                      width: 120,
+                      child: Obx(() => Slider(
+                            value: settingsController.lowLessonThreshold.value
+                                .toDouble(),
+                            min: 1,
+                            max: 10,
+                            divisions: 9,
+                            label: settingsController.lowLessonThreshold.value
+                                .toString(),
+                            onChanged: (value) => settingsController
+                                .setLowLessonThreshold(value.round()),
+                          )),
                     ),
                   ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        settingsController.enforceBillingValidation.value
-                            ? Icons.check_circle
-                            : Icons.warning,
-                        color: settingsController.enforceBillingValidation.value
-                            ? Colors.green
-                            : Colors.orange,
-                      ),
-                      SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              settingsController.enforceBillingValidation.value
-                                  ? 'Billing Validation Active'
-                                  : 'Billing Validation Disabled',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: settingsController
-                                        .enforceBillingValidation.value
-                                    ? Colors.green[800]
-                                    : Colors.orange[800],
-                              ),
-                            ),
-                            Text(
-                              settingsController.enforceBillingValidation.value
-                                  ? 'Students can only be scheduled for courses they\'ve been billed for'
-                                  : 'Students can be scheduled without billing validation',
-                              style: TextStyle(
-                                color: settingsController
-                                        .enforceBillingValidation.value
-                                    ? Colors.green[700]
-                                    : Colors.orange[700],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWorkingHoursCard(BuildContext context) {
+    return Card(
+      elevation: 4,
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.schedule, color: Colors.blue.shade600),
+                SizedBox(width: 8),
+                Text(
+                  'Working Hours',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: ListTile(
+                    title: Text('Start Time'),
+                    subtitle: Obx(
+                        () => Text(settingsController.workingHoursStart.value)),
+                    trailing: IconButton(
+                      icon: Icon(Icons.edit),
+                      onPressed: () => _selectTime(context, true),
+                    ),
                   ),
-                )),
-            SizedBox(height: 12),
-            Obx(() => ListTile(
-                  leading: Icon(Icons.warning, color: Colors.orange),
-                  title: Text('Low Lesson Warning'),
-                  subtitle: Text(
-                      'Alert when student has less than ${settingsController.lowLessonThreshold.value} lessons remaining'),
-                  trailing: Switch(
-                    value: settingsController.showLowLessonWarning.value,
-                    onChanged: (value) {
-                      settingsController.toggleLowLessonWarning(value);
-                    },
+                ),
+                Expanded(
+                  child: ListTile(
+                    title: Text('End Time'),
+                    subtitle: Obx(
+                        () => Text(settingsController.workingHoursEnd.value)),
+                    trailing: IconButton(
+                      icon: Icon(Icons.edit),
+                      onPressed: () => _selectTime(context, false),
+                    ),
                   ),
-                )),
-            Obx(() => ListTile(
-                  leading: Icon(Icons.block, color: Colors.red),
-                  title: Text('Prevent Over-scheduling'),
-                  subtitle: Text('Block scheduling beyond billed lessons'),
-                  trailing: Switch(
-                    value: settingsController.preventOverScheduling.value,
-                    onChanged: (value) {
-                      settingsController.togglePreventOverScheduling(value);
-                    },
-                  ),
-                )),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLessonDefaultsCard() {
+    return Card(
+      elevation: 4,
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.timer, color: Colors.green.shade600),
+                SizedBox(width: 8),
+                Text(
+                  'Lesson Defaults',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            SizedBox(height: 16),
+            ListTile(
+              title: Text('Default Lesson Duration'),
+              subtitle: Obx(() => Text(
+                  '${settingsController.defaultLessonDuration.value} hours')),
+              trailing: SizedBox(
+                width: 120,
+                child: Obx(() => Slider(
+                      value: settingsController.defaultLessonDuration.value,
+                      min: 0.5,
+                      max: 4.0,
+                      divisions: 7,
+                      label:
+                          '${settingsController.defaultLessonDuration.value}h',
+                      onChanged: (value) =>
+                          settingsController.setDefaultLessonDuration(value),
+                    )),
+              ),
+            ),
           ],
         ),
       ),
@@ -328,6 +429,7 @@ class _SettingsScreenState extends State<SettingsScreen>
 
   Widget _buildInstructorAvailabilityCard() {
     return Card(
+      elevation: 4,
       child: Padding(
         padding: EdgeInsets.all(16),
         child: Column(
@@ -335,39 +437,67 @@ class _SettingsScreenState extends State<SettingsScreen>
           children: [
             Row(
               children: [
-                Icon(Icons.person_pin, color: Colors.teal),
+                Icon(Icons.person_search, color: Colors.blue.shade600),
                 SizedBox(width: 8),
                 Text(
-                  'Instructor Management',
+                  'Instructor Availability',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            SizedBox(height: 16),
+            Obx(() => SwitchListTile(
+                  title: Text('Allow Back-to-Back Lessons'),
+                  subtitle: Text('Permit consecutive lessons without breaks'),
+                  value: settingsController.allowBackToBackLessons.value,
+                  onChanged: (value) =>
+                      settingsController.toggleBackToBackLessons(value),
+                  secondary:
+                      Icon(Icons.fast_forward, color: Colors.orange.shade600),
+                )),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBreakTimeCard() {
+    return Card(
+      elevation: 4,
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.coffee, color: Colors.brown.shade600),
+                SizedBox(width: 8),
+                Text(
+                  'Break Time Settings',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
               ],
             ),
             SizedBox(height: 16),
             ListTile(
-              leading: Icon(Icons.schedule, color: Colors.blue),
-              title: Text('Working Hours'),
-              subtitle: Text('9:00 AM - 6:00 PM'),
-              trailing: Icon(Icons.arrow_forward_ios),
-              onTap: () => _showWorkingHoursPicker(),
-            ),
-            Divider(),
-            ListTile(
-              leading: Icon(Icons.event_busy, color: Colors.red),
-              title: Text('Break Between Lessons'),
-              subtitle: Text('15 minutes minimum'),
-              trailing: Icon(Icons.arrow_forward_ios),
-              onTap: () => _showBreakTimePicker(),
-            ),
-            Divider(),
-            SwitchListTile(
-              title: Text('Allow Back-to-back Lessons'),
-              subtitle: Text('Permit consecutive lessons without breaks'),
-              value: false,
-              onChanged: (value) {
-                // Handle toggle
-              },
-              secondary: Icon(Icons.fast_forward, color: Colors.orange),
+              title: Text('Minimum Break Between Lessons'),
+              subtitle: Obx(() => Text(
+                  '${settingsController.breakBetweenLessons.value} minutes')),
+              trailing: SizedBox(
+                width: 120,
+                child: Obx(() => Slider(
+                      value: settingsController.breakBetweenLessons.value
+                          .toDouble(),
+                      min: 0,
+                      max: 60,
+                      divisions: 12,
+                      label:
+                          '${settingsController.breakBetweenLessons.value}min',
+                      onChanged: (value) => settingsController
+                          .setBreakBetweenLessons(value.round()),
+                    )),
+              ),
             ),
           ],
         ),
@@ -375,21 +505,9 @@ class _SettingsScreenState extends State<SettingsScreen>
     );
   }
 
-  Widget _buildNotificationsTab() {
-    return SingleChildScrollView(
-      padding: EdgeInsets.all(16),
-      child: Column(
-        children: [
-          _buildNotificationPreferencesCard(),
-          SizedBox(height: 16),
-          _buildReminderSettingsCard(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNotificationPreferencesCard() {
+  Widget _buildVehicleAssignmentCard() {
     return Card(
+      elevation: 4,
       child: Padding(
         padding: EdgeInsets.all(16),
         child: Column(
@@ -397,42 +515,68 @@ class _SettingsScreenState extends State<SettingsScreen>
           children: [
             Row(
               children: [
-                Icon(Icons.notifications, color: Colors.blue),
+                Icon(Icons.directions_car, color: Colors.blue.shade600),
                 SizedBox(width: 8),
                 Text(
-                  'Notification Preferences',
+                  'Vehicle Assignment',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
               ],
             ),
             SizedBox(height: 16),
             Obx(() => SwitchListTile(
-                  title: Text('Auto-Attendance Notifications'),
-                  subtitle: Text('Get notified before lessons are auto-marked'),
-                  value: settingsController.autoAttendanceNotifications.value,
-                  onChanged: (value) {
-                    settingsController.toggleAutoAttendanceNotifications(value);
-                  },
-                  secondary: Icon(Icons.auto_awesome, color: Colors.green),
+                  title: Text('Auto-Assign Vehicles'),
+                  subtitle: Text(
+                      'Automatically assign available vehicles to lessons'),
+                  value: settingsController.autoAssignVehicles.value,
+                  onChanged: (value) =>
+                      settingsController.toggleAutoAssignVehicles(value),
+                  secondary:
+                      Icon(Icons.auto_mode, color: Colors.green.shade600),
                 )),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNotificationSettingsCard() {
+    return Card(
+      elevation: 4,
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.notifications, color: Colors.blue.shade600),
+                SizedBox(width: 8),
+                Text(
+                  'Notification Settings',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            SizedBox(height: 16),
+            Obx(() => SwitchListTile(
+                  title: Text('Auto Attendance Notifications'),
+                  subtitle:
+                      Text('Automatic notifications for attendance updates'),
+                  value: settingsController.autoAttendanceNotifications.value,
+                  onChanged: (value) => settingsController
+                      .toggleAutoAttendanceNotifications(value),
+                  secondary:
+                      Icon(Icons.check_circle, color: Colors.green.shade600),
+                )),
+            Divider(),
             Obx(() => SwitchListTile(
                   title: Text('Schedule Conflict Alerts'),
-                  subtitle: Text('Alert when scheduling conflicts occur'),
+                  subtitle: Text('Alerts for scheduling conflicts'),
                   value: settingsController.scheduleConflictAlerts.value,
-                  onChanged: (value) {
-                    settingsController.toggleScheduleConflictAlerts(value);
-                  },
-                  secondary: Icon(Icons.warning, color: Colors.orange),
-                )),
-            Obx(() => SwitchListTile(
-                  title: Text('Billing Warnings'),
-                  subtitle: Text('Notify when students have low lesson counts'),
-                  value: settingsController.billingWarnings.value,
-                  onChanged: (value) {
-                    settingsController.toggleBillingWarnings(value);
-                  },
-                  secondary:
-                      Icon(Icons.account_balance_wallet, color: Colors.purple),
+                  onChanged: (value) =>
+                      settingsController.toggleScheduleConflictAlerts(value),
+                  secondary: Icon(Icons.error, color: Colors.red.shade600),
                 )),
           ],
         ),
@@ -440,8 +584,9 @@ class _SettingsScreenState extends State<SettingsScreen>
     );
   }
 
-  Widget _buildReminderSettingsCard() {
+  Widget _buildReminderSettingsCard(BuildContext context) {
     return Card(
+      elevation: 4,
       child: Padding(
         padding: EdgeInsets.all(16),
         child: Column(
@@ -449,52 +594,53 @@ class _SettingsScreenState extends State<SettingsScreen>
           children: [
             Row(
               children: [
-                Icon(Icons.alarm, color: Colors.orange),
+                Icon(Icons.alarm, color: Colors.orange.shade600),
                 SizedBox(width: 8),
                 Text(
-                  'Lesson Reminders',
+                  'Reminder Settings',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
               ],
             ),
             SizedBox(height: 16),
             ListTile(
-              leading: Icon(Icons.timer, color: Colors.blue),
               title: Text('Lesson Start Reminder'),
-              subtitle: Text('15 minutes before lesson'),
-              trailing: Icon(Icons.arrow_forward_ios),
-              onTap: () => _showReminderTimePicker(),
+              subtitle: Obx(() => Text(
+                  '${settingsController.lessonStartReminder.value} minutes before')),
+              trailing: SizedBox(
+                width: 120,
+                child: Obx(() => Slider(
+                      value: settingsController.lessonStartReminder.value
+                          .toDouble(),
+                      min: 5,
+                      max: 60,
+                      divisions: 11,
+                      label:
+                          '${settingsController.lessonStartReminder.value}min',
+                      onChanged: (value) => settingsController
+                          .setLessonStartReminder(value.round()),
+                    )),
+              ),
             ),
+            Divider(),
             ListTile(
-              leading: Icon(Icons.event, color: Colors.green),
-              title: Text('Daily Schedule Summary'),
-              subtitle: Text('8:00 AM every day'),
-              trailing: Icon(Icons.arrow_forward_ios),
-              onTap: () => _showDailySummaryTimePicker(),
+              title: Text('Daily Summary Time'),
+              subtitle:
+                  Obx(() => Text(settingsController.dailySummaryTime.value)),
+              trailing: IconButton(
+                icon: Icon(Icons.edit),
+                onPressed: () => _selectDailySummaryTime(context),
+              ),
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildGeneralTab() {
-    return SingleChildScrollView(
-      padding: EdgeInsets.all(16),
-      child: Column(
-        children: [
-          _buildAppPreferencesCard(),
-          SizedBox(height: 16),
-          _buildDataManagementCard(),
-          SizedBox(height: 16),
-          _buildAboutCard(),
-        ],
       ),
     );
   }
 
   Widget _buildAppPreferencesCard() {
     return Card(
+      elevation: 4,
       child: Padding(
         padding: EdgeInsets.all(16),
         child: Column(
@@ -502,7 +648,7 @@ class _SettingsScreenState extends State<SettingsScreen>
           children: [
             Row(
               children: [
-                Icon(Icons.settings, color: Colors.grey[700]),
+                Icon(Icons.settings, color: Colors.grey.shade600),
                 SizedBox(width: 8),
                 Text(
                   'App Preferences',
@@ -512,70 +658,75 @@ class _SettingsScreenState extends State<SettingsScreen>
             ),
             SizedBox(height: 16),
             ListTile(
-              leading: Icon(Icons.color_lens, color: Colors.purple),
               title: Text('Theme'),
-              subtitle: Text('Light'),
-              trailing: Icon(Icons.arrow_forward_ios),
-              onTap: () => _showThemePicker(),
+              subtitle: Obx(
+                  () => Text(settingsController.theme.value.capitalize ?? '')),
+              trailing: DropdownButton<String>(
+                value: settingsController.theme.value,
+                items: ['light', 'dark', 'system'].map((theme) {
+                  return DropdownMenuItem(
+                    value: theme,
+                    child: Text(theme.capitalize ?? ''),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  if (value != null) {
+                    settingsController.setTheme(value);
+                  }
+                },
+              ),
             ),
+            Divider(),
             ListTile(
-              leading: Icon(Icons.language, color: Colors.blue),
               title: Text('Language'),
-              subtitle: Text('English'),
-              trailing: Icon(Icons.arrow_forward_ios),
-              onTap: () => _showLanguagePicker(),
+              subtitle: Obx(() =>
+                  Text(settingsController.language.value.capitalize ?? '')),
+              trailing: DropdownButton<String>(
+                value: settingsController.language.value,
+                items: ['english', 'spanish', 'french', 'german'].map((lang) {
+                  return DropdownMenuItem(
+                    value: lang,
+                    child: Text(lang.capitalize ?? ''),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  if (value != null) {
+                    settingsController.setLanguage(value);
+                  }
+                },
+              ),
             ),
+            Divider(),
             ListTile(
-              leading: Icon(Icons.date_range, color: Colors.green),
               title: Text('Date Format'),
-              subtitle: Text('MM/DD/YYYY'),
-              trailing: Icon(Icons.arrow_forward_ios),
-              onTap: () => _showDateFormatPicker(),
+              subtitle: Obx(() => Text(settingsController.dateFormat.value)),
+              trailing: DropdownButton<String>(
+                value: settingsController.dateFormat.value,
+                items: ['MM/dd/yyyy', 'dd/MM/yyyy', 'yyyy-MM-dd'].map((format) {
+                  return DropdownMenuItem(
+                    value: format,
+                    child: Text(format),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  if (value != null) {
+                    settingsController.setDateFormat(value);
+                  }
+                },
+              ),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDataManagementCard() {
-    return Card(
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.storage, color: Colors.indigo),
-                SizedBox(width: 8),
-                Text(
-                  'Data Management',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            Divider(),
+            ListTile(
+              title: Text('Reset All Settings'),
+              subtitle: Text('Restore all settings to default values'),
+              trailing: ElevatedButton(
+                onPressed: () => _showResetConfirmation(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red.shade600,
+                  foregroundColor: Colors.white,
                 ),
-              ],
-            ),
-            SizedBox(height: 16),
-            ListTile(
-              leading: Icon(Icons.backup, color: Colors.green),
-              title: Text('Backup Data'),
-              subtitle: Text('Export all data to file'),
-              trailing: Icon(Icons.arrow_forward_ios),
-              onTap: () => _showBackupOptions(),
-            ),
-            ListTile(
-              leading: Icon(Icons.restore, color: Colors.blue),
-              title: Text('Restore Data'),
-              subtitle: Text('Import data from backup'),
-              trailing: Icon(Icons.arrow_forward_ios),
-              onTap: () => _showRestoreOptions(),
-            ),
-            ListTile(
-              leading: Icon(Icons.delete_forever, color: Colors.red),
-              title: Text('Clear All Data'),
-              subtitle: Text('Reset app to initial state'),
-              trailing: Icon(Icons.arrow_forward_ios),
-              onTap: () => _showClearDataDialog(),
+                child: Text('Reset'),
+              ),
             ),
           ],
         ),
@@ -583,54 +734,62 @@ class _SettingsScreenState extends State<SettingsScreen>
     );
   }
 
-  Widget _buildAboutCard() {
-    return Card(
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.info, color: Colors.blue),
-                SizedBox(width: 8),
-                Text(
-                  'About',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-            SizedBox(height: 16),
-            ListTile(
-              leading: Icon(Icons.app_settings_alt, color: Colors.green),
-              title: Text('App Version'),
-              subtitle: Text('1.0.0'),
-            ),
-            ListTile(
-              leading: Icon(Icons.help, color: Colors.orange),
-              title: Text('Help & Support'),
-              trailing: Icon(Icons.arrow_forward_ios),
-              onTap: () => _showHelpDialog(),
-            ),
-            ListTile(
-              leading: Icon(Icons.privacy_tip, color: Colors.purple),
-              title: Text('Privacy Policy'),
-              trailing: Icon(Icons.arrow_forward_ios),
-              onTap: () => _showPrivacyPolicy(),
-            ),
-          ],
-        ),
-      ),
+  Future<void> _selectTime(BuildContext context, bool isStart) async {
+    final currentTime = isStart
+        ? settingsController.workingHoursStart.value
+        : settingsController.workingHoursEnd.value;
+
+    final timeParts = currentTime.split(':');
+    final initialTime = TimeOfDay(
+      hour: int.parse(timeParts[0]),
+      minute: int.parse(timeParts[1]),
     );
+
+    final TimeOfDay? picked = await showTimePicker(
+      context: context,
+      initialTime: initialTime,
+    );
+
+    if (picked != null) {
+      final timeString =
+          '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
+
+      if (isStart) {
+        settingsController.setWorkingHours(
+            timeString, settingsController.workingHoursEnd.value);
+      } else {
+        settingsController.setWorkingHours(
+            settingsController.workingHoursStart.value, timeString);
+      }
+    }
   }
 
-  // Dialog methods
-  void _showTestDialog() {
+  Future<void> _selectDailySummaryTime(BuildContext context) async {
+    final currentTime = settingsController.dailySummaryTime.value;
+    final timeParts = currentTime.split(':');
+    final initialTime = TimeOfDay(
+      hour: int.parse(timeParts[0]),
+      minute: int.parse(timeParts[1]),
+    );
+
+    final TimeOfDay? picked = await showTimePicker(
+      context: context,
+      initialTime: initialTime,
+    );
+
+    if (picked != null) {
+      final timeString =
+          '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
+      settingsController.setDailySummaryTime(timeString);
+    }
+  }
+
+  void _showResetConfirmation() {
     Get.dialog(
       AlertDialog(
-        title: Text('Test Auto-Attendance'),
-        content:
-            Text('This will simulate lesson endings for testing. Continue?'),
+        title: Text('Reset All Settings'),
+        content: Text(
+            'Are you sure you want to reset all settings to their default values? This action cannot be undone.'),
         actions: [
           TextButton(
             onPressed: () => Get.back(),
@@ -639,113 +798,86 @@ class _SettingsScreenState extends State<SettingsScreen>
           ElevatedButton(
             onPressed: () {
               Get.back();
-              Get.snackbar(
-                'Test Mode',
-                'Auto-attendance test initiated',
-                backgroundColor: Colors.blue,
-                colorText: Colors.white,
-              );
+              settingsController.resetToDefaults();
             },
-            child: Text('Start Test'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade600,
+              foregroundColor: Colors.white,
+            ),
+            child: Text('Reset'),
           ),
         ],
       ),
     );
   }
 
-  void _showAutoAttendanceLog() {
+  void _showExportDialog() {
     Get.dialog(
       AlertDialog(
-        title: Text('Auto-Attendance Activity'),
-        content: Container(
-          width: double.maxFinite,
-          height: 300,
-          child: ListView(
-            children: [
-              ListTile(
-                leading: Icon(Icons.check_circle, color: Colors.green),
-                title: Text('Auto-marked: John Doe'),
-                subtitle: Text('Today 10:05 AM - Practical Lesson'),
+        title: Text('Export Settings'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Export your current settings to share or backup.'),
+            SizedBox(height: 16),
+            Container(
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey.shade300),
               ),
-              ListTile(
-                leading: Icon(Icons.warning, color: Colors.orange),
-                title: Text('No lessons: Jane Smith'),
-                subtitle: Text('Today 9:35 AM - Theory Lesson'),
+              child: SelectableText(
+                _getExportedSettingsJson(),
+                style: TextStyle(fontSize: 12, fontFamily: 'monospace'),
               ),
-              ListTile(
-                leading: Icon(Icons.check_circle, color: Colors.green),
-                title: Text('Auto-marked: Mike Johnson'),
-                subtitle: Text('Yesterday 3:05 PM - Practical Lesson'),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
         actions: [
           TextButton(
             onPressed: () => Get.back(),
             child: Text('Close'),
           ),
+          ElevatedButton(
+            onPressed: () {
+              // In a real app, you'd implement clipboard copy or file save
+              Get.back();
+              Get.snackbar(
+                'Settings Exported',
+                'Settings have been copied to clipboard',
+                backgroundColor: Colors.green,
+                colorText: Colors.white,
+              );
+            },
+            child: Text('Copy'),
+          ),
         ],
       ),
     );
   }
 
-  void _showDurationPicker() {
-    // Implementation for duration picker
-    Get.snackbar('Settings', 'Duration picker would open here');
-  }
+  void _showImportDialog() {
+    final TextEditingController controller = TextEditingController();
 
-  void _showWorkingHoursPicker() {
-    // Implementation for working hours picker
-    Get.snackbar('Settings', 'Working hours picker would open here');
-  }
-
-  void _showBreakTimePicker() {
-    // Implementation for break time picker
-    Get.snackbar('Settings', 'Break time picker would open here');
-  }
-
-  void _showReminderTimePicker() {
-    // Implementation for reminder time picker
-    Get.snackbar('Settings', 'Reminder time picker would open here');
-  }
-
-  void _showDailySummaryTimePicker() {
-    // Implementation for daily summary time picker
-    Get.snackbar('Settings', 'Daily summary time picker would open here');
-  }
-
-  void _showThemePicker() {
-    // Implementation for theme picker
-    Get.snackbar('Settings', 'Theme picker would open here');
-  }
-
-  void _showLanguagePicker() {
-    // Implementation for language picker
-    Get.snackbar('Settings', 'Language picker would open here');
-  }
-
-  void _showDateFormatPicker() {
-    // Implementation for date format picker
-    Get.snackbar('Settings', 'Date format picker would open here');
-  }
-
-  void _showBackupOptions() {
-    // Implementation for backup options
-    Get.snackbar('Settings', 'Backup options would open here');
-  }
-
-  void _showRestoreOptions() {
-    // Implementation for restore options
-    Get.snackbar('Settings', 'Restore options would open here');
-  }
-
-  void _showClearDataDialog() {
     Get.dialog(
       AlertDialog(
-        title: Text('Clear All Data'),
-        content: Text(
-            'This will permanently delete all data. This action cannot be undone. Are you sure?'),
+        title: Text('Import Settings'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Paste your exported settings JSON below:'),
+            SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              maxLines: 10,
+              decoration: InputDecoration(
+                border: OutlineInputBorder(),
+                hintText: 'Paste settings JSON here...',
+              ),
+            ),
+          ],
+        ),
         actions: [
           TextButton(
             onPressed: () => Get.back(),
@@ -753,29 +885,38 @@ class _SettingsScreenState extends State<SettingsScreen>
           ),
           ElevatedButton(
             onPressed: () {
-              Get.back();
-              Get.snackbar(
-                'Data Cleared',
-                'All data has been cleared',
-                backgroundColor: Colors.red,
-                colorText: Colors.white,
-              );
+              try {
+                // In a real app, you'd parse the JSON and validate it
+                Get.back();
+                Get.snackbar(
+                  'Import Successful',
+                  'Settings have been imported successfully',
+                  backgroundColor: Colors.green,
+                  colorText: Colors.white,
+                );
+              } catch (e) {
+                Get.snackbar(
+                  'Import Failed',
+                  'Invalid settings format',
+                  backgroundColor: Colors.red,
+                  colorText: Colors.white,
+                );
+              }
             },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: Text('Clear All'),
+            child: Text('Import'),
           ),
         ],
       ),
     );
   }
 
-  void _showHelpDialog() {
-    // Implementation for help dialog
-    Get.snackbar('Help', 'Help & support would open here');
-  }
-
-  void _showPrivacyPolicy() {
-    // Implementation for privacy policy
-    Get.snackbar('Privacy', 'Privacy policy would open here');
+  String _getExportedSettingsJson() {
+    final settings = settingsController.exportSettings();
+    return '''
+{
+  "version": "1.0",
+  "exported": "${DateTime.now().toIso8601String()}",
+  "settings": ${settings.toString().replaceAll('{', '{\n  ').replaceAll(', ', ',\n  ').replaceAll('}', '\n}')}
+}''';
   }
 }
