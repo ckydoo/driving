@@ -1,11 +1,6 @@
 // lib/routes/app_routes.dart
 import 'package:driving/dashboard.dart';
 import 'package:get/get.dart';
-import '../screens/users/enhanced_users_screen.dart';
-import '../screens/course/course_screen.dart';
-import '../screens/fleet/fleet_screen.dart';
-import '../screens/schedule/schedule_screen.dart';
-import '../screens/billing/billing_screen.dart';
 import '../widgets/main_layout.dart';
 
 class AppRoutes {

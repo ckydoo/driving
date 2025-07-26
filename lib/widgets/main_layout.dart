@@ -1,5 +1,6 @@
 // lib/widgets/complete_main_layout.dart
 import 'package:driving/dashboard.dart';
+import 'package:driving/settings/settings_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../controllers/navigation_controller.dart';
@@ -143,7 +144,7 @@ class CompleteMainLayout extends StatelessWidget {
                               navController.currentPage.value,
                               () => navController.navigateToPage('users'),
                             ),
-                            _buildReportsDropdown(navController),
+                            // _buildReportsDropdown(navController),
                             _buildSidebarItem(
                               Icons.settings,
                               'Settings',
@@ -388,7 +389,7 @@ class CompleteMainLayout extends StatelessWidget {
       case 'course_reports':
         return CourseReportsScreen();
       case 'settings':
-        return _buildSettingsPage();
+        return SettingsScreen();
       default:
         return DashboardContent();
     }

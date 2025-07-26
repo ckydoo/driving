@@ -1,6 +1,7 @@
 // lib/screens/schedule/schedule_screen.dart
 import 'package:driving/screens/schedule/create_schedule_screen.dart';
 import 'package:driving/screens/schedule/recurring_schedule_screen.dart';
+import 'package:driving/widgets/schedule_details_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:table_calendar/table_calendar.dart';
@@ -380,8 +381,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     final student = _getStudentById(schedule.studentId);
     final instructor = _getInstructorById(schedule.instructorId);
     final course = _getCourseById(schedule.courseId);
-    final vehicle =
-        schedule.carId != null ? _getVehicleById(schedule.carId!) : null;
 
     return Container(
       margin: EdgeInsets.only(bottom: 8),
@@ -399,7 +398,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         ],
       ),
       child: InkWell(
-        onTap: () => _showScheduleDetails(schedule),
+        onTap: () => _showScheduleDetails(
+            schedule), // This will now open the enhanced dialog
+        borderRadius: BorderRadius.circular(8),
         child: Row(
           children: [
             Container(
@@ -432,33 +433,36 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                       SizedBox(width: 8),
                       _buildInfoChip(Icons.school,
                           instructor?.fname ?? 'Unknown Instructor'),
-                      if (vehicle != null) ...[
-                        SizedBox(width: 8),
-                        _buildInfoChip(Icons.directions_car, vehicle.carPlate),
-                      ],
                     ],
                   ),
                 ],
               ),
             ),
             Column(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                _buildStatusBadge(schedule.status),
-                if (schedule.attended)
-                  Container(
-                    margin: EdgeInsets.only(top: 4),
-                    padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.green.shade50,
-                      borderRadius: BorderRadius.circular(4),
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _getStatusColor(schedule.status).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    schedule.status,
+                    style: TextStyle(
+                      color: _getStatusColor(schedule.status),
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
                     ),
-                    child: Text(
-                      'Attended',
-                      style: TextStyle(
-                        color: Colors.green.shade700,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w500,
-                      ),
+                  ),
+                ),
+                if (schedule.attended)
+                  Padding(
+                    padding: EdgeInsets.only(top: 4),
+                    child: Icon(
+                      Icons.check_circle,
+                      color: Colors.green,
+                      size: 16,
                     ),
                   ),
               ],
@@ -778,63 +782,12 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     }
   }
 
+  // Replace your existing _showScheduleDetails method with this:
   void _showScheduleDetails(Schedule schedule) {
-    final student = _getStudentById(schedule.studentId);
-    final instructor = _getInstructorById(schedule.instructorId);
-    final course = _getCourseById(schedule.courseId);
-    final vehicle =
-        schedule.carId != null ? _getVehicleById(schedule.carId!) : null;
-
+    // Use the new enhanced dialog instead of the basic AlertDialog
     Get.dialog(
-      AlertDialog(
-        title: Text('Schedule Details'),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildDetailRow('Course', course?.name ?? 'Unknown'),
-              _buildDetailRow(
-                  'Student',
-                  student != null
-                      ? '${student.fname} ${student.lname}'
-                      : 'Unknown'),
-              _buildDetailRow(
-                  'Instructor',
-                  instructor != null
-                      ? '${instructor.fname} ${instructor.lname}'
-                      : 'Unknown'),
-              _buildDetailRow('Date',
-                  DateFormat('EEEE, MMMM d, yyyy').format(schedule.start)),
-              _buildDetailRow('Time',
-                  '${DateFormat('HH:mm').format(schedule.start)} - ${DateFormat('HH:mm').format(schedule.end)}'),
-              _buildDetailRow('Duration', schedule.duration),
-              _buildDetailRow('Type', schedule.classType),
-              _buildDetailRow('Status', schedule.status),
-              if (vehicle != null)
-                _buildDetailRow('Vehicle',
-                    '${vehicle.make} ${vehicle.model} (${vehicle.carPlate})'),
-              if (schedule.attended) _buildDetailRow('Attendance', 'Attended'),
-              _buildDetailRow(
-                  'Lessons Completed', '${schedule.lessonsCompleted}'),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: Get.back,
-            child: Text('Close'),
-          ),
-          if (schedule.status != 'Cancelled')
-            ElevatedButton(
-              onPressed: () {
-                Get.back();
-                _showEditScheduleDialog(schedule);
-              },
-              child: Text('Edit'),
-            ),
-        ],
-      ),
+      ScheduleDetailsDialog(schedule: schedule),
+      barrierDismissible: true,
     );
   }
 
