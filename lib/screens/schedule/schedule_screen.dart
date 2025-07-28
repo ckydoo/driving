@@ -1,5 +1,8 @@
 // lib/screens/schedule/schedule_screen.dart
+import 'dart:async';
+
 import 'package:driving/screens/schedule/create_schedule_screen.dart';
+import 'package:driving/screens/schedule/daily_lessons.dart';
 import 'package:driving/screens/schedule/recurring_schedule_screen.dart';
 import 'package:driving/widgets/schedule_details_dialog.dart';
 import 'package:flutter/material.dart';
@@ -14,6 +17,8 @@ import '../../models/schedule.dart';
 import '../../models/user.dart';
 import '../../models/course.dart';
 import '../../models/fleet.dart';
+
+// Updated Schedule Screen - Calendar Only with Filtered Dialog
 
 class ScheduleScreen extends StatefulWidget {
   @override
@@ -61,9 +66,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           _buildHeader(),
           _buildFilters(),
           Expanded(
-            child: _currentView == 'list'
-                ? _buildListView()
-                : _buildCalendarView(),
+            child: _buildCalendarView(), // Only calendar view now
           ),
         ],
       ),
@@ -119,8 +122,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             itemBuilder: (context) => [
               PopupMenuItem(value: 'month', child: Text('Month View')),
               PopupMenuItem(value: 'week', child: Text('Week View')),
-              PopupMenuItem(value: 'day', child: Text('Day View')),
-              PopupMenuItem(value: 'list', child: Text('List View')),
             ],
           ),
           IconButton(
@@ -207,311 +208,52 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         return Center(child: CircularProgressIndicator());
       }
 
-      return Column(
-        children: [
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border(
-                bottom: BorderSide(color: Colors.grey.shade200),
-              ),
-            ),
-            child: TableCalendar<Schedule>(
-              firstDay: DateTime.utc(2020, 1, 1),
-              lastDay: DateTime.utc(2030, 12, 31),
-              focusedDay: _focusedDay.value,
-              calendarFormat: _getCalendarFormat(),
-              eventLoader: _getEventsForDay,
-              startingDayOfWeek: StartingDayOfWeek.monday,
-              calendarStyle: CalendarStyle(
-                outsideDaysVisible: false,
-                weekendTextStyle: TextStyle(color: Colors.red.shade400),
-                holidayTextStyle: TextStyle(color: Colors.red.shade400),
-                markerDecoration: BoxDecoration(
-                  color: Colors.blue,
-                  shape: BoxShape.circle,
-                ),
-              ),
-              onDaySelected: _onDaySelected,
-              onFormatChanged: (format) {
-                setState(() {
-                  switch (format) {
-                    case CalendarFormat.month:
-                      _currentView = 'month';
-                      break;
-                    case CalendarFormat.twoWeeks:
-                    case CalendarFormat.week:
-                      _currentView = 'week';
-                      break;
-                  }
-                });
-              },
-              onPageChanged: (focusedDay) {
-                _focusedDay.value = focusedDay;
-              },
-            ),
+      return Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border(
+            bottom: BorderSide(color: Colors.grey.shade200),
           ),
-          Expanded(
-            child: _buildDayScheduleList(),
-          ),
-        ],
-      );
-    });
-  }
-
-  Widget _buildDayScheduleList() {
-    return Obx(() {
-      final dayEvents = _getEventsForDay(_selectedDay.value);
-
-      if (dayEvents.isEmpty) {
-        return Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.event_busy, size: 60, color: Colors.grey.shade400),
-              SizedBox(height: 16),
-              Text(
-                'No lessons scheduled for ${DateFormat('MMM d, yyyy').format(_selectedDay.value)}',
-                style: TextStyle(color: Colors.grey.shade600),
-              ),
-            ],
-          ),
-        );
-      }
-
-      return ListView.builder(
-        padding: EdgeInsets.all(16),
-        itemCount: dayEvents.length,
-        itemBuilder: (context, index) {
-          return _buildScheduleCard(dayEvents[index]);
-        },
-      );
-    });
-  }
-
-  Widget _buildListView() {
-    return Obx(() {
-      if (scheduleController.isLoading.value) {
-        return Center(child: CircularProgressIndicator());
-      }
-
-      final filteredSchedules = _getFilteredSchedules();
-
-      if (filteredSchedules.isEmpty) {
-        return Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.event_busy, size: 60, color: Colors.grey.shade400),
-              SizedBox(height: 16),
-              Text(
-                'No schedules found matching your filters',
-                style: TextStyle(color: Colors.grey.shade600),
-              ),
-            ],
-          ),
-        );
-      }
-
-      // Group schedules by date
-      final groupedSchedules = <DateTime, List<Schedule>>{};
-      for (final schedule in filteredSchedules) {
-        final date = DateTime(
-          schedule.start.year,
-          schedule.start.month,
-          schedule.start.day,
-        );
-        groupedSchedules.putIfAbsent(date, () => []).add(schedule);
-      }
-
-      final sortedDates = groupedSchedules.keys.toList()..sort();
-
-      return ListView.builder(
-        padding: EdgeInsets.all(16),
-        itemCount: sortedDates.length,
-        itemBuilder: (context, index) {
-          final date = sortedDates[index];
-          final daySchedules = groupedSchedules[date]!;
-
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.calendar_today, size: 16, color: Colors.blue),
-                    SizedBox(width: 8),
-                    Text(
-                      DateFormat('EEEE, MMMM d, yyyy').format(date),
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blue.shade700,
-                      ),
-                    ),
-                    Spacer(),
-                    Text(
-                      '${daySchedules.length} lesson${daySchedules.length != 1 ? 's' : ''}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blue.shade600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              SizedBox(height: 8),
-              ...daySchedules
-                  .map((schedule) => _buildScheduleCard(schedule))
-                  .toList(),
-              SizedBox(height: 16),
-            ],
-          );
-        },
-      );
-    });
-  }
-
-  Widget _buildScheduleCard(Schedule schedule) {
-    final student = _getStudentById(schedule.studentId);
-    final instructor = _getInstructorById(schedule.instructorId);
-    final course = _getCourseById(schedule.courseId);
-
-    return Container(
-      margin: EdgeInsets.only(bottom: 8),
-      padding: EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey.shade200),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.shade100,
-            blurRadius: 2,
-            spreadRadius: 1,
-          ),
-        ],
-      ),
-      child: InkWell(
-        onTap: () => _showScheduleDetails(
-            schedule), // This will now open the enhanced dialog
-        borderRadius: BorderRadius.circular(8),
-        child: Row(
-          children: [
-            Container(
-              width: 4,
-              height: 40,
-              decoration: BoxDecoration(
-                color: _getStatusColor(schedule.status),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    course?.name ?? 'Unknown Course',
-                    style: TextStyle(fontWeight: FontWeight.w500),
-                  ),
-                  SizedBox(height: 4),
-                  Text(
-                    '${DateFormat('HH:mm').format(schedule.start)} - ${DateFormat('HH:mm').format(schedule.end)}',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                  ),
-                  SizedBox(height: 4),
-                  Row(
-                    children: [
-                      _buildInfoChip(
-                          Icons.person, student?.fname ?? 'Unknown Student'),
-                      SizedBox(width: 8),
-                      _buildInfoChip(Icons.school,
-                          instructor?.fname ?? 'Unknown Instructor'),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: _getStatusColor(schedule.status).withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    schedule.status,
-                    style: TextStyle(
-                      color: _getStatusColor(schedule.status),
-                      fontSize: 10,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-                if (schedule.attended)
-                  Padding(
-                    padding: EdgeInsets.only(top: 4),
-                    child: Icon(
-                      Icons.check_circle,
-                      color: Colors.green,
-                      size: 16,
-                    ),
-                  ),
-              ],
-            ),
-          ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildStatusBadge(String status) {
-    Color color = _getStatusColor(status);
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Text(
-        status,
-        style: TextStyle(
-          color: color,
-          fontSize: 12,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildInfoChip(IconData icon, String text) {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.grey[100],
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: Colors.grey[600]),
-          SizedBox(width: 4),
-          Text(
-            text.length > 10 ? '${text.substring(0, 10)}...' : text,
-            style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+        child: TableCalendar<Schedule>(
+          firstDay: DateTime.utc(2020, 1, 1),
+          lastDay: DateTime.utc(2030, 12, 31),
+          focusedDay: _focusedDay.value,
+          calendarFormat: _getCalendarFormat(),
+          eventLoader: _getEventsForDay,
+          startingDayOfWeek: StartingDayOfWeek.monday,
+          calendarStyle: CalendarStyle(
+            outsideDaysVisible: false,
+            weekendTextStyle: TextStyle(color: Colors.red.shade400),
+            holidayTextStyle: TextStyle(color: Colors.red.shade400),
+            markerDecoration: BoxDecoration(
+              color: Colors.blue,
+              shape: BoxShape.circle,
+            ),
+            // Highlight days with filtered events
+            markersMaxCount: 3,
+            markerMargin: EdgeInsets.symmetric(horizontal: 1.5),
           ),
-        ],
-      ),
-    );
+          onDaySelected: _onDaySelected,
+          onFormatChanged: (format) {
+            setState(() {
+              switch (format) {
+                case CalendarFormat.month:
+                  _currentView = 'month';
+                  break;
+                case CalendarFormat.twoWeeks:
+                case CalendarFormat.week:
+                  _currentView = 'week';
+                  break;
+              }
+            });
+          },
+          onPageChanged: (focusedDay) {
+            _focusedDay.value = focusedDay;
+          },
+        ),
+      );
+    });
   }
 
   Widget _buildFABWithOptions() {
@@ -622,21 +364,44 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     });
   }
 
+  String _getActiveFilterText() {
+    List<String> activeFilters = [];
+
+    if (_selectedInstructorFilter != null) {
+      activeFilters.add('Instructor: $_selectedInstructorFilter');
+    }
+    if (_selectedStudentFilter != null) {
+      activeFilters.add('Student: $_selectedStudentFilter');
+    }
+    if (_selectedStatusFilter != null) {
+      activeFilters.add('Status: $_selectedStatusFilter');
+    }
+
+    return activeFilters.isEmpty ? 'All Schedules' : activeFilters.join(' • ');
+  }
+
   // Event handlers
   void _onDaySelected(DateTime selectedDay, DateTime focusedDay) {
-    setState(() {
-      _selectedDay.value = selectedDay;
-      _focusedDay.value = focusedDay;
-    });
+    // Get filtered schedules for the selected day
+    final filteredSchedules = _getFilteredSchedules().where((schedule) {
+      return isSameDay(schedule.start, selectedDay);
+    }).toList();
+
+    Get.dialog(
+      FilteredDateLessonsDialog(
+        selectedDate: selectedDay,
+        schedules: filteredSchedules,
+        filterText: _getActiveFilterText(),
+        hasActiveFilters: _hasActiveFilters(),
+      ),
+      barrierDismissible: true,
+    );
   }
 
   void _previousPeriod() {
     switch (_currentView) {
       case 'week':
         _focusedDay.value = _focusedDay.value.subtract(Duration(days: 7));
-        break;
-      case 'day':
-        _focusedDay.value = _focusedDay.value.subtract(Duration(days: 1));
         break;
       default:
         _focusedDay.value =
@@ -648,9 +413,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     switch (_currentView) {
       case 'week':
         _focusedDay.value = _focusedDay.value.add(Duration(days: 7));
-        break;
-      case 'day':
-        _focusedDay.value = _focusedDay.value.add(Duration(days: 1));
         break;
       default:
         _focusedDay.value =
@@ -696,7 +458,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           ),
           ElevatedButton(
             onPressed: () {
-              // Implement search functionality
               _performSearch(searchController.text);
               Get.back();
             },
@@ -710,7 +471,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   void _performSearch(String query) {
     if (query.isEmpty) return;
 
-    // Find matching schedules and navigate to them
     final matchingSchedules = scheduleController.schedules.where((schedule) {
       final student = _getStudentById(schedule.studentId);
       final instructor = _getInstructorById(schedule.instructorId);
@@ -725,13 +485,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     }).toList();
 
     if (matchingSchedules.isNotEmpty) {
-      // Navigate to the first match
       final firstMatch = matchingSchedules.first;
       _selectedDay.value = firstMatch.start;
       _focusedDay.value = firstMatch.start;
-      setState(() {
-        _currentView = 'day';
-      });
       Get.snackbar(
           'Search Results', '${matchingSchedules.length} schedules found');
     } else {
@@ -782,62 +538,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     }
   }
 
-  // Replace your existing _showScheduleDetails method with this:
-  void _showScheduleDetails(Schedule schedule) {
-    // Use the new enhanced dialog instead of the basic AlertDialog
-    Get.dialog(
-      ScheduleDetailsDialog(schedule: schedule),
-      barrierDismissible: true,
-    );
-  }
-
-  Widget _buildDetailRow(String label, String value) {
-    return Padding(
-      padding: EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 100,
-            child: Text(
-              '$label:',
-              style: TextStyle(fontWeight: FontWeight.w500),
-            ),
-          ),
-          Expanded(
-            child: Text(value),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showEditScheduleDialog(Schedule schedule) {
-    Get.snackbar('Info', 'Edit schedule dialog would open here');
-  }
-
-  // Helper methods
-  Color _getStatusColor(String status) {
-    switch (status.toLowerCase()) {
-      case 'scheduled':
-        return Colors.blue;
-      case 'completed':
-        return Colors.green;
-      case 'cancelled':
-        return Colors.red;
-      case 'in progress':
-        return Colors.orange;
-      default:
-        return Colors.grey;
-    }
-  }
-
   CalendarFormat _getCalendarFormat() {
     switch (_currentView) {
       case 'week':
         return CalendarFormat.week;
-      case 'day':
-        return CalendarFormat.week; // TableCalendar doesn't have day format
       default:
         return CalendarFormat.month;
     }
@@ -847,10 +551,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     switch (_currentView) {
       case 'week':
         return 'Week of ${DateFormat('MMM d').format(_focusedDay.value)}';
-      case 'day':
-        return DateFormat('EEEE, MMMM d').format(_focusedDay.value);
-      case 'list':
-        return 'All Schedules';
       default:
         return DateFormat('MMMM yyyy').format(_focusedDay.value);
     }
@@ -861,5 +561,23 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     _focusedDay.dispose();
     _selectedDay.dispose();
     super.dispose();
+  }
+}
+
+class ScheduleProgressMonitor {
+  static Timer? _timer;
+  static final ScheduleController _scheduleController =
+      Get.find<ScheduleController>();
+
+  static void startMonitoring() {
+    // Check every minute for lesson progress updates
+    _timer = Timer.periodic(Duration(minutes: 1), (timer) {
+      _scheduleController.updateLessonProgress();
+    });
+  }
+
+  static void stopMonitoring() {
+    _timer?.cancel();
+    _timer = null;
   }
 }

@@ -258,4 +258,37 @@ class BillingController extends GetxController {
       Get.snackbar('Error', 'Failed to update billing info');
     }
   }
+
+  // Add this method to your BillingController class
+
+  Future<void> updateUsedLessons(int invoiceId, int usedLessons) async {
+    try {
+      final index = invoices.indexWhere((inv) => inv.id == invoiceId);
+      if (index == -1) {
+        throw Exception('Invoice not found');
+      }
+
+      final invoice = invoices[index];
+
+      // Update in the database
+      await _dbHelper.updateInvoice({
+        'id': invoiceId,
+        'used_lessons':
+            usedLessons, // Add this field to your database if not exists
+      });
+
+      // Update locally - you might need to add usedLessons field to your Invoice model
+      // For now, we'll track it through the existing lessons field relationship
+      final updatedInvoice = invoice.copyWith(
+          // If you have a usedLessons field in Invoice model, update it here
+          // usedLessons: usedLessons,
+          );
+
+      invoices[index] = updatedInvoice;
+      invoices.refresh();
+    } catch (e) {
+      print('Error updating used lessons: ${e.toString()}');
+      throw Exception('Failed to update lesson usage');
+    }
+  }
 }

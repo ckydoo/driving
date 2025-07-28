@@ -1,4 +1,3 @@
-// lib/models/schedule.dart
 import 'billing.dart';
 import 'payment.dart';
 
@@ -157,7 +156,10 @@ class Schedule {
 
   bool get isInProgress {
     final now = DateTime.now();
-    return now.isAfter(start) && now.isBefore(end) && status != 'Cancelled';
+    return now.isAfter(start) &&
+        now.isBefore(end) &&
+        status != 'Cancelled' &&
+        !attended;
   }
 
   String get statusDisplay {

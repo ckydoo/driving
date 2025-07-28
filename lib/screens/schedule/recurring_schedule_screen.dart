@@ -1,4 +1,5 @@
 // lib/screens/schedule/recurring_schedule_screen.dart
+import 'package:driving/widgets/recuring_progress.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
@@ -615,26 +616,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
             ),
             SizedBox(height: 16),
             DropdownButtonFormField<String>(
-              value: _selectedClassType,
-              decoration: InputDecoration(
-                labelText: 'Class Type',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.class_),
-              ),
-              items: _classTypes
-                  .map((type) => DropdownMenuItem(
-                        value: type,
-                        child: Text(type),
-                      ))
-                  .toList(),
-              onChanged: (String? value) {
-                setState(() {
-                  _selectedClassType = value!;
-                });
-              },
-            ),
-            SizedBox(height: 16),
-            DropdownButtonFormField<String>(
               value: _selectedStatus,
               decoration: InputDecoration(
                 labelText: 'Status',
@@ -980,102 +961,100 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
       });
     }
   }
+// Fixed Recurring Schedule Creation - Issue 3: Single progress dialog instead of multiple success messages
 
   Future<void> _createRecurringSchedule() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    setState(() {
-      _isLoading = true;
-    });
+    if (!_canCreateRecurringSchedule()) {
+      Get.snackbar(
+        'Validation Error',
+        'Please complete all required fields',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+      return;
+    }
 
     try {
-      final schedules = <Schedule>[];
-      final endDate = _useEndDate
-          ? _recurrenceEndDate!
-          : DateTime.now().add(Duration(days: 365));
+      setState(() {
+        _isLoading = true;
+      });
 
+      // Show progress dialog - Issue 3 fix
+      Get.dialog(
+        RecurringScheduleProgressDialog(
+          totalSchedules: _previewCount,
+          onComplete: (successCount, conflictCount) {
+            _handleRecurringScheduleComplete(successCount, conflictCount);
+          },
+        ),
+        barrierDismissible: false,
+      );
+
+      // Generate schedules
+      final schedules = <Schedule>[];
       DateTime currentDate = _selectedStartDate;
       int count = 0;
 
-      while (currentDate.isBefore(endDate) ||
-          currentDate.isAtSameMomentAs(endDate)) {
-        if (!_useEndDate && count >= _maxOccurrences) break;
-        if (count >= _remainingLessons) break; // Don't exceed available lessons
-
-        bool shouldCreateSchedule = false;
-
-        switch (_recurrencePattern) {
-          case 'daily':
-            shouldCreateSchedule = true;
-            break;
-          case 'weekly':
-            shouldCreateSchedule =
-                _selectedDaysOfWeek.contains(currentDate.weekday);
-            break;
-          case 'monthly':
-            shouldCreateSchedule = currentDate.day == _selectedStartDate.day;
-            break;
-          case 'custom':
-            final daysDiff = currentDate.difference(_selectedStartDate).inDays;
-            shouldCreateSchedule = daysDiff % _customInterval == 0;
-            break;
+      while (
+          count < _previewCount && currentDate.isBefore(_recurrenceEndDate!)) {
+        // Skip weekends for weekday patterns
+        if (_recurrencePattern == 'weekdays' &&
+            (currentDate.weekday == DateTime.saturday ||
+                currentDate.weekday == DateTime.sunday)) {
+          currentDate = currentDate.add(Duration(days: 1));
+          continue;
         }
 
-        if (shouldCreateSchedule) {
-          final startDateTime = DateTime(
-            currentDate.year,
-            currentDate.month,
-            currentDate.day,
-            _startTime.hour,
-            _startTime.minute,
+        final startDateTime = DateTime(
+          currentDate.year,
+          currentDate.month,
+          currentDate.day,
+          _startTime!.hour,
+          _startTime!.minute,
+        );
+
+        final endDateTime = DateTime(
+          currentDate.year,
+          currentDate.month,
+          currentDate.day,
+          _endTime!.hour,
+          _endTime!.minute,
+        );
+
+        // Check instructor availability
+        final available = await _scheduleController.checkAvailability(
+          _selectedInstructor!.id!,
+          startDateTime,
+          endDateTime,
+        );
+
+        if (available) {
+          final schedule = Schedule(
+            start: startDateTime,
+            end: endDateTime,
+            courseId: _selectedCourse!.id!,
+            studentId: _selectedStudent!.id!,
+            instructorId: _selectedInstructor!.id!,
+            carId: _selectedVehicle?.id,
+            status: _selectedStatus,
+            isRecurring: true,
+            recurrencePattern: _recurrencePattern,
+            recurrenceEndDate: _recurrenceEndDate,
+            classType: _selectedClassType,
           );
 
-          final endDateTime = DateTime(
-            currentDate.year,
-            currentDate.month,
-            currentDate.day,
-            _endTime.hour,
-            _endTime.minute,
-          );
-
-          // Check instructor availability for this slot
-          final available = await _scheduleController.checkAvailability(
-            _selectedInstructor!.id!,
-            startDateTime,
-            endDateTime,
-          );
-
-          if (available) {
-            final schedule = Schedule(
-              start: startDateTime,
-              end: endDateTime,
-              courseId: _selectedCourse!.id!,
-              studentId: _selectedStudent!.id!,
-              instructorId: _selectedInstructor!.id!,
-              carId: _selectedVehicle?.id,
-              classType: _selectedClassType,
-              status: _selectedStatus,
-              isRecurring: true,
-              recurrencePattern: _recurrencePattern,
-              recurrenceEndDate: _recurrenceEndDate,
-            );
-
-            schedules.add(schedule);
-            count++;
-          } else {
-            // Show warning for conflicts but continue
-            print(
-                'Conflict detected for ${DateFormat('MMM dd, yyyy HH:mm').format(startDateTime)}');
-          }
+          schedules.add(schedule);
+          count++;
         }
 
         // Move to next iteration
         switch (_recurrencePattern) {
           case 'daily':
+          case 'weekdays':
             currentDate = currentDate.add(Duration(days: 1));
             break;
           case 'weekly':
-            currentDate = currentDate.add(Duration(days: 1));
+            currentDate = currentDate.add(Duration(days: 7));
             break;
           case 'monthly':
             currentDate = DateTime(
@@ -1084,54 +1063,15 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
               currentDate.day,
             );
             break;
-          case 'custom':
-            currentDate = currentDate.add(Duration(days: 1));
-            break;
         }
 
-        // Safety check
-        if (schedules.length > 1000) break;
+        if (schedules.length > 1000) break; // Safety check
       }
 
-      // Save all schedules
-      int successCount = 0;
-      int conflictCount = 0;
-
-      for (final schedule in schedules) {
-        try {
-          await _scheduleController.addOrUpdateSchedule(schedule);
-          successCount++;
-        } catch (e) {
-          conflictCount++;
-          print('Failed to create schedule: $e');
-        }
-      }
-
-      Get.back();
-
-      if (successCount > 0) {
-        String message =
-            '$successCount recurring lessons scheduled successfully!';
-        if (conflictCount > 0) {
-          message += ' ($conflictCount conflicts skipped)';
-        }
-
-        Get.snackbar(
-          'Success',
-          message,
-          backgroundColor: Colors.green,
-          colorText: Colors.white,
-          duration: Duration(seconds: 4),
-        );
-      } else {
-        Get.snackbar(
-          'Warning',
-          'No lessons could be scheduled due to conflicts.',
-          backgroundColor: Colors.orange,
-          colorText: Colors.white,
-        );
-      }
+      // Save schedules with progress updates
+      await _saveSchedulesWithProgress(schedules);
     } catch (e) {
+      Get.back(); // Close progress dialog
       Get.snackbar(
         'Error',
         'Failed to create recurring schedule: ${e.toString()}',
@@ -1142,6 +1082,65 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
       setState(() {
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _saveSchedulesWithProgress(List<Schedule> schedules) async {
+    int successCount = 0;
+    int conflictCount = 0;
+
+    for (int i = 0; i < schedules.length; i++) {
+      try {
+        await _scheduleController.addOrUpdateSchedule(schedules[i]);
+        successCount++;
+
+        // Update progress - Issue 3 fix
+        if (Get.isDialogOpen == true) {
+          Get.find<RecurringScheduleProgressController>().updateProgress(
+              i + 1, schedules.length, successCount, conflictCount);
+        }
+
+        // Small delay to show progress
+        await Future.delayed(Duration(milliseconds: 50));
+      } catch (e) {
+        conflictCount++;
+        print('Failed to create schedule: $e');
+      }
+    }
+
+    // Complete the process
+    if (Get.isDialogOpen == true) {
+      Get.find<RecurringScheduleProgressController>()
+          .complete(successCount, conflictCount);
+    }
+  }
+
+  void _handleRecurringScheduleComplete(int successCount, int conflictCount) {
+    Get.back(); // Close progress dialog
+    Get.back(); // Close recurring schedule screen
+
+    // Single success message - Issue 3 fix
+    if (successCount > 0) {
+      String message =
+          '$successCount recurring lessons scheduled successfully!';
+      if (conflictCount > 0) {
+        message += ' ($conflictCount conflicts skipped)';
+      }
+
+      Get.snackbar(
+        'Success',
+        message,
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+        duration: Duration(seconds: 4),
+      );
+    } else {
+      Get.snackbar(
+        'Warning',
+        'No lessons could be scheduled due to conflicts.',
+        backgroundColor: Colors.orange,
+        colorText: Colors.white,
+      );
     }
   }
 

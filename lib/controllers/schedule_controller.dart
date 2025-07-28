@@ -572,153 +572,6 @@ class ScheduleController extends GetxController {
     return true;
   }
 
-// Enhanced addOrUpdateSchedule method with better validation
-  Future<void> addOrUpdateSchedule(Schedule schedule) async {
-    try {
-      isLoading(true);
-
-      // Validate schedule date and time
-      if (!await validateScheduleDateTime(schedule.start, schedule.end,
-          excludeScheduleId: schedule.id)) {
-        return;
-      }
-
-      // Get settings for validation
-      final settingsController = Get.find<SettingsController>();
-
-      // Check working hours if enforcement is enabled
-      if (settingsController.enforceWorkingHours.value) {
-        final workStart = settingsController.workingHoursStart.value;
-        final workEnd = settingsController.workingHoursEnd.value;
-
-        final startTime = TimeOfDay.fromDateTime(schedule.start);
-        final endTime = TimeOfDay.fromDateTime(schedule.end);
-
-        final workStartTime = TimeOfDay(
-          hour: int.parse(workStart.split(':')[0]),
-          minute: int.parse(workStart.split(':')[1]),
-        );
-
-        final workEndTime = TimeOfDay(
-          hour: int.parse(workEnd.split(':')[0]),
-          minute: int.parse(workEnd.split(':')[1]),
-        );
-
-        if (_timeIsBefore(startTime, workStartTime) ||
-            _timeIsAfter(endTime, workEndTime)) {
-          Get.snackbar(
-            'Outside Working Hours',
-            'Lesson time is outside configured working hours ($workStart - $workEnd).',
-            backgroundColor: Colors.orange,
-            colorText: Colors.white,
-            icon: Icon(Icons.schedule, color: Colors.white),
-            duration: Duration(seconds: 4),
-          );
-
-          // Ask user if they want to proceed anyway
-          final proceed = await Get.dialog<bool>(
-            AlertDialog(
-              title: Text('Schedule Outside Working Hours'),
-              content: Text(
-                  'This lesson is scheduled outside the configured working hours ($workStart - $workEnd). Do you want to proceed anyway?'),
-              actions: [
-                TextButton(
-                  onPressed: () => Get.back(result: false),
-                  child: Text('Cancel'),
-                ),
-                ElevatedButton(
-                  onPressed: () => Get.back(result: true),
-                  child: Text('Proceed'),
-                ),
-              ],
-            ),
-          );
-
-          if (proceed != true) return;
-        }
-      }
-
-      // Check instructor availability
-      if (settingsController.checkInstructorAvailability.value) {
-        if (!await checkAvailability(
-            schedule.instructorId, schedule.start, schedule.end)) {
-          Get.snackbar(
-            'Scheduling Conflict',
-            'The selected instructor is already booked for this time slot.',
-            backgroundColor: Colors.red,
-            colorText: Colors.white,
-            icon: Icon(Icons.stop, color: Colors.white),
-            duration: Duration(seconds: 4),
-          );
-          return;
-        }
-      }
-
-      // Check billing validation if enabled
-      if (settingsController.enforceBillingValidation.value) {
-        if (await checkBillingLessons(
-            schedule.studentId, schedule.courseId, 1)) {
-          Get.snackbar(
-            'Insufficient Lessons',
-            'Student does not have enough remaining lessons for this course.',
-            backgroundColor: Colors.red,
-            colorText: Colors.white,
-            icon: Icon(Icons.account_balance_wallet, color: Colors.white),
-            duration: Duration(seconds: 4),
-          );
-          return;
-        }
-      }
-
-      // Proceed with scheduling
-      if (schedule.id == null) {
-        // Adding new schedule
-        final id = await _dbHelper.insertSchedule(schedule.toJson());
-        final newSchedule = schedule.copyWith(id: id);
-        schedules.add(newSchedule);
-
-        Get.snackbar(
-          'Success',
-          'Schedule created successfully for ${DateFormat('MMM dd, yyyy \'at\' HH:mm').format(schedule.start)}',
-          backgroundColor: Colors.green,
-          colorText: Colors.white,
-          icon: Icon(Icons.check_circle, color: Colors.white),
-          duration: Duration(seconds: 3),
-        );
-      } else {
-        // Updating existing schedule
-        await _dbHelper.updateSchedule(schedule.toJson());
-        final index = schedules.indexWhere((s) => s.id == schedule.id);
-        if (index != -1) {
-          schedules[index] = schedule;
-        }
-
-        Get.snackbar(
-          'Success',
-          'Schedule updated successfully',
-          backgroundColor: Colors.green,
-          colorText: Colors.white,
-          icon: Icon(Icons.check_circle, color: Colors.white),
-          duration: Duration(seconds: 3),
-        );
-      }
-
-      schedules.refresh();
-      _applyFilters();
-    } catch (e) {
-      Get.snackbar(
-        'Error',
-        'Failed to save schedule: ${e.toString()}',
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-        icon: Icon(Icons.error, color: Colors.white),
-        duration: Duration(seconds: 4),
-      );
-    } finally {
-      isLoading(false);
-    }
-  }
-
 // Helper method to check availability with optional exclusion
   Future<bool> checkAvailability(int instructorId, DateTime start, DateTime end,
       {int? excludeId}) async {
@@ -776,5 +629,139 @@ class ScheduleController extends GetxController {
   DateTime getMaximumScheduleDate() {
     final now = DateTime.now();
     return DateTime(now.year + 1, now.month, now.day);
+  }
+
+  // Fixed Schedule Controller - Issue 1: Scheduling but not deducting lessons from billed lessons
+
+  Future<void> addOrUpdateSchedule(Schedule schedule) async {
+    try {
+      isLoading(true);
+
+      if (schedule.id == null) {
+        // Creating new schedule
+        final newSchedule = await _dbHelper.insertSchedule(schedule.toJson());
+        final scheduleWithId = Schedule.fromJson({
+          ...schedule.toJson(),
+          'id': newSchedule,
+        });
+
+        // FIXED: Deduct lessons from billing when scheduling (not just attending)
+        await _deductLessonsFromBilling(scheduleWithId);
+
+        schedules.add(scheduleWithId);
+      } else {
+        // Updating existing schedule
+        await _dbHelper.updateSchedule(schedule.toJson());
+        final index = schedules.indexWhere((s) => s.id == schedule.id);
+        if (index != -1) {
+          schedules[index] = schedule;
+        }
+      }
+
+      schedules.refresh();
+      _applyFilters();
+
+      Get.snackbar(
+        'Success',
+        schedule.id == null
+            ? 'Schedule created successfully'
+            : 'Schedule updated successfully',
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
+    } catch (e) {
+      Get.snackbar('Error', 'Failed to save schedule: ${e.toString()}');
+    } finally {
+      isLoading(false);
+    }
+  }
+
+// New method to handle lesson deduction from billing
+  Future<void> _deductLessonsFromBilling(Schedule schedule) async {
+    try {
+      final billingController = Get.find<BillingController>();
+      final invoice = billingController.invoices.firstWhereOrNull(
+        (inv) =>
+            inv.studentId == schedule.studentId &&
+            inv.courseId == schedule.courseId,
+      );
+
+      if (invoice != null) {
+        // Calculate current used lessons (including this new schedule)
+        final usedLessons =
+            _getUsedLessons(schedule.studentId, schedule.courseId) +
+                schedule.lessonsDeducted;
+
+        // Check if we have enough lessons
+        if (usedLessons > invoice.lessons) {
+          throw Exception(
+              'Insufficient lessons remaining. Please add more lessons to the invoice.');
+        }
+
+        // Update the invoice to reflect used lessons
+        await billingController.updateUsedLessons(invoice.id!, usedLessons);
+      }
+    } catch (e) {
+      rethrow; // Re-throw to handle in calling method
+    }
+  }
+
+// Helper method to get used lessons count
+  int _getUsedLessons(int studentId, int courseId) {
+    return schedules
+        .where((s) =>
+            s.studentId == studentId &&
+            s.courseId == courseId &&
+            s.status != 'Cancelled')
+        .fold<int>(0, (sum, s) => sum + s.lessonsDeducted);
+  }
+
+  Future<void> updateLessonProgress() async {
+    try {
+      final now = DateTime.now();
+      bool hasUpdates = false;
+
+      for (int i = 0; i < schedules.length; i++) {
+        final schedule = schedules[i];
+        final wasInProgress = schedule.status == 'In Progress';
+
+        // Check if lesson should be marked as in progress
+        final shouldBeInProgress = now.isAfter(schedule.start) &&
+            now.isBefore(schedule.end) &&
+            schedule.status != 'Cancelled' &&
+            !schedule.attended;
+
+        if (shouldBeInProgress && !wasInProgress) {
+          // Mark as in progress
+          final updatedSchedule = schedule.copyWith(status: 'In Progress');
+          await _dbHelper.updateSchedule({
+            'id': schedule.id,
+            'status': 'In Progress',
+          });
+          schedules[i] = updatedSchedule;
+          hasUpdates = true;
+        } else if (!shouldBeInProgress &&
+            wasInProgress &&
+            schedule.status == 'In Progress') {
+          // Lesson time has passed, mark as missed if not attended
+          if (now.isAfter(schedule.end) && !schedule.attended) {
+            final updatedSchedule = schedule.copyWith(status: 'Missed');
+            await _dbHelper.updateSchedule({
+              'id': schedule.id,
+              'status': 'Missed',
+            });
+            schedules[i] = updatedSchedule;
+            hasUpdates = true;
+          }
+        }
+      }
+
+      if (hasUpdates) {
+        schedules.refresh();
+        _applyFilters();
+      }
+    } catch (e) {
+      print('Error updating lesson progress: $e');
+    }
   }
 }

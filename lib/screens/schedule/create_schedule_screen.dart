@@ -700,26 +700,6 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
             ),
             SizedBox(height: 16),
             DropdownButtonFormField<String>(
-              value: _selectedClassType,
-              decoration: InputDecoration(
-                labelText: 'Class Type',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.class_),
-              ),
-              items: _classTypes
-                  .map((type) => DropdownMenuItem(
-                        value: type,
-                        child: Text(type),
-                      ))
-                  .toList(),
-              onChanged: (String? value) {
-                setState(() {
-                  _selectedClassType = value!;
-                });
-              },
-            ),
-            SizedBox(height: 16),
-            DropdownButtonFormField<String>(
               value: _selectedStatus,
               decoration: InputDecoration(
                 labelText: 'Status',
