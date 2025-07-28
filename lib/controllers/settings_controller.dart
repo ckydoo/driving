@@ -45,11 +45,64 @@ class SettingsController extends GetxController {
   final RxString defaultCurrency = 'USD'.obs;
   final RxBool showDeveloperOptions = false.obs;
 
+  final RxInt _tempBreakBetweenLessons = 15.obs;
+  final RxInt _tempLessonStartReminder = 15.obs;
+  final RxInt _tempLowLessonThreshold = 3.obs;
+  final RxInt _tempAutoSaveInterval = 5.obs;
+
   @override
   void onInit() {
     super.onInit();
     _loadSettings();
+    // Initialize temp values
+    _tempBreakBetweenLessons.value = breakBetweenLessons.value;
+    _tempLessonStartReminder.value = lessonStartReminder.value;
+    _tempLowLessonThreshold.value = lowLessonThreshold.value;
+    _tempAutoSaveInterval.value = autoSaveInterval.value;
   }
+
+  // Enhanced methods for smooth slider experience
+  void updateBreakBetweenLessonsTemp(int minutes) {
+    _tempBreakBetweenLessons.value = minutes;
+  }
+
+  void commitBreakBetweenLessons() {
+    updateSetting('break_between_lessons', _tempBreakBetweenLessons.value,
+        breakBetweenLessons);
+  }
+
+  void updateLessonStartReminderTemp(int minutes) {
+    _tempLessonStartReminder.value = minutes;
+  }
+
+  void commitLessonStartReminder() {
+    updateSetting('lesson_start_reminder', _tempLessonStartReminder.value,
+        lessonStartReminder);
+  }
+
+  void updateLowLessonThresholdTemp(int threshold) {
+    _tempLowLessonThreshold.value = threshold;
+  }
+
+  void commitLowLessonThreshold() {
+    updateSetting('low_lesson_threshold', _tempLowLessonThreshold.value,
+        lowLessonThreshold);
+  }
+
+  void updateAutoSaveIntervalTemp(int interval) {
+    _tempAutoSaveInterval.value = interval;
+  }
+
+  void commitAutoSaveInterval() {
+    updateSetting(
+        'auto_save_interval', _tempAutoSaveInterval.value, autoSaveInterval);
+  }
+
+  // Getters for temp values
+  RxInt get tempBreakBetweenLessons => _tempBreakBetweenLessons;
+  RxInt get tempLessonStartReminder => _tempLessonStartReminder;
+  RxInt get tempLowLessonThreshold => _tempLowLessonThreshold;
+  RxInt get tempAutoSaveInterval => _tempAutoSaveInterval;
 
   // Load settings from SharedPreferences
   Future<void> _loadSettings() async {

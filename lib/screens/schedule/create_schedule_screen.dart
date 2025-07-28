@@ -348,6 +348,7 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
                     _buildInstructorSection(),
                     SizedBox(height: 20),
                     _buildDateTimeSection(),
+                    _buildValidationMessages(), // ← ADD THIS LINE
                     SizedBox(height: 20),
                     _buildLessonDetailsSection(),
                     SizedBox(height: 30),
@@ -919,9 +920,6 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
     Get.back();
   }
 
-  // Enhanced Billing Status Widget for consistent UI
-// Add this to your schedule form to show billing information consistently
-
   Widget _buildBillingStatusCard() {
     if (_selectedStudent == null || _selectedCourse == null) {
       return SizedBox.shrink();
@@ -1310,7 +1308,30 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
     return true;
   }
 
-// Enhanced form validation messages
+// Add these methods to your CreateScheduleScreen class
+
+// Helper method to parse time string (e.g., "09:00") to TimeOfDay
+  TimeOfDay _parseTimeString(String timeString) {
+    final parts = timeString.split(':');
+    final hour = int.parse(parts[0]);
+    final minute = int.parse(parts[1]);
+    return TimeOfDay(hour: hour, minute: minute);
+  }
+
+// Helper method to check if selected time is outside working hours
+  bool _isTimeOutsideWorkingHours(TimeOfDay startTime, TimeOfDay endTime,
+      TimeOfDay workingStart, TimeOfDay workingEnd) {
+    // Convert TimeOfDay to minutes for easier comparison
+    int startMinutes = startTime.hour * 60 + startTime.minute;
+    int endMinutes = endTime.hour * 60 + endTime.minute;
+    int workingStartMinutes = workingStart.hour * 60 + workingStart.minute;
+    int workingEndMinutes = workingEnd.hour * 60 + workingEnd.minute;
+
+    // Check if lesson starts before working hours or ends after working hours
+    return startMinutes < workingStartMinutes || endMinutes > workingEndMinutes;
+  }
+
+// Enhanced form validation messages with working hours validation
   Widget _buildValidationMessages() {
     List<String> errors = [];
     List<String> warnings = [];
@@ -1337,6 +1358,54 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
         warnings.add('Lesson duration is less than 30 minutes');
       } else if (duration.inHours > 4) {
         warnings.add('Lesson duration exceeds 4 hours');
+      }
+
+      // NEW: Working hours validation
+      final settingsController = Get.find<SettingsController>();
+      if (settingsController.enforceWorkingHours.value &&
+          _selectedInstructor != null) {
+        final startTime =
+            TimeOfDay(hour: _startTime!.hour, minute: _startTime!.minute);
+        final endTime =
+            TimeOfDay(hour: _endTime!.hour, minute: _endTime!.minute);
+
+        final workingStart =
+            _parseTimeString(settingsController.workingHoursStart.value);
+        final workingEnd =
+            _parseTimeString(settingsController.workingHoursEnd.value);
+
+        if (_isTimeOutsideWorkingHours(
+            startTime, endTime, workingStart, workingEnd)) {
+          errors.add(
+              'Schedule time is outside instructor working hours (${settingsController.workingHoursStart.value} - ${settingsController.workingHoursEnd.value})');
+        }
+
+        // Check for break between lessons if enabled
+        if (!settingsController.allowBackToBackLessons.value) {
+          final breakMinutes = settingsController.breakBetweenLessons.value;
+          final conflictingSchedules =
+              _scheduleController.schedules.where((schedule) {
+            if (schedule.instructorId != _selectedInstructor!.id) return false;
+
+            final scheduleDate = DateTime(
+                schedule.start.year, schedule.start.month, schedule.start.day);
+            final selectedScheduleDate = DateTime(
+                _selectedDate!.year, _selectedDate!.month, _selectedDate!.day);
+
+            if (!scheduleDate.isAtSameMomentAs(selectedScheduleDate))
+              return false;
+
+            // Check if there's a schedule that ends within break time of our start time
+            final timeDifference =
+                startDateTime.difference(schedule.end).inMinutes;
+            return timeDifference > 0 && timeDifference < breakMinutes;
+          }).toList();
+
+          if (conflictingSchedules.isNotEmpty) {
+            warnings.add(
+                'Less than ${breakMinutes} minutes break from previous lesson');
+          }
+        }
       }
     }
 

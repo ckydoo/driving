@@ -1,4 +1,5 @@
 // lib/screens/schedule/recurring_schedule_screen.dart
+import 'package:driving/controllers/settings_controller.dart';
 import 'package:driving/widgets/recuring_progress.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -29,6 +30,7 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
   final _courseController = Get.find<CourseController>();
   final _fleetController = Get.find<FleetController>();
   final _billingController = Get.find<BillingController>();
+  DateTime _selectedDate = DateTime.now();
 
   // Form fields
   DateTime _selectedStartDate = DateTime.now();
@@ -116,6 +118,9 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
                     _buildPreviewSection(),
                     SizedBox(height: 30),
                     _buildActionButtons(),
+                    _buildStudentSection(),
+                    SizedBox(height: 20),
+                    _buildValidationMessages(),
                   ],
                 ),
               ),
@@ -1529,5 +1534,133 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     }
 
     return true;
+  }
+
+  TimeOfDay _parseTimeString(String timeString) {
+    final parts = timeString.split(':');
+    final hour = int.parse(parts[0]);
+    final minute = int.parse(parts[1]);
+    return TimeOfDay(hour: hour, minute: minute);
+  }
+
+// Helper method to check if selected time is outside working hours
+  bool _isTimeOutsideWorkingHours(TimeOfDay startTime, TimeOfDay endTime,
+      TimeOfDay workingStart, TimeOfDay workingEnd) {
+    // Convert TimeOfDay to minutes for easier comparison
+    int startMinutes = startTime.hour * 60 + startTime.minute;
+    int endMinutes = endTime.hour * 60 + endTime.minute;
+    int workingStartMinutes = workingStart.hour * 60 + workingStart.minute;
+    int workingEndMinutes = workingEnd.hour * 60 + workingEnd.minute;
+
+    // Check if lesson starts before working hours or ends after working hours
+    return startMinutes < workingStartMinutes || endMinutes > workingEndMinutes;
+  }
+
+// Enhanced form validation messages with working hours validation
+  Widget _buildValidationMessages() {
+    List<String> errors = [];
+    List<String> warnings = [];
+
+    if (_selectedDate != null && _startTime != null && _endTime != null) {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final selectedDay = DateTime(
+          _selectedDate!.year, _selectedDate!.month, _selectedDate!.day);
+
+      if (selectedDay.isBefore(today)) {
+        errors.add('Cannot schedule lessons for past dates');
+      }
+
+      final startDateTime = DateTime(_selectedDate!.year, _selectedDate!.month,
+          _selectedDate!.day, _startTime!.hour, _startTime!.minute);
+      final endDateTime = DateTime(_selectedDate!.year, _selectedDate!.month,
+          _selectedDate!.day, _endTime!.hour, _endTime!.minute);
+      final duration = endDateTime.difference(startDateTime);
+
+      if (duration.inMinutes <= 0) {
+        errors.add('End time must be after start time');
+      } else if (duration.inMinutes < 30) {
+        warnings.add('Lesson duration is less than 30 minutes');
+      } else if (duration.inHours > 4) {
+        warnings.add('Lesson duration exceeds 4 hours');
+      }
+
+      // NEW: Working hours validation
+      final settingsController = Get.find<SettingsController>();
+      if (settingsController.enforceWorkingHours.value &&
+          _selectedInstructor != null) {
+        final startTime =
+            TimeOfDay(hour: _startTime!.hour, minute: _startTime!.minute);
+        final endTime =
+            TimeOfDay(hour: _endTime!.hour, minute: _endTime!.minute);
+
+        final workingStart =
+            _parseTimeString(settingsController.workingHoursStart.value);
+        final workingEnd =
+            _parseTimeString(settingsController.workingHoursEnd.value);
+
+        if (_isTimeOutsideWorkingHours(
+            startTime, endTime, workingStart, workingEnd)) {
+          errors.add(
+              'Schedule time is outside instructor working hours (${settingsController.workingHoursStart.value} - ${settingsController.workingHoursEnd.value})');
+        }
+
+        // Check for break between lessons if enabled
+        if (!settingsController.allowBackToBackLessons.value) {
+          final breakMinutes = settingsController.breakBetweenLessons.value;
+          final conflictingSchedules =
+              _scheduleController.schedules.where((schedule) {
+            if (schedule.instructorId != _selectedInstructor!.id) return false;
+
+            final scheduleDate = DateTime(
+                schedule.start.year, schedule.start.month, schedule.start.day);
+            final selectedScheduleDate = DateTime(
+                _selectedDate!.year, _selectedDate!.month, _selectedDate!.day);
+
+            if (!scheduleDate.isAtSameMomentAs(selectedScheduleDate))
+              return false;
+
+            // Check if there's a schedule that ends within break time of our start time
+            final timeDifference =
+                startDateTime.difference(schedule.end).inMinutes;
+            return timeDifference > 0 && timeDifference < breakMinutes;
+          }).toList();
+
+          if (conflictingSchedules.isNotEmpty) {
+            warnings.add(
+                'Less than ${breakMinutes} minutes break from previous lesson');
+          }
+        }
+      }
+    }
+
+    if (errors.isEmpty && warnings.isEmpty) {
+      return SizedBox.shrink();
+    }
+
+    return Container(
+      margin: EdgeInsets.symmetric(vertical: 8),
+      child: Column(
+        children: [
+          ...errors.map(
+              (error) => _buildMessageCard(error, Colors.red, Icons.error)),
+          ...warnings.map((warning) =>
+              _buildMessageCard(warning, Colors.orange, Icons.warning)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMessageCard(String message, Color color, IconData icon) {
+    return Card(
+      margin: EdgeInsets.symmetric(vertical: 4),
+      child: ListTile(
+        leading: Icon(icon, color: color),
+        title: Text(
+          message,
+          style: TextStyle(color: color, fontWeight: FontWeight.w500),
+        ),
+      ),
+    );
   }
 }

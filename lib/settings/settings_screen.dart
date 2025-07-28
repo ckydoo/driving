@@ -1,5 +1,6 @@
 // lib/settings/enhanced_settings_screen.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import '../controllers/settings_controller.dart';
 import 'dart:convert';
@@ -199,120 +200,6 @@ class _SettingsScreenState extends State<SettingsScreen>
     );
   }
 
-  Widget _buildBillingSettings() {
-    return SingleChildScrollView(
-      padding: EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildSectionHeader('Billing Warnings'),
-          _buildSettingsCard([
-            _buildSwitchTile(
-              'Show Low Lesson Warning',
-              'Alert when student has few lessons remaining',
-              settingsController.showLowLessonWarning,
-              settingsController.toggleLowLessonWarning,
-            ),
-            _buildSwitchTile(
-              'Prevent Over-Scheduling',
-              'Block scheduling when no lessons remain',
-              settingsController.preventOverScheduling,
-              settingsController.togglePreventOverScheduling,
-            ),
-          ]),
-          SizedBox(height: 16),
-          _buildSectionHeader('Billing Automation'),
-          _buildSettingsCard([
-            _buildSwitchTile(
-              'Auto-Create Billing Records',
-              'Automatically create billing entries for completed lessons',
-              settingsController.autoCreateBillingRecords,
-              settingsController.toggleAutoCreateBillingRecords,
-            ),
-            _buildSwitchTile(
-              'Count Scheduled Lessons',
-              'Include scheduled lessons in billing calculations',
-              settingsController.countScheduledLessons,
-              settingsController.toggleCountScheduledLessons,
-            ),
-          ]),
-          SizedBox(height: 16),
-          _buildSectionHeader('Thresholds'),
-          _buildSettingsCard([
-            _buildSliderTile(
-              'Low Lesson Threshold',
-              'Number of lessons to trigger warning',
-              settingsController.lowLessonThreshold.value.toDouble().obs,
-              1.0,
-              10.0,
-              1.0,
-              (value) =>
-                  settingsController.setLowLessonThreshold(value.toInt()),
-              (value) => '${value.toInt()} lessons',
-            ),
-          ]),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNotificationSettings() {
-    return SingleChildScrollView(
-      padding: EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildSectionHeader('Automatic Notifications'),
-          _buildSettingsCard([
-            _buildSwitchTile(
-              'Auto Attendance Notifications',
-              'Send notifications for attendance updates',
-              settingsController.autoAttendanceNotifications,
-              settingsController.toggleAutoAttendanceNotifications,
-            ),
-            _buildSwitchTile(
-              'Schedule Conflict Alerts',
-              'Alert when scheduling conflicts occur',
-              settingsController.scheduleConflictAlerts,
-              settingsController.toggleScheduleConflictAlerts,
-            ),
-            _buildSwitchTile(
-              'Billing Warnings',
-              'Send billing-related notifications',
-              settingsController.billingWarnings,
-              settingsController.toggleBillingWarnings,
-            ),
-          ]),
-          SizedBox(height: 16),
-          _buildSectionHeader('Reminder Settings'),
-          _buildSettingsCard([
-            _buildSliderTile(
-              'Lesson Start Reminder',
-              'Minutes before lesson to send reminder',
-              settingsController.lessonStartReminder.value.toDouble().obs,
-              5.0,
-              60.0,
-              5.0,
-              (value) =>
-                  settingsController.setLessonStartReminder(value.toInt()),
-              (value) => '${value.toInt()} minutes',
-            ),
-          ]),
-          SizedBox(height: 16),
-          _buildSectionHeader('Daily Summary'),
-          _buildSettingsCard([
-            _buildTimeTile(
-              'Daily Summary Time',
-              settingsController.dailySummaryTime,
-              null,
-              subtitle: 'Time to send daily summary notifications',
-            ),
-          ]),
-        ],
-      ),
-    );
-  }
-
   Widget _buildAppearanceSettings() {
     return SingleChildScrollView(
       padding: EdgeInsets.all(16),
@@ -346,83 +233,6 @@ class _SettingsScreenState extends State<SettingsScreen>
               (value) => value,
             ),
           ]),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAdvancedSettings() {
-    return SingleChildScrollView(
-      padding: EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildSectionHeader('Data Management'),
-          _buildSettingsCard([
-            _buildSwitchTile(
-              'Enable Data Backup',
-              'Automatically backup data to cloud storage',
-              settingsController.enableDataBackup,
-              settingsController.toggleDataBackup,
-            ),
-            _buildSwitchTile(
-              'Enable Auto-Save',
-              'Automatically save changes without manual save',
-              settingsController.enableAutoSave,
-              settingsController.toggleAutoSave,
-            ),
-          ]),
-          SizedBox(height: 16),
-          Obx(() => settingsController.enableAutoSave.value
-              ? Column(children: [
-                  _buildSectionHeader('Auto-Save Settings'),
-                  _buildSettingsCard([
-                    _buildSliderTile(
-                      'Auto-Save Interval',
-                      'Minutes between automatic saves',
-                      settingsController.autoSaveInterval.value.toDouble().obs,
-                      1.0,
-                      30.0,
-                      1.0,
-                      (value) =>
-                          settingsController.setAutoSaveInterval(value.toInt()),
-                      (value) => '${value.toInt()} minutes',
-                    ),
-                  ]),
-                  SizedBox(height: 16),
-                ])
-              : SizedBox.shrink()),
-          _buildSectionHeader('System Settings'),
-          _buildSettingsCard([
-            _buildSwitchTile(
-              'Advanced Logging',
-              'Enable detailed system logging for debugging',
-              settingsController.enableAdvancedLogging,
-              settingsController.toggleAdvancedLogging,
-            ),
-            _buildDropdownTile(
-              'Default Currency',
-              'Set default currency for billing',
-              settingsController.defaultCurrency,
-              ['USD', 'EUR', 'GBP', 'CAD', 'AUD'],
-              settingsController.setDefaultCurrency,
-              (value) => value,
-            ),
-          ]),
-          SizedBox(height: 16),
-          _buildSectionHeader('Developer Options'),
-          _buildSettingsCard([
-            _buildSwitchTile(
-              'Show Developer Options',
-              'Display advanced developer tools and options',
-              settingsController.showDeveloperOptions,
-              settingsController.toggleDeveloperOptions,
-            ),
-          ]),
-          SizedBox(height: 16),
-          Obx(() => settingsController.showDeveloperOptions.value
-              ? _buildDeveloperOptions()
-              : SizedBox.shrink()),
         ],
       ),
     );
@@ -500,42 +310,121 @@ class _SettingsScreenState extends State<SettingsScreen>
   Widget _buildSliderTile(
     String title,
     String subtitle,
-    RxDouble value,
+    RxInt currentValue,
+    RxInt tempValue,
     double min,
     double max,
     double divisions,
-    Function(double) onChanged,
-    String Function(double) formatter,
+    Function(int) onTempChanged,
+    Function() onCommit,
+    String Function(int) formatter,
   ) {
-    return Obx(() => ListTile(
-          title: Text(title, style: TextStyle(fontWeight: FontWeight.w500)),
-          subtitle: Column(
+    return Obx(() => Container(
+          padding: EdgeInsets.symmetric(vertical: 8),
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(subtitle, style: TextStyle(fontSize: 12)),
-              SizedBox(height: 8),
+              Text(
+                title,
+                style: TextStyle(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 16,
+                ),
+              ),
+              SizedBox(height: 4),
+              Text(
+                subtitle,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                ),
+              ),
+              SizedBox(height: 12),
               Row(
                 children: [
                   Expanded(
-                    child: Slider(
-                      value: value.value,
-                      min: min,
-                      max: max,
-                      divisions: ((max - min) / divisions).round(),
-                      onChanged: onChanged,
-                      activeColor: Colors.blue[700],
+                    child: SliderTheme(
+                      data: SliderTheme.of(context).copyWith(
+                        activeTrackColor: Colors.blue[700],
+                        inactiveTrackColor: Colors.blue[100],
+                        thumbColor: Colors.blue[700],
+                        overlayColor: Colors.blue[700]!.withAlpha(32),
+                        thumbShape:
+                            RoundSliderThumbShape(enabledThumbRadius: 12),
+                        overlayShape:
+                            RoundSliderOverlayShape(overlayRadius: 20),
+                        trackHeight: 4,
+                        valueIndicatorShape: PaddleSliderValueIndicatorShape(),
+                        valueIndicatorColor: Colors.blue[700],
+                        valueIndicatorTextStyle: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      child: Slider(
+                        value: tempValue.value.toDouble(),
+                        min: min,
+                        max: max,
+                        divisions: ((max - min) / divisions).round(),
+                        label: formatter(tempValue.value),
+                        onChanged: (value) => onTempChanged(value.toInt()),
+                        onChangeEnd: (value) {
+                          onCommit();
+                          // Add haptic feedback
+                          HapticFeedback.lightImpact();
+                        },
+                      ),
                     ),
                   ),
                   SizedBox(width: 16),
-                  Text(
-                    formatter(value.value),
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: Colors.blue[700],
+                  Container(
+                    width: 80,
+                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.blue[50],
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.blue[200]!),
+                    ),
+                    child: Text(
+                      formatter(tempValue.value),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.blue[700],
+                        fontSize: 14,
+                      ),
                     ),
                   ),
                 ],
               ),
+              // Show if value has changed
+              if (tempValue.value != currentValue.value) ...[
+                SizedBox(height: 8),
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.orange[50],
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.orange[200]!),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.info_outline,
+                          size: 14, color: Colors.orange[700]),
+                      SizedBox(width: 4),
+                      Text(
+                        'Changed from ${formatter(currentValue.value)}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.orange[700],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
         ));
@@ -599,7 +488,6 @@ class _SettingsScreenState extends State<SettingsScreen>
         ));
   }
 
-  // Helper methods
   Future<void> _selectTime(
       BuildContext context, RxString timeValue, bool? isStart) async {
     final currentTime = timeValue.value;
@@ -941,15 +829,183 @@ class _SettingsScreenState extends State<SettingsScreen>
             _buildSliderTile(
               'Break Between Lessons',
               'Minimum break time in minutes',
-              settingsController.breakBetweenLessons.value.toDouble().obs,
+              settingsController.breakBetweenLessons,
+              settingsController.tempBreakBetweenLessons,
               0.0,
               60.0,
               5.0,
-              (value) =>
-                  settingsController.setBreakBetweenLessons(value.toInt()),
-              (value) => '${value.toInt()} minutes',
+              settingsController.updateBreakBetweenLessonsTemp,
+              settingsController.commitBreakBetweenLessons,
+              (value) => '${value} min',
             ),
           ]),
+        ],
+      ),
+    );
+  }
+
+  // Update notification settings with smooth sliders
+  Widget _buildNotificationSettings() {
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSectionHeader('Automatic Notifications'),
+          _buildSettingsCard([
+            _buildSwitchTile(
+              'Auto Attendance Notifications',
+              'Send notifications for attendance updates',
+              settingsController.autoAttendanceNotifications,
+              settingsController.toggleAutoAttendanceNotifications,
+            ),
+            _buildSwitchTile(
+              'Schedule Conflict Alerts',
+              'Alert when scheduling conflicts occur',
+              settingsController.scheduleConflictAlerts,
+              settingsController.toggleScheduleConflictAlerts,
+            ),
+            _buildSwitchTile(
+              'Billing Warnings',
+              'Send billing-related notifications',
+              settingsController.billingWarnings,
+              settingsController.toggleBillingWarnings,
+            ),
+          ]),
+          SizedBox(height: 16),
+          _buildSectionHeader('Reminder Settings'),
+          _buildSettingsCard([
+            _buildSliderTile(
+              'Lesson Start Reminder',
+              'Minutes before lesson to send reminder',
+              settingsController.lessonStartReminder,
+              settingsController.tempLessonStartReminder,
+              5.0,
+              60.0,
+              5.0,
+              settingsController.updateLessonStartReminderTemp,
+              settingsController.commitLessonStartReminder,
+              (value) => '${value} min',
+            ),
+          ]),
+          SizedBox(height: 16),
+          _buildSectionHeader('Daily Summary'),
+          _buildSettingsCard([
+            _buildTimeTile(
+              'Daily Summary Time',
+              settingsController.dailySummaryTime,
+              null,
+              subtitle: 'Time to send daily summary notifications',
+            ),
+          ]),
+        ],
+      ),
+    );
+  }
+
+  // Update billing settings with smooth sliders
+  Widget _buildBillingSettings() {
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSectionHeader('Billing Warnings'),
+          _buildSettingsCard([
+            _buildSwitchTile(
+              'Show Low Lesson Warning',
+              'Alert when student has few lessons remaining',
+              settingsController.showLowLessonWarning,
+              settingsController.toggleLowLessonWarning,
+            ),
+            _buildSwitchTile(
+              'Prevent Over-Scheduling',
+              'Block scheduling when no lessons remain',
+              settingsController.preventOverScheduling,
+              settingsController.togglePreventOverScheduling,
+            ),
+          ]),
+          SizedBox(height: 16),
+          _buildSectionHeader('Billing Automation'),
+          _buildSettingsCard([
+            _buildSwitchTile(
+              'Auto-Create Billing Records',
+              'Automatically create billing entries for completed lessons',
+              settingsController.autoCreateBillingRecords,
+              settingsController.toggleAutoCreateBillingRecords,
+            ),
+            _buildSwitchTile(
+              'Count Scheduled Lessons',
+              'Include scheduled lessons in billing calculations',
+              settingsController.countScheduledLessons,
+              settingsController.toggleCountScheduledLessons,
+            ),
+          ]),
+          SizedBox(height: 16),
+          _buildSectionHeader('Thresholds'),
+          _buildSettingsCard([
+            _buildSliderTile(
+              'Low Lesson Threshold',
+              'Number of lessons to trigger warning',
+              settingsController.lowLessonThreshold,
+              settingsController.tempLowLessonThreshold,
+              1.0,
+              10.0,
+              1.0,
+              settingsController.updateLowLessonThresholdTemp,
+              settingsController.commitLowLessonThreshold,
+              (value) => '${value} lesson${value == 1 ? '' : 's'}',
+            ),
+          ]),
+        ],
+      ),
+    );
+  }
+
+  // Update advanced settings with smooth sliders
+  Widget _buildAdvancedSettings() {
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSectionHeader('Data Management'),
+          _buildSettingsCard([
+            _buildSwitchTile(
+              'Enable Data Backup',
+              'Automatically backup data to cloud storage',
+              settingsController.enableDataBackup,
+              settingsController.toggleDataBackup,
+            ),
+            _buildSwitchTile(
+              'Enable Auto-Save',
+              'Automatically save changes while working',
+              settingsController.enableAutoSave,
+              settingsController.toggleAutoSave,
+            ),
+          ]),
+          SizedBox(height: 16),
+          Obx(() => settingsController.enableAutoSave.value
+              ? Column(children: [
+                  _buildSectionHeader('Auto-Save Settings'),
+                  _buildSettingsCard([
+                    _buildSliderTile(
+                      'Auto-Save Interval',
+                      'Minutes between automatic saves',
+                      settingsController.autoSaveInterval,
+                      settingsController.tempAutoSaveInterval,
+                      1.0,
+                      30.0,
+                      1.0,
+                      settingsController.updateAutoSaveIntervalTemp,
+                      settingsController.commitAutoSaveInterval,
+                      (value) => '${value} min',
+                    ),
+                  ]),
+                  SizedBox(height: 16),
+                ])
+              : SizedBox.shrink()),
+          // ... rest of advanced settings
         ],
       ),
     );
