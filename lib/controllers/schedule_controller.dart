@@ -1,10 +1,12 @@
 // lib/controllers/schedule_controller.dart
 import 'package:driving/controllers/billing_controller.dart';
 import 'package:driving/controllers/course_controller.dart';
+import 'package:driving/controllers/settings_controller.dart';
 import 'package:driving/controllers/user_controller.dart';
 import 'package:driving/models/billing_record.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:intl/intl.dart';
 import '../models/schedule.dart';
 import '../services/database_helper.dart';
 import 'package:driving/widgets/create_invoice_dialog.dart';
@@ -344,65 +346,6 @@ class ScheduleController extends GetxController {
     }
   }
 
-  // Schedule management
-  Future<void> addOrUpdateSchedule(Schedule schedule) async {
-    try {
-      isLoading(true);
-
-      // Check availability
-      if (!await checkAvailability(
-          schedule.instructorId, schedule.start, schedule.end)) {
-        Get.snackbar(
-          'Scheduling Conflict',
-          'The selected instructor is already booked for this time slot.',
-          backgroundColor: Colors.red,
-          colorText: Colors.white,
-        );
-        return;
-      }
-
-      if (schedule.id == null) {
-        // Adding new schedule
-        final id = await _dbHelper.insertSchedule(schedule.toJson());
-        final newSchedule = schedule.copyWith(id: id);
-        schedules.add(newSchedule);
-      } else {
-        // Updating existing schedule
-        await _dbHelper.updateSchedule(schedule.toJson());
-        final index = schedules.indexWhere((s) => s.id == schedule.id);
-        if (index != -1) {
-          schedules[index] = schedule;
-        }
-      }
-
-      schedules.refresh();
-      _applyFilters();
-
-      Get.snackbar(
-        'Success',
-        schedule.id == null
-            ? 'Schedule created successfully'
-            : 'Schedule updated successfully',
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
-      );
-    } catch (e) {
-      Get.snackbar('Error', 'Failed to save schedule: ${e.toString()}');
-    } finally {
-      isLoading(false);
-    }
-  }
-
-  Future<bool> checkAvailability(
-      int instructorId, DateTime start, DateTime end) async {
-    return !schedules.any((s) {
-      return s.instructorId == instructorId &&
-          start.isBefore(s.end) &&
-          end.isAfter(s.start) &&
-          s.status != 'Cancelled';
-    });
-  }
-
   Future<void> cancelSchedule(int scheduleId) async {
     try {
       isLoading(true);
@@ -557,5 +500,281 @@ class ScheduleController extends GetxController {
   // Refresh data
   void refreshData() {
     fetchSchedules();
+  }
+  // Enhanced Schedule Controller with Past Date Validation
+// Add this method to your existing ScheduleController class
+
+// Add this method to prevent scheduling in the past
+  bool _isValidScheduleDate(DateTime selectedDate) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final scheduleDate =
+        DateTime(selectedDate.year, selectedDate.month, selectedDate.day);
+
+    return scheduleDate.isAtSameMomentAs(today) || scheduleDate.isAfter(today);
+  }
+
+// Enhanced method to validate schedule before creation/update
+  Future<bool> validateScheduleDateTime(DateTime start, DateTime end,
+      {int? excludeScheduleId}) async {
+    // Check if scheduling date is not in the past
+    if (!_isValidScheduleDate(start)) {
+      Get.snackbar(
+        'Invalid Date',
+        'Cannot schedule lessons for past dates. Please select today or a future date.',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+        icon: Icon(Icons.error, color: Colors.white),
+        duration: Duration(seconds: 4),
+      );
+      return false;
+    }
+
+    // Check if end time is after start time
+    if (end.isBefore(start) || end.isAtSameMomentAs(start)) {
+      Get.snackbar(
+        'Invalid Time',
+        'End time must be after start time.',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+        icon: Icon(Icons.error, color: Colors.white),
+        duration: Duration(seconds: 3),
+      );
+      return false;
+    }
+
+    // Check if lesson duration is reasonable (at least 30 minutes, max 4 hours)
+    final duration = end.difference(start);
+    if (duration.inMinutes < 30) {
+      Get.snackbar(
+        'Invalid Duration',
+        'Lesson duration must be at least 30 minutes.',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+        icon: Icon(Icons.error, color: Colors.white),
+        duration: Duration(seconds: 3),
+      );
+      return false;
+    }
+
+    if (duration.inHours > 4) {
+      Get.snackbar(
+        'Invalid Duration',
+        'Lesson duration cannot exceed 4 hours.',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+        icon: Icon(Icons.error, color: Colors.white),
+        duration: Duration(seconds: 3),
+      );
+      return false;
+    }
+
+    return true;
+  }
+
+// Enhanced addOrUpdateSchedule method with better validation
+  Future<void> addOrUpdateSchedule(Schedule schedule) async {
+    try {
+      isLoading(true);
+
+      // Validate schedule date and time
+      if (!await validateScheduleDateTime(schedule.start, schedule.end,
+          excludeScheduleId: schedule.id)) {
+        return;
+      }
+
+      // Get settings for validation
+      final settingsController = Get.find<SettingsController>();
+
+      // Check working hours if enforcement is enabled
+      if (settingsController.enforceWorkingHours.value) {
+        final workStart = settingsController.workingHoursStart.value;
+        final workEnd = settingsController.workingHoursEnd.value;
+
+        final startTime = TimeOfDay.fromDateTime(schedule.start);
+        final endTime = TimeOfDay.fromDateTime(schedule.end);
+
+        final workStartTime = TimeOfDay(
+          hour: int.parse(workStart.split(':')[0]),
+          minute: int.parse(workStart.split(':')[1]),
+        );
+
+        final workEndTime = TimeOfDay(
+          hour: int.parse(workEnd.split(':')[0]),
+          minute: int.parse(workEnd.split(':')[1]),
+        );
+
+        if (_timeIsBefore(startTime, workStartTime) ||
+            _timeIsAfter(endTime, workEndTime)) {
+          Get.snackbar(
+            'Outside Working Hours',
+            'Lesson time is outside configured working hours ($workStart - $workEnd).',
+            backgroundColor: Colors.orange,
+            colorText: Colors.white,
+            icon: Icon(Icons.schedule, color: Colors.white),
+            duration: Duration(seconds: 4),
+          );
+
+          // Ask user if they want to proceed anyway
+          final proceed = await Get.dialog<bool>(
+            AlertDialog(
+              title: Text('Schedule Outside Working Hours'),
+              content: Text(
+                  'This lesson is scheduled outside the configured working hours ($workStart - $workEnd). Do you want to proceed anyway?'),
+              actions: [
+                TextButton(
+                  onPressed: () => Get.back(result: false),
+                  child: Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Get.back(result: true),
+                  child: Text('Proceed'),
+                ),
+              ],
+            ),
+          );
+
+          if (proceed != true) return;
+        }
+      }
+
+      // Check instructor availability
+      if (settingsController.checkInstructorAvailability.value) {
+        if (!await checkAvailability(
+            schedule.instructorId, schedule.start, schedule.end)) {
+          Get.snackbar(
+            'Scheduling Conflict',
+            'The selected instructor is already booked for this time slot.',
+            backgroundColor: Colors.red,
+            colorText: Colors.white,
+            icon: Icon(Icons.stop, color: Colors.white),
+            duration: Duration(seconds: 4),
+          );
+          return;
+        }
+      }
+
+      // Check billing validation if enabled
+      if (settingsController.enforceBillingValidation.value) {
+        if (await checkBillingLessons(
+            schedule.studentId, schedule.courseId, 1)) {
+          Get.snackbar(
+            'Insufficient Lessons',
+            'Student does not have enough remaining lessons for this course.',
+            backgroundColor: Colors.red,
+            colorText: Colors.white,
+            icon: Icon(Icons.account_balance_wallet, color: Colors.white),
+            duration: Duration(seconds: 4),
+          );
+          return;
+        }
+      }
+
+      // Proceed with scheduling
+      if (schedule.id == null) {
+        // Adding new schedule
+        final id = await _dbHelper.insertSchedule(schedule.toJson());
+        final newSchedule = schedule.copyWith(id: id);
+        schedules.add(newSchedule);
+
+        Get.snackbar(
+          'Success',
+          'Schedule created successfully for ${DateFormat('MMM dd, yyyy \'at\' HH:mm').format(schedule.start)}',
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+          icon: Icon(Icons.check_circle, color: Colors.white),
+          duration: Duration(seconds: 3),
+        );
+      } else {
+        // Updating existing schedule
+        await _dbHelper.updateSchedule(schedule.toJson());
+        final index = schedules.indexWhere((s) => s.id == schedule.id);
+        if (index != -1) {
+          schedules[index] = schedule;
+        }
+
+        Get.snackbar(
+          'Success',
+          'Schedule updated successfully',
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+          icon: Icon(Icons.check_circle, color: Colors.white),
+          duration: Duration(seconds: 3),
+        );
+      }
+
+      schedules.refresh();
+      _applyFilters();
+    } catch (e) {
+      Get.snackbar(
+        'Error',
+        'Failed to save schedule: ${e.toString()}',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+        icon: Icon(Icons.error, color: Colors.white),
+        duration: Duration(seconds: 4),
+      );
+    } finally {
+      isLoading(false);
+    }
+  }
+
+// Helper method to check availability with optional exclusion
+  Future<bool> checkAvailability(int instructorId, DateTime start, DateTime end,
+      {int? excludeId}) async {
+    return !schedules.any((s) {
+      if (excludeId != null && s.id == excludeId)
+        return false; // Exclude current schedule when editing
+
+      return s.instructorId == instructorId &&
+          start.isBefore(s.end) &&
+          end.isAfter(s.start) &&
+          s.status != 'Cancelled';
+    });
+  }
+
+// Helper methods for time comparison
+  bool _timeIsBefore(TimeOfDay time1, TimeOfDay time2) {
+    return time1.hour < time2.hour ||
+        (time1.hour == time2.hour && time1.minute < time2.minute);
+  }
+
+  bool _timeIsAfter(TimeOfDay time1, TimeOfDay time2) {
+    return time1.hour > time2.hour ||
+        (time1.hour == time2.hour && time1.minute > time2.minute);
+  }
+
+  Future<bool> checkBillingLessons(
+      int studentId, int courseId, int requiredLessons) async {
+    try {
+      final billingController = Get.find<BillingController>();
+      final invoice = billingController.invoices.firstWhereOrNull(
+        (inv) => inv.studentId == studentId && inv.courseId == courseId,
+      );
+
+      if (invoice == null) return true;
+
+      final usedLessons = schedules
+          .where((s) =>
+              s.studentId == studentId && s.courseId == courseId && s.attended)
+          .fold<int>(0, (sum, s) => sum + s.lessonsDeducted);
+
+      return (usedLessons + requiredLessons) > invoice.lessons;
+    } catch (e) {
+      print('Error checking billing lessons: $e');
+      return false;
+    }
+  }
+
+// Method to get minimum selectable date (today)
+  DateTime getMinimumScheduleDate() {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day);
+  }
+
+// Method to get maximum selectable date (1 year from now)
+  DateTime getMaximumScheduleDate() {
+    final now = DateTime.now();
+    return DateTime(now.year + 1, now.month, now.day);
   }
 }

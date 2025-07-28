@@ -961,36 +961,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
         _previewCount <= _remainingLessons;
   }
 
-  Future<void> _selectStartDate() async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedStartDate,
-      firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(Duration(days: 365)),
-    );
-    if (picked != null && picked != _selectedStartDate) {
-      setState(() {
-        _selectedStartDate = picked;
-      });
-      _updatePreviewCount();
-    }
-  }
-
-  Future<void> _selectEndDate() async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _recurrenceEndDate!,
-      firstDate: _selectedStartDate,
-      lastDate: DateTime.now().add(Duration(days: 365)),
-    );
-    if (picked != null && picked != _recurrenceEndDate) {
-      setState(() {
-        _recurrenceEndDate = picked;
-      });
-      _updatePreviewCount();
-    }
-  }
-
   Future<void> _selectTime(bool isStartTime) async {
     final TimeOfDay? picked = await showTimePicker(
       context: context,
@@ -1173,5 +1143,392 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
         _isLoading = false;
       });
     }
+  }
+
+  Future<void> _selectStartDate() async {
+    final scheduleController = Get.find<ScheduleController>();
+
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedStartDate,
+      firstDate:
+          scheduleController.getMinimumScheduleDate(), // Prevent past dates
+      lastDate: scheduleController.getMaximumScheduleDate(),
+      helpText: 'Select Start Date',
+      cancelText: 'Cancel',
+      confirmText: 'Select',
+      errorFormatText: 'Enter valid date',
+      errorInvalidText: 'Enter date in valid range',
+      fieldLabelText: 'Start Date',
+      fieldHintText: 'mm/dd/yyyy',
+      selectableDayPredicate: (DateTime date) {
+        // Only allow today and future dates
+        final now = DateTime.now();
+        final today = DateTime(now.year, now.month, now.day);
+        final checkDate = DateTime(date.year, date.month, date.day);
+        return checkDate.isAtSameMomentAs(today) || checkDate.isAfter(today);
+      },
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.light(
+              primary: Colors.blue[600]!,
+              onPrimary: Colors.white,
+              onSurface: Colors.black,
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.blue[600],
+              ),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null && picked != _selectedStartDate) {
+      setState(() {
+        _selectedStartDate = picked;
+        // Ensure end date is not before start date
+        if (_recurrenceEndDate != null &&
+            _recurrenceEndDate!.isBefore(picked)) {
+          _recurrenceEndDate = picked.add(Duration(days: 30));
+        }
+      });
+      _updatePreviewCount();
+    }
+  }
+
+  Future<void> _selectEndDate() async {
+    final scheduleController = Get.find<ScheduleController>();
+
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate:
+          _recurrenceEndDate ?? _selectedStartDate.add(Duration(days: 30)),
+      firstDate: _selectedStartDate, // End date must be after start date
+      lastDate: scheduleController.getMaximumScheduleDate(),
+      helpText: 'Select End Date',
+      cancelText: 'Cancel',
+      confirmText: 'Select',
+      errorFormatText: 'Enter valid date',
+      errorInvalidText: 'Enter date in valid range',
+      fieldLabelText: 'End Date',
+      fieldHintText: 'mm/dd/yyyy',
+      selectableDayPredicate: (DateTime date) {
+        // End date must be same as or after start date
+        final startDay = DateTime(_selectedStartDate.year,
+            _selectedStartDate.month, _selectedStartDate.day);
+        final checkDate = DateTime(date.year, date.month, date.day);
+        return checkDate.isAtSameMomentAs(startDay) ||
+            checkDate.isAfter(startDay);
+      },
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.light(
+              primary: Colors.green[600]!,
+              onPrimary: Colors.white,
+              onSurface: Colors.black,
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.green[600],
+              ),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null && picked != _recurrenceEndDate) {
+      setState(() {
+        _recurrenceEndDate = picked;
+      });
+      _updatePreviewCount();
+    }
+  }
+
+// Enhanced date range picker widget
+  Widget _buildDateRangeSelector() {
+    return Container(
+      padding: EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        border: Border.all(color: Colors.grey[300]!),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.date_range, color: Colors.blue[600], size: 20),
+              SizedBox(width: 8),
+              Text(
+                'Schedule Period',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey[800],
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 16),
+          Row(
+            children: [
+              // Start date
+              Expanded(
+                child: InkWell(
+                  onTap: _selectStartDate,
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding: EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      border: Border.all(color: Colors.blue[300]!),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.play_arrow,
+                                color: Colors.blue[600], size: 16),
+                            SizedBox(width: 4),
+                            Text(
+                              'Start Date',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.blue[600],
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          DateFormat('EEE, MMM dd, yyyy')
+                              .format(_selectedStartDate),
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black87,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(width: 12),
+              // End date (if using end date)
+              if (_useEndDate)
+                Expanded(
+                  child: InkWell(
+                    onTap: _selectEndDate,
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        border: Border.all(color: Colors.green[300]!),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.stop,
+                                  color: Colors.green[600], size: 16),
+                              SizedBox(width: 4),
+                              Text(
+                                'End Date',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.green[600],
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            _recurrenceEndDate != null
+                                ? DateFormat('EEE, MMM dd, yyyy')
+                                    .format(_recurrenceEndDate!)
+                                : 'Select date',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: _recurrenceEndDate != null
+                                  ? Colors.black87
+                                  : Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              // Max occurrences (if not using end date)
+              if (!_useEndDate)
+                Expanded(
+                  child: Container(
+                    padding: EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      border: Border.all(color: Colors.orange[300]!),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.repeat,
+                                color: Colors.orange[600], size: 16),
+                            SizedBox(width: 4),
+                            Text(
+                              'Max Lessons',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.orange[600],
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          '$_maxOccurrences lessons',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black87,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          SizedBox(height: 12),
+          _buildDateValidationInfo(),
+        ],
+      ),
+    );
+  }
+
+// Date validation information widget
+  Widget _buildDateValidationInfo() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final startDay = DateTime(_selectedStartDate.year, _selectedStartDate.month,
+        _selectedStartDate.day);
+
+    List<Widget> infoItems = [];
+
+    if (startDay.isAtSameMomentAs(today)) {
+      infoItems.add(_buildInfoItem(
+        icon: Icons.info,
+        text: 'Starting today',
+        color: Colors.blue,
+      ));
+    } else if (startDay.isAfter(today)) {
+      final daysUntilStart = startDay.difference(today).inDays;
+      infoItems.add(_buildInfoItem(
+        icon: Icons.schedule,
+        text:
+            'Starting in $daysUntilStart day${daysUntilStart == 1 ? '' : 's'}',
+        color: Colors.green,
+      ));
+    }
+
+    if (_useEndDate && _recurrenceEndDate != null) {
+      final totalDays =
+          _recurrenceEndDate!.difference(_selectedStartDate).inDays;
+      infoItems.add(_buildInfoItem(
+        icon: Icons.timeline,
+        text: 'Duration: $totalDays days',
+        color: Colors.orange,
+      ));
+    }
+
+    if (infoItems.isEmpty) return SizedBox.shrink();
+
+    return Container(
+      padding: EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: Column(
+        children: infoItems
+            .map((item) => Padding(
+                  padding: EdgeInsets.symmetric(vertical: 2),
+                  child: item,
+                ))
+            .toList(),
+      ),
+    );
+  }
+
+  Widget _buildInfoItem(
+      {required IconData icon, required String text, required Color color}) {
+    return Row(
+      children: [
+        Icon(icon, color: color, size: 14),
+        SizedBox(width: 6),
+        Text(
+          text,
+          style: TextStyle(
+            fontSize: 12,
+            color: color,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+
+// Enhanced validation for recurring schedule creation
+  bool _canCreateRecurringSchedule() {
+    if (_selectedStudent == null ||
+        _selectedCourse == null ||
+        _selectedInstructor == null ||
+        _startTime == null ||
+        _endTime == null) {
+      return false;
+    }
+
+    // Check if start date is not in the past
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final startDay = DateTime(_selectedStartDate.year, _selectedStartDate.month,
+        _selectedStartDate.day);
+
+    if (startDay.isBefore(today)) {
+      return false;
+    }
+
+    // Check if we have preview count and remaining lessons
+    if (_previewCount <= 0 || _remainingLessons <= 0) {
+      return false;
+    }
+
+    // Check if preview count doesn't exceed remaining lessons
+    if (_previewCount > _remainingLessons) {
+      return false;
+    }
+
+    return true;
   }
 }
