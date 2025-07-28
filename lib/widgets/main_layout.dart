@@ -1,5 +1,6 @@
 // lib/widgets/complete_main_layout.dart
 import 'package:driving/dashboard.dart';
+import 'package:driving/overview/quick_search_screen.dart';
 import 'package:driving/settings/settings_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -217,6 +218,11 @@ class CompleteMainLayout extends StatelessWidget {
                             )),
                         Spacer(),
                         IconButton(
+                          icon: Icon(Icons.search, color: Colors.grey[600]),
+                          onPressed: () =>
+                              navController.navigateToPage('quick_search'),
+                        ),
+                        IconButton(
                           icon: Icon(Icons.notifications,
                               color: Colors.grey[600]),
                           onPressed: () => _showNotificationsDialog(),
@@ -341,6 +347,13 @@ class CompleteMainLayout extends StatelessWidget {
           () => navController.navigateToPage('user_reports'),
         ),
         _buildSidebarItem(
+          Icons.search,
+          'Quick Search',
+          'quick_search',
+          navController.currentPage.value,
+          () => navController.navigateToPage('quick_search'),
+        ),
+        _buildSidebarItem(
           Icons.book,
           'Course Reports',
           'course_reports',
@@ -380,6 +393,8 @@ class CompleteMainLayout extends StatelessWidget {
             role: 'instructor', key: ValueKey('instructors'));
       case 'vehicles':
         return FleetScreen();
+      case 'quick_search':
+        return QuickSearchScreen();
       case 'billing':
         return BillingScreen();
       case 'schedules':

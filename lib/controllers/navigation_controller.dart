@@ -40,6 +40,8 @@ class NavigationController extends GetxController {
         return 'Dashboard';
       case 'courses':
         return 'Course Management';
+      case 'quick_search':
+        return 'Quick Search & Overview';
       case 'students':
         return 'Student Management';
       case 'instructors':

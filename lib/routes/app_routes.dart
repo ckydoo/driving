@@ -1,5 +1,6 @@
 // lib/routes/app_routes.dart
 import 'package:driving/dashboard.dart';
+import 'package:driving/overview/quick_search_screen.dart';
 import 'package:get/get.dart';
 import '../widgets/main_layout.dart';
 
@@ -11,6 +12,8 @@ class AppRoutes {
   static const String fleet = '/fleet';
   static const String schedules = '/schedules';
   static const String billing = '/billing';
+  static const String quickSearch = '/quick-search';
+  static const String settings = '/settings';
 
   static final routes = [
     GetPage(
@@ -40,6 +43,14 @@ class AppRoutes {
     GetPage(
       name: billing,
       page: () => CompleteMainLayout(),
+    ),
+    GetPage(
+      name: settings,
+      page: () => CompleteMainLayout(),
+    ),
+    GetPage(
+      name: quickSearch,
+      page: () => QuickSearchScreen(),
     ),
   ];
 }
