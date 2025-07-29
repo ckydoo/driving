@@ -1,4 +1,5 @@
 // lib/screens/receipts/receipt_management_screen.dart
+import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/services/database_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -7,6 +8,7 @@ import '../../controllers/billing_controller.dart';
 import '../../controllers/user_controller.dart';
 import '../../services/receipt_service.dart';
 import '../../models/payment.dart';
+import '../../controllers/auth_controller.dart'; // Add this import
 
 class ReceiptManagementScreen extends StatefulWidget {
   const ReceiptManagementScreen({Key? key}) : super(key: key);
@@ -19,6 +21,7 @@ class ReceiptManagementScreen extends StatefulWidget {
 class _ReceiptManagementScreenState extends State<ReceiptManagementScreen> {
   final BillingController billingController = Get.find<BillingController>();
   final UserController userController = Get.find<UserController>();
+  final AuthController authController = Get.find<AuthController>(); // Add this
   final TextEditingController _searchController = TextEditingController();
 
   String _sortBy = 'date';
@@ -788,6 +791,8 @@ class _ReceiptManagementScreenState extends State<ReceiptManagementScreen> {
 
   Widget _buildEmptyState() {
     final hasActiveFilters = _hasActiveFilters();
+    final currentUser = authController.currentUser.value; // Use authController
+    final isStudent = currentUser?.role.toLowerCase() == 'student';
 
     return Center(
       child: Column(
@@ -800,7 +805,11 @@ class _ReceiptManagementScreenState extends State<ReceiptManagementScreen> {
           ),
           const SizedBox(height: 16),
           Text(
-            hasActiveFilters ? 'No matching receipts' : 'No receipts found',
+            hasActiveFilters
+                ? 'No matching receipts'
+                : isStudent
+                    ? 'No receipts found'
+                    : 'No receipts found',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -811,7 +820,9 @@ class _ReceiptManagementScreenState extends State<ReceiptManagementScreen> {
           Text(
             hasActiveFilters
                 ? 'Try adjusting your search or filters'
-                : 'Receipts will appear here when payments are recorded',
+                : isStudent
+                    ? 'Your payment receipts will appear here'
+                    : 'Receipts will appear here when payments are recorded',
             style: TextStyle(color: Colors.grey.shade500),
             textAlign: TextAlign.center,
           ),
@@ -1001,6 +1012,17 @@ class _ReceiptManagementScreenState extends State<ReceiptManagementScreen> {
 
   List<Payment> _getFilteredPayments() {
     var payments = billingController.payments.toList();
+
+    // Filter by current user if they are a student
+    final currentUser = authController.currentUser.value; // Use authController
+    if (currentUser != null && currentUser.role.toLowerCase() == 'student') {
+      payments = payments.where((payment) {
+        final invoice = billingController.invoices.firstWhereOrNull(
+          (inv) => inv.id == payment.invoiceId,
+        );
+        return invoice?.studentId == currentUser.id;
+      }).toList();
+    }
 
     // Apply date filter
     if (_hasActiveDateFilter()) {

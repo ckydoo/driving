@@ -33,9 +33,8 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
 
   // Form fields
   DateTime _selectedStartDate = DateTime.now();
-  TimeOfDay _startTime = TimeOfDay.now();
-  TimeOfDay _endTime =
-      TimeOfDay.now().replacing(hour: TimeOfDay.now().hour + 1);
+  TimeOfDay _startTime = TimeOfDay(hour: 9, minute: 0); // Fixed initialization
+  TimeOfDay _endTime = TimeOfDay(hour: 10, minute: 0); // Fixed initialization
 
   User? _selectedStudent;
   User? _selectedInstructor;
@@ -83,7 +82,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     super.initState();
     _recurrenceEndDate = DateTime.now().add(Duration(days: 30));
     _selectedDaysOfWeek = [DateTime.now().weekday]; // Default to today
-    _updatePreviewCount();
   }
 
   @override
@@ -117,7 +115,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
                     _buildPreviewSection(),
                     SizedBox(height: 30),
                     _buildActionButtons(),
-                    _buildStudentSection(),
                     SizedBox(height: 20),
                     _buildValidationMessages(),
                   ],
@@ -694,7 +691,7 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
                         SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'Warning: You only have $_remainingLessons lessons remaining.',
+                            'Warning: There are only have $_remainingLessons lessons remaining.',
                             style: TextStyle(
                               color: Colors.orange.shade700,
                               fontWeight: FontWeight.w600,

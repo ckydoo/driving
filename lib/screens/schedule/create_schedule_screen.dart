@@ -32,9 +32,8 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
 
   // Form fields
   DateTime _selectedDate = DateTime.now();
-  TimeOfDay _startTime = TimeOfDay.now();
-  TimeOfDay _endTime =
-      TimeOfDay.now().replacing(hour: TimeOfDay.now().hour + 1);
+  TimeOfDay _startTime = TimeOfDay(hour: 9, minute: 0); // Fixed initialization
+  TimeOfDay _endTime = TimeOfDay(hour: 10, minute: 0); // Fixed initialization
 
   User? _selectedStudent;
   User? _selectedInstructor;
@@ -792,24 +791,35 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
   }
 
   Future<void> _selectTime(bool isStartTime) async {
-    final TimeOfDay? picked = await showTimePicker(
-      context: context,
-      initialTime: isStartTime ? _startTime : _endTime,
-    );
-    if (picked != null) {
-      setState(() {
-        if (isStartTime) {
-          _startTime = picked;
-          // Auto-adjust end time to be 1 hour later
-          _endTime = TimeOfDay(
-            hour: (picked.hour + 1) % 24,
-            minute: picked.minute,
-          );
-        } else {
-          _endTime = picked;
-        }
-      });
-      _checkInstructorAvailability();
+    try {
+      final TimeOfDay? picked = await showTimePicker(
+        context: context,
+        initialTime: isStartTime ? _startTime! : _endTime!,
+      );
+
+      if (picked != null) {
+        setState(() {
+          if (isStartTime) {
+            _startTime = picked;
+            // Ensure end time is after start time using safe method
+            final nextHour = (picked.hour + 1) % 24;
+            _endTime = TimeOfDay(
+              hour: nextHour,
+              minute: picked.minute,
+            );
+          } else {
+            _endTime = picked;
+          }
+        });
+      }
+    } catch (e) {
+      print('Error in time picker: $e');
+      Get.snackbar(
+        'Error',
+        'Failed to select time. Please try again.',
+        backgroundColor: Colors.red.shade600,
+        colorText: Colors.white,
+      );
     }
   }
 
@@ -903,9 +913,15 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
     setState(() {
       _selectedDate = DateTime.now();
       _startTime = TimeOfDay.now();
-      _endTime = TimeOfDay.now().replacing(hour: TimeOfDay.now().hour + 1);
+      _endTime = _getDefaultEndTime();
       _showAvailabilityStatus = false;
     });
+  }
+
+  TimeOfDay _getDefaultEndTime() {
+    final now = TimeOfDay.now();
+    final nextHour = (now.hour + 1) % 24; // Use modulo to wrap 23+1 to 0
+    return TimeOfDay(hour: nextHour, minute: now.minute);
   }
 
   Future<void> _markAttended(bool attended) async {
@@ -920,12 +936,62 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
 
 // Helper method to get scheduled lessons count
 
-// Helper method to parse time string (e.g., "09:00") to TimeOfDay
   TimeOfDay _parseTimeString(String timeString) {
-    final parts = timeString.split(':');
-    final hour = int.parse(parts[0]);
-    final minute = int.parse(parts[1]);
-    return TimeOfDay(hour: hour, minute: minute);
+    try {
+      // Validate timeString format
+      if (timeString.isEmpty || !timeString.contains(':')) {
+        print('Invalid time string format: $timeString, using default 09:00');
+        return const TimeOfDay(hour: 9, minute: 0);
+      }
+
+      final parts = timeString.trim().split(':');
+      if (parts.length != 2) {
+        print('Invalid time string parts: $timeString, using default 09:00');
+        return const TimeOfDay(hour: 9, minute: 0);
+      }
+
+      final hour = int.tryParse(parts[0].trim()) ?? 9;
+      final minute = int.tryParse(parts[1].trim()) ?? 0;
+
+      // Validate hour range (0-23)
+      if (hour < 0 || hour > 23) {
+        print('Invalid hour value: $hour, using default 9');
+        return TimeOfDay(hour: 9, minute: minute.clamp(0, 59));
+      }
+
+      // Validate minute range (0-59)
+      if (minute < 0 || minute > 59) {
+        print('Invalid minute value: $minute, using default 0');
+        return TimeOfDay(hour: hour, minute: 0);
+      }
+
+      return TimeOfDay(hour: hour, minute: minute);
+    } catch (e) {
+      print('Error parsing time string "$timeString": $e, using default 09:00');
+      return const TimeOfDay(hour: 9, minute: 0);
+    }
+  }
+
+// Also add this method to validate working hours before using them:
+
+  bool _isValidTimeString(String timeString) {
+    try {
+      if (timeString.isEmpty || !timeString.contains(':')) return false;
+
+      final parts = timeString.trim().split(':');
+      if (parts.length != 2) return false;
+
+      final hour = int.tryParse(parts[0].trim());
+      final minute = int.tryParse(parts[1].trim());
+
+      if (hour == null || minute == null) return false;
+      if (hour < 0 || hour > 23) return false;
+      if (minute < 0 || minute > 59) return false;
+
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
 // Helper method to check if selected time is outside working hours

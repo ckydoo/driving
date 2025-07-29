@@ -50,13 +50,6 @@ class NavigationController extends GetxController {
       requiredRoles: ['admin'],
     ),
     NavigationItem(
-      title: 'Schedule',
-      icon: Icons.calendar_today,
-      route: '/schedules',
-      pageKey: 'schedules',
-      requiredRoles: ['admin', 'instructor', 'student'],
-    ),
-    NavigationItem(
       title: 'Courses',
       icon: Icons.book,
       route: '/courses',
@@ -85,18 +78,18 @@ class NavigationController extends GetxController {
       requiredRoles: ['admin', 'instructor', 'student'],
     ),
     NavigationItem(
+      title: 'Schedule',
+      icon: Icons.calendar_today,
+      route: '/schedules',
+      pageKey: 'schedules',
+      requiredRoles: ['admin', 'instructor', 'student'],
+    ),
+    NavigationItem(
       title: 'Users',
       icon: Icons.admin_panel_settings,
       route: '/users',
       pageKey: 'users',
       requiredRoles: ['admin'],
-    ),
-    NavigationItem(
-      title: 'Quick Search',
-      icon: Icons.search,
-      route: '/quick-search',
-      pageKey: 'quick_search',
-      requiredRoles: ['admin', 'instructor'],
     ),
     NavigationItem(
       title: 'Settings',

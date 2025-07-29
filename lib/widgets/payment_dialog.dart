@@ -202,6 +202,8 @@ class _PaymentDialogState extends State<PaymentDialog>
         false;
   }
 
+  // Replace the _showSuccessAnimation method in payment_dialog.dart with this:
+
   Future<void> _showSuccessAnimation() async {
     await showDialog(
       context: context,
@@ -245,25 +247,105 @@ class _PaymentDialogState extends State<PaymentDialog>
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
+                  color: Colors.green,
                 ),
               ),
-              if (_generateReceipt) ...[
-                const SizedBox(height: 8),
-                Text(
-                  'Receipt generated successfully',
-                  style: TextStyle(
-                    color: Colors.grey.shade600,
-                    fontSize: 14,
+              const SizedBox(height: 8),
+              const Text(
+                'The payment has been successfully recorded.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey,
+                ),
+              ),
+              const SizedBox(height: 20),
+              // Add a close button
+              ElevatedButton(
+                onPressed: () => Navigator.of(context).pop(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green.shade600,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
                   ),
                 ),
-              ],
+                child: const Text('OK'),
+              ),
             ],
           ),
         ),
       ),
     );
 
-    await Future.delayed(const Duration(milliseconds: 800));
+    // Add a small delay to ensure the dialog animation completes
+    await Future.delayed(const Duration(milliseconds: 100));
+  }
+
+// Alternative solution - Auto-dismiss after animation:
+  Future<void> _showSuccessAnimationAutoDismiss() async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TweenAnimationBuilder<double>(
+                duration: const Duration(milliseconds: 600),
+                tween: Tween(begin: 0.0, end: 1.0),
+                builder: (context, value, child) {
+                  return Transform.scale(
+                    scale: value,
+                    child: Container(
+                      width: 80,
+                      height: 80,
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade100,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.check,
+                        color: Colors.green.shade600,
+                        size: 40,
+                      ),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Payment Recorded!',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.green,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'The payment has been successfully recorded.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    // Auto-dismiss after 2 seconds
+    await Future.delayed(const Duration(seconds: 2));
     if (mounted && Navigator.canPop(context)) {
       Navigator.of(context).pop();
     }

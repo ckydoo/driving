@@ -1,6 +1,8 @@
 // lib/screens/schedule/schedule_screen.dart
 import 'dart:async';
 
+import 'package:driving/models/schedule.dart';
+import 'package:driving/models/user.dart';
 import 'package:driving/screens/schedule/create_schedule_screen.dart';
 import 'package:driving/screens/schedule/daily_lessons.dart';
 import 'package:driving/screens/schedule/recurring_schedule_screen.dart';
@@ -13,12 +15,9 @@ import '../../controllers/schedule_controller.dart';
 import '../../controllers/user_controller.dart';
 import '../../controllers/course_controller.dart';
 import '../../controllers/fleet_controller.dart';
-import '../../models/schedule.dart';
-import '../../models/user.dart';
 import '../../models/course.dart';
 import '../../models/fleet.dart';
-
-// Updated Schedule Screen - Calendar Only with Filtered Dialog
+import '../../controllers/auth_controller.dart';
 
 class ScheduleScreen extends StatefulWidget {
   @override
@@ -31,6 +30,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   final UserController userController = Get.find<UserController>();
   final CourseController courseController = Get.find<CourseController>();
   final FleetController fleetController = Get.find<FleetController>();
+  final AuthController authController = Get.find<AuthController>();
 
   // Calendar state
   final ValueNotifier<DateTime> _focusedDay = ValueNotifier(DateTime.now());
@@ -66,7 +66,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           _buildHeader(),
           _buildFilters(),
           Expanded(
-            child: _buildCalendarView(), // Only calendar view now
+            child: _buildCalendarView(),
           ),
         ],
       ),
@@ -87,50 +87,108 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           ),
         ],
       ),
-      child: Row(
+      child: Column(
         children: [
-          IconButton(
-            onPressed: _previousPeriod,
-            icon: Icon(Icons.chevron_left),
-          ),
-          Expanded(
-            child: Center(
-              child: Text(
-                _getHeaderText(),
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
+          _buildUserContextInfo(),
+          Row(
+            children: [
+              IconButton(
+                onPressed: _previousPeriod,
+                icon: Icon(Icons.chevron_left),
+              ),
+              Expanded(
+                child: Center(
+                  child: Text(
+                    _getHeaderText(),
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
               ),
-            ),
-          ),
-          IconButton(
-            onPressed: _nextPeriod,
-            icon: Icon(Icons.chevron_right),
-          ),
-          IconButton(
-            onPressed: _showDatePicker,
-            icon: Icon(Icons.today),
-          ),
-          PopupMenuButton<String>(
-            icon: Icon(Icons.view_module),
-            onSelected: (value) {
-              setState(() {
-                _currentView = value;
-              });
-            },
-            itemBuilder: (context) => [
-              PopupMenuItem(value: 'month', child: Text('Month View')),
-              PopupMenuItem(value: 'week', child: Text('Week View')),
+              IconButton(
+                onPressed: _nextPeriod,
+                icon: Icon(Icons.chevron_right),
+              ),
+              IconButton(
+                onPressed: _showDatePicker,
+                icon: Icon(Icons.today),
+              ),
+              PopupMenuButton<String>(
+                icon: Icon(Icons.view_module),
+                onSelected: (value) {
+                  setState(() {
+                    _currentView = value;
+                  });
+                },
+                itemBuilder: (context) => [
+                  PopupMenuItem(value: 'month', child: Text('Month View')),
+                  PopupMenuItem(value: 'week', child: Text('Week View')),
+                ],
+              ),
+              IconButton(
+                onPressed: _refreshData,
+                icon: Icon(Icons.refresh),
+              ),
+              IconButton(
+                onPressed: _showSearchDialog,
+                icon: Icon(Icons.search),
+              ),
             ],
           ),
-          IconButton(
-            onPressed: _refreshData,
-            icon: Icon(Icons.refresh),
-          ),
-          IconButton(
-            onPressed: _showSearchDialog,
-            icon: Icon(Icons.search),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUserContextInfo() {
+    final currentUser = authController.currentUser.value;
+    if (currentUser == null) return SizedBox.shrink();
+
+    String contextText = '';
+    Color contextColor = Colors.blue;
+    IconData contextIcon = Icons.schedule;
+
+    switch (currentUser.role.toLowerCase()) {
+      case 'student':
+        contextText = 'My Lessons - ${currentUser.fname} ${currentUser.lname}';
+        contextColor = Colors.green;
+        contextIcon = Icons.school;
+        break;
+      case 'instructor':
+        contextText =
+            'My Teaching Schedule - ${currentUser.fname} ${currentUser.lname}';
+        contextColor = Colors.orange;
+        contextIcon = Icons.person;
+        break;
+      default:
+        contextText = 'All Schedules - Admin View';
+        contextColor = Colors.blue;
+        contextIcon = Icons.admin_panel_settings;
+        break;
+    }
+
+    return Container(
+      margin: EdgeInsets.only(bottom: 8),
+      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: contextColor.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: contextColor.withOpacity(0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(contextIcon, size: 16, color: contextColor),
+          SizedBox(width: 6),
+          Text(
+            contextText,
+            style: TextStyle(
+              color: contextColor,
+              fontWeight: FontWeight.w500,
+              fontSize: 12,
+            ),
           ),
         ],
       ),
@@ -230,7 +288,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               color: Colors.blue,
               shape: BoxShape.circle,
             ),
-            // Highlight days with filtered events
             markersMaxCount: 3,
             markerMargin: EdgeInsets.symmetric(horizontal: 1.5),
           ),
@@ -256,7 +313,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     });
   }
 
-  Widget _buildFABWithOptions() {
+  Widget? _buildFABWithOptions() {
+    final currentUser = authController.currentUser.value;
+
+    if (currentUser?.role.toLowerCase() == 'student') {
+      return null;
+    }
+
     return FloatingActionButton.extended(
       onPressed: _showCreateOptions,
       icon: Icon(Icons.add),
@@ -264,7 +327,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     );
   }
 
-  // Helper methods for getting data
   User? _getStudentById(int id) {
     return userController.users.firstWhereOrNull(
       (user) => user.id == id && user.role.toLowerCase() == 'student',
@@ -290,6 +352,28 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   List<String> _getInstructorOptions() {
+    final currentUser = authController.currentUser.value;
+
+    if (currentUser?.role.toLowerCase() == 'student') {
+      final studentSchedules = scheduleController.schedules
+          .where((schedule) => schedule.studentId == currentUser!.id)
+          .toList();
+
+      final instructorIds =
+          studentSchedules.map((schedule) => schedule.instructorId).toSet();
+
+      return userController.users
+          .where((user) =>
+              user.role.toLowerCase() == 'instructor' &&
+              instructorIds.contains(user.id))
+          .map((user) => '${user.fname} ${user.lname}')
+          .toList();
+    }
+
+    if (currentUser?.role.toLowerCase() == 'instructor') {
+      return ['${currentUser!.fname} ${currentUser.lname}'];
+    }
+
     return userController.users
         .where((user) => user.role.toLowerCase() == 'instructor')
         .map((user) => '${user.fname} ${user.lname}')
@@ -297,6 +381,28 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   List<String> _getStudentOptions() {
+    final currentUser = authController.currentUser.value;
+
+    if (currentUser?.role.toLowerCase() == 'student') {
+      return ['${currentUser!.fname} ${currentUser.lname}'];
+    }
+
+    if (currentUser?.role.toLowerCase() == 'instructor') {
+      final instructorSchedules = scheduleController.schedules
+          .where((schedule) => schedule.instructorId == currentUser!.id)
+          .toList();
+
+      final studentIds =
+          instructorSchedules.map((schedule) => schedule.studentId).toSet();
+
+      return userController.users
+          .where((user) =>
+              user.role.toLowerCase() == 'student' &&
+              studentIds.contains(user.id))
+          .map((user) => '${user.fname} ${user.lname}')
+          .toList();
+    }
+
     return userController.users
         .where((user) => user.role.toLowerCase() == 'student')
         .map((user) => '${user.fname} ${user.lname}')
@@ -310,8 +416,27 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   List<Schedule> _getFilteredSchedules() {
-    return scheduleController.schedules.where((schedule) {
-      // Filter by instructor
+    var schedules = scheduleController.schedules.toList();
+
+    final currentUser = authController.currentUser.value;
+    if (currentUser != null) {
+      switch (currentUser.role.toLowerCase()) {
+        case 'student':
+          schedules = schedules
+              .where((schedule) => schedule.studentId == currentUser.id)
+              .toList();
+          break;
+        case 'instructor':
+          schedules = schedules
+              .where((schedule) => schedule.instructorId == currentUser.id)
+              .toList();
+          break;
+        default:
+          break;
+      }
+    }
+
+    schedules = schedules.where((schedule) {
       if (_selectedInstructorFilter != null) {
         final instructor = _getInstructorById(schedule.instructorId);
         final instructorName =
@@ -321,7 +446,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         }
       }
 
-      // Filter by student
       if (_selectedStudentFilter != null) {
         final student = _getStudentById(schedule.studentId);
         final studentName =
@@ -331,7 +455,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         }
       }
 
-      // Filter by status
       if (_selectedStatusFilter != null) {
         if (schedule.status != _selectedStatusFilter) {
           return false;
@@ -340,6 +463,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
       return true;
     }).toList();
+
+    return schedules;
   }
 
   bool _hasActiveFilters() {
@@ -380,9 +505,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     return activeFilters.isEmpty ? 'All Schedules' : activeFilters.join(' • ');
   }
 
-  // Event handlers
   void _onDaySelected(DateTime selectedDay, DateTime focusedDay) {
-    // Get filtered schedules for the selected day
     final filteredSchedules = _getFilteredSchedules().where((schedule) {
       return isSameDay(schedule.start, selectedDay);
     }).toList();
@@ -471,7 +594,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   void _performSearch(String query) {
     if (query.isEmpty) return;
 
-    final matchingSchedules = scheduleController.schedules.where((schedule) {
+    final matchingSchedules = _getFilteredSchedules().where((schedule) {
       final student = _getStudentById(schedule.studentId);
       final instructor = _getInstructorById(schedule.instructorId);
       final course = _getCourseById(schedule.courseId);
@@ -570,7 +693,6 @@ class ScheduleProgressMonitor {
       Get.find<ScheduleController>();
 
   static void startMonitoring() {
-    // Check every minute for lesson progress updates
     _timer = Timer.periodic(Duration(minutes: 1), (timer) {
       _scheduleController.updateLessonProgress();
     });

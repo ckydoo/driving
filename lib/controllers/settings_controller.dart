@@ -34,7 +34,6 @@ class SettingsController extends GetxController {
 
   // App Preferences
   final RxString theme = 'light'.obs;
-  final RxString language = 'english'.obs;
   final RxString dateFormat = 'MM/dd/yyyy'.obs;
 
   // NEW: Advanced Settings
@@ -150,7 +149,6 @@ class SettingsController extends GetxController {
 
       // App Preferences
       theme.value = prefs.getString('theme') ?? 'light';
-      language.value = prefs.getString('language') ?? 'english';
       dateFormat.value = prefs.getString('date_format') ?? 'MM/dd/yyyy';
 
       // Advanced Settings
@@ -287,9 +285,6 @@ class SettingsController extends GetxController {
     }
   }
 
-  void setLanguage(String newLanguage) =>
-      updateSetting('language', newLanguage, language);
-
   void setDateFormat(String format) =>
       updateSetting('date_format', format, dateFormat);
 
@@ -344,7 +339,6 @@ class SettingsController extends GetxController {
 
       // App Preferences
       'theme': theme.value,
-      'language': language.value,
       'date_format': dateFormat.value,
 
       // Advanced
@@ -427,7 +421,6 @@ class SettingsController extends GetxController {
       dailySummaryTime.value = '08:00';
 
       theme.value = 'light';
-      language.value = 'english';
       dateFormat.value = 'MM/dd/yyyy';
 
       enableDataBackup.value = true;
@@ -493,7 +486,6 @@ class SettingsController extends GetxController {
       },
       'app': {
         'theme': theme.value,
-        'language': language.value,
         'dateFormat': dateFormat.value,
       },
       'advanced': {

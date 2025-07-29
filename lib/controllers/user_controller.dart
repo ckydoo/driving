@@ -26,7 +26,7 @@ class UserController extends GetxController {
   final RxInt _currentPage = 1.obs;
   int get currentPage => _currentPage.value;
   int get totalPages => (_users.length / _rowsPerPage).ceil();
-
+  final Rx<User?> currentUser = Rx<User?>(null);
   final ValueNotifier<bool> isMultiSelectionActive = ValueNotifier<bool>(false);
 
   @override
