@@ -1,5 +1,6 @@
 // lib/dashboard_updated.dart
 import 'package:driving/controllers/billing_controller.dart';
+import 'package:driving/controllers/navigation_controller.dart';
 import 'package:driving/controllers/user_controller.dart';
 import 'package:driving/widgets/main_layout.dart';
 import 'package:flutter/material.dart';
@@ -19,93 +20,106 @@ class DashboardContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final userController = Get.find<UserController>();
-    final billingController = Get.find<BillingController>();
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Welcome Section
-          _buildWelcomeSection(),
-          const SizedBox(height: 24),
-
-          // Statistics Cards
-          Obx(() {
+    return GetBuilder<UserController>(
+      builder: (userController) {
+        return GetBuilder<BillingController>(
+          builder: (billingController) {
+            // Calculate real values - Fixed income calculation
             final totalStudents = userController.users
                 .where((user) => user.role == 'student')
                 .length;
-            final totalIncome = billingController.invoices
-                .where((invoice) => invoice.status == 'paid')
-                .fold<double>(0, (sum, invoice) => sum + invoice.amountPaid);
+
+            // Calculate total income from all payments, not just paid invoices
+            final totalIncome = billingController.payments
+                .fold<double>(0, (sum, payment) => sum + payment.amount);
+
             final unpaidInvoices = billingController.invoices
                 .fold<double>(0, (sum, invoice) => sum + invoice.balance);
 
-            return Row(
-              children: [
-                Expanded(
-                  child: _buildStatCard(
-                    'Total Students',
-                    '$totalStudents',
-                    Icons.school,
-                    Colors.blue,
+            final activeInstructors = userController.users
+                .where((user) =>
+                    user.role == 'instructor' && user.status == 'Active')
+                .length;
+
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Welcome Section
+                  _buildWelcomeSection(),
+                  const SizedBox(height: 24),
+
+                  // Statistics Cards with real data
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildStatCard(
+                          'Total Students',
+                          '$totalStudents',
+                          Icons.school,
+                          Colors.blue,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: _buildStatCard(
+                          'Total Income',
+                          '\$${totalIncome.toStringAsFixed(2)}',
+                          Icons.attach_money,
+                          Colors.green,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: _buildStatCard(
+                          'Unpaid Amount',
+                          '\$${unpaidInvoices.toStringAsFixed(2)}',
+                          Icons.payment,
+                          Colors.orange,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: _buildStatCard(
+                          'Active Instructors',
+                          '$activeInstructors',
+                          Icons.person,
+                          Colors.purple,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _buildStatCard(
-                    'Total Income',
-                    '\$${totalIncome.toStringAsFixed(2)}',
-                    Icons.attach_money,
-                    Colors.green,
+
+                  const SizedBox(height: 32),
+
+                  // Quick Actions Section with functionality
+                  _buildQuickActionsSection(),
+
+                  const SizedBox(height: 32),
+
+                  // Real data sections
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: _buildRecentActivitiesCard(
+                            billingController, userController),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        flex: 1,
+                        child: _buildQuickStatsCard(
+                            billingController, userController),
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _buildStatCard(
-                    'Unpaid Amount',
-                    '\$${unpaidInvoices.toStringAsFixed(2)}',
-                    Icons.payment,
-                    Colors.orange,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _buildStatCard(
-                    'Active Instructors',
-                    '${userController.users.where((user) => user.role == 'instructor' && user.status == 'Active').length}',
-                    Icons.person,
-                    Colors.purple,
-                  ),
-                ),
-              ],
+                ],
+              ),
             );
-          }),
-
-          const SizedBox(height: 32),
-
-          // Quick Actions Section
-          _buildQuickActionsSection(),
-
-          const SizedBox(height: 32),
-
-          // Charts or Additional Reports
-          Row(
-            children: [
-              Expanded(
-                flex: 2,
-                child: _buildRecentActivitiesCard(),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                flex: 1,
-                child: _buildQuickStatsCard(),
-              ),
-            ],
-          ),
-        ],
-      ),
+          },
+        );
+      },
     );
   }
 
@@ -143,16 +157,6 @@ class DashboardContent extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 16),
-                ElevatedButton.icon(
-                  onPressed: () {},
-                  icon: Icon(Icons.analytics),
-                  label: Text('View Analytics'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: Colors.blue[800],
-                    padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  ),
-                ),
               ],
             ),
           ),
@@ -242,7 +246,11 @@ class DashboardContent extends StatelessWidget {
                 'Register a new student',
                 Icons.person_add,
                 Colors.blue,
-                () {},
+                () {
+                  final navController = Get.find<NavigationController>();
+                  navController.navigateToPage('students');
+                  // You could also show a dialog or navigate to add student form
+                },
               ),
             ),
             const SizedBox(width: 12),
@@ -252,7 +260,10 @@ class DashboardContent extends StatelessWidget {
                 'Book a new lesson',
                 Icons.calendar_today,
                 Colors.green,
-                () {},
+                () {
+                  final navController = Get.find<NavigationController>();
+                  navController.navigateToPage('schedule');
+                },
               ),
             ),
             const SizedBox(width: 12),
@@ -262,7 +273,10 @@ class DashboardContent extends StatelessWidget {
                 'Generate new invoice',
                 Icons.receipt,
                 Colors.orange,
-                () {},
+                () {
+                  final navController = Get.find<NavigationController>();
+                  navController.navigateToPage('billing');
+                },
               ),
             ),
             const SizedBox(width: 12),
@@ -272,7 +286,10 @@ class DashboardContent extends StatelessWidget {
                 'Register new vehicle',
                 Icons.directions_car,
                 Colors.purple,
-                () {},
+                () {
+                  final navController = Get.find<NavigationController>();
+                  navController.navigateToPage('fleet');
+                },
               ),
             ),
           ],
@@ -345,7 +362,22 @@ class DashboardContent extends StatelessWidget {
     );
   }
 
-  Widget _buildRecentActivitiesCard() {
+  Widget _buildRecentActivitiesCard(
+      BillingController billingController, UserController userController) {
+    // Get recent activities from real data
+    final recentPayments = billingController.payments
+        .where((p) =>
+            p.paymentDate.isAfter(DateTime.now().subtract(Duration(days: 7))))
+        .take(4)
+        .toList();
+
+    final recentStudents = userController.users
+        .where((u) => u.role == 'student' && u.created_at != null)
+        .where((u) =>
+            u.created_at!.isAfter(DateTime.now().subtract(Duration(days: 7))))
+        .take(2)
+        .toList();
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -372,30 +404,42 @@ class DashboardContent extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          _buildActivityItem(
-            'New student John Doe registered',
-            '2 hours ago',
-            Icons.person_add,
-            Colors.blue,
-          ),
-          _buildActivityItem(
-            'Lesson completed by Sarah Smith',
-            '4 hours ago',
-            Icons.check_circle,
-            Colors.green,
-          ),
-          _buildActivityItem(
-            'Payment received from Mike Johnson',
-            '6 hours ago',
-            Icons.payment,
-            Colors.orange,
-          ),
-          _buildActivityItem(
-            'New vehicle added to fleet',
-            '1 day ago',
-            Icons.directions_car,
-            Colors.purple,
-          ),
+
+          // Show recent student registrations
+          ...recentStudents
+              .map((student) => _buildActivityItem(
+                    'New student ${student.fname} ${student.lname} registered',
+                    _getTimeAgo(student.created_at!),
+                    Icons.person_add,
+                    Colors.blue,
+                  ))
+              .toList(),
+
+          // Show recent payments
+          ...recentPayments.map((payment) {
+            final invoice = billingController.invoices.firstWhereOrNull(
+              (inv) => inv.id == payment.invoiceId,
+            );
+            final student = userController.users.firstWhereOrNull(
+              (user) => user.id == invoice?.studentId,
+            );
+
+            return _buildActivityItem(
+              'Payment received from ${student?.fname ?? 'Unknown'} - ${payment.formattedAmount}',
+              _getTimeAgo(payment.paymentDate),
+              Icons.payment,
+              Colors.green,
+            );
+          }).toList(),
+
+          // If no recent activities, show placeholder
+          if (recentPayments.isEmpty && recentStudents.isEmpty)
+            _buildActivityItem(
+              'No recent activities',
+              'Check back later',
+              Icons.info_outline,
+              Colors.grey,
+            ),
         ],
       ),
     );
@@ -447,7 +491,26 @@ class DashboardContent extends StatelessWidget {
     );
   }
 
-  Widget _buildQuickStatsCard() {
+  Widget _buildQuickStatsCard(
+      BillingController billingController, UserController userController) {
+    final today = DateTime.now();
+    final todayStart = DateTime(today.year, today.month, today.day);
+    final todayEnd = DateTime(today.year, today.month, today.day, 23, 59, 59);
+
+    // Calculate today's statistics
+    final todaysPayments = billingController.payments
+        .where((p) =>
+            p.paymentDate.isAfter(todayStart) &&
+            p.paymentDate.isBefore(todayEnd))
+        .length;
+
+    final pendingInvoices = billingController.invoices
+        .where((inv) => inv.status == 'pending' || inv.balance > 0)
+        .length;
+
+    final totalVehicles =
+        0; // You'll need to get this from FleetController when available
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -474,10 +537,16 @@ class DashboardContent extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          _buildStatRow('Scheduled Lessons', '12', Colors.blue),
-          _buildStatRow('Completed Lessons', '8', Colors.green),
-          _buildStatRow('Pending Payments', '5', Colors.orange),
-          _buildStatRow('Active Instructors', '6', Colors.purple),
+          _buildStatRow('Today\'s Payments', '$todaysPayments', Colors.green),
+          _buildStatRow('Pending Invoices', '$pendingInvoices', Colors.orange),
+          _buildStatRow(
+              'Total Students',
+              '${userController.users.where((u) => u.role == 'student').length}',
+              Colors.blue),
+          _buildStatRow(
+              'Active Instructors',
+              '${userController.users.where((u) => u.role == 'instructor' && u.status == 'Active').length}',
+              Colors.purple),
         ],
       ),
     );
@@ -514,5 +583,20 @@ class DashboardContent extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  String _getTimeAgo(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+
+    if (difference.inDays > 0) {
+      return '${difference.inDays} day${difference.inDays == 1 ? '' : 's'} ago';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours} hour${difference.inHours == 1 ? '' : 's'} ago';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes} minute${difference.inMinutes == 1 ? '' : 's'} ago';
+    } else {
+      return 'Just now';
+    }
   }
 }

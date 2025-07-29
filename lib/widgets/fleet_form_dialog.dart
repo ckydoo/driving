@@ -1,5 +1,6 @@
 import 'package:driving/controllers/user_controller.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // Add this import
 import 'package:get/get.dart';
 import '../../controllers/fleet_controller.dart';
 import '../../models/fleet.dart';
@@ -155,7 +156,8 @@ class _FleetFormDialogState extends State<FleetFormDialog> {
               TextFormField(
                 initialValue: _carPlate,
                 decoration: InputDecoration(
-                  labelText: 'License Plate',
+                  labelText: 'License Plate (ABC1234)',
+                  hintText: 'ABC1234',
                   labelStyle: TextStyle(color: Colors.grey.shade700),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
@@ -170,7 +172,25 @@ class _FleetFormDialogState extends State<FleetFormDialog> {
                     borderSide: BorderSide(color: Colors.blue.shade800),
                   ),
                 ),
-                validator: (value) => value!.isEmpty ? 'Required' : null,
+                maxLength: 7,
+                textCapitalization: TextCapitalization.characters,
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9]')),
+                  UpperCaseTextFormatter(),
+                  LicensePlateFormatter(),
+                ],
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'License plate is required';
+                  }
+                  if (value.length != 7) {
+                    return 'License plate must be 7 characters';
+                  }
+                  if (!RegExp(r'^[A-Z]{3}[0-9]{4}$').hasMatch(value)) {
+                    return 'Format: ABC1234 (3 letters, 4 numbers)';
+                  }
+                  return null;
+                },
                 onSaved: (value) => _carPlate = value!,
               ),
               const SizedBox(height: 16),
@@ -317,6 +337,70 @@ class _FleetFormDialogState extends State<FleetFormDialog> {
           ),
         ),
       ],
+    );
+  }
+}
+
+// Custom formatter to enforce uppercase
+class UpperCaseTextFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    return TextEditingValue(
+      text: newValue.text.toUpperCase(),
+      selection: newValue.selection,
+    );
+  }
+}
+
+// Custom formatter to enforce license plate format
+class LicensePlateFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final text = newValue.text;
+
+    // Allow empty or partial input during typing
+    if (text.isEmpty) {
+      return newValue;
+    }
+
+    // Ensure the format is correct as user types
+    String formattedText = '';
+    int letterCount = 0;
+    int numberCount = 0;
+
+    for (int i = 0; i < text.length && i < 7; i++) {
+      final char = text[i];
+
+      if (i < 3) {
+        // First 3 positions should be letters
+        if (RegExp(r'[A-Za-z]').hasMatch(char)) {
+          formattedText += char.toUpperCase();
+          letterCount++;
+        } else {
+          // If user tries to input number in letter position, reject it
+          break;
+        }
+      } else {
+        // Last 4 positions should be numbers
+        if (RegExp(r'[0-9]').hasMatch(char)) {
+          formattedText += char;
+          numberCount++;
+        } else {
+          // If user tries to input letter in number position, reject it
+          break;
+        }
+      }
+    }
+
+    return TextEditingValue(
+      text: formattedText,
+      selection: TextSelection.collapsed(offset: formattedText.length),
     );
   }
 }

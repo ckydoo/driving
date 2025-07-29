@@ -32,7 +32,26 @@ class NavigationController extends GetxController {
       icon: Icons.receipt_long,
       route: '/receipts',
     ),
-    // ...other existing items...
+    NavigationItem(
+      title: 'Courses',
+      icon: Icons.book,
+      route: '/courses',
+    ),
+    NavigationItem(
+      title: 'Instructors',
+      icon: Icons.person,
+      route: '/instructors',
+    ),
+    NavigationItem(
+      title: 'Vehicles',
+      icon: Icons.directions_car,
+      route: '/vehicles',
+    ),
+    NavigationItem(
+      title: 'Users',
+      icon: Icons.admin_panel_settings,
+      route: '/users',
+    ),
   ];
 
   @override
