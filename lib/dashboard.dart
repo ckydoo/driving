@@ -372,9 +372,9 @@ class DashboardContent extends StatelessWidget {
         .toList();
 
     final recentStudents = userController.users
-        .where((u) => u.role == 'student' && u.created_at != null)
+        .where((u) => u.role == 'student')
         .where((u) =>
-            u.created_at!.isAfter(DateTime.now().subtract(Duration(days: 7))))
+            u.created_at.isAfter(DateTime.now().subtract(Duration(days: 7))))
         .take(2)
         .toList();
 
@@ -409,7 +409,7 @@ class DashboardContent extends StatelessWidget {
           ...recentStudents
               .map((student) => _buildActivityItem(
                     'New student ${student.fname} ${student.lname} registered',
-                    _getTimeAgo(student.created_at!),
+                    _getTimeAgo(student.created_at),
                     Icons.person_add,
                     Colors.blue,
                   ))
@@ -507,9 +507,6 @@ class DashboardContent extends StatelessWidget {
     final pendingInvoices = billingController.invoices
         .where((inv) => inv.status == 'pending' || inv.balance > 0)
         .length;
-
-    final totalVehicles =
-        0; // You'll need to get this from FleetController when available
 
     return Container(
       padding: const EdgeInsets.all(20),

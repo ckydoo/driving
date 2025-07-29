@@ -330,6 +330,6 @@ class _UserFormDialogState extends State<UserFormDialog> {
     );
 
     await userController.handleUser(user, isUpdate: widget.user != null);
-    Get.back();
+    Get.back(result: true); // Close the dialog and return true
   }
 }

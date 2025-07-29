@@ -8,7 +8,6 @@ import '../../models/schedule.dart';
 import '../../models/user.dart';
 import '../../models/course.dart';
 import '../../models/fleet.dart';
-import '../../models/invoice.dart';
 import '../../controllers/schedule_controller.dart';
 import '../../controllers/user_controller.dart';
 import '../../controllers/course_controller.dart';

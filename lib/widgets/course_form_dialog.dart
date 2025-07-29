@@ -187,7 +187,7 @@ class _CourseFormDialogState extends State<CourseFormDialog> {
                   Get.find<CourseController>()
                       .handleCourse(course, isUpdate: widget.course != null);
                   Navigator.of(context).pop(); // Close the dialog
-                  Get.back(); // Close the form dialog
+                  Get.back(result: true); // Close the form dialog
                 },
                 child: Text(
                   widget.course == null ? 'Add' : 'Update',

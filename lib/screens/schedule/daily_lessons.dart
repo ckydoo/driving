@@ -7,12 +7,11 @@ import 'package:intl/intl.dart';
 import 'package:driving/controllers/course_controller.dart';
 import 'package:driving/controllers/user_controller.dart';
 import 'package:driving/models/schedule.dart';
-import 'package:driving/screens/schedule/create_schedule_screen.dart';
 import 'package:driving/widgets/schedule_details_dialog.dart';
 
 class FilteredDateLessonsDialog extends StatelessWidget {
   final DateTime selectedDate;
-  final List<Schedule> schedules; // Already filtered schedules
+  final List<Schedule> schedules;
   final String filterText;
   final bool hasActiveFilters;
 

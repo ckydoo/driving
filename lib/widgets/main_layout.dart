@@ -337,62 +337,6 @@ class CompleteMainLayout extends StatelessWidget {
     );
   }
 
-  Widget _buildReportsDropdown(NavigationController navController) {
-    return ExpansionTile(
-      leading: Icon(Icons.bar_chart, color: Colors.white70),
-      title: Text(
-        'Reports',
-        style: TextStyle(color: Colors.white70),
-      ),
-      iconColor: Colors.white70,
-      collapsedIconColor: Colors.white70,
-      children: <Widget>[
-        _buildSidebarItem(
-          Icons.person,
-          'User Reports',
-          'user_reports',
-          navController.currentPage.value,
-          () => navController.navigateToPage('user_reports'),
-        ),
-        _buildSidebarItem(
-          Icons.search,
-          'Quick Search',
-          'quick_search',
-          navController.currentPage.value,
-          () => navController.navigateToPage('quick_search'),
-        ),
-        _buildSidebarItem(
-          Icons.book,
-          'Course Reports',
-          'course_reports',
-          navController.currentPage.value,
-          () => navController.navigateToPage('course_reports'),
-        ),
-        _buildSidebarItem(
-          Icons.receipt_long,
-          'Receipt Reports',
-          'receipt_reports',
-          navController.currentPage.value,
-          () => navController.navigateToPage('receipt_reports'),
-        ),
-        _buildSidebarItem(
-          Icons.calendar_today,
-          'Schedule Reports',
-          'schedule_reports',
-          navController.currentPage.value,
-          () => navController.navigateToPage('schedule_reports'),
-        ),
-        _buildSidebarItem(
-          Icons.attach_money,
-          'Billing Reports',
-          'billing_reports',
-          navController.currentPage.value,
-          () => navController.navigateToPage('billing_reports'),
-        ),
-      ],
-    );
-  }
-
   Widget _getCurrentPageWidget(String currentPage) {
     switch (currentPage) {
       case 'dashboard':
@@ -425,52 +369,6 @@ class CompleteMainLayout extends StatelessWidget {
       default:
         return DashboardContent();
     }
-  }
-
-  Widget _buildSettingsPage() {
-    return Padding(
-      padding: EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Settings',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          SizedBox(height: 16),
-          Card(
-            child: ListTile(
-              leading: Icon(Icons.school),
-              title: Text('School Information'),
-              subtitle: Text('Manage school details and preferences'),
-              trailing: Icon(Icons.arrow_forward_ios),
-              onTap: () {},
-            ),
-          ),
-          Card(
-            child: ListTile(
-              leading: Icon(Icons.notifications),
-              title: Text('Notifications'),
-              subtitle: Text('Configure notification preferences'),
-              trailing: Icon(Icons.arrow_forward_ios),
-              onTap: () {},
-            ),
-          ),
-          Card(
-            child: ListTile(
-              leading: Icon(Icons.security),
-              title: Text('Security'),
-              subtitle: Text('Password and security settings'),
-              trailing: Icon(Icons.arrow_forward_ios),
-              onTap: () {},
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   void _showLogoutDialog(NavigationController navController) {

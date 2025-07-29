@@ -133,7 +133,7 @@ class _FleetFormDialogState extends State<FleetFormDialog> {
       vehicle,
       isUpdate: widget.vehicle != null,
     );
-    Get.back();
+    Get.back(result: true); // Close the dialog and return true
   }
 
   @override
@@ -371,7 +371,9 @@ class LicensePlateFormatter extends TextInputFormatter {
 
     // Ensure the format is correct as user types
     String formattedText = '';
+    // ignore: unused_local_variable
     int letterCount = 0;
+    // ignore: unused_local_variable
     int numberCount = 0;
 
     for (int i = 0; i < text.length && i < 7; i++) {

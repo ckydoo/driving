@@ -34,6 +34,7 @@ class _PaymentDialogState extends State<PaymentDialog>
   final _referenceController = TextEditingController();
   String _paymentMethod = 'cash';
   bool _isRecording = false;
+  // ignore: unused_field
   bool _isPartialPayment = false;
   bool _generateReceipt = true; // NEW: Option to generate receipt
   bool _autoGenerateReference = true; // NEW: Auto-generate reference
@@ -718,32 +719,6 @@ class _PaymentDialogState extends State<PaymentDialog>
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildSummaryItem(String label, String value,
-      {bool isHighlighted = false}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.white.withOpacity(0.8),
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-            color: isHighlighted ? Colors.yellow.shade300 : Colors.white,
-          ),
-        ),
-      ],
     );
   }
 

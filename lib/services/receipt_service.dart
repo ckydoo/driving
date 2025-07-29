@@ -108,9 +108,9 @@ class ReceiptService {
                           style: pw.TextStyle(
                               fontSize: 16, fontWeight: pw.FontWeight.bold),
                         ),
-                        pw.Text(student.email ?? '',
+                        pw.Text(student.email,
                             style: const pw.TextStyle(fontSize: 12)),
-                        pw.Text(student.phone ?? '',
+                        pw.Text(student.phone,
                             style: const pw.TextStyle(fontSize: 12)),
                       ],
                     ),

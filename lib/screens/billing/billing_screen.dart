@@ -744,7 +744,7 @@ class _BillingScreenState extends State<BillingScreen>
                             ),
                           ),
                           Text(
-                            student.email ?? '',
+                            student.email,
                             style: TextStyle(
                               fontSize: 12,
                               color: Colors.grey.shade600,

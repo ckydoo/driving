@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import '../controllers/settings_controller.dart';
-import 'dart:convert';
 
 class SettingsScreen extends StatefulWidget {
   @override
@@ -235,31 +234,6 @@ class _SettingsScreenState extends State<SettingsScreen>
           ]),
         ],
       ),
-    );
-  }
-
-  Widget _buildDeveloperOptions() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionHeader('Developer Tools'),
-        _buildSettingsCard([
-          ListTile(
-            leading: Icon(Icons.bug_report, color: Colors.orange),
-            title: Text('Debug Information'),
-            subtitle: Text('View current application state and settings'),
-            trailing: Icon(Icons.arrow_forward_ios),
-            onTap: _showDebugInfo,
-          ),
-          ListTile(
-            leading: Icon(Icons.data_object, color: Colors.blue),
-            title: Text('Export All Settings (JSON)'),
-            subtitle: Text('Export settings in developer-friendly format'),
-            trailing: Icon(Icons.arrow_forward_ios),
-            onTap: _showRawSettingsExport,
-          ),
-        ]),
-      ],
     );
   }
 
@@ -674,120 +648,6 @@ class _SettingsScreenState extends State<SettingsScreen>
               }
             },
             child: Text('Import'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showDebugInfo() {
-    final allSettings = settingsController.getAllSettings();
-    final prettyJson = JsonEncoder.withIndent('  ').convert(allSettings);
-
-    Get.dialog(
-      AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.bug_report, color: Colors.orange),
-            SizedBox(width: 8),
-            Text('Debug Information'),
-          ],
-        ),
-        content: Container(
-          width: double.maxFinite,
-          height: 400,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Current Application Settings:'),
-              SizedBox(height: 8),
-              Expanded(
-                child: Container(
-                  padding: EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.grey.shade300),
-                  ),
-                  child: SingleChildScrollView(
-                    child: SelectableText(
-                      prettyJson,
-                      style: TextStyle(fontSize: 10, fontFamily: 'monospace'),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Get.back(),
-            child: Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showRawSettingsExport() {
-    final exportedSettings = settingsController.exportSettings();
-    final prettyJson =
-        JsonEncoder.withIndent('  ').convert(jsonDecode(exportedSettings));
-
-    Get.dialog(
-      AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.data_object, color: Colors.blue),
-            SizedBox(width: 8),
-            Text('Raw Settings Export'),
-          ],
-        ),
-        content: Container(
-          width: double.maxFinite,
-          height: 400,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Formatted settings JSON for developers:'),
-              SizedBox(height: 8),
-              Expanded(
-                child: Container(
-                  padding: EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.grey.shade300),
-                  ),
-                  child: SingleChildScrollView(
-                    child: SelectableText(
-                      prettyJson,
-                      style: TextStyle(fontSize: 10, fontFamily: 'monospace'),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Get.back(),
-            child: Text('Close'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              // Copy formatted JSON
-              Get.back();
-              Get.snackbar(
-                'Copied',
-                'Formatted settings copied to clipboard',
-                backgroundColor: Colors.green,
-                colorText: Colors.white,
-              );
-            },
-            child: Text('Copy'),
           ),
         ],
       ),

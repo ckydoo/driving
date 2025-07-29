@@ -1,5 +1,4 @@
 import 'package:driving/controllers/billing_controller.dart';
-import 'package:driving/models/billing_record.dart';
 import 'package:driving/models/invoice.dart';
 import 'package:driving/models/user.dart';
 import 'package:driving/models/payment.dart';
@@ -310,14 +309,13 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    if (widget.student.email != null)
-                      Text(
-                        widget.student.email!,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey.shade600,
-                        ),
+                    Text(
+                      widget.student.email,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade600,
                       ),
+                    ),
                   ],
                 ),
               ),
@@ -1451,15 +1449,6 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
         ),
       ),
     );
-  }
-
-  void _openReceiptWithSystemApp(Payment payment) async {
-    try {
-      // This will attempt to open the PDF with the system's default PDF viewer
-      _printReceipt(payment);
-    } catch (e) {
-      _showErrorSnackbar('Could not open PDF: ${e.toString()}');
-    }
   }
 
   void _printReceipt(Payment payment) async {

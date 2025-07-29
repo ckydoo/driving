@@ -1,6 +1,6 @@
 // lib/screens/users/enhanced_users_screen.dart
-import 'dart:io';
-import 'package:csv/csv.dart';
+// ignore_for_file: unused_field
+
 import 'package:driving/screens/users/enhanced_recommendations_screen.dart';
 import 'package:driving/screens/users/add_user_screen.dart';
 import 'package:driving/screens/users/student_details_screen.dart';
@@ -533,57 +533,6 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
     return EnhancedRecommendationsScreen(role: widget.role);
   }
 
-  Widget _buildRecommendationCard(Map<String, dynamic> recommendation) {
-    return Card(
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: InkWell(
-        onTap: recommendation['action'],
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: EdgeInsets.all(16),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: recommendation['color'].withOpacity(0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  recommendation['icon'],
-                  size: 32,
-                  color: recommendation['color'],
-                ),
-              ),
-              SizedBox(height: 12),
-              Text(
-                recommendation['title'],
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              SizedBox(height: 4),
-              Text(
-                recommendation['description'],
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                ),
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildHeaderRow() {
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
@@ -887,7 +836,7 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
         onPressed: () {
           controller.deleteUser(id);
           _loadUsers();
-          Get.back();
+          Get.back(result: true); // Close the dialog and return true
         },
         style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
         child: Text('Delete', style: TextStyle(color: Colors.white)),
@@ -911,7 +860,7 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
           });
           _toggleSelectAll(false);
           _loadUsers();
-          Get.back();
+          Get.back(result: true); // Close the dialog and return true
         },
         style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
         child: Text('Delete All', style: TextStyle(color: Colors.white)),
@@ -960,7 +909,7 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
       content: Text('Quick enrollment functionality for students.'),
       confirm: TextButton(
         onPressed: () {
-          Get.back();
+          Get.back(result: true); // Close the dialog and return true
           Get.snackbar('Enrollment', 'Quick enrollment coming soon!');
         },
         child: Text('OK'),

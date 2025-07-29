@@ -1,13 +1,9 @@
 import 'package:driving/controllers/billing_controller.dart';
 import 'package:driving/controllers/course_controller.dart';
 import 'package:driving/controllers/schedule_controller.dart';
-import 'package:driving/models/course.dart';
-import 'package:driving/models/schedule.dart';
-import 'package:driving/models/user.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
-import 'package:driving/services/database_helper.dart'; // Import DatabaseHelper
 import 'package:csv/csv.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:pdf/pdf.dart';
@@ -15,6 +11,8 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 
 class CourseReportsScreen extends StatefulWidget {
+  const CourseReportsScreen({super.key});
+
   @override
   _CourseReportsScreenState createState() => _CourseReportsScreenState();
 }
@@ -140,17 +138,6 @@ class _CourseReportsScreenState extends State<CourseReportsScreen> {
         _endDate = picked.end;
       });
     }
-  }
-
-  Widget _buildReportSectionTitle(String title) {
-    return Text(
-      title,
-      style: const TextStyle(
-        fontSize: 22,
-        fontWeight: FontWeight.bold,
-        color: Colors.blueGrey,
-      ),
-    );
   }
 
   Widget _buildCourseProgressAndRevenue() {

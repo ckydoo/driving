@@ -8,7 +8,7 @@ class UserController extends GetxController {
   final RxBool isLoading = false.obs;
   final RxString error = ''.obs;
 
-  // Keep track of the last fetched role to avoid unnecessary fetches
+  // ignore: unused_field
   String? _lastFetchedRole;
 
   List<User> get users => _users;

@@ -8,9 +8,6 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../controllers/course_controller.dart';
 import '../../widgets/course_form_dialog.dart';
-import 'package:csv/csv.dart';
-import 'package:file_picker/file_picker.dart';
-import 'dart:io';
 
 class CourseScreen extends StatefulWidget {
   const CourseScreen({Key? key}) : super(key: key);
@@ -43,7 +40,6 @@ class _CourseScreenState extends State<CourseScreen>
 
   // Tab controller for different views
   late TabController _tabController;
-  int _currentViewIndex = 0;
 
   // Smart recommendations
   List<Map<String, dynamic>> _recommendations = [];
@@ -1326,8 +1322,6 @@ class _CourseScreenState extends State<CourseScreen>
 
   void _showPricingAnalysis() {
     final highPricedCourses = _courses.where((c) => c.price > 1000).toList();
-    final avgPrice =
-        _courses.fold<double>(0, (sum, c) => sum + c.price) / _courses.length;
 
     showDialog(
       context: context,

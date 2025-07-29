@@ -7,8 +7,6 @@ import '../../controllers/billing_controller.dart';
 import '../../controllers/schedule_controller.dart';
 import '../../controllers/course_controller.dart';
 import '../../models/user.dart';
-import '../../models/schedule.dart';
-import '../../models/invoice.dart';
 
 class QuickSearchScreen extends StatefulWidget {
   @override

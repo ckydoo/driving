@@ -6,7 +6,6 @@ import '../../models/schedule.dart';
 import '../../models/user.dart';
 import '../../models/course.dart';
 import '../../models/fleet.dart';
-import '../../models/invoice.dart';
 import '../../controllers/schedule_controller.dart';
 import '../../controllers/user_controller.dart';
 import '../../controllers/course_controller.dart';
@@ -50,7 +49,6 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
   bool _showAvailabilityStatus = false;
   bool _instructorAvailable = true;
 
-  final List<String> _classTypes = ['Practical', 'Theory'];
   final List<String> _statusOptions = ['Scheduled', 'Confirmed', 'Pending'];
 
   @override
@@ -920,395 +918,7 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
     Get.back();
   }
 
-  Widget _buildBillingStatusCard() {
-    if (_selectedStudent == null || _selectedCourse == null) {
-      return SizedBox.shrink();
-    }
-
-    final billingController = Get.find<BillingController>();
-    final settingsController = Get.find<SettingsController>();
-
-    // Get invoice for this student and course
-    final invoice = billingController.invoices.firstWhereOrNull(
-      (inv) =>
-          inv.studentId == _selectedStudent!.id &&
-          inv.courseId == _selectedCourse!.id,
-    );
-
-    if (invoice == null) {
-      return Container(
-        margin: EdgeInsets.symmetric(vertical: 8),
-        padding: EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.red[50],
-          border: Border.all(color: Colors.red[200]!),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.error, color: Colors.red[600], size: 20),
-                SizedBox(width: 8),
-                Text(
-                  'No Billing Found',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.red[800],
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 8),
-            Text(
-              'This student does not have an active invoice for the selected course. Please create an invoice before scheduling lessons.',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.red[700],
-              ),
-            ),
-            SizedBox(height: 12),
-            ElevatedButton.icon(
-              onPressed: () {
-                // Navigate to create invoice screen
-                Get.toNamed('/billing/create', arguments: {
-                  'studentId': _selectedStudent!.id,
-                  'courseId': _selectedCourse!.id,
-                });
-              },
-              icon: Icon(Icons.add),
-              label: Text('Create Invoice'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red[600],
-                foregroundColor: Colors.white,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    // Calculate lesson usage
-    final totalLessons = invoice.lessons;
-    final usedLessons =
-        _getUsedLessons(_selectedStudent!.id!, _selectedCourse!.id!);
-    final scheduledLessons = settingsController.countScheduledLessons.value
-        ? _getScheduledLessons(_selectedStudent!.id!, _selectedCourse!.id!)
-        : 0;
-    final remainingLessons = totalLessons - usedLessons - scheduledLessons;
-
-    Color statusColor;
-    IconData statusIcon;
-    String statusText;
-
-    if (remainingLessons <= 0) {
-      statusColor = Colors.red;
-      statusIcon = Icons.error;
-      statusText = 'No lessons remaining';
-    } else if (remainingLessons <=
-        settingsController.lowLessonThreshold.value) {
-      statusColor = Colors.orange;
-      statusIcon = Icons.warning;
-      statusText = 'Low lesson balance';
-    } else {
-      statusColor = Colors.green;
-      statusIcon = Icons.check_circle;
-      statusText = 'Sufficient lessons available';
-    }
-
-    return Container(
-      margin: EdgeInsets.symmetric(vertical: 8),
-      padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: statusColor.withOpacity(0.1),
-        border: Border.all(color: statusColor.withOpacity(0.3)),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(statusIcon, color: statusColor, size: 20),
-              SizedBox(width: 8),
-              Text(
-                'Billing Status',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: statusColor,
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _buildLessonCounter(
-                  'Total',
-                  totalLessons.toString(),
-                  Colors.blue,
-                  Icons.book,
-                ),
-              ),
-              SizedBox(width: 12),
-              Expanded(
-                child: _buildLessonCounter(
-                  'Used',
-                  usedLessons.toString(),
-                  Colors.grey,
-                  Icons.check,
-                ),
-              ),
-              if (settingsController.countScheduledLessons.value) ...[
-                SizedBox(width: 12),
-                Expanded(
-                  child: _buildLessonCounter(
-                    'Scheduled',
-                    scheduledLessons.toString(),
-                    Colors.orange,
-                    Icons.schedule,
-                  ),
-                ),
-              ],
-              SizedBox(width: 12),
-              Expanded(
-                child: _buildLessonCounter(
-                  'Remaining',
-                  remainingLessons.toString(),
-                  statusColor,
-                  Icons.inventory,
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 12),
-          LinearProgressIndicator(
-            value: totalLessons > 0
-                ? (totalLessons - remainingLessons) / totalLessons
-                : 0,
-            backgroundColor: Colors.grey[300],
-            valueColor: AlwaysStoppedAnimation<Color>(statusColor),
-          ),
-          SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                statusText,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: statusColor,
-                ),
-              ),
-              Text(
-                'Invoice #${invoice.id}',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                ),
-              ),
-            ],
-          ),
-          if (remainingLessons <= 0 &&
-              settingsController.enforceBillingValidation.value) ...[
-            SizedBox(height: 12),
-            Container(
-              padding: EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.red[100],
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.block, color: Colors.red[700], size: 16),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Cannot schedule lesson - billing validation enabled',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.red[700],
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLessonCounter(
-      String label, String count, Color color, IconData icon) {
-    return Container(
-      padding: EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, color: color, size: 16),
-          SizedBox(height: 4),
-          Text(
-            count,
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 10,
-              color: Colors.grey[600],
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
 // Helper method to get scheduled lessons count
-  int _getScheduledLessons(int studentId, int courseId) {
-    final scheduleController = Get.find<ScheduleController>();
-    return scheduleController.schedules
-        .where((s) =>
-            s.studentId == studentId &&
-            s.courseId == courseId &&
-            !s.attended &&
-            s.status != 'Cancelled' &&
-            s.start.isAfter(DateTime.now()))
-        .fold<int>(0, (sum, s) => sum + (s.lessonsCompleted ?? 1));
-  }
-
-// Helper method to get used lessons count
-
-// Enhanced Submit Button with validation
-  Widget _buildSubmitButton() {
-    final canSubmit = _selectedStudent != null &&
-        _selectedInstructor != null &&
-        _selectedCourse != null &&
-        _selectedDate != null &&
-        _startTime != null &&
-        _endTime != null &&
-        _isValidForSubmission();
-
-    return Container(
-      width: double.infinity,
-      height: 50,
-      child: ElevatedButton(
-        onPressed: canSubmit ? _saveSchedule : null,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: canSubmit ? Colors.blue[600] : Colors.grey[400],
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          elevation: canSubmit ? 2 : 0,
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            if (_isLoading) ...[
-              SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                ),
-              ),
-              SizedBox(width: 12),
-            ],
-            Icon(
-              widget.existingSchedule != null ? Icons.update : Icons.add,
-              size: 20,
-            ),
-            SizedBox(width: 8),
-            Text(
-              _isLoading
-                  ? 'Processing...'
-                  : widget.existingSchedule != null
-                      ? 'Update Schedule'
-                      : 'Create Schedule',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-// Validation method for submission
-  bool _isValidForSubmission() {
-    if (_selectedDate == null || _startTime == null || _endTime == null) {
-      return false;
-    }
-
-    // Check if date is not in the past
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final selectedDay =
-        DateTime(_selectedDate!.year, _selectedDate!.month, _selectedDate!.day);
-
-    if (selectedDay.isBefore(today)) {
-      return false;
-    }
-
-    // Check duration
-    final startDateTime = DateTime(_selectedDate!.year, _selectedDate!.month,
-        _selectedDate!.day, _startTime!.hour, _startTime!.minute);
-    final endDateTime = DateTime(_selectedDate!.year, _selectedDate!.month,
-        _selectedDate!.day, _endTime!.hour, _endTime!.minute);
-    final duration = endDateTime.difference(startDateTime);
-
-    if (duration.inMinutes < 30 || duration.inHours > 4) {
-      return false;
-    }
-
-    // Check billing if validation is enabled
-    final settingsController = Get.find<SettingsController>();
-    if (settingsController.enforceBillingValidation.value &&
-        _selectedStudent != null &&
-        _selectedCourse != null) {
-      final billingController = Get.find<BillingController>();
-      final invoice = billingController.invoices.firstWhereOrNull(
-        (inv) =>
-            inv.studentId == _selectedStudent!.id &&
-            inv.courseId == _selectedCourse!.id,
-      );
-
-      if (invoice == null) return false;
-
-      final usedLessons =
-          _getUsedLessons(_selectedStudent!.id!, _selectedCourse!.id!);
-      final scheduledLessons = settingsController.countScheduledLessons.value
-          ? _getScheduledLessons(_selectedStudent!.id!, _selectedCourse!.id!)
-          : 0;
-      final remainingLessons = invoice.lessons - usedLessons - scheduledLessons;
-
-      if (remainingLessons <= 0) return false;
-    }
-
-    return true;
-  }
-
-// Add these methods to your CreateScheduleScreen class
 
 // Helper method to parse time string (e.g., "09:00") to TimeOfDay
   TimeOfDay _parseTimeString(String timeString) {
@@ -1339,17 +949,17 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
     if (_selectedDate != null && _startTime != null && _endTime != null) {
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day);
-      final selectedDay = DateTime(
-          _selectedDate!.year, _selectedDate!.month, _selectedDate!.day);
+      final selectedDay =
+          DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
 
       if (selectedDay.isBefore(today)) {
         errors.add('Cannot schedule lessons for past dates');
       }
 
-      final startDateTime = DateTime(_selectedDate!.year, _selectedDate!.month,
-          _selectedDate!.day, _startTime!.hour, _startTime!.minute);
-      final endDateTime = DateTime(_selectedDate!.year, _selectedDate!.month,
-          _selectedDate!.day, _endTime!.hour, _endTime!.minute);
+      final startDateTime = DateTime(_selectedDate.year, _selectedDate.month,
+          _selectedDate.day, _startTime.hour, _startTime.minute);
+      final endDateTime = DateTime(_selectedDate.year, _selectedDate.month,
+          _selectedDate.day, _endTime.hour, _endTime.minute);
       final duration = endDateTime.difference(startDateTime);
 
       if (duration.inMinutes <= 0) {
@@ -1365,9 +975,8 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
       if (settingsController.enforceWorkingHours.value &&
           _selectedInstructor != null) {
         final startTime =
-            TimeOfDay(hour: _startTime!.hour, minute: _startTime!.minute);
-        final endTime =
-            TimeOfDay(hour: _endTime!.hour, minute: _endTime!.minute);
+            TimeOfDay(hour: _startTime.hour, minute: _startTime.minute);
+        final endTime = TimeOfDay(hour: _endTime.hour, minute: _endTime.minute);
 
         final workingStart =
             _parseTimeString(settingsController.workingHoursStart.value);
@@ -1390,7 +999,7 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
             final scheduleDate = DateTime(
                 schedule.start.year, schedule.start.month, schedule.start.day);
             final selectedScheduleDate = DateTime(
-                _selectedDate!.year, _selectedDate!.month, _selectedDate!.day);
+                _selectedDate.year, _selectedDate.month, _selectedDate.day);
 
             if (!scheduleDate.isAtSameMomentAs(selectedScheduleDate))
               return false;

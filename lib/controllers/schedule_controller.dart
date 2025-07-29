@@ -1,15 +1,11 @@
 // lib/controllers/schedule_controller.dart
 import 'package:driving/controllers/billing_controller.dart';
 import 'package:driving/controllers/course_controller.dart';
-import 'package:driving/controllers/settings_controller.dart';
 import 'package:driving/controllers/user_controller.dart';
-import 'package:driving/models/billing_record.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:intl/intl.dart';
 import '../models/schedule.dart';
 import '../services/database_helper.dart';
-import 'package:driving/widgets/create_invoice_dialog.dart';
 
 class ScheduleController extends GetxController {
   final RxList<Schedule> schedules = <Schedule>[].obs;
@@ -476,8 +472,6 @@ class ScheduleController extends GetxController {
       'today': 0,
     };
 
-    final now = DateTime.now();
-
     for (final schedule in schedules) {
       final status = schedule.statusDisplay.toLowerCase();
 
@@ -584,17 +578,6 @@ class ScheduleController extends GetxController {
           end.isAfter(s.start) &&
           s.status != 'Cancelled';
     });
-  }
-
-// Helper methods for time comparison
-  bool _timeIsBefore(TimeOfDay time1, TimeOfDay time2) {
-    return time1.hour < time2.hour ||
-        (time1.hour == time2.hour && time1.minute < time2.minute);
-  }
-
-  bool _timeIsAfter(TimeOfDay time1, TimeOfDay time2) {
-    return time1.hour > time2.hour ||
-        (time1.hour == time2.hour && time1.minute > time2.minute);
   }
 
   Future<bool> checkBillingLessons(
