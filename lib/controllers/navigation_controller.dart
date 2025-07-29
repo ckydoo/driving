@@ -36,6 +36,13 @@ class NavigationController extends GetxController {
       requiredRoles: ['admin', 'instructor', 'student'],
     ),
     NavigationItem(
+      title: 'Courses',
+      icon: Icons.book,
+      route: '/courses',
+      pageKey: 'courses',
+      requiredRoles: ['admin', 'instructor'],
+    ),
+    NavigationItem(
       title: 'Students',
       icon: Icons.people,
       route: '/students',
@@ -50,24 +57,10 @@ class NavigationController extends GetxController {
       requiredRoles: ['admin'],
     ),
     NavigationItem(
-      title: 'Courses',
-      icon: Icons.book,
-      route: '/courses',
-      pageKey: 'courses',
-      requiredRoles: ['admin', 'instructor'],
-    ),
-    NavigationItem(
       title: 'Vehicles',
       icon: Icons.directions_car,
       route: '/fleet',
       pageKey: 'vehicles',
-      requiredRoles: ['admin'],
-    ),
-    NavigationItem(
-      title: 'Billing',
-      icon: Icons.account_balance_wallet,
-      route: '/billing',
-      pageKey: 'billing',
       requiredRoles: ['admin'],
     ),
     NavigationItem(
@@ -76,6 +69,13 @@ class NavigationController extends GetxController {
       route: '/receipts',
       pageKey: 'receipts',
       requiredRoles: ['admin', 'instructor', 'student'],
+    ),
+    NavigationItem(
+      title: 'Billing',
+      icon: Icons.account_balance_wallet,
+      route: '/billing',
+      pageKey: 'billing',
+      requiredRoles: ['admin'],
     ),
     NavigationItem(
       title: 'Schedule',
@@ -90,6 +90,13 @@ class NavigationController extends GetxController {
       route: '/users',
       pageKey: 'users',
       requiredRoles: ['admin'],
+    ),
+    NavigationItem(
+      title: 'Quick Search',
+      icon: Icons.search,
+      route: '/quick-search',
+      pageKey: 'quick_search',
+      requiredRoles: ['admin', 'instructor'],
     ),
     NavigationItem(
       title: 'Settings',
