@@ -229,7 +229,14 @@ class DatabaseHelper {
     invoice INTEGER NOT NULL,
     amount REAL NOT NULL,
     method TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'Paid',
+    paymentDate TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    notes TEXT,
+    reference TEXT,
+    receipt_path TEXT,
+    receipt_generated INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+
   )
 ''');
     await db.execute('''

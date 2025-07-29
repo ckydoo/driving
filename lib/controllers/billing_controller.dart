@@ -18,50 +18,6 @@ class BillingController extends GetxController {
     fetchBillingData();
   }
 
-  Future<List<Map<String, dynamic>>> getPayments() async {
-    final db = await _dbHelper.database;
-    return await db.query('payments');
-  }
-
-  Future<int> insertPayment(Map<String, dynamic> payment) async {
-    final db = await _dbHelper.database;
-    return await db.insert('payments', payment);
-  }
-
-  Future<void> fetchBillingData() async {
-    try {
-      isLoading(true);
-      print('BillingController: fetchBillingData called');
-      final invoicesData = await _dbHelper.getInvoices();
-      print(
-          'BillingController: Data from _dbHelper.getInvoices: $invoicesData');
-      final paymentsData = await _dbHelper.getPayments();
-      print(
-          'BillingController: Data from _dbHelper.getPayments: $paymentsData');
-
-      List<Invoice> fetchedInvoices = [];
-      for (var invoiceData in invoicesData) {
-        Invoice invoice = Invoice.fromJson(invoiceData);
-        // Fetch payments for the current invoice
-        List<Payment> invoicePayments = paymentsData
-            .map((json) => Payment.fromJson(json))
-            .where((payment) => payment.invoiceId == invoice.id)
-            .toList();
-        invoice.payments = invoicePayments; // Assign payments to invoice
-        fetchedInvoices.add(invoice);
-      }
-
-      invoices.assignAll(fetchedInvoices);
-      print(
-          'BillingController: Invoices after assignAll (invoices): $invoices');
-      payments.assignAll(paymentsData.map((json) => Payment.fromJson(json)));
-      print(
-          'BillingController: Payments after assignAll (payments): $payments');
-    } finally {
-      isLoading(false);
-    }
-  }
-
   Future<int> insertBillingRecord(BillingRecord billingRecord) async {
     final db = await DatabaseHelper.instance.database;
     return await db.insert('billing_records', billingRecord.toJson());
@@ -197,17 +153,6 @@ class BillingController extends GetxController {
     }
   }
 
-  Future<void> recordPayment(Payment payment) async {
-    try {
-      isLoading(true);
-      await _dbHelper.insertPayment(payment.toJson());
-      await _updateInvoiceStatus(payment.invoiceId, payment.amount);
-      await fetchBillingData();
-    } finally {
-      isLoading(false);
-    }
-  }
-
   Future<void> _updateInvoiceStatus(int invoiceId, double amount) async {
     final invoice = invoices.firstWhere((inv) => inv.id == invoiceId);
     final newAmountPaid = invoice.amountPaid + amount;
@@ -290,5 +235,79 @@ class BillingController extends GetxController {
       print('Error updating used lessons: ${e.toString()}');
       throw Exception('Failed to update lesson usage');
     }
+  }
+
+  Future<List<Map<String, dynamic>>> getPayments() async {
+    final db = await _dbHelper.database;
+    return await db.query('payments');
+  }
+
+  Future<int> insertPayment(Map<String, dynamic> payment) async {
+    final db = await _dbHelper.database;
+    return await db.insert('payments', payment);
+  }
+
+  Future<void> fetchBillingData() async {
+    try {
+      isLoading(true);
+      print('BillingController: fetchBillingData called');
+      final invoicesData = await _dbHelper.getInvoices();
+      print(
+          'BillingController: Data from _dbHelper.getInvoices: $invoicesData');
+      final paymentsData = await _dbHelper.getPayments();
+      print(
+          'BillingController: Data from _dbHelper.getPayments: $paymentsData');
+
+      List<Invoice> fetchedInvoices = [];
+      for (var invoiceData in invoicesData) {
+        Invoice invoice = Invoice.fromJson(invoiceData);
+        List<Payment> invoicePayments = paymentsData
+            .map((json) => Payment.fromJson(json))
+            .where((payment) => payment.invoiceId == invoice.id)
+            .toList();
+        invoice.payments = invoicePayments;
+        fetchedInvoices.add(invoice);
+      }
+
+      invoices.assignAll(fetchedInvoices);
+      payments.assignAll(paymentsData.map((json) => Payment.fromJson(json)));
+    } finally {
+      isLoading(false);
+    }
+  }
+
+  Future<void> recordPayment(Payment payment) async {
+    try {
+      isLoading(true);
+
+      // Insert payment into database
+      final paymentId = await _dbHelper.insertPayment(payment.toJson());
+
+      // Update invoice status
+      await _updateInvoiceStatus(payment.invoiceId, payment.amount);
+
+      // Refresh data
+      await fetchBillingData();
+
+      print('Payment recorded successfully with ID: $paymentId');
+    } finally {
+      isLoading(false);
+    }
+  }
+
+  Future<void> updateInvoiceStatus(int invoiceId, double amount) async {
+    final invoice = invoices.firstWhere((inv) => inv.id == invoiceId);
+    final newAmountPaid = invoice.amountPaid + amount;
+    final status = newAmountPaid >= invoice.totalAmountCalculated
+        ? 'paid'
+        : newAmountPaid > 0
+            ? 'partial'
+            : 'unpaid';
+
+    await _dbHelper.updateInvoice({
+      'id': invoiceId,
+      'amountpaid': newAmountPaid,
+      'status': status,
+    });
   }
 }
