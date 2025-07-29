@@ -1,5 +1,7 @@
-// lib/main_final.dart
-import 'package:driving/controllers/navigation_controller.dart';
+// lib/main.dart
+import 'package:driving/controllers/auth_controller.dart';
+import 'package:driving/routes/protected_routes.dart';
+import 'package:driving/screens/auth/login_screen.dart';
 import 'package:driving/services/app_bindings.dart';
 import 'package:driving/services/app_initialization.dart';
 import 'package:driving/widgets/main_layout.dart';
@@ -57,7 +59,8 @@ class MyApp extends StatelessWidget {
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
           ),
-          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         ),
         listTileTheme: ListTileThemeData(
           shape: RoundedRectangleBorder(
@@ -66,201 +69,20 @@ class MyApp extends StatelessWidget {
         ),
       ),
       initialBinding: FinalAppBindings(),
-      home: CompleteMainLayout(),
+
+      // Use protected routes with middleware
+      getPages: ProtectedRoutes.routes,
+
+      // Start with login screen and let authentication handle the flow
+      initialRoute: '/login',
+
       debugShowCheckedModeBanner: false,
-      // Add routes for logout functionality
-      getPages: [
-        GetPage(
-          name: '/login',
-          page: () => LoginScreen(),
-        ),
-        GetPage(
-          name: '/main',
-          page: () => CompleteMainLayout(),
-        ),
-      ],
-    );
-  }
-}
 
-// Simple login screen for logout functionality
-class LoginScreen extends StatefulWidget {
-  @override
-  _LoginScreenState createState() => _LoginScreenState();
-}
-
-class _LoginScreenState extends State<LoginScreen> {
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  bool _isLoading = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Colors.blue[600]!, Colors.blue[800]!],
-          ),
-        ),
-        child: Center(
-          child: Card(
-            margin: EdgeInsets.all(32),
-            elevation: 8,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Container(
-              width: 400,
-              padding: EdgeInsets.all(32),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.school,
-                    size: 80,
-                    color: Colors.blue[600],
-                  ),
-                  SizedBox(height: 16),
-                  Text(
-                    'Driving School Management',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey[800],
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    'Please sign in to continue',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.grey[600],
-                    ),
-                  ),
-                  SizedBox(height: 32),
-                  TextField(
-                    controller: _emailController,
-                    decoration: InputDecoration(
-                      labelText: 'Email',
-                      prefixIcon: Icon(Icons.email),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    keyboardType: TextInputType.emailAddress,
-                  ),
-                  SizedBox(height: 16),
-                  TextField(
-                    controller: _passwordController,
-                    decoration: InputDecoration(
-                      labelText: 'Password',
-                      prefixIcon: Icon(Icons.lock),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    obscureText: true,
-                  ),
-                  SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : _login,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue[600],
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: _isLoading
-                          ? CircularProgressIndicator(color: Colors.white)
-                          : Text(
-                              'Sign In',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                    ),
-                  ),
-                  SizedBox(height: 16),
-                  TextButton(
-                    onPressed: () {
-                      Get.snackbar(
-                        'Info',
-                        'Contact your administrator for password reset',
-                        backgroundColor: Colors.blue[100],
-                      );
-                    },
-                    child: Text('Forgot Password?'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
+      // Handle unknown routes
+      unknownRoute: GetPage(
+        name: '/notfound',
+        page: () => const LoginScreen(),
       ),
     );
-  }
-
-  void _login() async {
-    if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
-      Get.snackbar(
-        'Error',
-        'Please enter both email and password',
-        backgroundColor: Colors.red[100],
-        colorText: Colors.red[800],
-      );
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-    });
-
-    // Simulate login process
-    await Future.delayed(Duration(seconds: 2));
-
-    // For demo purposes, accept any email/password
-    // In real app, you would validate against your backend
-    if (_emailController.text.isNotEmpty &&
-        _passwordController.text.isNotEmpty) {
-      // Update navigation controller with user info
-      final navController = Get.find<NavigationController>();
-      navController.currentUser.value = {
-        'name': _emailController.text
-            .split('@')[0]
-            .replaceAll('.', ' ')
-            .toUpperCase(),
-        'email': _emailController.text,
-        'role': 'Administrator',
-      };
-
-      Get.offAll(() => CompleteMainLayout());
-    } else {
-      Get.snackbar(
-        'Error',
-        'Invalid credentials',
-        backgroundColor: Colors.red[100],
-        colorText: Colors.red[800],
-      );
-    }
-
-    setState(() {
-      _isLoading = false;
-    });
-  }
-
-  @override
-  void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
-    super.dispose();
   }
 }

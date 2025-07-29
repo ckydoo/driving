@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import '../controllers/settings_controller.dart';
+import '../controllers/auth_controller.dart';
 
 class SettingsScreen extends StatefulWidget {
   @override
@@ -13,11 +14,34 @@ class _SettingsScreenState extends State<SettingsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final SettingsController settingsController = Get.find<SettingsController>();
+  final AuthController authController = Get.find<AuthController>();
+
+  // Add getter to calculate tab count dynamically
+  int get _tabCount {
+    int count = 1; // Appearance tab is always visible
+    if (authController.hasAnyRole(['admin', 'instructor'])) {
+      count += 5; // Scheduling, Billing, Instructor, Notifications, Advanced
+    }
+    return count;
+  }
+
+  // Add getter for tab indices
+  List<String> get _availableTabs {
+    List<String> tabs = [];
+    if (authController.hasAnyRole(['admin', 'instructor'])) {
+      tabs.addAll(['Scheduling', 'Billing', 'Instructor', 'Notifications']);
+    }
+    tabs.add('Appearance');
+    if (authController.hasAnyRole(['admin', 'instructor'])) {
+      tabs.add('Advanced');
+    }
+    return tabs;
+  }
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 6, vsync: this);
+    _tabController = TabController(length: _tabCount, vsync: this);
   }
 
   @override
@@ -71,14 +95,9 @@ class _SettingsScreenState extends State<SettingsScreen>
                   indicatorColor: Colors.blue[700],
                   labelColor: Colors.blue[700],
                   unselectedLabelColor: Colors.grey[600],
-                  tabs: [
-                    Tab(text: 'Scheduling'),
-                    Tab(text: 'Billing'),
-                    Tab(text: 'Instructor'),
-                    Tab(text: 'Notifications'),
-                    Tab(text: 'Appearance'),
-                    Tab(text: 'Advanced'),
-                  ],
+                  tabs: _availableTabs
+                      .map((tabName) => Tab(text: tabName))
+                      .toList(),
                 ),
               ],
             ),
@@ -87,14 +106,7 @@ class _SettingsScreenState extends State<SettingsScreen>
           Expanded(
             child: TabBarView(
               controller: _tabController,
-              children: [
-                _buildSchedulingSettings(),
-                _buildBillingSettings(),
-                _buildInstructorSettings(),
-                _buildNotificationSettings(),
-                _buildAppearanceSettings(),
-                _buildAdvancedSettings(),
-              ],
+              children: _buildTabViews(),
             ),
           ),
         ],
@@ -102,27 +114,48 @@ class _SettingsScreenState extends State<SettingsScreen>
     );
   }
 
+  // Add method to build tab views dynamically
+  List<Widget> _buildTabViews() {
+    List<Widget> views = [];
+    if (authController.hasAnyRole(['admin', 'instructor'])) {
+      views.addAll([
+        _buildSchedulingSettings(),
+        _buildBillingSettings(),
+        _buildInstructorSettings(),
+        _buildNotificationSettings(),
+      ]);
+    }
+    views.add(_buildAppearanceSettings());
+    if (authController.hasAnyRole(['admin', 'instructor'])) {
+      views.add(_buildAdvancedSettings());
+    }
+    return views;
+  }
+
   Widget _buildQuickActions() {
     return Row(
       children: [
-        _buildQuickActionButton(
-          icon: Icons.download,
-          label: 'Export',
-          onTap: _showExportDialog,
-        ),
+        if (authController.hasAnyRole(['admin', 'instructor']))
+          _buildQuickActionButton(
+            icon: Icons.download,
+            label: 'Export',
+            onTap: _showExportDialog,
+          ),
         SizedBox(width: 8),
-        _buildQuickActionButton(
-          icon: Icons.upload,
-          label: 'Import',
-          onTap: _showImportDialog,
-        ),
+        if (authController.hasAnyRole(['admin', 'instructor']))
+          _buildQuickActionButton(
+            icon: Icons.upload,
+            label: 'Import',
+            onTap: _showImportDialog,
+          ),
         SizedBox(width: 8),
-        _buildQuickActionButton(
-          icon: Icons.refresh,
-          label: 'Reset',
-          onTap: _showResetConfirmation,
-          color: Colors.red[600],
-        ),
+        if (authController.hasAnyRole(['admin', 'instructor']))
+          _buildQuickActionButton(
+            icon: Icons.refresh,
+            label: 'Reset',
+            onTap: _showResetConfirmation,
+            color: Colors.red[600],
+          ),
       ],
     );
   }
@@ -213,14 +246,6 @@ class _SettingsScreenState extends State<SettingsScreen>
               settingsController.theme,
               ['light', 'dark', 'system'],
               settingsController.setTheme,
-              (value) => value.capitalize ?? '',
-            ),
-            _buildDropdownTile(
-              'Language',
-              'Select application language',
-              settingsController.language,
-              ['english', 'spanish', 'french', 'german'],
-              settingsController.setLanguage,
               (value) => value.capitalize ?? '',
             ),
             _buildDropdownTile(

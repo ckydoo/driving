@@ -183,13 +183,13 @@ class AuthController extends GetxController {
       print('🎉 Login successful for ${userObj.fname} ${userObj.lname}');
       print('🔐 === LOGIN COMPLETE ===\n');
 
-      Get.snackbar(
-        'Welcome!',
-        'Login successful. Welcome back, ${userObj.fname}!',
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
-        duration: const Duration(seconds: 3),
-      );
+      // Get.snackbar(
+      //   'Welcome!',
+      //   'Login successful. Welcome back, ${userObj.fname}!',
+      //   backgroundColor: Colors.green,
+      //   colorText: Colors.white,
+      //   duration: const Duration(seconds: 3),
+      // );
 
       return true;
     } catch (e) {

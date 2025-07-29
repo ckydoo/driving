@@ -1,4 +1,5 @@
 // lib/dashboard_updated.dart
+import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/controllers/billing_controller.dart';
 import 'package:driving/controllers/navigation_controller.dart';
 import 'package:driving/controllers/user_controller.dart';
@@ -17,9 +18,9 @@ class UpdatedDashboardScreen extends StatelessWidget {
 
 class DashboardContent extends StatelessWidget {
   const DashboardContent({Key? key}) : super(key: key);
-
   @override
   Widget build(BuildContext context) {
+    final authController = Get.find<AuthController>();
     return GetBuilder<UserController>(
       builder: (userController) {
         return GetBuilder<BillingController>(
@@ -62,23 +63,25 @@ class DashboardContent extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 16),
-                      Expanded(
-                        child: _buildStatCard(
-                          'Total Income',
-                          '\$${totalIncome.toStringAsFixed(2)}',
-                          Icons.attach_money,
-                          Colors.green,
+                      if (authController.hasAnyRole(['admin', 'instructor']))
+                        Expanded(
+                          child: _buildStatCard(
+                            'Total Income',
+                            '\$${totalIncome.toStringAsFixed(2)}',
+                            Icons.attach_money,
+                            Colors.green,
+                          ),
                         ),
-                      ),
                       const SizedBox(width: 16),
-                      Expanded(
-                        child: _buildStatCard(
-                          'Unpaid Amount',
-                          '\$${unpaidInvoices.toStringAsFixed(2)}',
-                          Icons.payment,
-                          Colors.orange,
+                      if (authController.hasAnyRole(['admin', 'instructor']))
+                        Expanded(
+                          child: _buildStatCard(
+                            'Unpaid Amount',
+                            '\$${unpaidInvoices.toStringAsFixed(2)}',
+                            Icons.payment,
+                            Colors.orange,
+                          ),
                         ),
-                      ),
                       const SizedBox(width: 16),
                       Expanded(
                         child: _buildStatCard(
@@ -92,28 +95,28 @@ class DashboardContent extends StatelessWidget {
                   ),
 
                   const SizedBox(height: 32),
-
-                  // Quick Actions Section with functionality
-                  _buildQuickActionsSection(),
+                  if (authController.hasAnyRole(['admin', 'instructor']))
+                    _buildQuickActionsSection(),
 
                   const SizedBox(height: 32),
 
                   // Real data sections
-                  Row(
-                    children: [
-                      Expanded(
-                        flex: 2,
-                        child: _buildRecentActivitiesCard(
-                            billingController, userController),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        flex: 1,
-                        child: _buildQuickStatsCard(
-                            billingController, userController),
-                      ),
-                    ],
-                  ),
+                  if (authController.hasAnyRole(['admin', 'instructor']))
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 2,
+                          child: _buildRecentActivitiesCard(
+                              billingController, userController),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          flex: 1,
+                          child: _buildQuickStatsCard(
+                              billingController, userController),
+                        ),
+                      ],
+                    ),
                 ],
               ),
             );

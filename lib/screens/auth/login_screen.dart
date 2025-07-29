@@ -34,7 +34,8 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       if (success) {
-        Get.offAll(() => const UpdatedDashboardScreen());
+        // Navigate to main layout instead of specific dashboard
+        Get.offAllNamed('/main');
       }
     }
   }

@@ -1,5 +1,6 @@
 // lib/services/app_initialization.dart
 import 'package:get/get.dart';
+import '../controllers/auth_controller.dart';
 import '../controllers/schedule_controller.dart';
 import '../controllers/user_controller.dart';
 import '../controllers/course_controller.dart';
@@ -16,9 +17,13 @@ class AppInitialization {
       // Initialize database helper first
       Get.put(DatabaseHelper.instance, permanent: true);
 
+      // IMPORTANT: Initialize AuthController early - this was missing!
+      Get.put(AuthController(), permanent: true);
+
       // Run database migration
       await DatabaseMigration.instance.runFullMigration();
       print('Enhanced schedules table created');
+
       // Initialize controllers in proper order
       await _initializeControllers();
 

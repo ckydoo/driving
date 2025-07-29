@@ -1,4 +1,5 @@
-// lib/services/final_app_bindings.dart
+// lib/services/app_bindings.dart
+import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/controllers/billing_controller.dart';
 import 'package:driving/controllers/course_controller.dart';
 import 'package:driving/controllers/fleet_controller.dart';
@@ -15,6 +16,9 @@ class FinalAppBindings extends Bindings {
   void dependencies() {
     // Core services
     Get.lazyPut(() => DatabaseHelper(), fenix: true);
+
+    // IMPORTANT: Initialize AuthController first - this was missing!
+    Get.put(AuthController(), permanent: true);
 
     // Navigation
     Get.put(NavigationController(), permanent: true);
