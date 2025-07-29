@@ -944,6 +944,7 @@ class _BillingScreenState extends State<BillingScreen>
         return PaymentDialog(
           invoice: studentInvoices.first,
           studentName: '${student.fname} ${student.lname}',
+          studentId: student.id!,
         );
       },
     ).then((_) {

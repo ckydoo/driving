@@ -10,6 +10,7 @@ class Payment {
   final String? reference; // For transaction reference, check number, etc.
   final String? receiptPath; // Path to generated receipt PDF
   final bool receiptGenerated;
+  final int? userId; // ID of the user who processed the payment
 
   Payment({
     this.id,
@@ -21,11 +22,12 @@ class Payment {
     this.reference,
     this.receiptPath,
     this.receiptGenerated = false,
+    this.userId,
   });
 
   factory Payment.fromJson(Map<String, dynamic> json) => Payment(
         id: json['id'],
-        invoiceId: json['invoice'],
+        invoiceId: json['invoiceId'],
         amount: json['amount'].toDouble(),
         method: json['method'],
         paymentDate: DateTime.parse(json['created_at']),
@@ -33,11 +35,12 @@ class Payment {
         reference: json['reference'],
         receiptPath: json['receipt_path'],
         receiptGenerated: json['receipt_generated'] == 1,
+        userId: json['user_id'],
       );
 
   Map<String, dynamic> toJson() => {
         'id': id,
-        'invoice': invoiceId,
+        'invoiceId': invoiceId,
         'amount': amount,
         'method': method,
         'created_at': paymentDate.toIso8601String(),
@@ -45,6 +48,7 @@ class Payment {
         'reference': reference,
         'receipt_path': receiptPath,
         'receipt_generated': receiptGenerated ? 1 : 0,
+        'userId': userId,
       };
 
   // Create a copy with updated fields
@@ -58,6 +62,7 @@ class Payment {
     String? reference,
     String? receiptPath,
     bool? receiptGenerated,
+    int? userId,
   }) {
     return Payment(
       id: id ?? this.id,
@@ -69,6 +74,7 @@ class Payment {
       reference: reference ?? this.reference,
       receiptPath: receiptPath ?? this.receiptPath,
       receiptGenerated: receiptGenerated ?? this.receiptGenerated,
+      userId: userId ?? this.userId,
     );
   }
 
@@ -83,14 +89,6 @@ class Payment {
     switch (method.toLowerCase()) {
       case 'cash':
         return 'Cash';
-      case 'credit_card':
-        return 'Credit Card';
-      case 'debit_card':
-        return 'Debit Card';
-      case 'bank_transfer':
-        return 'Bank Transfer';
-      case 'check':
-        return 'Check';
       case 'mobile_payment':
         return 'Mobile Payment';
       default:
@@ -186,14 +184,6 @@ extension PaymentExtensions on Payment {
     switch (method.toLowerCase()) {
       case 'cash':
         return 'Cash';
-      case 'credit_card':
-        return 'Credit Card';
-      case 'debit_card':
-        return 'Debit Card';
-      case 'bank_transfer':
-        return 'Bank Transfer';
-      case 'check':
-        return 'Check';
       case 'mobile_payment':
         return 'Mobile Payment';
       default:
@@ -249,34 +239,6 @@ class PaymentMethods {
       'icon': 'money',
       'color': 'green',
       'requiresReference': false,
-    },
-    {
-      'value': creditCard,
-      'label': 'Credit Card',
-      'icon': 'credit_card',
-      'color': 'blue',
-      'requiresReference': true,
-    },
-    {
-      'value': debitCard,
-      'label': 'Debit Card',
-      'icon': 'payment',
-      'color': 'purple',
-      'requiresReference': true,
-    },
-    {
-      'value': bankTransfer,
-      'label': 'Bank Transfer',
-      'icon': 'account_balance',
-      'color': 'orange',
-      'requiresReference': true,
-    },
-    {
-      'value': check,
-      'label': 'Check',
-      'icon': 'receipt_long',
-      'color': 'brown',
-      'requiresReference': true,
     },
     {
       'value': mobilePayment,

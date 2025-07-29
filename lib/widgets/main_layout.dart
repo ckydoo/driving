@@ -1,6 +1,7 @@
 // lib/widgets/complete_main_layout.dart
 import 'package:driving/dashboard.dart';
 import 'package:driving/overview/quick_search_screen.dart';
+import 'package:driving/screens/receipts/receipt_management_screen.dart';
 import 'package:driving/settings/settings_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -35,7 +36,7 @@ class CompleteMainLayout extends StatelessWidget {
                   child: Column(
                     children: [
                       Text(
-                        'DRIVING SCHOOL',
+                        'Myla Driving School',
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: 20,
@@ -123,6 +124,13 @@ class CompleteMainLayout extends StatelessWidget {
                               'vehicles',
                               navController.currentPage.value,
                               () => navController.navigateToPage('vehicles'),
+                            ),
+                            _buildSidebarItem(
+                              Icons.receipt_long,
+                              'Receipts',
+                              'receipts',
+                              navController.currentPage.value,
+                              () => navController.navigateToPage('receipts'),
                             ),
                             _buildSidebarItem(
                               Icons.attach_money,
@@ -361,6 +369,13 @@ class CompleteMainLayout extends StatelessWidget {
           () => navController.navigateToPage('course_reports'),
         ),
         _buildSidebarItem(
+          Icons.receipt_long,
+          'Receipt Reports',
+          'receipt_reports',
+          navController.currentPage.value,
+          () => navController.navigateToPage('receipt_reports'),
+        ),
+        _buildSidebarItem(
           Icons.calendar_today,
           'Schedule Reports',
           'schedule_reports',
@@ -395,6 +410,8 @@ class CompleteMainLayout extends StatelessWidget {
         return FleetScreen();
       case 'quick_search':
         return QuickSearchScreen();
+      case 'receipts':
+        return ReceiptManagementScreen();
       case 'billing':
         return BillingScreen();
       case 'schedules':

@@ -226,7 +226,7 @@ class DatabaseHelper {
     await db.execute('''
   CREATE TABLE payments(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    invoice INTEGER NOT NULL,
+    invoiceId INTEGER NOT NULL,
     amount REAL NOT NULL,
     method TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'Paid',
@@ -235,6 +235,7 @@ class DatabaseHelper {
     reference TEXT,
     receipt_path TEXT,
     receipt_generated INTEGER NOT NULL DEFAULT 0,
+    userId INTEGER REFERENCES users(id),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 
   )
@@ -768,7 +769,9 @@ WHERE invoices.student = ?
   }
 
   Future<int> updateInvoice(Map<String, dynamic> invoice) async {
-    Database db = await database;
+    print(
+        'DatabaseHelper: Updating invoice with data: $invoice'); // Add this debug line
+    final db = await database;
     return await db.update(
       'invoices',
       invoice,

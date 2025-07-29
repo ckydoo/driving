@@ -53,7 +53,7 @@ dependencies:
   crypto: ^3.0.3  # Added for password hashing
   equatable: ^2.0.5
   shared_preferences: ^2.0.15
-
+  pdf_render: ^1.4.0
 
 
 

@@ -1,9 +1,39 @@
 // lib/controllers/navigation_controller.dart
 import 'package:get/get.dart';
+import 'package:flutter/material.dart';
 
 class NavigationController extends GetxController {
   var currentPage = 'dashboard'.obs;
   var currentUser = Rxn<Map<String, String>>();
+
+  final List<NavigationItem> navigationItems = [
+    NavigationItem(
+      title: 'Dashboard',
+      icon: Icons.dashboard,
+      route: '/dashboard',
+    ),
+    NavigationItem(
+      title: 'Students',
+      icon: Icons.people,
+      route: '/students',
+    ),
+    NavigationItem(
+      title: 'Schedule',
+      icon: Icons.calendar_today,
+      route: '/schedule',
+    ),
+    NavigationItem(
+      title: 'Billing',
+      icon: Icons.account_balance_wallet,
+      route: '/billing',
+    ),
+    NavigationItem(
+      title: 'Receipts', // New item
+      icon: Icons.receipt_long,
+      route: '/receipts',
+    ),
+    // ...other existing items...
+  ];
 
   @override
   void onInit() {
@@ -48,6 +78,8 @@ class NavigationController extends GetxController {
         return 'Instructor Management';
       case 'vehicles':
         return 'Vehicle Management';
+      case 'receipts':
+        return 'Receipts Management';
       case 'billing':
         return 'Payments & Invoices';
       case 'schedules':
@@ -62,4 +94,16 @@ class NavigationController extends GetxController {
         return 'Dashboard';
     }
   }
+}
+
+class NavigationItem {
+  final String title;
+  final IconData icon;
+  final String route;
+
+  NavigationItem({
+    required this.title,
+    required this.icon,
+    required this.route,
+  });
 }

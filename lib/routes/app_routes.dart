@@ -10,6 +10,7 @@ class AppRoutes {
   static const String instructors = '/instructors';
   static const String courses = '/courses';
   static const String fleet = '/fleet';
+  static const String receipts = '/receipts';
   static const String schedules = '/schedules';
   static const String billing = '/billing';
   static const String quickSearch = '/quick-search';
@@ -51,6 +52,10 @@ class AppRoutes {
     GetPage(
       name: quickSearch,
       page: () => QuickSearchScreen(),
+    ),
+    GetPage(
+      name: receipts,
+      page: () => CompleteMainLayout(),
     ),
   ];
 }

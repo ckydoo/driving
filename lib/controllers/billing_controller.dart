@@ -1,6 +1,9 @@
 import 'package:driving/models/billing_record.dart';
 import 'package:driving/models/invoice.dart';
 import 'package:driving/models/payment.dart';
+import 'package:driving/models/user.dart';
+import 'package:driving/services/receipt_service.dart';
+import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../services/database_helper.dart';
 
@@ -153,19 +156,6 @@ class BillingController extends GetxController {
     }
   }
 
-  Future<void> _updateInvoiceStatus(int invoiceId, double amount) async {
-    final invoice = invoices.firstWhere((inv) => inv.id == invoiceId);
-    final newAmountPaid = invoice.amountPaid + amount;
-    final status = newAmountPaid >= invoice.totalAmountCalculated
-        ? 'paid'
-        : newAmountPaid > 0
-            ? 'partial'
-            : 'unpaid';
-
-    await _dbHelper.updateInvoice(
-        {'id': invoiceId, 'amountpaid': newAmountPaid, 'status': status});
-  }
-
   Future<void> addLessonsBack(int studentId, int lessonsToAdd) async {
     try {
       print(
@@ -204,8 +194,6 @@ class BillingController extends GetxController {
     }
   }
 
-  // Add this method to your BillingController class
-
   Future<void> updateUsedLessons(int invoiceId, int usedLessons) async {
     try {
       final index = invoices.indexWhere((inv) => inv.id == invoiceId);
@@ -242,11 +230,6 @@ class BillingController extends GetxController {
     return await db.query('payments');
   }
 
-  Future<int> insertPayment(Map<String, dynamic> payment) async {
-    final db = await _dbHelper.database;
-    return await db.insert('payments', payment);
-  }
-
   Future<void> fetchBillingData() async {
     try {
       isLoading(true);
@@ -277,37 +260,268 @@ class BillingController extends GetxController {
   }
 
   Future<void> recordPayment(Payment payment) async {
+    print('=== STARTING recordPayment ===');
+    print(
+        'Payment details: Invoice ID: ${payment.invoiceId}, Amount: ${payment.amount}');
+
+    try {
+      isLoading(true);
+      print('Setting isLoading to true');
+
+      // Insert payment with debug
+      print('About to insert payment into database...');
+      print('Payment data to insert: ${payment.toJson()}');
+
+      final paymentId = await _dbHelper.insertPayment(payment.toJson());
+      print('✓ Payment inserted successfully with ID: $paymentId');
+
+      // Verify payment was inserted
+      final db = await _dbHelper.database;
+      final insertedPayment =
+          await db.query('payments', where: 'id = ?', whereArgs: [paymentId]);
+      print('✓ Verified inserted payment: $insertedPayment');
+
+      // Update invoice status with debug
+      print('About to call _updateInvoiceStatus...');
+      await _updateInvoiceStatus(payment.invoiceId, payment.amount);
+      print('✓ _updateInvoiceStatus completed successfully');
+
+      // Refresh billing data
+      print('About to refresh billing data...');
+      await fetchBillingData();
+      print('✓ Billing data refreshed');
+
+      print('=== recordPayment COMPLETED SUCCESSFULLY ===');
+    } catch (e) {
+      print('=== ERROR in recordPayment ===');
+      print('Error: $e');
+      print('Stack trace: ${e.toString()}');
+      rethrow;
+    } finally {
+      isLoading(false);
+      print('Setting isLoading to false');
+    }
+  }
+
+// STEP 3: Updated _updateInvoiceStatus that gets data from database directly
+  Future<void> _updateInvoiceStatus(int invoiceId, double amount) async {
+    print('=== STARTING _updateInvoiceStatus ===');
+    print('Invoice ID: $invoiceId, Payment Amount: $amount');
+
+    try {
+      final db = await _dbHelper.database;
+
+      // Get current invoice data from database (not memory)
+      final invoiceResults = await db.query(
+        'invoices',
+        where: 'id = ?',
+        whereArgs: [invoiceId],
+      );
+
+      if (invoiceResults.isEmpty) {
+        throw Exception('Invoice $invoiceId not found in database');
+      }
+
+      final invoiceData = invoiceResults.first;
+      print('Current invoice data from DB: $invoiceData');
+
+      // Get current amount paid
+      final currentAmountPaid =
+          (invoiceData['amountpaid'] as num?)?.toDouble() ?? 0.0;
+      print('Current amount paid: $currentAmountPaid');
+
+      // Calculate new amounts
+      final newAmountPaid = currentAmountPaid + amount;
+      print('New amount paid will be: $newAmountPaid');
+
+      // Calculate total amount
+      final totalAmount = (invoiceData['total_amount'] as num?)?.toDouble() ??
+          ((invoiceData['lessons'] as num).toDouble() *
+              (invoiceData['price_per_lesson'] as num).toDouble());
+      print('Total amount: $totalAmount');
+
+      // Determine new status
+      String newStatus;
+      if (newAmountPaid >= totalAmount) {
+        newStatus = 'paid';
+      } else if (newAmountPaid > 0) {
+        newStatus = 'partial';
+      } else {
+        newStatus = 'unpaid';
+      }
+
+      print('New status will be: $newStatus');
+
+      // Update the invoice
+      final updateData = {
+        'amountpaid': newAmountPaid,
+        'status': newStatus,
+      };
+
+      print('Updating invoice with data: $updateData');
+
+      final rowsUpdated = await db.update(
+        'invoices',
+        updateData,
+        where: 'id = ?',
+        whereArgs: [invoiceId],
+      );
+
+      print('✓ Database update completed. Rows affected: $rowsUpdated');
+
+      // Verify the update
+      final verifyResults = await db.query(
+        'invoices',
+        where: 'id = ?',
+        whereArgs: [invoiceId],
+      );
+
+      if (verifyResults.isNotEmpty) {
+        final updatedData = verifyResults.first;
+        print(
+            '✓ Verification - Updated invoice: amountpaid = ${updatedData['amountpaid']}, status = ${updatedData['status']}');
+      }
+
+      print('=== _updateInvoiceStatus COMPLETED ===');
+    } catch (e) {
+      print('=== ERROR in _updateInvoiceStatus ===');
+      print('Error: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> recordPaymentWithReceipt(
+      Payment payment, Invoice invoice, User student) async {
+    print('=== STARTING recordPaymentWithReceipt ===');
+
     try {
       isLoading(true);
 
-      // Insert payment into database
-      final paymentId = await _dbHelper.insertPayment(payment.toJson());
+      // Generate reference if not provided
+      final reference = payment.reference ?? ReceiptService.generateReference();
+
+      // Create payment with reference
+      final paymentWithReference = payment.copyWith(reference: reference);
+
+      // Insert payment
+      final paymentId =
+          await _dbHelper.insertPayment(paymentWithReference.toJson());
+      print('✓ Payment inserted with ID: $paymentId');
 
       // Update invoice status
       await _updateInvoiceStatus(payment.invoiceId, payment.amount);
+      print('✓ Invoice status updated');
 
-      // Refresh data
-      await fetchBillingData();
+      // Generate receipt
+      try {
+        final receiptPath = await ReceiptService.generateReceipt(
+          paymentWithReference.copyWith(id: paymentId),
+          invoice,
+          student,
+          'Your Driving School', // Replace with your school name
+        );
 
-      print('Payment recorded successfully with ID: $paymentId');
+        // Update payment with receipt path
+        await _dbHelper.updatePayment({
+          'id': paymentId,
+          'receipt_path': receiptPath,
+          'receipt_generated': 1,
+        });
+
+        print('✓ Receipt generated at: $receiptPath');
+
+        // Refresh billing data
+        await fetchBillingData();
+
+        // Show success with receipt options
+        Get.snackbar(
+          'Payment Recorded',
+          'Payment recorded and receipt generated successfully',
+          snackPosition: SnackPosition.TOP,
+          backgroundColor: Colors.green.shade600,
+          colorText: Colors.white,
+          duration: const Duration(seconds: 5),
+          mainButton: TextButton(
+            onPressed: () => ReceiptService.printReceipt(receiptPath),
+            child: const Text('Print Receipt',
+                style: TextStyle(color: Colors.white)),
+          ),
+        );
+      } catch (receiptError) {
+        print('Warning: Receipt generation failed: $receiptError');
+        // Still refresh data even if receipt fails
+        await fetchBillingData();
+
+        Get.snackbar(
+          'Payment Recorded',
+          'Payment recorded but receipt generation failed',
+          snackPosition: SnackPosition.TOP,
+          backgroundColor: Colors.orange.shade600,
+          colorText: Colors.white,
+        );
+      }
+    } catch (e) {
+      print('ERROR in recordPaymentWithReceipt: $e');
+      rethrow;
     } finally {
       isLoading(false);
     }
   }
 
-  Future<void> updateInvoiceStatus(int invoiceId, double amount) async {
-    final invoice = invoices.firstWhere((inv) => inv.id == invoiceId);
-    final newAmountPaid = invoice.amountPaid + amount;
-    final status = newAmountPaid >= invoice.totalAmountCalculated
-        ? 'paid'
-        : newAmountPaid > 0
-            ? 'partial'
-            : 'unpaid';
+  Future<void> regenerateReceipt(int paymentId) async {
+    try {
+      final payment = payments.firstWhere((p) => p.id == paymentId);
+      final invoice = invoices.firstWhere((inv) => inv.id == payment.invoiceId);
 
-    await _dbHelper.updateInvoice({
-      'id': invoiceId,
-      'amountpaid': newAmountPaid,
-      'status': status,
-    });
+      // You'll need to get the student data - add this method to your UserController
+      // final student = await userController.getUserById(invoice.studentId);
+
+      // For now, assuming you have access to student data
+      // Replace this with actual student lookup
+      final receiptPath = await ReceiptService.generateReceipt(
+        payment,
+        invoice,
+        User(
+            fname: 'Student',
+            lname: 'Name',
+            email: 'student@example.com',
+            password: '',
+            gender: '',
+            phone: '',
+            address: '',
+            date_of_birth: DateTime.now(),
+            role: 'student',
+            status: 'active',
+            idnumber: '',
+            created_at: DateTime.now()), // Replace with actual student
+
+        'Your Driving School',
+      );
+
+      // Update payment with new receipt path
+      await _dbHelper.updatePayment({
+        'id': paymentId,
+        'receipt_path': receiptPath,
+        'receipt_generated': 1,
+      });
+
+      await fetchBillingData();
+
+      Get.snackbar(
+        'Receipt Generated',
+        'Receipt has been regenerated successfully',
+        snackPosition: SnackPosition.TOP,
+        backgroundColor: Colors.green.shade600,
+        colorText: Colors.white,
+      );
+    } catch (e) {
+      Get.snackbar(
+        'Error',
+        'Failed to regenerate receipt: ${e.toString()}',
+        snackPosition: SnackPosition.TOP,
+        backgroundColor: Colors.red.shade600,
+        colorText: Colors.white,
+      );
+    }
   }
 }

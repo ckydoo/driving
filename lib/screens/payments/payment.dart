@@ -910,13 +910,18 @@ class _PaymentsScreenState extends State<PaymentsScreen>
     );
   }
 
-  void _showPaymentDialog(BuildContext context, Invoice invoice, User student) {
+  void _showPaymentDialog(
+    BuildContext context,
+    Invoice invoice,
+    User student,
+  ) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return PaymentDialog(
           invoice: invoice,
           studentName: '${student.fname} ${student.lname}',
+          studentId: student.id!, // Make sure to pass this
         );
       },
     ).then((result) {
