@@ -137,6 +137,8 @@ class ScheduleController extends GetxController {
     }).toList();
 
     filteredSchedules.assignAll(filtered);
+    // FIXED: Force update to ensure UI refreshes
+    filteredSchedules.refresh();
   }
 
   // Helper methods to get related data
@@ -243,13 +245,13 @@ class ScheduleController extends GetxController {
       }
 
       final schedule = schedules[index];
-      final lessonsChange =
-          attended ? schedule.lessonsDeducted : -schedule.lessonsDeducted;
+
+      // Calculate lessons based on duration (30 min = 1 lesson)
+      final actualLessonsDeducted = schedule.lessonsDeducted;
 
       // Create temporary schedule with proposed changes
       final tempSchedule = schedule.copyWith(
         attended: attended,
-        lessonsCompleted: schedule.lessonsCompleted + lessonsChange,
       );
 
       if (attended && _isBilledLessonsExceeded(tempSchedule)) {
@@ -264,7 +266,10 @@ class ScheduleController extends GetxController {
 
       final updated = schedule.copyWith(
         attended: attended,
-        lessonsCompleted: schedule.lessonsCompleted + lessonsChange,
+        // Update lessons completed based on actual duration
+        lessonsCompleted: attended
+            ? schedule.lessonsCompleted + actualLessonsDeducted
+            : schedule.lessonsCompleted - actualLessonsDeducted,
       );
 
       await _dbHelper.updateSchedule({
@@ -313,6 +318,7 @@ class ScheduleController extends GetxController {
     }
   }
 
+  // Fix the billing lessons check to use proper calculation
   bool _isBilledLessonsExceeded(Schedule schedule) {
     try {
       final billingController = Get.find<BillingController>();
@@ -332,6 +338,7 @@ class ScheduleController extends GetxController {
               s.attended)
           .fold<int>(0, (sum, s) => sum + s.lessonsDeducted);
 
+      // Use the actual lesson deduction for this schedule
       final potentialAddedLessons =
           schedule.attended ? schedule.lessonsDeducted : 0;
 
@@ -439,7 +446,7 @@ class ScheduleController extends GetxController {
     }
   }
 
-  // Progress calculation
+  // Fix the progress calculation method
   double calculateScheduleProgress(Schedule schedule) {
     try {
       final billingController = Get.find<BillingController>();
@@ -452,7 +459,15 @@ class ScheduleController extends GetxController {
       final totalLessons = invoice?.lessons ?? 0;
       if (totalLessons == 0) return 0;
 
-      final progress = (schedule.lessonsCompleted / totalLessons) * 100;
+      // Fix: Use attended lessons with proper deduction calculation
+      final attendedLessons = schedules
+          .where((s) =>
+              s.studentId == schedule.studentId &&
+              s.courseId == schedule.courseId &&
+              s.attended)
+          .fold<int>(0, (sum, s) => sum + s.lessonsDeducted);
+
+      final progress = (attendedLessons / totalLessons) * 100;
       return progress.clamp(0.0, 100.0);
     } catch (e) {
       print('Error calculating progress: $e');
@@ -641,8 +656,12 @@ class ScheduleController extends GetxController {
         }
       }
 
+      // FIXED: Ensure UI updates by refreshing observables
       schedules.refresh();
       _applyFilters();
+
+      // Force update to ensure UI reflects changes
+      update();
 
       Get.snackbar(
         'Success',
@@ -654,6 +673,7 @@ class ScheduleController extends GetxController {
       );
     } catch (e) {
       Get.snackbar('Error', 'Failed to save schedule: ${e.toString()}');
+      rethrow; // Re-throw to handle in calling code
     } finally {
       isLoading(false);
     }
@@ -693,9 +713,7 @@ class ScheduleController extends GetxController {
   int _getUsedLessons(int studentId, int courseId) {
     return schedules
         .where((s) =>
-            s.studentId == studentId &&
-            s.courseId == courseId &&
-            s.status != 'Cancelled')
+            s.studentId == studentId && s.courseId == courseId && s.attended)
         .fold<int>(0, (sum, s) => sum + s.lessonsDeducted);
   }
 

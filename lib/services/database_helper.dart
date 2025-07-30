@@ -114,7 +114,9 @@ class DatabaseHelper {
    due_date TIMESTAMP NOT NULL,
    courseName TEXT ,
    status TEXT NOT NULL DEFAULT 'unpaid',
-   total_amount REAL NOT NULL 
+   total_amount REAL NOT NULL ,
+   used_lessons INTEGER NOT NULL DEFAULT 0,
+   invoice_number TEXT NOT NULL UNIQUE
 )
  ''');
 
@@ -165,7 +167,7 @@ class DatabaseHelper {
     status TEXT NOT NULL,
     attended INTEGER NOT NULL DEFAULT 0,
     lessonsCompleted INTEGER DEFAULT 0,
-    
+    lessonsDeducted INTEGER DEFAULT 0, 
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
   )
 ''');
@@ -504,6 +506,8 @@ class DatabaseHelper {
     invoices.due_date,
     invoices.status,
     invoices.total_amount,
+    invoices.used_lessons,
+    invoices.invoice_number,
     courses.name AS courseName 
 FROM invoices
 INNER JOIN courses ON invoices.course = courses.id  

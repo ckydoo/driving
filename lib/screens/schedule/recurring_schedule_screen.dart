@@ -1114,6 +1114,9 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
       Get.find<RecurringScheduleProgressController>()
           .complete(successCount, conflictCount);
     }
+
+    // FIXED: Force schedule controller to refresh
+    _scheduleController.fetchSchedules();
   }
 
   void _handleRecurringScheduleComplete(int successCount, int conflictCount) {

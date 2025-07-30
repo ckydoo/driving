@@ -14,7 +14,6 @@ class Schedule {
   final String status;
   final bool attended;
   int lessonsCompleted;
-  final int lessonsDeducted; // Added missing property
   final Billing? billing;
   final List<Payment> payments;
   final bool hasPaidOverHalf;
@@ -36,7 +35,6 @@ class Schedule {
     required this.classType,
     this.status = 'Scheduled',
     this.attended = false,
-    this.lessonsDeducted = 1, // Default to 1 lesson per schedule
     this.billing,
     this.payments = const [],
     this.hasPaidOverHalf = false,
@@ -46,6 +44,14 @@ class Schedule {
     this.recurrencePattern,
     this.recurrenceEndDate,
   });
+
+  // Remove the hardcoded lessonsDeducted and make it calculated
+  int get lessonsDeducted {
+    final duration = end.difference(start);
+    final minutes = duration.inMinutes;
+    // Each lesson is 30 minutes, so divide by 30 and round up
+    return (minutes / 30).ceil();
+  }
 
   factory Schedule.fromJson(Map<String, dynamic> json) => Schedule(
         id: json['id'],
@@ -59,7 +65,7 @@ class Schedule {
         status: json['status'] ?? 'Scheduled',
         attended: json['attended'] == 1,
         lessonsCompleted: json['lessonsCompleted'] ?? 0,
-        lessonsDeducted: json['lessonsDeducted'] ?? 1,
+        // Remove lessonsDeducted from JSON parsing as it's now calculated
         // Parse new fields
         isRecurring: json['is_recurring'] == 1,
         recurrencePattern: json['recurrence_pattern'],
@@ -80,7 +86,7 @@ class Schedule {
         'status': status,
         'attended': attended ? 1 : 0,
         'lessonsCompleted': lessonsCompleted,
-        'lessonsDeducted': lessonsDeducted,
+        'lessonsDeducted': lessonsDeducted, // This will now be calculated
         // Add new fields to toJson
         'is_recurring': isRecurring ? 1 : 0,
         'recurrence_pattern': recurrencePattern,
@@ -107,7 +113,6 @@ class Schedule {
     String? status,
     bool? attended,
     int? lessonsCompleted,
-    int? lessonsDeducted,
     Billing? billing,
     List<Payment>? payments,
     bool? hasPaidOverHalf,
@@ -128,7 +133,6 @@ class Schedule {
       status: status ?? this.status,
       attended: attended ?? this.attended,
       lessonsCompleted: lessonsCompleted ?? this.lessonsCompleted,
-      lessonsDeducted: lessonsDeducted ?? this.lessonsDeducted,
       billing: billing ?? this.billing,
       payments: payments ?? this.payments,
       hasPaidOverHalf: hasPaidOverHalf ?? this.hasPaidOverHalf,

@@ -49,13 +49,41 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadAllData();
     });
+
+    // FIXED: Listen for route changes to refresh data
+    _setupRouteListener();
+  }
+
+  void _setupRouteListener() {
+    // Listen for when we return to this screen
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Get.rootDelegate.addListener(() {
+        if (Get.currentRoute == '/schedule' ||
+            Get.currentRoute == '/' && mounted) {
+          // Refresh data when returning to schedule screen
+          _refreshData();
+        }
+      });
+    });
   }
 
   Future<void> _loadAllData() async {
-    await scheduleController.fetchSchedules();
-    await userController.fetchUsers();
-    await courseController.fetchCourses();
-    await fleetController.fetchFleet();
+    try {
+      await Future.wait([
+        scheduleController.fetchSchedules(),
+        userController.fetchUsers(),
+        courseController.fetchCourses(),
+        fleetController.fetchFleet(),
+      ]);
+    } catch (e) {
+      print('Error loading data: $e');
+      Get.snackbar(
+        'Error',
+        'Failed to load some data. Please refresh.',
+        backgroundColor: Colors.orange,
+        colorText: Colors.white,
+      );
+    }
   }
 
   @override
@@ -308,6 +336,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           onPageChanged: (focusedDay) {
             _focusedDay.value = focusedDay;
           },
+          // FIXED: Add key to force rebuild when schedules change
+          key: ValueKey(scheduleController.schedules.length),
         ),
       );
     });
@@ -410,24 +440,26 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   List<Schedule> _getEventsForDay(DateTime day) {
-    return _getFilteredSchedules().where((schedule) {
+    // FIXED: Use the reactive filtered schedules that auto-update
+    return scheduleController.filteredSchedules.where((schedule) {
       return isSameDay(schedule.start, day);
     }).toList();
   }
 
   List<Schedule> _getFilteredSchedules() {
-    var schedules = scheduleController.schedules.toList();
+    // FIXED: Apply filters directly to the reactive schedules list
+    var allSchedules = scheduleController.schedules.toList();
 
     final currentUser = authController.currentUser.value;
     if (currentUser != null) {
       switch (currentUser.role.toLowerCase()) {
         case 'student':
-          schedules = schedules
+          allSchedules = allSchedules
               .where((schedule) => schedule.studentId == currentUser.id)
               .toList();
           break;
         case 'instructor':
-          schedules = schedules
+          allSchedules = allSchedules
               .where((schedule) => schedule.instructorId == currentUser.id)
               .toList();
           break;
@@ -436,7 +468,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       }
     }
 
-    schedules = schedules.where((schedule) {
+    allSchedules = allSchedules.where((schedule) {
       if (_selectedInstructorFilter != null) {
         final instructor = _getInstructorById(schedule.instructorId);
         final instructorName =
@@ -464,7 +496,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       return true;
     }).toList();
 
-    return schedules;
+    return allSchedules;
   }
 
   bool _hasActiveFilters() {
@@ -545,7 +577,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
   void _refreshData() {
     _loadAllData();
-    Get.snackbar('Info', 'Refreshing schedule data...');
+    // Don't show snackbar for automatic refresh
   }
 
   void _showDatePicker() async {
