@@ -1,12 +1,10 @@
 // lib/screens/schedule/schedule_screen.dart
 import 'dart:async';
-
 import 'package:driving/models/schedule.dart';
 import 'package:driving/models/user.dart';
 import 'package:driving/screens/schedule/create_schedule_screen.dart';
 import 'package:driving/screens/schedule/daily_lessons.dart';
 import 'package:driving/screens/schedule/recurring_schedule_screen.dart';
-import 'package:driving/widgets/schedule_details_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:table_calendar/table_calendar.dart';
@@ -16,7 +14,6 @@ import '../../controllers/user_controller.dart';
 import '../../controllers/course_controller.dart';
 import '../../controllers/fleet_controller.dart';
 import '../../models/course.dart';
-import '../../models/fleet.dart';
 import '../../controllers/auth_controller.dart';
 
 class ScheduleScreen extends StatefulWidget {
@@ -372,12 +369,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   Course? _getCourseById(int id) {
     return courseController.courses.firstWhereOrNull(
       (course) => course.id == id,
-    );
-  }
-
-  Fleet? _getVehicleById(int id) {
-    return fleetController.fleet.firstWhereOrNull(
-      (vehicle) => vehicle.id == id,
     );
   }
 

@@ -1,7 +1,7 @@
-import 'dart:io';
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/controllers/course_controller.dart';
 import 'package:driving/controllers/fleet_controller.dart';
+import 'package:driving/models/fleet.dart';
 import 'package:driving/controllers/schedule_controller.dart';
 import 'package:driving/controllers/user_controller.dart';
 import 'package:driving/models/user.dart';
@@ -38,19 +38,13 @@ class _InstructorDetailsScreenState extends State<InstructorDetailsScreen>
 
   // Enhanced UX properties
   late TabController _tabController;
-  int _currentTabIndex = 0;
-  bool _isExpanded = false;
-  String _searchQuery = '';
-  String _filterStatus = 'all';
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 5, vsync: this);
     _tabController.addListener(() {
-      setState(() {
-        _currentTabIndex = _tabController.index;
-      });
+      setState(() {});
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -664,34 +658,10 @@ class _InstructorDetailsScreenState extends State<InstructorDetailsScreen>
               runSpacing: 8,
               children: [
                 _buildActionChip(
-                  'Schedule Lesson',
-                  Icons.add_box,
-                  Colors.blue,
-                  () => _scheduleLesson(),
-                ),
-                _buildActionChip(
                   'Assign Vehicle',
                   Icons.directions_car,
                   Colors.orange,
                   () => _assignVehicle(),
-                ),
-                _buildActionChip(
-                  'Send Message',
-                  Icons.message,
-                  Colors.green,
-                  () => _sendMessage(),
-                ),
-                _buildActionChip(
-                  'Edit Profile',
-                  Icons.edit,
-                  Colors.purple,
-                  () => _editProfile(),
-                ),
-                _buildActionChip(
-                  'Generate Report',
-                  Icons.assessment,
-                  Colors.red,
-                  () => _generateReport(),
                 ),
               ],
             ),
@@ -758,9 +728,7 @@ class _InstructorDetailsScreenState extends State<InstructorDetailsScreen>
                     contentPadding: EdgeInsets.symmetric(horizontal: 16),
                   ),
                   onChanged: (value) {
-                    setState(() {
-                      _searchQuery = value;
-                    });
+                    setState(() {});
                   },
                 ),
               ),
@@ -768,9 +736,7 @@ class _InstructorDetailsScreenState extends State<InstructorDetailsScreen>
               PopupMenuButton<String>(
                 icon: Icon(Icons.filter_list),
                 onSelected: (value) {
-                  setState(() {
-                    _filterStatus = value;
-                  });
+                  setState(() {});
                 },
                 itemBuilder: (context) => [
                   PopupMenuItem(value: 'all', child: Text('All')),
@@ -1043,17 +1009,15 @@ class _InstructorDetailsScreenState extends State<InstructorDetailsScreen>
               Container(
                 padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: vehicle.status.toLowerCase() == 'active'
-                      ? Colors.green.shade200
-                      : Colors.orange.shade200,
+                  color: _getFleetStatusColor(vehicle),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  vehicle.status,
+                  _getFleetStatus(vehicle),
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
-                    color: vehicle.status.toLowerCase() == 'active'
+                    color: _getFleetStatusColor(vehicle) == Colors.green
                         ? Colors.green.shade800
                         : Colors.orange.shade800,
                   ),
@@ -1216,6 +1180,28 @@ class _InstructorDetailsScreenState extends State<InstructorDetailsScreen>
         ),
       ],
     );
+  }
+
+  String _getFleetStatus(Fleet fleet) {
+    if (fleet.instructor == 0) return 'Available';
+    final age = _getFleetAge(fleet.modelYear);
+    if (age > 10) return 'Assigned (Old)';
+    if (age > 5) return 'Assigned (Aging)';
+    return 'Assigned';
+  }
+
+// Helper method to get fleet status color
+  Color _getFleetStatusColor(Fleet fleet) {
+    if (fleet.instructor == 0) return Colors.orange;
+    final age = _getFleetAge(fleet.modelYear);
+    if (age > 10) return Colors.red;
+    if (age > 5) return Colors.amber;
+    return Colors.green;
+  }
+
+// Helper method to calculate fleet age
+  int _getFleetAge(String modelYear) {
+    return DateTime.now().year - int.parse(modelYear);
   }
 
   Widget _buildNoteCard(Map<String, dynamic> note) {
@@ -1609,30 +1595,6 @@ class _InstructorDetailsScreenState extends State<InstructorDetailsScreen>
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: Icon(Icons.edit),
-              title: Text('Edit Instructor'),
-              onTap: () {
-                Navigator.pop(context);
-                _editProfile();
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.share),
-              title: Text('Share Profile'),
-              onTap: () {
-                Navigator.pop(context);
-                _shareProfile();
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.print),
-              title: Text('Print Report'),
-              onTap: () {
-                Navigator.pop(context);
-                _generateReport();
-              },
-            ),
-            ListTile(
               leading: Icon(Icons.delete, color: Colors.red),
               title: Text('Delete Instructor',
                   style: TextStyle(color: Colors.red)),
@@ -1647,63 +1609,217 @@ class _InstructorDetailsScreenState extends State<InstructorDetailsScreen>
     );
   }
 
-  void _scheduleLesson() {
-    // Navigate to schedule creation screen
-    Get.snackbar('Info', 'Navigate to schedule lesson screen');
-  }
-
   void _assignVehicle() {
-    // Show vehicle assignment dialog
-    Get.snackbar('Info', 'Show vehicle assignment dialog');
-  }
+    final availableVehicles = fleetController.fleet
+        .where((vehicle) => vehicle.instructor == 0)
+        .toList();
 
-  void _sendMessage() {
-    // Open messaging interface
-    Get.snackbar('Info', 'Open messaging interface');
-  }
-
-  void _editProfile() {
-    // Navigate to edit profile screen
-    Get.snackbar('Info', 'Navigate to edit profile screen');
-  }
-
-  void _generateReport() {
-    // Generate and download report
-    Get.snackbar('Info', 'Generating instructor report...');
-  }
-
-  void _shareProfile() {
-    // Share instructor profile
-    Get.snackbar('Info', 'Share instructor profile');
-  }
-
-  void _confirmDelete() {
-    // Show delete confirmation dialog
-    Get.dialog(
-      AlertDialog(
-        title: Text('Delete Instructor'),
-        content: Text(
-            'Are you sure you want to delete this instructor? This action cannot be undone.'),
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Assign Vehicle'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+                'Select a vehicle to assign to ${instructor!.fname} ${instructor!.lname}:'),
+            SizedBox(height: 16),
+            Container(
+              width: double.maxFinite,
+              child: availableVehicles.isEmpty
+                  ? Container(
+                      padding: EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.orange.shade200),
+                      ),
+                      child: Column(
+                        children: [
+                          Icon(Icons.warning, color: Colors.orange),
+                          SizedBox(height: 8),
+                          Text(
+                            'No available vehicles',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          Text('All vehicles are currently assigned.'),
+                        ],
+                      ),
+                    )
+                  : Column(
+                      children: availableVehicles.map((vehicle) {
+                        return Card(
+                          child: ListTile(
+                            leading: Icon(Icons.directions_car),
+                            title: Text('${vehicle.make} ${vehicle.model}'),
+                            subtitle: Text(
+                                'Plate: ${vehicle.carPlate} • Year: ${vehicle.modelYear}'),
+                            onTap: () {
+                              Navigator.pop(context);
+                              _confirmVehicleAssignment(vehicle);
+                            },
+                          ),
+                        );
+                      }).toList(),
+                    ),
+            ),
+          ],
+        ),
         actions: [
           TextButton(
-            onPressed: () => Get.back(),
+            onPressed: () => Navigator.pop(context),
             child: Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              Get.back();
-              _deleteInstructor();
-            },
-            child: Text('Delete', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
     );
   }
 
-  void _deleteInstructor() {
-    // Delete instructor logic
-    Get.snackbar('Info', 'Instructor deleted');
+  void _confirmVehicleAssignment(Fleet vehicle) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Confirm Assignment'),
+        content: Text(
+            'Assign ${vehicle.make} ${vehicle.model} (${vehicle.carPlate}) to ${instructor!.fname} ${instructor!.lname}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              try {
+                // Update vehicle assignment
+                await fleetController.assignVehicleToInstructor(
+                    vehicle.id ?? 0, instructor!.id ?? 0);
+                await fleetController.fetchFleet(); // Refresh fleet data
+                setState(() {}); // Refresh UI
+                Get.snackbar(
+                  'Success',
+                  'Vehicle assigned successfully',
+                  backgroundColor: Colors.green,
+                  colorText: Colors.white,
+                );
+              } catch (e) {
+                Get.snackbar(
+                  'Error',
+                  'Failed to assign vehicle: ${e.toString()}',
+                  backgroundColor: Colors.red,
+                  colorText: Colors.white,
+                );
+              }
+            },
+            child: Text('Assign'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDelete() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.warning, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Delete Instructor'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+                'Are you sure you want to delete ${instructor!.fname} ${instructor!.lname}?'),
+            SizedBox(height: 8),
+            Text(
+              'This will also:',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            Text('• Cancel all scheduled lessons'),
+            Text('• Unassign the instructor\'s vehicle'),
+            Text('• Remove all notes and attachments'),
+            SizedBox(height: 8),
+            Container(
+              padding: EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                'This action cannot be undone!',
+                style: TextStyle(
+                  color: Colors.red.shade800,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _deleteInstructor();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _deleteInstructor() async {
+    // Show loading
+    Get.dialog(
+      AlertDialog(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Deleting instructor...'),
+          ],
+        ),
+      ),
+      barrierDismissible: false,
+    );
+
+    try {
+      // Delete instructor and related data
+      await userController.deleteUser(instructor?.id ?? 0);
+
+      Get.back(); // Close loading dialog
+      Get.back(); // Go back to previous screen
+
+      Get.snackbar(
+        'Success',
+        'Instructor deleted successfully',
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
+    } catch (e) {
+      Get.back(); // Close loading dialog
+      Get.snackbar(
+        'Error',
+        'Failed to delete instructor: ${e.toString()}',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    }
   }
 
   void _showScheduleDetails(schedule) {
@@ -1787,12 +1903,6 @@ class _InstructorDetailsScreenState extends State<InstructorDetailsScreen>
                   ),
                 ),
     );
-  }
-
-  // Calculate header height based on content
-  double _getHeaderHeight() {
-    // Base height for app bar, profile info, and stats
-    return 280.0; // Adjust this value based on your header content
   }
 }
 

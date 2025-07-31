@@ -1,4 +1,5 @@
 import 'package:driving/models/billing_record.dart';
+import 'package:driving/models/course.dart';
 import 'package:driving/models/invoice.dart';
 import 'package:driving/models/payment.dart';
 import 'package:driving/models/user.dart';
@@ -523,5 +524,86 @@ class BillingController extends GetxController {
         colorText: Colors.white,
       );
     }
+  }
+  // Add this method to your existing BillingController
+
+  /// Creates an invoice directly (used during student enrollment)
+  Future<int> createInvoice(Invoice invoice) async {
+    try {
+      isLoading(true);
+
+      // Insert invoice into database
+      final invoiceId = await _dbHelper.insertInvoice(invoice.toJson());
+
+      // Add to local list for immediate UI update
+      final newInvoice = invoice.copyWith(id: invoiceId);
+      invoices.add(newInvoice);
+      invoices.refresh();
+
+      print(
+          '✓ Invoice created successfully: ID $invoiceId, Amount: \$${invoice.totalAmountCalculated}');
+
+      return invoiceId;
+    } catch (e) {
+      print('ERROR creating invoice: $e');
+      rethrow;
+    } finally {
+      isLoading(false);
+    }
+  }
+
+  /// Enhanced version that also handles course name lookup
+  Future<int> createInvoiceWithCourse(
+      int studentId, Course course, int lessons, DateTime dueDate) async {
+    try {
+      isLoading(true);
+
+      final invoice = Invoice(
+        studentId: studentId,
+        courseId: course.id!,
+        lessons: lessons,
+        pricePerLesson: course.price.toDouble(),
+        createdDate: DateTime.now(),
+        dueDate: dueDate,
+        status: 'unpaid',
+        courseName: course.name, // Store course name for easier display
+      );
+
+      final invoiceId = await _dbHelper.insertInvoice(invoice.toJson());
+
+      // Add to local list
+      final newInvoice = invoice.copyWith(id: invoiceId);
+      invoices.add(newInvoice);
+      invoices.refresh();
+
+      // Log the creation for audit trail
+      print('✓ Auto-invoice created during enrollment:');
+      print('  Student ID: $studentId');
+      print('  Course: ${course.name}');
+      print('  Lessons: $lessons');
+      print('  Price per lesson: \$${course.price}');
+      print('  Total: \$${invoice.totalAmountCalculated}');
+      print('  Due date: ${dueDate.toString().split(' ')[0]}');
+
+      return invoiceId;
+    } catch (e) {
+      print('ERROR in createInvoiceWithCourse: $e');
+      Get.snackbar(
+        'Invoice Creation Failed',
+        'Student was created but invoice creation failed: ${e.toString()}',
+        backgroundColor: Colors.orange,
+        colorText: Colors.white,
+        duration: Duration(seconds: 5),
+      );
+      rethrow;
+    } finally {
+      isLoading(false);
+    }
+  }
+
+// Also add this helper method to DatabaseHelper if not already present
+  Future<int> insertInvoice(Map<String, dynamic> invoice) async {
+    final db = await DatabaseHelper.instance.database;
+    return await db.insert('invoices', invoice);
   }
 }

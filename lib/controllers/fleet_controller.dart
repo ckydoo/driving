@@ -142,4 +142,17 @@ class FleetController extends GetxController {
       isLoading(false);
     }
   }
+
+  // Add this to your FleetController
+  Future<void> assignVehicleToInstructor(
+      int vehicleId, int instructorId) async {
+    // Implementation to update vehicle assignment in database
+    final db = await DatabaseHelper.instance.database;
+    await db.update(
+      'fleet',
+      {'instructor': instructorId},
+      where: 'id = ?',
+      whereArgs: [vehicleId],
+    );
+  }
 }

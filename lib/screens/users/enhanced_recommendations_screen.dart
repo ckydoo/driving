@@ -28,7 +28,6 @@ class _EnhancedRecommendationsScreenState
   final ScheduleController scheduleController = Get.find<ScheduleController>();
 
   List<Map<String, dynamic>> _smartRecommendations = [];
-  List<Map<String, dynamic>> _quickActions = [];
   List<Map<String, dynamic>> _insights = [];
 
   @override
@@ -229,70 +228,7 @@ class _EnhancedRecommendationsScreenState
     }
   }
 
-  void _generateQuickActions() {
-    _quickActions = [
-      {
-        'title': 'Add New ${widget.role.capitalize}',
-        'description': 'Register a new ${widget.role} in the system',
-        'icon': Icons.person_add,
-        'color': Colors.blue,
-        'onTap': () => Get.to(() => AddUserScreen(role: widget.role)),
-      },
-      {
-        'title': 'Import from CSV',
-        'description': 'Bulk import ${widget.role}s from a CSV file',
-        'icon': Icons.upload_file,
-        'color': Colors.green,
-        'onTap': () => _showImportDialog(),
-      },
-      {
-        'title': 'Export ${widget.role.capitalize} List',
-        'description': 'Download ${widget.role} data as CSV',
-        'icon': Icons.download,
-        'color': Colors.purple,
-        'onTap': () => _exportUserList(),
-      },
-      {
-        'title': 'Send Notifications',
-        'description': 'Send bulk messages to ${widget.role}s',
-        'icon': Icons.notifications,
-        'color': Colors.orange,
-        'onTap': () => _sendBulkNotifications(),
-      },
-      if (widget.role == 'student') ...[
-        {
-          'title': 'Quick Enrollment',
-          'description': 'Enroll students in courses quickly',
-          'icon': Icons.school,
-          'color': Colors.teal,
-          'onTap': () => _quickEnrollment(),
-        },
-        {
-          'title': 'Payment Reminders',
-          'description': 'Send payment reminders to students',
-          'icon': Icons.payment,
-          'color': Colors.red,
-          'onTap': () => _sendPaymentReminders(),
-        },
-      ],
-      if (widget.role == 'instructor') ...[
-        {
-          'title': 'Schedule Optimization',
-          'description': 'Optimize instructor schedules',
-          'icon': Icons.auto_awesome,
-          'color': Colors.indigo,
-          'onTap': () => _optimizeSchedules(),
-        },
-        {
-          'title': 'Performance Review',
-          'description': 'Review instructor performance',
-          'icon': Icons.analytics,
-          'color': Colors.cyan,
-          'onTap': () => _performanceReview(),
-        },
-      ],
-    ];
-  }
+  void _generateQuickActions() {}
 
   void _generateInsights() {
     final users =
@@ -409,8 +345,6 @@ class _EnhancedRecommendationsScreenState
             _buildInsightsSection(),
             SizedBox(height: 24),
             _buildSmartRecommendationsSection(),
-            SizedBox(height: 24),
-            _buildQuickActionsSection(),
           ],
         ),
       ),
@@ -636,91 +570,6 @@ class _EnhancedRecommendationsScreenState
     );
   }
 
-  Widget _buildQuickActionsSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Quick Actions',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: Colors.grey[800],
-          ),
-        ),
-        SizedBox(height: 16),
-        GridView.builder(
-          shrinkWrap: true,
-          physics: NeverScrollableScrollPhysics(),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3,
-            childAspectRatio: 1.1,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
-          ),
-          itemCount: _quickActions.length,
-          itemBuilder: (context, index) {
-            final action = _quickActions[index];
-            return _buildQuickActionCard(action);
-          },
-        ),
-      ],
-    );
-  }
-
-  Widget _buildQuickActionCard(Map<String, dynamic> action) {
-    return Card(
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: InkWell(
-        onTap: action['onTap'],
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: EdgeInsets.all(16),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: action['color'].withOpacity(0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  action['icon'],
-                  size: 28,
-                  color: action['color'],
-                ),
-              ),
-              SizedBox(height: 12),
-              Text(
-                action['title'],
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                ),
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              SizedBox(height: 4),
-              Text(
-                action['description'],
-                style: TextStyle(
-                  fontSize: 11,
-                  color: Colors.grey[600],
-                ),
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   // Action methods
   void _showInactiveUsers() {
     Get.snackbar(
@@ -761,33 +610,5 @@ class _EnhancedRecommendationsScreenState
 
   void _optimizeInstructorSchedules() {
     Get.snackbar('Optimization', 'Schedule optimization feature coming soon!');
-  }
-
-  void _showImportDialog() {
-    Get.snackbar('Import', 'CSV import feature coming soon!');
-  }
-
-  void _exportUserList() {
-    Get.snackbar('Export', 'CSV export feature coming soon!');
-  }
-
-  void _sendBulkNotifications() {
-    Get.snackbar('Notifications', 'Bulk notifications feature coming soon!');
-  }
-
-  void _quickEnrollment() {
-    Get.snackbar('Enrollment', 'Quick enrollment feature coming soon!');
-  }
-
-  void _sendPaymentReminders() {
-    Get.snackbar('Reminders', 'Payment reminders feature coming soon!');
-  }
-
-  void _optimizeSchedules() {
-    Get.snackbar('Schedules', 'Schedule optimization feature coming soon!');
-  }
-
-  void _performanceReview() {
-    Get.snackbar('Performance', 'Performance review feature coming soon!');
   }
 }

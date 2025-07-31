@@ -152,7 +152,7 @@ class QuickSearchWidget extends StatelessWidget {
                   Colors.green,
                   () {
                     navigationController.navigateToPage('quick_search');
-                    // Auto-select student filter
+                    // TODO: Auto-select student filter when quick_search page supports it
                   },
                 ),
               ),
@@ -165,7 +165,7 @@ class QuickSearchWidget extends StatelessWidget {
                   Colors.orange,
                   () {
                     navigationController.navigateToPage('quick_search');
-                    // Auto-select instructor filter
+                    // TODO: Auto-select instructor filter when quick_search page supports it
                   },
                 ),
               ),
@@ -177,7 +177,7 @@ class QuickSearchWidget extends StatelessWidget {
                   Icons.schedule,
                   Colors.purple,
                   () {
-                    Get.toNamed('/schedules/create');
+                    navigationController.navigateToPage('schedules');
                   },
                 ),
               ),

@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:driving/controllers/billing_controller.dart';
@@ -37,9 +36,6 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
 
   // Enhanced UX properties
   late TabController _tabController;
-  int _currentTabIndex = 0;
-  String _searchQuery = '';
-  String _filterStatus = 'all';
   bool _showPaymentReminder = false;
 
   @override
@@ -47,9 +43,7 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
     super.initState();
     _tabController = TabController(length: 6, vsync: this);
     _tabController.addListener(() {
-      setState(() {
-        _currentTabIndex = _tabController.index;
-      });
+      setState(() {});
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -502,7 +496,7 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
           ),
           Tab(
             icon: Icon(Icons.payment),
-            text: 'Billing ($_showPaymentReminder)',
+            text: 'Billing',
           ),
           Tab(
             icon: Icon(Icons.note),
@@ -527,8 +521,6 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
           _buildPersonalInfoCard(),
           SizedBox(height: 16),
           _buildLearningStatsCard(),
-          SizedBox(height: 16),
-          _buildQuickActionsCard(),
           SizedBox(height: 16),
           _buildRecentActivityCard(),
         ],
@@ -708,102 +700,6 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
     );
   }
 
-  Widget _buildQuickActionsCard() {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.flash_on, color: Colors.blue.shade600),
-                SizedBox(width: 8),
-                Text(
-                  'Quick Actions',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.blue.shade800,
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 16),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _buildActionChip(
-                  'Schedule Lesson',
-                  Icons.add_box,
-                  Colors.blue,
-                  () => _scheduleLesson(),
-                ),
-                _buildActionChip(
-                  'Record Payment',
-                  Icons.payment,
-                  Colors.green,
-                  () => _recordPayment(),
-                ),
-                _buildActionChip(
-                  'Send Message',
-                  Icons.message,
-                  Colors.orange,
-                  () => _sendMessage(),
-                ),
-                _buildActionChip(
-                  'Edit Profile',
-                  Icons.edit,
-                  Colors.purple,
-                  () => _editProfile(),
-                ),
-                _buildActionChip(
-                  'Progress Report',
-                  Icons.assessment,
-                  Colors.red,
-                  () => _generateProgressReport(),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildActionChip(
-      String label, IconData icon, Color color, VoidCallback onTap) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: color.withOpacity(0.3)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 16, color: color),
-            SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                color: color,
-                fontWeight: FontWeight.w500,
-                fontSize: 12,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildRecentActivityCard() {
     final recentSchedules = scheduleController.schedules
         .where((s) => s.studentId == widget.studentId)
@@ -932,9 +828,7 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
                     contentPadding: EdgeInsets.symmetric(horizontal: 16),
                   ),
                   onChanged: (value) {
-                    setState(() {
-                      _searchQuery = value;
-                    });
+                    setState(() {});
                   },
                 ),
               ),
@@ -942,9 +836,7 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
               PopupMenuButton<String>(
                 icon: Icon(Icons.filter_list),
                 onSelected: (value) {
-                  setState(() {
-                    _filterStatus = value;
-                  });
+                  setState(() {});
                 },
                 itemBuilder: (context) => [
                   PopupMenuItem(value: 'all', child: Text('All')),
@@ -1181,57 +1073,6 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildSkillProgressItem(
-      String skillName, double progress, int lessons) {
-    return Padding(
-      padding: EdgeInsets.symmetric(vertical: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                skillName,
-                style: TextStyle(
-                  fontWeight: FontWeight.w500,
-                  color: Colors.grey.shade800,
-                ),
-              ),
-              Text(
-                '$lessons lessons',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey.shade600,
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 8),
-          LinearProgressIndicator(
-            value: progress,
-            backgroundColor: Colors.grey.shade200,
-            valueColor: AlwaysStoppedAnimation<Color>(
-              progress > 0.7
-                  ? Colors.green
-                  : progress > 0.4
-                      ? Colors.orange
-                      : Colors.red,
-            ),
-          ),
-          SizedBox(height: 4),
-          Text(
-            '${(progress * 100).toInt()}% mastered',
-            style: TextStyle(
-              fontSize: 11,
-              color: Colors.grey.shade600,
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -1507,19 +1348,11 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
                             ),
                           ),
                           Text(
-                            'Outstanding balance of \${totalBalance.toStringAsFixed(2)} needs to be cleared.',
+                            'Outstanding balance of \$${totalBalance.toStringAsFixed(2)} needs to be cleared.',
                             style: TextStyle(color: Colors.red.shade700),
                           ),
                         ],
                       ),
-                    ),
-                    ElevatedButton(
-                      onPressed: () => _recordPayment(),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red.shade600,
-                        foregroundColor: Colors.white,
-                      ),
-                      child: Text('Pay Now'),
                     ),
                   ],
                 ),
@@ -1662,7 +1495,7 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
             children: [
               Text('Total Amount:',
                   style: TextStyle(color: Colors.grey.shade600)),
-              Text('\${invoice.totalAmountCalculated.toStringAsFixed(2)}',
+              Text('\$${invoice.totalAmountCalculated.toStringAsFixed(2)}',
                   style: TextStyle(fontWeight: FontWeight.w500)),
             ],
           ),
@@ -1670,7 +1503,7 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('Balance:', style: TextStyle(color: Colors.grey.shade600)),
-              Text('\${invoice.balance.toStringAsFixed(2)}',
+              Text('\$${invoice.balance.toStringAsFixed(2)}',
                   style: TextStyle(
                     fontWeight: FontWeight.w500,
                     color: invoice.balance > 0 ? Colors.red : Colors.green,
@@ -2037,7 +1870,7 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
         .where((s) =>
             s.studentId == widget.studentId &&
             s.status.toLowerCase() == 'completed')
-        .fold<int>(0, (sum, s) => sum + (s.lessonsDeducted ?? 1));
+        .fold<int>(0, (sum, s) => sum + (s.lessonsDeducted));
   }
 
   int _getTotalLessonsCount() {
@@ -2085,7 +1918,7 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
       return earliest;
     });
 
-    if (nextLesson == null) return 'None';
+    if (nextLesson == null) return '0';
 
     final difference = nextLesson.difference(now).inDays;
     if (difference == 0) return 'Today';
@@ -2161,45 +1994,6 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: Icon(Icons.edit),
-              title: Text('Edit Student'),
-              onTap: () {
-                _editProfile();
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.schedule),
-              title: Text('Schedule Lesson'),
-              onTap: () {
-                Navigator.pop(context); // Use context here
-                _scheduleLesson();
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.payment),
-              title: Text('Record Payment'),
-              onTap: () {
-                Navigator.pop(context); // Use context here
-                _recordPayment();
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.share),
-              title: Text('Share Progress'),
-              onTap: () {
-                Navigator.pop(context); // Use context here
-                _shareProgress();
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.print),
-              title: Text('Print Report'),
-              onTap: () {
-                Navigator.pop(context); // Use context here
-                _generateProgressReport();
-              },
-            ),
-            ListTile(
               leading: Icon(Icons.delete, color: Colors.red),
               title:
                   Text('Delete Student', style: TextStyle(color: Colors.red)),
@@ -2212,36 +2006,6 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
         ),
       ),
     );
-  }
-
-  void _scheduleLesson() {
-    // Navigate to schedule creation screen
-    Get.snackbar('Info', 'Navigate to schedule lesson screen');
-  }
-
-  void _recordPayment() {
-    // Show payment recording dialog
-    Get.snackbar('Info', 'Show payment recording dialog');
-  }
-
-  void _sendMessage() {
-    // Open messaging interface
-    Get.snackbar('Info', 'Open messaging interface');
-  }
-
-  void _editProfile() {
-    // Navigate to edit profile screen
-    Get.snackbar('Info', 'Navigate to edit profile screen');
-  }
-
-  void _generateProgressReport() {
-    // Generate and download progress report
-    Get.snackbar('Info', 'Generating progress report...');
-  }
-
-  void _shareProgress() {
-    // Share student progress
-    Get.snackbar('Info', 'Share student progress');
   }
 
   void _confirmDelete() {

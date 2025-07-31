@@ -66,14 +66,30 @@ class _CourseScreenState extends State<CourseScreen>
     });
 
     try {
+      // Force refresh all data from the source
       await controller.fetchCourses();
       await userController.fetchUsers();
       await billingController.fetchBillingData();
       await scheduleController.fetchSchedules();
 
       setState(() {
-        _courses = controller.courses;
+        // Ensure we're getting fresh data from the controller
+        _courses = List.from(controller.courses);
         _searchResults = List.from(_courses);
+
+        // Reset filters and search
+        _searchController.clear();
+        _filterStatus = 'all';
+        _sortBy = 'name';
+        _sortAscending = true;
+        _currentPage = 1;
+
+        // Clear selections
+        _selectedCourses.clear();
+        _isMultiSelectionActive = false;
+        _isAllSelected = false;
+
+        // Regenerate data
         _sortCourses();
         _filterCourses();
         _generateQuickStats();
@@ -84,6 +100,13 @@ class _CourseScreenState extends State<CourseScreen>
       setState(() {
         _isLoading = false;
       });
+
+      Get.snackbar(
+        'Error',
+        'Failed to refresh data: $e',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
     }
   }
 
@@ -153,10 +176,6 @@ class _CourseScreenState extends State<CourseScreen>
     final totalRevenue = billingController.invoices.fold<double>(
         0.0, (sum, invoice) => sum + invoice.totalAmountCalculated);
     final totalEnrollments = billingController.invoices.length;
-    final avgCoursePrice = _courses.isNotEmpty
-        ? _courses.fold<double>(0.0, (sum, course) => sum + course.price) /
-            _courses.length
-        : 0.0;
 
     _quickStats = [
       {
@@ -172,13 +191,6 @@ class _CourseScreenState extends State<CourseScreen>
         'icon': Icons.attach_money,
         'color': Colors.blue,
         'subtitle': 'From ${totalEnrollments} enrollments',
-      },
-      {
-        'title': 'Avg. Course Price',
-        'value': '\$${avgCoursePrice.toStringAsFixed(2)}',
-        'icon': Icons.trending_up,
-        'color': Colors.orange,
-        'subtitle': 'Across all courses',
       },
       {
         'title': 'Total Enrollments',
@@ -464,7 +476,7 @@ class _CourseScreenState extends State<CourseScreen>
             CourseFormDialog(),
           );
           if (result == true) {
-            _loadCourses();
+            await _loadCourses(); // Use await to ensure proper refresh
           }
         },
         label: Text('Add Course'),
@@ -1087,12 +1099,17 @@ class _CourseScreenState extends State<CourseScreen>
     if (confirmed == true) {
       try {
         await controller.deleteCourse(course.id!);
-        _loadCourses();
+
+        // Force refresh the data
+        await _loadCourses();
+
         Get.snackbar(
           'Success',
           'Course "${course.name}" deleted successfully',
           backgroundColor: Colors.green,
           colorText: Colors.white,
+          snackPosition: SnackPosition.TOP,
+          duration: Duration(seconds: 2),
         );
       } catch (e) {
         Get.snackbar(
@@ -1100,6 +1117,8 @@ class _CourseScreenState extends State<CourseScreen>
           'Failed to delete course: $e',
           backgroundColor: Colors.red,
           colorText: Colors.white,
+          snackPosition: SnackPosition.TOP,
+          duration: Duration(seconds: 3),
         );
       }
     }
@@ -1128,20 +1147,28 @@ class _CourseScreenState extends State<CourseScreen>
 
     if (confirmed == true) {
       try {
+        // Delete all selected courses
         for (int courseId in _selectedCourses) {
           await controller.deleteCourse(courseId);
         }
+
+        // Clear selections before refresh
         setState(() {
           _selectedCourses.clear();
           _isMultiSelectionActive = false;
           _isAllSelected = false;
         });
-        _loadCourses();
+
+        // Force refresh the data
+        await _loadCourses();
+
         Get.snackbar(
           'Success',
           'Selected courses deleted successfully',
           backgroundColor: Colors.green,
           colorText: Colors.white,
+          snackPosition: SnackPosition.TOP,
+          duration: Duration(seconds: 2),
         );
       } catch (e) {
         Get.snackbar(
@@ -1149,6 +1176,8 @@ class _CourseScreenState extends State<CourseScreen>
           'Failed to delete courses: $e',
           backgroundColor: Colors.red,
           colorText: Colors.white,
+          snackPosition: SnackPosition.TOP,
+          duration: Duration(seconds: 3),
         );
       }
     }

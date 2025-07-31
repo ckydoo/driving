@@ -1,10 +1,8 @@
 // lib/main.dart
-import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/routes/protected_routes.dart';
 import 'package:driving/screens/auth/login_screen.dart';
 import 'package:driving/services/app_bindings.dart';
 import 'package:driving/services/app_initialization.dart';
-import 'package:driving/widgets/main_layout.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';

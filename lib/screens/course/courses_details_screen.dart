@@ -291,9 +291,6 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
               case 'duplicate':
                 await _duplicateCourse();
                 break;
-              case 'export':
-                await _exportCourseData();
-                break;
               case 'delete':
                 await _deleteCourse();
                 break;
@@ -786,14 +783,6 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
                 ),
                 Divider(height: 1),
                 ListTile(
-                  leading: Icon(Icons.download, color: Colors.orange),
-                  title: Text('Export Course Data'),
-                  subtitle: Text('Download enrollment and revenue data'),
-                  trailing: Icon(Icons.arrow_forward_ios),
-                  onTap: _exportCourseData,
-                ),
-                Divider(height: 1),
-                ListTile(
                   leading: Icon(Icons.delete, color: Colors.red),
                   title: Text('Delete Course'),
                   subtitle: Text('Permanently remove this course'),
@@ -890,15 +879,6 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
         );
       }
     }
-  }
-
-  Future<void> _exportCourseData() async {
-    Get.snackbar(
-      'Export',
-      'Course data export feature coming soon!',
-      backgroundColor: Colors.blue,
-      colorText: Colors.white,
-    );
   }
 
   Future<void> _deleteCourse() async {

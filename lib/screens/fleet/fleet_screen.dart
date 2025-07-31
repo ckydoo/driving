@@ -4,11 +4,9 @@ import 'package:driving/screens/fleet/fleet_details_screen.dart';
 import 'package:driving/widgets/fleet_form_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:intl/intl.dart';
 import '../../controllers/fleet_controller.dart';
 import '../../controllers/user_controller.dart';
 import '../../models/fleet.dart';
-import '../../models/user.dart';
 
 class FleetScreen extends StatefulWidget {
   const FleetScreen({Key? key}) : super(key: key);
@@ -162,13 +160,6 @@ class _FleetScreenState extends State<FleetScreen>
     final unassignedVehicles = totalVehicles - assignedVehicles;
 
     // Calculate average vehicle age
-    final currentYear = DateTime.now().year;
-    final avgAge = _vehicles.isNotEmpty
-        ? _vehicles
-                .map((v) => currentYear - int.parse(v.modelYear))
-                .reduce((a, b) => a + b) /
-            _vehicles.length
-        : 0.0;
 
     // Get unique makes
     final uniqueMakes = _vehicles.map((v) => v.make).toSet().length;
@@ -195,13 +186,6 @@ class _FleetScreenState extends State<FleetScreen>
         'icon': Icons.car_rental,
         'color': Colors.orange,
         'subtitle': 'Ready for assignment',
-      },
-      {
-        'title': 'Avg. Age',
-        'value': '${avgAge.toStringAsFixed(1)} yrs',
-        'icon': Icons.access_time,
-        'color': Colors.purple,
-        'subtitle': 'Fleet average',
       },
     ];
   }
@@ -775,7 +759,7 @@ class _FleetScreenState extends State<FleetScreen>
 
   Widget _buildVehicleListTile(Fleet vehicle) {
     final isSelected = _selectedVehicles.contains(vehicle.id);
-    final instructorName = _getInstructorName(vehicle.instructor);
+    _getInstructorName(vehicle.instructor);
     final isAssigned = vehicle.instructor != 0;
     final currentYear = DateTime.now().year;
     final vehicleAge = currentYear - int.parse(vehicle.modelYear);

@@ -58,7 +58,6 @@ class _QuickSearchScreenState extends State<QuickSearchScreen> {
 
     List<dynamic> results = [];
 
-    // Only search if query has actual content (not just spaces)
     if (query.trim().isEmpty) {
       setState(() {
         _searchResults = [];
@@ -69,9 +68,7 @@ class _QuickSearchScreenState extends State<QuickSearchScreen> {
 
     query = query.toLowerCase().trim();
 
-    // Search users with more precise matching
     var users = userController.users.where((user) {
-      // First check if user matches the selected filter
       bool matchesFilter = _selectedFilter == 'All' ||
           (_selectedFilter == 'Students' &&
               user.role.toLowerCase() == 'student') ||
@@ -80,12 +77,10 @@ class _QuickSearchScreenState extends State<QuickSearchScreen> {
 
       if (!matchesFilter) return false;
 
-      // Then check if user matches the search query
       String fullName = '${user.fname} ${user.lname}'.toLowerCase();
       String email = user.email.toLowerCase();
       String phone = user.phone.toLowerCase();
 
-      // Check for matches in name, email, or phone
       bool matchesQuery = fullName.contains(query) ||
           user.fname.toLowerCase().contains(query) ||
           user.lname.toLowerCase().contains(query) ||
@@ -97,23 +92,19 @@ class _QuickSearchScreenState extends State<QuickSearchScreen> {
       return matchesQuery;
     }).toList();
 
-    // Sort results by relevance
     users.sort((a, b) {
       String aFullName = '${a.fname} ${a.lname}'.toLowerCase();
       String bFullName = '${b.fname} ${b.lname}'.toLowerCase();
 
-      // Exact matches first
       if (aFullName.startsWith(query) && !bFullName.startsWith(query))
         return -1;
       if (!aFullName.startsWith(query) && bFullName.startsWith(query)) return 1;
 
-      // Then by first name matches
       if (a.fname.toLowerCase().startsWith(query) &&
           !b.fname.toLowerCase().startsWith(query)) return -1;
       if (!a.fname.toLowerCase().startsWith(query) &&
           b.fname.toLowerCase().startsWith(query)) return 1;
 
-      // Finally alphabetical
       return aFullName.compareTo(bFullName);
     });
 
@@ -137,7 +128,6 @@ class _QuickSearchScreenState extends State<QuickSearchScreen> {
       backgroundColor: Colors.grey[50],
       body: Row(
         children: [
-          // Left Panel - Search & Results
           Expanded(
             flex: 2,
             child: Container(
@@ -161,7 +151,6 @@ class _QuickSearchScreenState extends State<QuickSearchScreen> {
               ),
             ),
           ),
-          // Right Panel - Details
           Expanded(
             flex: 3,
             child: _selectedPerson != null
@@ -561,63 +550,12 @@ class _QuickSearchScreenState extends State<QuickSearchScreen> {
               ],
             ),
           ),
-          PopupMenuButton<String>(
-            icon: Icon(Icons.more_vert, color: Colors.white),
-            onSelected: (value) {
-              switch (value) {
-                case 'view_details':
-                  _navigateToDetails();
-                  break;
-                case 'schedule_lesson':
-                  _scheduleLesson();
-                  break;
-                case 'view_billing':
-                  _viewBilling();
-                  break;
-              }
-            },
-            itemBuilder: (context) => [
-              PopupMenuItem(
-                value: 'view_details',
-                child: Row(
-                  children: [
-                    Icon(Icons.person, size: 16),
-                    SizedBox(width: 8),
-                    Text('View Full Details'),
-                  ],
-                ),
-              ),
-              if (_selectedPerson!.role.toLowerCase() == 'student')
-                PopupMenuItem(
-                  value: 'schedule_lesson',
-                  child: Row(
-                    children: [
-                      Icon(Icons.schedule, size: 16),
-                      SizedBox(width: 8),
-                      Text('Schedule Lesson'),
-                    ],
-                  ),
-                ),
-              if (_selectedPerson!.role.toLowerCase() == 'student')
-                PopupMenuItem(
-                  value: 'view_billing',
-                  child: Row(
-                    children: [
-                      Icon(Icons.receipt, size: 16),
-                      SizedBox(width: 8),
-                      Text('View Billing'),
-                    ],
-                  ),
-                ),
-            ],
-          ),
         ],
       ),
     );
   }
 
   Widget _buildQuickStats() {
-    // Calculate stats based on role
     int totalSchedules = scheduleController.schedules
         .where((s) => _selectedPerson!.role.toLowerCase() == 'student'
             ? s.studentId == _selectedPerson!.id
@@ -773,14 +711,6 @@ class _QuickSearchScreenState extends State<QuickSearchScreen> {
                     color: Colors.grey[800],
                   ),
                 ),
-                Spacer(),
-                TextButton(
-                  onPressed: () {
-                    // Navigate to full schedule view
-                    Get.toNamed('/schedules');
-                  },
-                  child: Text('View All'),
-                ),
               ],
             ),
           ),
@@ -904,13 +834,6 @@ class _QuickSearchScreenState extends State<QuickSearchScreen> {
                     color: Colors.grey[800],
                   ),
                 ),
-                Spacer(),
-                TextButton(
-                  onPressed: () {
-                    Get.toNamed('/billing');
-                  },
-                  child: Text('View Details'),
-                ),
               ],
             ),
           ),
@@ -996,26 +919,5 @@ class _QuickSearchScreenState extends State<QuickSearchScreen> {
       default:
         return Colors.grey;
     }
-  }
-
-  void _navigateToDetails() {
-    if (_selectedPerson!.role.toLowerCase() == 'student') {
-      // Navigate to student details
-      Get.toNamed('/students/details',
-          arguments: {'studentId': _selectedPerson!.id});
-    } else {
-      // Navigate to instructor details
-      Get.toNamed('/instructors/details',
-          arguments: {'instructorId': _selectedPerson!.id});
-    }
-  }
-
-  void _scheduleLesson() {
-    Get.toNamed('/schedules/create',
-        arguments: {'studentId': _selectedPerson!.id});
-  }
-
-  void _viewBilling() {
-    Get.toNamed('/billing', arguments: {'studentId': _selectedPerson!.id});
   }
 }

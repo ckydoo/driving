@@ -8,7 +8,6 @@ import '../../controllers/billing_controller.dart';
 import '../../controllers/user_controller.dart';
 import '../../services/receipt_service.dart';
 import '../../models/payment.dart';
-import '../../controllers/auth_controller.dart'; // Add this import
 
 class ReceiptManagementScreen extends StatefulWidget {
   const ReceiptManagementScreen({Key? key}) : super(key: key);
@@ -908,108 +907,6 @@ class _ReceiptManagementScreenState extends State<ReceiptManagementScreen> {
     }
   }
 
-  void _showDateFilterDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.date_range, color: Colors.green.shade600),
-            const SizedBox(width: 8),
-            const Text('Filter by Date'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: Icon(Icons.all_inclusive, color: Colors.grey.shade600),
-              title: const Text('All Time'),
-              trailing: _dateFilter == 'all'
-                  ? Icon(Icons.check, color: Colors.green.shade600)
-                  : null,
-              onTap: () {
-                setState(() {
-                  _dateFilter = 'all';
-                  _setDateRange('all');
-                });
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.today, color: Colors.blue.shade600),
-              title: const Text('Today'),
-              trailing: _dateFilter == 'today'
-                  ? Icon(Icons.check, color: Colors.green.shade600)
-                  : null,
-              onTap: () {
-                setState(() {
-                  _dateFilter = 'today';
-                  _setDateRange('today');
-                });
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.view_week, color: Colors.orange.shade600),
-              title: const Text('This Week'),
-              trailing: _dateFilter == 'this_week'
-                  ? Icon(Icons.check, color: Colors.green.shade600)
-                  : null,
-              onTap: () {
-                setState(() {
-                  _dateFilter = 'this_week';
-                  _setDateRange('this_week');
-                });
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              leading:
-                  Icon(Icons.calendar_month, color: Colors.purple.shade600),
-              title: const Text('This Month'),
-              trailing: _dateFilter == 'this_month'
-                  ? Icon(Icons.check, color: Colors.green.shade600)
-                  : null,
-              onTap: () {
-                setState(() {
-                  _dateFilter = 'this_month';
-                  _setDateRange('this_month');
-                });
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.date_range, color: Colors.red.shade600),
-              title: const Text('Custom Range'),
-              trailing: _dateFilter == 'custom'
-                  ? Icon(Icons.check, color: Colors.green.shade600)
-                  : null,
-              onTap: () {
-                Navigator.pop(context);
-                _showDateRangePicker();
-              },
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          if (_hasActiveDateFilter())
-            TextButton(
-              onPressed: () {
-                _clearDateFilter();
-                Navigator.pop(context);
-              },
-              child: const Text('Clear Filter'),
-            ),
-        ],
-      ),
-    );
-  }
-
   List<Payment> _getFilteredPayments() {
     var payments = billingController.payments.toList();
 
@@ -1102,14 +999,6 @@ class _ReceiptManagementScreenState extends State<ReceiptManagementScreen> {
     return _dateFilter != 'all';
   }
 
-  void _clearSearch() {
-    setState(() {
-      _searchController.clear();
-      _searchQuery = '';
-      _isSearchActive = false;
-    });
-  }
-
   void _clearDateFilter() {
     setState(() {
       _dateFilter = 'all';
@@ -1130,15 +1019,6 @@ class _ReceiptManagementScreenState extends State<ReceiptManagementScreen> {
       _startDate = null;
       _endDate = null;
     });
-  }
-
-  void _viewReceipt(Payment payment) {
-    // You can implement a PDF viewer here or open with system app
-    Get.snackbar(
-      'Receipt',
-      'Receipt saved at: ${payment.receiptPath}',
-      snackPosition: SnackPosition.BOTTOM,
-    );
   }
 
   void _printReceipt(Payment payment) async {

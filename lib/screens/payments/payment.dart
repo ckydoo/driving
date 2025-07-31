@@ -145,7 +145,7 @@ class _PaymentsScreenState extends State<PaymentsScreen>
   @override
   Widget build(BuildContext context) {
     final totalStudents = _studentsWithBalance.length;
-    final totalBalance = _studentsWithBalance.fold<double>(
+    _studentsWithBalance.fold<double>(
         0, (sum, student) => sum + _getTotalBalance(student));
 
     return Scaffold(
@@ -510,7 +510,7 @@ class _PaymentsScreenState extends State<PaymentsScreen>
         .where(
             (invoice) => invoice.studentId == student.id && invoice.balance > 0)
         .toList();
-    final totalDue = _getTotalBalance(student);
+    _getTotalBalance(student);
     final invoiceCount = studentInvoices.length;
     final hasOverdueInvoices = studentInvoices
         .any((invoice) => invoice.dueDate.isBefore(DateTime.now()));

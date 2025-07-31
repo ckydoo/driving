@@ -3,11 +3,9 @@ import 'package:driving/controllers/course_controller.dart';
 import 'package:driving/controllers/fleet_controller.dart';
 import 'package:driving/controllers/schedule_controller.dart';
 import 'package:driving/controllers/user_controller.dart';
-import 'package:driving/models/schedule.dart';
 import 'package:driving/models/user.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:intl/intl.dart';
 
 class ReportsScreen extends StatefulWidget {
   @override
@@ -254,9 +252,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
         .map((vehicle) => vehicle.instructor)
         .toSet()
         .length;
-    final assignmentPercentage = totalInstructors > 0
-        ? (assignedInstructors / totalInstructors) * 100
-        : 0;
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceAround,

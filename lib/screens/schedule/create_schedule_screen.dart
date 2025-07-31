@@ -32,8 +32,8 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
 
   // Form fields
   DateTime _selectedDate = DateTime.now();
-  TimeOfDay _startTime = TimeOfDay(hour: 9, minute: 0); // Fixed initialization
-  TimeOfDay _endTime = TimeOfDay(hour: 10, minute: 0); // Fixed initialization
+  TimeOfDay _startTime = TimeOfDay(hour: 9, minute: 0);
+  TimeOfDay _endTime = TimeOfDay(hour: 10, minute: 0);
 
   User? _selectedStudent;
   User? _selectedInstructor;
@@ -345,7 +345,7 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
                     _buildInstructorSection(),
                     SizedBox(height: 20),
                     _buildDateTimeSection(),
-                    _buildValidationMessages(), // ← ADD THIS LINE
+                    _buildValidationMessages(),
                     SizedBox(height: 20),
                     _buildLessonDetailsSection(),
                     SizedBox(height: 30),
@@ -768,11 +768,47 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
   }
 
   bool _canSchedule() {
-    return _selectedStudent != null &&
-        _selectedInstructor != null &&
-        _selectedCourse != null &&
-        _remainingLessons > 0 &&
-        _instructorAvailable;
+    // Check basic requirements
+    if (_selectedStudent == null ||
+        _selectedInstructor == null ||
+        _selectedCourse == null ||
+        _remainingLessons <= 0 ||
+        !_instructorAvailable) {
+      return false;
+    }
+
+    // Check for validation errors
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final selectedDay =
+        DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
+
+    // Check if date is in the past
+    if (selectedDay.isBefore(today)) {
+      return false;
+    }
+
+    // Check if time is in the past for today's date
+    if (selectedDay.isAtSameMomentAs(today)) {
+      final startDateTime = DateTime(_selectedDate.year, _selectedDate.month,
+          _selectedDate.day, _startTime.hour, _startTime.minute);
+      if (startDateTime.isBefore(now)) {
+        return false;
+      }
+    }
+
+    // Check if end time is after start time
+    final endDateTime = DateTime(_selectedDate.year, _selectedDate.month,
+        _selectedDate.day, _endTime.hour, _endTime.minute);
+    final startDateTime = DateTime(_selectedDate.year, _selectedDate.month,
+        _selectedDate.day, _startTime.hour, _startTime.minute);
+
+    if (endDateTime.isBefore(startDateTime) ||
+        endDateTime.isAtSameMomentAs(startDateTime)) {
+      return false;
+    }
+
+    return true;
   }
 
   Future<void> _selectDate() async {
@@ -794,7 +830,7 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
     try {
       final TimeOfDay? picked = await showTimePicker(
         context: context,
-        initialTime: isStartTime ? _startTime! : _endTime!,
+        initialTime: isStartTime ? _startTime : _endTime,
       );
 
       if (picked != null) {
@@ -934,8 +970,6 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
     Get.back();
   }
 
-// Helper method to get scheduled lessons count
-
   TimeOfDay _parseTimeString(String timeString) {
     try {
       // Validate timeString format
@@ -972,28 +1006,6 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
     }
   }
 
-// Also add this method to validate working hours before using them:
-
-  bool _isValidTimeString(String timeString) {
-    try {
-      if (timeString.isEmpty || !timeString.contains(':')) return false;
-
-      final parts = timeString.trim().split(':');
-      if (parts.length != 2) return false;
-
-      final hour = int.tryParse(parts[0].trim());
-      final minute = int.tryParse(parts[1].trim());
-
-      if (hour == null || minute == null) return false;
-      if (hour < 0 || hour > 23) return false;
-      if (minute < 0 || minute > 59) return false;
-
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
-
 // Helper method to check if selected time is outside working hours
   bool _isTimeOutsideWorkingHours(TimeOfDay startTime, TimeOfDay endTime,
       TimeOfDay workingStart, TimeOfDay workingEnd) {
@@ -1012,74 +1024,79 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
     List<String> errors = [];
     List<String> warnings = [];
 
-    if (_selectedDate != null && _startTime != null && _endTime != null) {
-      final now = DateTime.now();
-      final today = DateTime(now.year, now.month, now.day);
-      final selectedDay =
-          DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final selectedDay =
+        DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
 
-      if (selectedDay.isBefore(today)) {
-        errors.add('Cannot schedule lessons for past dates');
+    if (selectedDay.isBefore(today)) {
+      errors.add('Cannot schedule lessons for past dates');
+    }
+
+    // NEW: Check for past time on today's date
+    final startDateTime = DateTime(_selectedDate.year, _selectedDate.month,
+        _selectedDate.day, _startTime.hour, _startTime.minute);
+    final endDateTime = DateTime(_selectedDate.year, _selectedDate.month,
+        _selectedDate.day, _endTime.hour, _endTime.minute);
+
+    // If it's today, check if the start time is in the past
+    if (selectedDay.isAtSameMomentAs(today) && startDateTime.isBefore(now)) {
+      errors.add('Cannot schedule lessons for past times');
+    }
+
+    final duration = endDateTime.difference(startDateTime);
+
+    if (duration.inMinutes <= 0) {
+      errors.add('End time must be after start time');
+    } else if (duration.inMinutes < 30) {
+      warnings.add('Lesson duration is less than 30 minutes');
+    } else if (duration.inHours > 4) {
+      warnings.add('Lesson duration exceeds 4 hours');
+    }
+
+    // Working hours validation
+    final settingsController = Get.find<SettingsController>();
+    if (settingsController.enforceWorkingHours.value &&
+        _selectedInstructor != null) {
+      final startTime =
+          TimeOfDay(hour: _startTime.hour, minute: _startTime.minute);
+      final endTime = TimeOfDay(hour: _endTime.hour, minute: _endTime.minute);
+
+      final workingStart =
+          _parseTimeString(settingsController.workingHoursStart.value);
+      final workingEnd =
+          _parseTimeString(settingsController.workingHoursEnd.value);
+
+      if (_isTimeOutsideWorkingHours(
+          startTime, endTime, workingStart, workingEnd)) {
+        errors.add(
+            'Schedule time is outside instructor working hours (${settingsController.workingHoursStart.value} - ${settingsController.workingHoursEnd.value})');
       }
 
-      final startDateTime = DateTime(_selectedDate.year, _selectedDate.month,
-          _selectedDate.day, _startTime.hour, _startTime.minute);
-      final endDateTime = DateTime(_selectedDate.year, _selectedDate.month,
-          _selectedDate.day, _endTime.hour, _endTime.minute);
-      final duration = endDateTime.difference(startDateTime);
+      // Check for break between lessons if enabled
+      if (!settingsController.allowBackToBackLessons.value) {
+        final breakMinutes = settingsController.breakBetweenLessons.value;
+        final conflictingSchedules =
+            _scheduleController.schedules.where((schedule) {
+          if (schedule.instructorId != _selectedInstructor!.id) return false;
 
-      if (duration.inMinutes <= 0) {
-        errors.add('End time must be after start time');
-      } else if (duration.inMinutes < 30) {
-        warnings.add('Lesson duration is less than 30 minutes');
-      } else if (duration.inHours > 4) {
-        warnings.add('Lesson duration exceeds 4 hours');
-      }
+          final scheduleDate = DateTime(
+              schedule.start.year, schedule.start.month, schedule.start.day);
+          final selectedScheduleDate = DateTime(
+              _selectedDate.year, _selectedDate.month, _selectedDate.day);
 
-      // NEW: Working hours validation
-      final settingsController = Get.find<SettingsController>();
-      if (settingsController.enforceWorkingHours.value &&
-          _selectedInstructor != null) {
-        final startTime =
-            TimeOfDay(hour: _startTime.hour, minute: _startTime.minute);
-        final endTime = TimeOfDay(hour: _endTime.hour, minute: _endTime.minute);
+          if (!scheduleDate.isAtSameMomentAs(selectedScheduleDate))
+            return false;
 
-        final workingStart =
-            _parseTimeString(settingsController.workingHoursStart.value);
-        final workingEnd =
-            _parseTimeString(settingsController.workingHoursEnd.value);
+          // Check if there's a schedule that ends within break time of our start time
+          final timeDifference =
+              startDateTime.difference(schedule.end).inMinutes;
+          return timeDifference > 0 && timeDifference < breakMinutes;
+        }).toList();
 
-        if (_isTimeOutsideWorkingHours(
-            startTime, endTime, workingStart, workingEnd)) {
-          errors.add(
-              'Schedule time is outside instructor working hours (${settingsController.workingHoursStart.value} - ${settingsController.workingHoursEnd.value})');
-        }
-
-        // Check for break between lessons if enabled
-        if (!settingsController.allowBackToBackLessons.value) {
-          final breakMinutes = settingsController.breakBetweenLessons.value;
-          final conflictingSchedules =
-              _scheduleController.schedules.where((schedule) {
-            if (schedule.instructorId != _selectedInstructor!.id) return false;
-
-            final scheduleDate = DateTime(
-                schedule.start.year, schedule.start.month, schedule.start.day);
-            final selectedScheduleDate = DateTime(
-                _selectedDate.year, _selectedDate.month, _selectedDate.day);
-
-            if (!scheduleDate.isAtSameMomentAs(selectedScheduleDate))
-              return false;
-
-            // Check if there's a schedule that ends within break time of our start time
-            final timeDifference =
-                startDateTime.difference(schedule.end).inMinutes;
-            return timeDifference > 0 && timeDifference < breakMinutes;
-          }).toList();
-
-          if (conflictingSchedules.isNotEmpty) {
-            warnings.add(
-                'Less than ${breakMinutes} minutes break from previous lesson');
-          }
+        if (conflictingSchedules.isNotEmpty) {
+          warnings.add(
+              'Less than ${breakMinutes} minutes break from previous lesson');
         }
       }
     }

@@ -1,6 +1,5 @@
 // lib/screens/auth/login_screen.dart - Fixed with Force Reset
 import 'package:driving/controllers/auth_controller.dart';
-import 'package:driving/dashboard.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
