@@ -629,6 +629,8 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
   }
 
   Widget _buildDateTimeSection() {
+    final settingsController = Get.find<SettingsController>();
+
     return Card(
       child: Padding(
         padding: EdgeInsets.all(16),
@@ -650,8 +652,23 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
               contentPadding: EdgeInsets.zero,
               leading: Icon(Icons.event, color: Colors.blue),
               title: Text('Date'),
-              subtitle:
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text(DateFormat('EEEE, MMMM dd, yyyy').format(_selectedDate)),
+                  if (settingsController.operatingDays.isNotEmpty) ...[
+                    SizedBox(height: 4),
+                    Text(
+                      'Operating days: ${settingsController.operatingDays.join(', ')}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.blue.shade600,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
               trailing: Icon(Icons.arrow_forward_ios),
               onTap: () => _selectDate(),
             ),
@@ -660,7 +677,24 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
               contentPadding: EdgeInsets.zero,
               leading: Icon(Icons.access_time, color: Colors.green),
               title: Text('Start Time'),
-              subtitle: Text(_startTime.format(context)),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(_startTime.format(context)),
+                  if (settingsController
+                      .businessStartTime.value.isNotEmpty) ...[
+                    SizedBox(height: 4),
+                    Text(
+                      'Business hours: ${settingsController.businessStartTime.value} - ${settingsController.businessEndTime.value}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.green.shade600,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
               trailing: Icon(Icons.arrow_forward_ios),
               onTap: () => _selectTime(true),
             ),
@@ -765,65 +799,6 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
         ),
       ],
     );
-  }
-
-  bool _canSchedule() {
-    // Check basic requirements
-    if (_selectedStudent == null ||
-        _selectedInstructor == null ||
-        _selectedCourse == null ||
-        _remainingLessons <= 0 ||
-        !_instructorAvailable) {
-      return false;
-    }
-
-    // Check for validation errors
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final selectedDay =
-        DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
-
-    // Check if date is in the past
-    if (selectedDay.isBefore(today)) {
-      return false;
-    }
-
-    // Check if time is in the past for today's date
-    if (selectedDay.isAtSameMomentAs(today)) {
-      final startDateTime = DateTime(_selectedDate.year, _selectedDate.month,
-          _selectedDate.day, _startTime.hour, _startTime.minute);
-      if (startDateTime.isBefore(now)) {
-        return false;
-      }
-    }
-
-    // Check if end time is after start time
-    final endDateTime = DateTime(_selectedDate.year, _selectedDate.month,
-        _selectedDate.day, _endTime.hour, _endTime.minute);
-    final startDateTime = DateTime(_selectedDate.year, _selectedDate.month,
-        _selectedDate.day, _startTime.hour, _startTime.minute);
-
-    if (endDateTime.isBefore(startDateTime) ||
-        endDateTime.isAtSameMomentAs(startDateTime)) {
-      return false;
-    }
-
-    return true;
-  }
-
-  Future<void> _selectDate() async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedDate,
-      firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(Duration(days: 365)),
-    );
-    if (picked != null && picked != _selectedDate) {
-      setState(() {
-        _selectedDate = picked;
-      });
-      _checkInstructorAvailability();
-    }
   }
 
   Future<void> _selectTime(bool isStartTime) async {
@@ -1019,7 +994,7 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
     return startMinutes < workingStartMinutes || endMinutes > workingEndMinutes;
   }
 
-// Enhanced form validation messages with working hours validation
+// Enhanced form validation messages with working hours and operating days validation
   Widget _buildValidationMessages() {
     List<String> errors = [];
     List<String> warnings = [];
@@ -1033,7 +1008,7 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
       errors.add('Cannot schedule lessons for past dates');
     }
 
-    // NEW: Check for past time on today's date
+    // Check for past time on today's date
     final startDateTime = DateTime(_selectedDate.year, _selectedDate.month,
         _selectedDate.day, _startTime.hour, _startTime.minute);
     final endDateTime = DateTime(_selectedDate.year, _selectedDate.month,
@@ -1042,6 +1017,16 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
     // If it's today, check if the start time is in the past
     if (selectedDay.isAtSameMomentAs(today) && startDateTime.isBefore(now)) {
       errors.add('Cannot schedule lessons for past times');
+    }
+
+    // NEW: Check if the selected day is a business operating day
+    final settingsController = Get.find<SettingsController>();
+    final selectedDayName = _getDayName(_selectedDate.weekday);
+
+    if (settingsController.operatingDays.isNotEmpty &&
+        !settingsController.operatingDays.contains(selectedDayName)) {
+      errors.add(
+          'Business is closed on ${selectedDayName}s. Operating days: ${settingsController.operatingDays.join(', ')}');
     }
 
     final duration = endDateTime.difference(startDateTime);
@@ -1055,7 +1040,6 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
     }
 
     // Working hours validation
-    final settingsController = Get.find<SettingsController>();
     if (settingsController.enforceWorkingHours.value &&
         _selectedInstructor != null) {
       final startTime =
@@ -1063,14 +1047,14 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
       final endTime = TimeOfDay(hour: _endTime.hour, minute: _endTime.minute);
 
       final workingStart =
-          _parseTimeString(settingsController.workingHoursStart.value);
+          _parseTimeString(settingsController.businessStartTime.value);
       final workingEnd =
-          _parseTimeString(settingsController.workingHoursEnd.value);
+          _parseTimeString(settingsController.businessEndTime.value);
 
       if (_isTimeOutsideWorkingHours(
           startTime, endTime, workingStart, workingEnd)) {
         errors.add(
-            'Schedule time is outside instructor working hours (${settingsController.workingHoursStart.value} - ${settingsController.workingHoursEnd.value})');
+            'Schedule time is outside business hours (${settingsController.businessStartTime.value} - ${settingsController.businessEndTime.value})');
       }
 
       // Check for break between lessons if enabled
@@ -1116,6 +1100,127 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
         ],
       ),
     );
+  }
+
+// Helper method to get day name from weekday number
+  String _getDayName(int weekday) {
+    const days = [
+      'Monday', // 1
+      'Tuesday', // 2
+      'Wednesday', // 3
+      'Thursday', // 4
+      'Friday', // 5
+      'Saturday', // 6
+      'Sunday', // 7
+    ];
+    return days[weekday - 1];
+  }
+
+// Update the _canSchedule method to include operating days validation
+  bool _canSchedule() {
+    // Check basic requirements
+    if (_selectedStudent == null ||
+        _selectedInstructor == null ||
+        _selectedCourse == null ||
+        _remainingLessons <= 0 ||
+        !_instructorAvailable) {
+      return false;
+    }
+
+    // Check for validation errors
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final selectedDay =
+        DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
+
+    // Check if date is in the past
+    if (selectedDay.isBefore(today)) {
+      return false;
+    }
+
+    // Check if time is in the past for today's date
+    if (selectedDay.isAtSameMomentAs(today)) {
+      final startDateTime = DateTime(_selectedDate.year, _selectedDate.month,
+          _selectedDate.day, _startTime.hour, _startTime.minute);
+      if (startDateTime.isBefore(now)) {
+        return false;
+      }
+    }
+
+    // NEW: Check if the selected day is a business operating day
+    final settingsController = Get.find<SettingsController>();
+    final selectedDayName = _getDayName(_selectedDate.weekday);
+
+    if (settingsController.operatingDays.isNotEmpty &&
+        !settingsController.operatingDays.contains(selectedDayName)) {
+      return false;
+    }
+
+    // Check if end time is after start time
+    final endDateTime = DateTime(_selectedDate.year, _selectedDate.month,
+        _selectedDate.day, _endTime.hour, _endTime.minute);
+    final startDateTime = DateTime(_selectedDate.year, _selectedDate.month,
+        _selectedDate.day, _startTime.hour, _startTime.minute);
+
+    if (endDateTime.isBefore(startDateTime) ||
+        endDateTime.isAtSameMomentAs(startDateTime)) {
+      return false;
+    }
+
+    return true;
+  }
+
+// Update the date picker to only show operating days
+  Future<void> _selectDate() async {
+    final settingsController = Get.find<SettingsController>();
+
+    // Find a valid initial date that satisfies the predicate
+    DateTime initialDate = _selectedDate;
+
+    // If operating days are configured, ensure initialDate is valid
+    if (settingsController.operatingDays.isNotEmpty) {
+      final currentDayName = _getDayName(initialDate.weekday);
+
+      // If current date is not an operating day, find the next valid day
+      if (!settingsController.operatingDays.contains(currentDayName)) {
+        // Start from today and find the next operating day
+        DateTime searchDate = DateTime.now();
+        while (searchDate.isBefore(DateTime.now().add(Duration(days: 365)))) {
+          final dayName = _getDayName(searchDate.weekday);
+          if (settingsController.operatingDays.contains(dayName)) {
+            initialDate = searchDate;
+            break;
+          }
+          searchDate = searchDate.add(Duration(days: 1));
+        }
+      }
+    }
+
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(Duration(days: 365)),
+      selectableDayPredicate: (DateTime date) {
+        // If no operating days are set, allow all days
+        if (settingsController.operatingDays.isEmpty) {
+          return true;
+        }
+
+        final dayName = _getDayName(date.weekday);
+        return settingsController.operatingDays.contains(dayName);
+      },
+      helpText: settingsController.operatingDays.isNotEmpty
+          ? 'Select date (Operating days: ${settingsController.operatingDays.join(', ')})'
+          : 'Select date',
+    );
+
+    if (picked != null && picked != _selectedDate) {
+      setState(() {
+        _selectedDate = picked;
+      });
+      _checkInstructorAvailability();
+    }
   }
 
   Widget _buildMessageCard(String message, Color color, IconData icon) {

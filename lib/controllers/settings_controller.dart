@@ -1,10 +1,15 @@
 // lib/controllers/enhanced_settings_controller.dart
+import 'package:driving/services/database_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
 class SettingsController extends GetxController {
+  final DatabaseHelper _dbHelper = DatabaseHelper();
+
   // Scheduling Settings
   final RxBool enforceBillingValidation = true.obs;
   final RxBool checkInstructorAvailability = true.obs;
@@ -44,6 +49,22 @@ class SettingsController extends GetxController {
   final RxString defaultCurrency = 'USD'.obs;
   final RxBool showDeveloperOptions = false.obs;
 
+  // Business Information
+  final RxString businessName = ''.obs;
+  final RxString businessAddress = ''.obs;
+  final RxString businessCity = ''.obs;
+  final RxString businessCountry = 'Zimbabwe'.obs;
+
+  // Contact Information
+  final RxString businessPhone = ''.obs;
+  final RxString businessEmail = ''.obs;
+  final RxString businessWebsite = ''.obs;
+
+  // Operating Schedule
+  final RxList<String> operatingDays = <String>[].obs;
+  final RxString businessStartTime = '09:00'.obs;
+  final RxString businessEndTime = '17:00'.obs;
+
   final RxInt _tempBreakBetweenLessons = 15.obs;
   final RxInt _tempLessonStartReminder = 15.obs;
   final RxInt _tempLowLessonThreshold = 3.obs;
@@ -58,6 +79,7 @@ class SettingsController extends GetxController {
     _tempLessonStartReminder.value = lessonStartReminder.value;
     _tempLowLessonThreshold.value = lowLessonThreshold.value;
     _tempAutoSaveInterval.value = autoSaveInterval.value;
+    loadSettingsFromDatabase();
   }
 
   // Enhanced methods for smooth slider experience
@@ -184,8 +206,12 @@ class SettingsController extends GetxController {
   }
 
   // Enhanced utility methods for easy setting management
-  void updateSetting(String key, dynamic value, Rx observableValue) {
-    observableValue.value = value;
+  void updateSetting(String key, dynamic value, dynamic observableValue) {
+    if (observableValue is RxList) {
+      observableValue.assignAll(value);
+    } else if (observableValue is Rx) {
+      observableValue.value = value;
+    }
     _saveSetting(key, value);
     _showSettingUpdatedSnackbar(key);
   }
@@ -497,5 +523,126 @@ class SettingsController extends GetxController {
         'showDeveloperOptions': showDeveloperOptions.value,
       },
     };
+  }
+
+  Future<void> loadSettingsFromDatabase() async {
+    try {
+      final db = await _dbHelper.database;
+      final settings = await db.query('settings');
+
+      if (settings.isNotEmpty) {
+        final settingsMap = {
+          for (var setting in settings) setting['key']: setting['value']
+        };
+
+        // Business Information
+        businessName.value = (settingsMap['business_name'] as String?) ?? '';
+        businessAddress.value =
+            (settingsMap['business_address'] as String?) ?? '';
+        businessCity.value = (settingsMap['business_city'] as String?) ?? '';
+        businessCountry.value =
+            (settingsMap['business_country'] as String?) ?? 'Zimbabwe';
+
+        // Contact Information
+        businessPhone.value = (settingsMap['business_phone'] as String?) ?? '';
+        businessEmail.value = (settingsMap['business_email'] as String?) ?? '';
+        businessWebsite.value =
+            (settingsMap['business_website'] as String?) ?? '';
+
+        // Operating Schedule
+        businessStartTime.value =
+            (settingsMap['business_start_time'] as String?) ?? '09:00';
+        businessEndTime.value =
+            (settingsMap['business_end_time'] as String?) ?? '17:00';
+
+        // Operating Days (stored as comma-separated string)
+        final operatingDaysString =
+            (settingsMap['operating_days'] as String?) ?? '';
+        if (operatingDaysString.isNotEmpty) {
+          operatingDays.value = operatingDaysString.split(',');
+        }
+      }
+    } catch (e) {
+      print('Error loading settings: $e');
+    }
+  }
+
+// Save business settings to database
+  Future<void> saveBusinessSettings() async {
+    try {
+      print('Starting to save business settings...');
+      final db = await _dbHelper.database;
+      print('Database connection established');
+
+      final businessSettingsMap = {
+        'business_name': businessName.value,
+        'business_address': businessAddress.value,
+        'business_city': businessCity.value,
+        'business_country': businessCountry.value,
+        'business_phone': businessPhone.value,
+        'business_email': businessEmail.value,
+        'business_website': businessWebsite.value,
+        'business_start_time': businessStartTime.value,
+        'business_end_time': businessEndTime.value,
+        'operating_days': operatingDays.join(','),
+      };
+
+      print('Settings to save: $businessSettingsMap');
+
+      for (final entry in businessSettingsMap.entries) {
+        print('Saving: ${entry.key} = ${entry.value}');
+        await db.insert(
+          'settings',
+          {'key': entry.key, 'value': entry.value},
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+
+      print('All business settings saved successfully');
+    } catch (e) {
+      print('Error saving business settings: $e');
+      rethrow; // Re-throw to be caught by calling method
+    }
+  }
+
+// Enhanced save method that ensures all current values are saved
+// Enhanced save method that ensures all current values are saved
+  Future<void> saveAllBusinessSettings() async {
+    try {
+      print('Starting saveAllBusinessSettings...');
+      await saveBusinessSettings();
+      print('Business settings saved successfully');
+
+      // Don't show snackbar here - let the UI handle it
+      // This prevents conflicts with the loading dialog
+    } catch (e) {
+      print('Error in saveAllBusinessSettings: $e');
+      rethrow; // Re-throw so the UI can handle it
+    }
+  }
+
+// Individual setters for text fields
+  void setBusinessName(String name) {
+    businessName.value = name;
+  }
+
+  void setBusinessAddress(String address) {
+    businessAddress.value = address;
+  }
+
+  void setBusinessCity(String city) {
+    businessCity.value = city;
+  }
+
+  void setBusinessPhone(String phone) {
+    businessPhone.value = phone;
+  }
+
+  void setBusinessEmail(String email) {
+    businessEmail.value = email;
+  }
+
+  void setBusinessWebsite(String website) {
+    businessWebsite.value = website;
   }
 }

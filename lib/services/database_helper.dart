@@ -38,6 +38,15 @@ class DatabaseHelper {
   Future<void> _onCreate(Database db, int version) async {
     // Create all tables based on the schema
     await db.execute('''
+      CREATE TABLE settings(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        key TEXT UNIQUE NOT NULL,
+        value TEXT NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )
+    ''');
+    await db.execute('''
       CREATE TABLE attachments(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         uploaded_by INTEGER NOT NULL,

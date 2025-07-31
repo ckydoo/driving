@@ -606,4 +606,74 @@ class BillingController extends GetxController {
     final db = await DatabaseHelper.instance.database;
     return await db.insert('invoices', invoice);
   }
+
+  Future<void> updateInvoicePayment({
+    required int invoiceId,
+    required double paymentAmount,
+    required String paymentMethod,
+    required String notes,
+  }) async {
+    final payment = Payment(
+      invoiceId: invoiceId,
+      amount: paymentAmount,
+      paymentDate: DateTime.now(),
+      notes: notes,
+      method: paymentMethod,
+    );
+    await recordPayment(payment);
+  }
+
+  Future<void> processBulkPayment({
+    required List<Map<String, dynamic>> studentsData,
+    required double paymentAmount,
+    required String paymentMethod,
+    required String notes,
+  }) async {
+    try {
+      // Calculate total outstanding amount
+      double totalOutstanding =
+          studentsData.fold(0.0, (sum, data) => sum + data['balance']);
+
+      // Determine payment distribution
+      for (var studentData in studentsData) {
+        final User student = studentData['student'];
+        final List<Invoice> invoices = studentData['invoices'];
+        final double studentBalance = studentData['balance'];
+
+        // Calculate proportional payment for this student
+        double studentPayment =
+            (studentBalance / totalOutstanding) * paymentAmount;
+
+        // Apply payment to student's invoices (oldest first)
+        double remainingPayment = studentPayment;
+
+        for (var invoice in invoices) {
+          if (remainingPayment <= 0) break;
+
+          double invoiceBalance =
+              invoice.totalAmountCalculated - invoice.amountPaid;
+          if (invoiceBalance <= 0) continue;
+
+          double paymentForInvoice = remainingPayment > invoiceBalance
+              ? invoiceBalance
+              : remainingPayment;
+
+          // Update invoice payment
+          await updateInvoicePayment(
+            invoiceId: invoice.id!,
+            paymentAmount: paymentForInvoice,
+            paymentMethod: paymentMethod,
+            notes: notes.isNotEmpty ? notes : 'Bulk payment',
+          );
+
+          remainingPayment -= paymentForInvoice;
+        }
+      }
+
+      // Refresh billing data
+      await fetchBillingData();
+    } catch (e) {
+      throw Exception('Failed to process bulk payment: $e');
+    }
+  }
 }

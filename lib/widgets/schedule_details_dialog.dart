@@ -252,35 +252,7 @@ class ScheduleDetailsDialog extends StatelessWidget {
                 children: [
                   // Attendance Actions (for instructors)
                   if (schedule.status != 'Cancelled' && !schedule.attended) ...[
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: () =>
-                                _markAttendance(true, scheduleController),
-                            icon: Icon(Icons.check_circle, size: 18),
-                            label: Text('Mark Attended'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green,
-                              foregroundColor: Colors.white,
-                            ),
-                          ),
-                        ),
-                        SizedBox(width: 12),
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: () =>
-                                _markAttendance(false, scheduleController),
-                            icon: Icon(Icons.cancel, size: 18),
-                            label: Text('Mark Absent'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.orange,
-                              foregroundColor: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                    _buildAttendanceSection(scheduleController),
                     SizedBox(height: 12),
                   ],
 
@@ -505,6 +477,87 @@ class ScheduleDetailsDialog extends StatelessWidget {
           colorText: Colors.white,
         );
       }
+    }
+  }
+
+  Widget _buildAttendanceSection(ScheduleController controller) {
+    final now = DateTime.now();
+    final lessonStart = schedule.start;
+    final lessonEnd = schedule.end;
+    final timeDifference = lessonStart.difference(now).inMinutes;
+
+    // Check if we're within 5 minutes of start time or lesson has started/ended
+    final canMarkAttendance = timeDifference <= 5 || now.isAfter(lessonStart);
+
+    if (canMarkAttendance) {
+      return Row(
+        children: [
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: () => _markAttendance(true, controller),
+              icon: Icon(Icons.check_circle, size: 18),
+              label: Text('Mark Attended'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ),
+          SizedBox(width: 12),
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: () => _markAttendance(false, controller),
+              icon: Icon(Icons.cancel, size: 18),
+              label: Text('Mark Absent'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ),
+        ],
+      );
+    } else {
+      // Show disabled state with time remaining
+      final timeRemaining = timeDifference > 60
+          ? '${(timeDifference / 60).floor()}h ${timeDifference % 60}m'
+          : '${timeDifference}m';
+
+      return Container(
+        padding: EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.grey[100],
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.grey[300]!),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.access_time, color: Colors.grey[600], size: 20),
+            SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Attendance marking unavailable',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w500,
+                      color: Colors.grey[700],
+                    ),
+                  ),
+                  Text(
+                    'Available 5 minutes before lesson starts ($timeRemaining remaining)',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
     }
   }
 }

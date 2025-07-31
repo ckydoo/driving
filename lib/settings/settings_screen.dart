@@ -20,7 +20,7 @@ class _SettingsScreenState extends State<SettingsScreen>
   int get _tabCount {
     int count = 1; // Appearance tab is always visible
     if (authController.hasAnyRole(['admin', 'instructor'])) {
-      count += 5; // Scheduling, Billing, Instructor, Notifications, Advanced
+      count += 6; // Scheduling, Billing, Instructor, Notifications, Advanced
     }
     return count;
   }
@@ -29,7 +29,8 @@ class _SettingsScreenState extends State<SettingsScreen>
   List<String> get _availableTabs {
     List<String> tabs = [];
     if (authController.hasAnyRole(['admin', 'instructor'])) {
-      tabs.addAll(['Scheduling', 'Billing', 'Instructor', 'Notifications']);
+      tabs.addAll(
+          ['Business', 'Scheduling', 'Billing', 'Instructor', 'Notifications']);
     }
     tabs.add('Appearance');
     if (authController.hasAnyRole(['admin', 'instructor'])) {
@@ -119,6 +120,7 @@ class _SettingsScreenState extends State<SettingsScreen>
     List<Widget> views = [];
     if (authController.hasAnyRole(['admin', 'instructor'])) {
       views.addAll([
+        _buildBusinessSettings(),
         _buildSchedulingSettings(),
         _buildBillingSettings(),
         _buildInstructorSettings(),
@@ -437,25 +439,42 @@ class _SettingsScreenState extends State<SettingsScreen>
     Function(T) onChanged,
     String Function(T) formatter,
   ) {
-    return Obx(() => ListTile(
-          title: Text(title, style: TextStyle(fontWeight: FontWeight.w500)),
-          subtitle: Text(subtitle, style: TextStyle(fontSize: 12)),
-          trailing: DropdownButton<T>(
-            value: items.firstWhere((item) => item.toString() == value.value),
-            items: items.map((item) {
-              return DropdownMenuItem<T>(
-                value: item,
-                child: Text(formatter(item)),
-              );
-            }).toList(),
-            onChanged: (newValue) {
-              if (newValue != null) {
-                onChanged(newValue);
-              }
-            },
-            underline: SizedBox.shrink(),
-          ),
-        ));
+    return Obx(() {
+      // Find matching item or use first item as fallback
+      T? selectedItem;
+      try {
+        selectedItem =
+            items.firstWhere((item) => item.toString() == value.value);
+      } catch (e) {
+        // If no match found, use the first item and update the value
+        selectedItem = items.isNotEmpty ? items.first : null;
+        if (selectedItem != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            value.value = selectedItem.toString();
+          });
+        }
+      }
+
+      return ListTile(
+        title: Text(title, style: TextStyle(fontWeight: FontWeight.w500)),
+        subtitle: Text(subtitle, style: TextStyle(fontSize: 12)),
+        trailing: DropdownButton<T>(
+          value: selectedItem,
+          items: items.map((item) {
+            return DropdownMenuItem<T>(
+              value: item,
+              child: Text(formatter(item)),
+            );
+          }).toList(),
+          onChanged: (newValue) {
+            if (newValue != null) {
+              onChanged(newValue);
+            }
+          },
+          underline: SizedBox.shrink(),
+        ),
+      );
+    });
   }
 
   Widget _buildTimeTile(
@@ -891,6 +910,352 @@ class _SettingsScreenState extends State<SettingsScreen>
                 ])
               : SizedBox.shrink()),
           // ... rest of advanced settings
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTextFieldTile(
+    String title,
+    String hintText,
+    RxString value,
+    IconData icon,
+  ) {
+    final TextEditingController controller =
+        TextEditingController(text: value.value);
+    final RxBool hasChanges = false.obs;
+
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 20, color: Colors.blue[700]),
+              SizedBox(width: 8),
+              Text(
+                title,
+                style: TextStyle(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 16,
+                ),
+              ),
+              Spacer(),
+              Obx(() => hasChanges.value
+                  ? Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: Icon(Icons.close, size: 18),
+                          onPressed: () {
+                            controller.text = value.value;
+                            hasChanges.value = false;
+                          },
+                          color: Colors.grey[600],
+                          tooltip: 'Cancel changes',
+                        ),
+                        IconButton(
+                          icon: Icon(Icons.check, size: 18),
+                          onPressed: () {
+                            // Update the reactive value immediately
+                            value.value = controller.text;
+                            hasChanges.value = false;
+
+                            // Save individual setting
+                            settingsController.saveBusinessSettings();
+
+                            Get.snackbar(
+                              'Saved',
+                              '$title updated successfully',
+                              backgroundColor: Colors.green,
+                              colorText: Colors.white,
+                              duration: Duration(seconds: 2),
+                            );
+                          },
+                          color: Colors.green[600],
+                          tooltip: 'Save changes',
+                        ),
+                      ],
+                    )
+                  : SizedBox.shrink()),
+            ],
+          ),
+          SizedBox(height: 8),
+          TextField(
+            controller: controller,
+            decoration: InputDecoration(
+              hintText: hintText,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: Colors.grey[300]!),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: Colors.blue[700]!, width: 2),
+              ),
+              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            ),
+            onChanged: (newValue) {
+              hasChanges.value = newValue != value.value;
+              // Update the reactive value in real-time for the "Save All" button
+              value.value = newValue;
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBusinessSettings() {
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSectionHeader('Business Information'),
+          _buildSettingsCard([
+            _buildTextFieldTile(
+              'Business Name',
+              'Enter your driving school name',
+              settingsController.businessName,
+              Icons.business,
+            ),
+            _buildTextFieldTile(
+              'Address',
+              'Street address',
+              settingsController.businessAddress,
+              Icons.location_on,
+            ),
+            _buildTextFieldTile(
+              'City',
+              'City name',
+              settingsController.businessCity,
+              Icons.location_city,
+            ),
+            _buildDropdownTile(
+              'Country',
+              'Select your country',
+              settingsController.businessCountry,
+              [
+                'Zimbabwe',
+              ],
+              (value) {
+                settingsController.businessCountry.value = value;
+                settingsController.saveBusinessSettings();
+              },
+              (value) => value,
+            ),
+          ]),
+          SizedBox(height: 16),
+          _buildSectionHeader('Contact Information'),
+          _buildSettingsCard([
+            _buildTextFieldTile(
+              'Phone Number',
+              'Business phone number',
+              settingsController.businessPhone,
+              Icons.phone,
+            ),
+            _buildTextFieldTile(
+              'Email',
+              'Business email address',
+              settingsController.businessEmail,
+              Icons.email,
+            ),
+            _buildTextFieldTile(
+              'Website',
+              'Business website (optional)',
+              settingsController.businessWebsite,
+              Icons.language,
+            ),
+          ]),
+          SizedBox(height: 16),
+          _buildSectionHeader('Operating Days'),
+          _buildSettingsCard([
+            _buildDaysOfWeekSelector(),
+          ]),
+          SizedBox(height: 16),
+          _buildSectionHeader('Business Hours'),
+          _buildSettingsCard([
+            _buildTimeTile(
+              'Business Start Time',
+              settingsController.businessStartTime,
+              true,
+              subtitle: 'When your business opens',
+            ),
+            _buildTimeTile(
+              'Business End Time',
+              settingsController.businessEndTime,
+              false,
+              subtitle: 'When your business closes',
+            ),
+          ]),
+          SizedBox(height: 24),
+          // Save All Button
+          Center(
+            child: ElevatedButton.icon(
+              onPressed: () async {
+                print('Save button pressed');
+
+                bool dialogShown = false;
+
+                try {
+                  await Future.delayed(Duration(milliseconds: 100));
+
+                  await settingsController.saveAllBusinessSettings();
+
+                  // Then show success message
+                  Get.snackbar(
+                    'Success',
+                    'All business settings saved successfully',
+                    backgroundColor: Colors.green,
+                    colorText: Colors.white,
+                    icon: Icon(Icons.check_circle, color: Colors.white),
+                    duration: Duration(seconds: 3),
+                  );
+                } catch (e) {
+                  print('Save failed with error: $e');
+
+                  // Then show error message
+                  Get.snackbar(
+                    'Error',
+                    'Failed to save settings: ${e.toString()}',
+                    backgroundColor: Colors.red,
+                    colorText: Colors.white,
+                    icon: Icon(Icons.error, color: Colors.white),
+                    duration: Duration(seconds: 3),
+                  );
+                }
+              },
+              icon: Icon(Icons.save_alt),
+              label: Text('Save All Business Settings'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue[700],
+                foregroundColor: Colors.white,
+                padding: EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDaysOfWeekSelector() {
+    final List<String> daysOfWeek = [
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday'
+    ];
+
+    return Padding(
+      padding: EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.calendar_today, size: 20, color: Colors.blue[700]),
+              SizedBox(width: 8),
+              Text(
+                'Operating Days',
+                style: TextStyle(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 16,
+                ),
+              ),
+              Spacer(),
+              TextButton.icon(
+                onPressed: () {
+                  settingsController.saveBusinessSettings();
+                  Get.snackbar(
+                    'Saved',
+                    'Operating days updated',
+                    backgroundColor: Colors.green,
+                    colorText: Colors.white,
+                  );
+                },
+                icon: Icon(Icons.save, size: 16),
+                label: Text('Save'),
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.blue[700],
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 12),
+          Text(
+            'Select the days your business operates',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey[600],
+            ),
+          ),
+          SizedBox(height: 16),
+          Obx(() => Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: daysOfWeek.map((day) {
+                  final isSelected =
+                      settingsController.operatingDays.contains(day);
+                  return FilterChip(
+                    label: Text(
+                      day.substring(0, 3),
+                      style: TextStyle(
+                        color: isSelected ? Colors.white : Colors.blue[700],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    selected: isSelected,
+                    onSelected: (selected) {
+                      if (selected) {
+                        if (!settingsController.operatingDays.contains(day)) {
+                          settingsController.operatingDays.add(day);
+                        }
+                      } else {
+                        settingsController.operatingDays.remove(day);
+                      }
+                    },
+                    selectedColor: Colors.blue[700],
+                    checkmarkColor: Colors.white,
+                    backgroundColor: Colors.blue[50],
+                    side: BorderSide(color: Colors.blue[300]!),
+                  );
+                }).toList(),
+              )),
+          Obx(() => settingsController.operatingDays.isEmpty
+              ? Container(
+                  margin: EdgeInsets.only(top: 8),
+                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.orange[50],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange[200]!),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.warning, size: 16, color: Colors.orange[700]),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Please select at least one operating day',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.orange[700],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : SizedBox.shrink()),
         ],
       ),
     );

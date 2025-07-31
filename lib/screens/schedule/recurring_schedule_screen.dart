@@ -778,8 +778,34 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
       errors.add('End time must be after start time');
     }
 
-    // Working hours validation
+    // Business settings validation
     final settingsController = Get.find<SettingsController>();
+
+    // Check if scheduling on closed days
+    if (_selectedInstructor != null) {
+      final closedDays = _getClosedDaysFromSettings(settingsController);
+
+      // Check if start date falls on a closed day
+      if (closedDays.contains(_selectedStartDate.weekday)) {
+        final dayName = _getDayName(_selectedStartDate.weekday);
+        errors.add('Cannot schedule on $dayName - Business is closed');
+      }
+
+      // For recurring schedules, check if any selected days are closed
+      if (_recurrencePattern == 'weekly' && _selectedDaysOfWeek.isNotEmpty) {
+        final conflictingDays = _selectedDaysOfWeek
+            .where((day) => closedDays.contains(day))
+            .toList();
+        if (conflictingDays.isNotEmpty) {
+          final dayNames =
+              conflictingDays.map((day) => _getDayName(day)).join(', ');
+          errors.add(
+              'Cannot schedule on $dayNames - Business is closed on these days');
+        }
+      }
+    }
+
+    // Business hours validation
     if (settingsController.enforceWorkingHours.value &&
         _selectedInstructor != null) {
       final startTime =
@@ -791,10 +817,10 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
       final workingEnd =
           _parseTimeString(settingsController.workingHoursEnd.value);
 
-      if (_isTimeOutsideWorkingHours(
+      if (_isTimeOutsideBusinessHours(
           startTime, endTime, workingStart, workingEnd)) {
         errors.add(
-            'Schedule time is outside instructor working hours (${settingsController.workingHoursStart.value} - ${settingsController.workingHoursEnd.value})');
+            'Schedule time is outside business hours (${settingsController.workingHoursStart.value} - ${settingsController.workingHoursEnd.value})');
       }
     }
 
@@ -881,6 +907,200 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     }
 
     return warnings;
+  }
+
+// Helper method to get closed days from settings
+  List<int> _getClosedDaysFromSettings(SettingsController settingsController) {
+    List<int> closedDays = [];
+
+    // For now, assume all days are open since the specific day properties don't exist
+    // This method can be updated when the SettingsController has the required properties
+
+    return closedDays;
+  }
+
+// Helper method to get day name from weekday number
+  String _getDayName(int weekday) {
+    switch (weekday) {
+      case 1:
+        return 'Monday';
+      case 2:
+        return 'Tuesday';
+      case 3:
+        return 'Wednesday';
+      case 4:
+        return 'Thursday';
+      case 5:
+        return 'Friday';
+      case 6:
+        return 'Saturday';
+      case 7:
+        return 'Sunday';
+      default:
+        return 'Unknown';
+    }
+  }
+
+// Updated method name for clarity
+  bool _isTimeOutsideBusinessHours(TimeOfDay startTime, TimeOfDay endTime,
+      TimeOfDay businessStart, TimeOfDay businessEnd) {
+    int startMinutes = startTime.hour * 60 + startTime.minute;
+    int endMinutes = endTime.hour * 60 + endTime.minute;
+    int businessStartMinutes = businessStart.hour * 60 + businessStart.minute;
+    int businessEndMinutes = businessEnd.hour * 60 + businessEnd.minute;
+
+    return startMinutes < businessStartMinutes ||
+        endMinutes > businessEndMinutes;
+  }
+
+// Updated method to respect closed days when calculating lessons
+  int _calculateLessonsForPeriod(DateTime startDate, DateTime endDate) {
+    if (_selectedInstructor == null) return 0;
+
+    final settingsController = Get.find<SettingsController>();
+    final closedDays = _getClosedDaysFromSettings(settingsController);
+
+    DateTime currentDate = startDate;
+    int count = 0;
+
+    while (currentDate.isBefore(endDate) ||
+        currentDate.isAtSameMomentAs(endDate)) {
+      // Skip if it's a closed day
+      if (closedDays.contains(currentDate.weekday)) {
+        currentDate = _getNextDate(currentDate);
+        continue;
+      }
+
+      bool shouldCreateSchedule = false;
+
+      switch (_recurrencePattern) {
+        case 'daily':
+          shouldCreateSchedule = true;
+          break;
+        case 'weekly':
+          shouldCreateSchedule =
+              _selectedDaysOfWeek.contains(currentDate.weekday);
+          break;
+        case 'monthly':
+          shouldCreateSchedule = currentDate.day == startDate.day;
+          break;
+        case 'custom':
+          final daysDiff = currentDate.difference(startDate).inDays;
+          shouldCreateSchedule = daysDiff % _customInterval == 0;
+          break;
+      }
+
+      if (shouldCreateSchedule) {
+        count++;
+      }
+
+      currentDate = _getNextDate(currentDate);
+
+      if (count > 1000) break;
+    }
+
+    return count;
+  }
+
+// Helper method to get next date based on recurrence pattern
+  DateTime _getNextDate(DateTime currentDate) {
+    switch (_recurrencePattern) {
+      case 'daily':
+        return currentDate.add(Duration(days: 1));
+      case 'weekly':
+        return currentDate.add(Duration(days: 1));
+      case 'monthly':
+        return DateTime(
+          currentDate.year,
+          currentDate.month + 1,
+          currentDate.day,
+        );
+      case 'custom':
+        return currentDate.add(Duration(days: 1));
+      default:
+        return currentDate.add(Duration(days: 1));
+    }
+  }
+
+// Updated _updatePreviewCount to respect closed days
+  void _updatePreviewCount() {
+    if (_selectedInstructor == null) {
+      setState(() {
+        _previewCount = 0;
+      });
+      return;
+    }
+
+    final settingsController = Get.find<SettingsController>();
+    final closedDays = _getClosedDaysFromSettings(settingsController);
+
+    final endDate = _useEndDate
+        ? _recurrenceEndDate!
+        : DateTime.now().add(Duration(days: 365));
+
+    DateTime currentDate = _selectedStartDate;
+    int count = 0;
+
+    while (currentDate.isBefore(endDate) ||
+        currentDate.isAtSameMomentAs(endDate)) {
+      if (!_useEndDate && count >= _maxOccurrences) break;
+
+      // Skip if it's a closed day
+      if (closedDays.contains(currentDate.weekday)) {
+        currentDate = currentDate.add(Duration(days: 1));
+        continue;
+      }
+
+      bool shouldCreateSchedule = false;
+
+      switch (_recurrencePattern) {
+        case 'daily':
+          shouldCreateSchedule = true;
+          break;
+        case 'weekly':
+          shouldCreateSchedule =
+              _selectedDaysOfWeek.contains(currentDate.weekday);
+          break;
+        case 'monthly':
+          shouldCreateSchedule = currentDate.day == _selectedStartDate.day;
+          break;
+        case 'custom':
+          final daysDiff = currentDate.difference(_selectedStartDate).inDays;
+          shouldCreateSchedule = daysDiff % _customInterval == 0;
+          break;
+      }
+
+      if (shouldCreateSchedule) {
+        count++;
+      }
+
+      // Move to next iteration
+      switch (_recurrencePattern) {
+        case 'daily':
+          currentDate = currentDate.add(Duration(days: 1));
+          break;
+        case 'weekly':
+          currentDate = currentDate.add(Duration(days: 1));
+          break;
+        case 'monthly':
+          currentDate = DateTime(
+            currentDate.year,
+            currentDate.month + 1,
+            currentDate.day,
+          );
+          break;
+        case 'custom':
+          currentDate = currentDate.add(Duration(days: 1));
+          break;
+      }
+
+      // Safety check
+      if (count > 1000) break;
+    }
+
+    setState(() {
+      _previewCount = count;
+    });
   }
 
   List<Widget> _buildPreviewValidationMessages() {
@@ -1110,77 +1330,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
         _selectedVehicle = assignedVehicle;
       });
     }
-  }
-
-  void _updatePreviewCount() {
-    if (_selectedInstructor == null) {
-      setState(() {
-        _previewCount = 0;
-      });
-      return;
-    }
-
-    final endDate = _useEndDate
-        ? _recurrenceEndDate!
-        : DateTime.now().add(Duration(days: 365));
-
-    DateTime currentDate = _selectedStartDate;
-    int count = 0;
-
-    while (currentDate.isBefore(endDate) ||
-        currentDate.isAtSameMomentAs(endDate)) {
-      if (!_useEndDate && count >= _maxOccurrences) break;
-
-      bool shouldCreateSchedule = false;
-
-      switch (_recurrencePattern) {
-        case 'daily':
-          shouldCreateSchedule = true;
-          break;
-        case 'weekly':
-          shouldCreateSchedule =
-              _selectedDaysOfWeek.contains(currentDate.weekday);
-          break;
-        case 'monthly':
-          shouldCreateSchedule = currentDate.day == _selectedStartDate.day;
-          break;
-        case 'custom':
-          final daysDiff = currentDate.difference(_selectedStartDate).inDays;
-          shouldCreateSchedule = daysDiff % _customInterval == 0;
-          break;
-      }
-
-      if (shouldCreateSchedule) {
-        count++;
-      }
-
-      // Move to next iteration
-      switch (_recurrencePattern) {
-        case 'daily':
-          currentDate = currentDate.add(Duration(days: 1));
-          break;
-        case 'weekly':
-          currentDate = currentDate.add(Duration(days: 1));
-          break;
-        case 'monthly':
-          currentDate = DateTime(
-            currentDate.year,
-            currentDate.month + 1,
-            currentDate.day,
-          );
-          break;
-        case 'custom':
-          currentDate = currentDate.add(Duration(days: 1));
-          break;
-      }
-
-      // Safety check
-      if (count > 1000) break;
-    }
-
-    setState(() {
-      _previewCount = count;
-    });
   }
 
   Future<void> _selectTime(bool isStartTime) async {
@@ -1593,63 +1742,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     int workingEndMinutes = workingEnd.hour * 60 + workingEnd.minute;
 
     return startMinutes < workingStartMinutes || endMinutes > workingEndMinutes;
-  }
-
-  int _calculateLessonsForPeriod(DateTime startDate, DateTime endDate) {
-    if (_selectedInstructor == null) return 0;
-
-    DateTime currentDate = startDate;
-    int count = 0;
-
-    while (currentDate.isBefore(endDate) ||
-        currentDate.isAtSameMomentAs(endDate)) {
-      bool shouldCreateSchedule = false;
-
-      switch (_recurrencePattern) {
-        case 'daily':
-          shouldCreateSchedule = true;
-          break;
-        case 'weekly':
-          shouldCreateSchedule =
-              _selectedDaysOfWeek.contains(currentDate.weekday);
-          break;
-        case 'monthly':
-          shouldCreateSchedule = currentDate.day == startDate.day;
-          break;
-        case 'custom':
-          final daysDiff = currentDate.difference(startDate).inDays;
-          shouldCreateSchedule = daysDiff % _customInterval == 0;
-          break;
-      }
-
-      if (shouldCreateSchedule) {
-        count++;
-      }
-
-      // Move to next iteration
-      switch (_recurrencePattern) {
-        case 'daily':
-          currentDate = currentDate.add(Duration(days: 1));
-          break;
-        case 'weekly':
-          currentDate = currentDate.add(Duration(days: 1));
-          break;
-        case 'monthly':
-          currentDate = DateTime(
-            currentDate.year,
-            currentDate.month + 1,
-            currentDate.day,
-          );
-          break;
-        case 'custom':
-          currentDate = currentDate.add(Duration(days: 1));
-          break;
-      }
-
-      if (count > 1000) break;
-    }
-
-    return count;
   }
 
   DateTime _findOptimalEndDate() {

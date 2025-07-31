@@ -3,6 +3,7 @@ import 'package:driving/controllers/user_controller.dart';
 import 'package:driving/models/invoice.dart';
 import 'package:driving/models/user.dart';
 import 'package:driving/screens/billing/student_invoice.dart';
+import 'package:driving/screens/payments/bulk_payments.dart';
 import 'package:driving/widgets/create_invoice_dialog.dart';
 import 'package:driving/widgets/payment_dialog.dart';
 import 'package:flutter/material.dart';
@@ -966,7 +967,60 @@ class _BillingScreenState extends State<BillingScreen>
   }
 
   void _handleBulkPayment() {
-    // Implementation for bulk payment functionality
-    _showSuccessSnackbar('Bulk payment feature coming soon!');
+    if (_selectedStudents.isEmpty) {
+      _showErrorSnackbar('No students selected for bulk payment');
+      return;
+    }
+
+    // Get all selected students with their outstanding invoices
+    List<Map<String, dynamic>> selectedStudentsData = [];
+    double totalBulkAmount = 0;
+
+    for (int studentId in _selectedStudents) {
+      final student = _students.firstWhere((s) => s.id == studentId);
+      final studentInvoices = billingController.invoices
+          .where((invoice) => invoice.studentId == studentId)
+          .toList();
+
+      double studentBalance = _getStudentBalance(student);
+
+      if (studentBalance > 0) {
+        selectedStudentsData.add({
+          'student': student,
+          'invoices': studentInvoices,
+          'balance': studentBalance,
+        });
+        totalBulkAmount += studentBalance;
+      }
+    }
+
+    if (selectedStudentsData.isEmpty) {
+      _showErrorSnackbar('Selected students have no outstanding balance');
+      return;
+    }
+
+    _showBulkPaymentDialog(selectedStudentsData, totalBulkAmount);
+  }
+
+  void _showBulkPaymentDialog(
+      List<Map<String, dynamic>> studentsData, double totalAmount) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return BulkPaymentDialog(
+          studentsData: studentsData,
+          totalAmount: totalAmount,
+          onPaymentComplete: () {
+            _loadBillingData();
+            setState(() {
+              _selectedStudents.clear();
+              _isMultiSelectionActive = false;
+              _isAllSelected = false;
+            });
+          },
+        );
+      },
+    );
   }
 }

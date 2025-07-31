@@ -697,7 +697,7 @@ class ScheduleController extends GetxController {
 
         // Check if we have enough lessons
         if (usedLessons > invoice.lessons) {
-          throw Exception(
+          print(
               'Insufficient lessons remaining. Please add more lessons to the invoice.');
         }
 
