@@ -108,6 +108,7 @@ class Invoice {
   factory Invoice.fromJson(Map<String, dynamic> json) {
     return Invoice(
       id: json['id'],
+      invoiceNumber: json['invoice_number'],
       studentId: json['student'],
       courseId: json['course'],
       lessons: json['lessons'],
@@ -115,16 +116,17 @@ class Invoice {
       amountPaid: (json['amountpaid'] as num?)?.toDouble() ?? 0.0,
       createdAt: DateTime.parse(json['created_at']),
       dueDate: DateTime.parse(json['due_date']),
-      status: json['status'],
-      totalAmount: (json['total_amount'] as num?)!.toDouble(),
-      invoiceNumber: json['invoice_number'],
+      status: json['status'] ?? 'unpaid',
       courseName: json['course_name'],
+      totalAmount: (json['total_amount'] as num?)!.toDouble(),
+      payments: [],
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
       'id': id,
+      'invoice_number': invoiceNumber,
       'student': studentId,
       'course': courseId,
       'lessons': lessons,
@@ -133,9 +135,8 @@ class Invoice {
       'created_at': createdAt.toIso8601String(),
       'due_date': dueDate.toIso8601String(),
       'status': status,
-      'total_amount': totalAmount,
-      'invoice_number': invoiceNumber,
       'course_name': courseName,
+      'total_amount': totalAmount,
     };
   }
 }
