@@ -1,5 +1,7 @@
+// lib/models/schedule.dart
 import 'billing.dart';
 import 'payment.dart';
+import 'package:driving/constant/schedule_status.dart';
 
 class Schedule {
   final int? id;
@@ -20,8 +22,8 @@ class Schedule {
 
   // New fields for recurring schedules
   final bool isRecurring;
-  final String? recurrencePattern; // e.g., 'daily', 'weekly', 'monthly'
-  final DateTime? recurrenceEndDate; // When the recurrence ends
+  final String? recurrencePattern;
+  final DateTime? recurrenceEndDate;
 
   Schedule({
     this.id,
@@ -33,19 +35,18 @@ class Schedule {
     this.carId,
     this.progress = 0.0,
     required this.classType,
-    this.status = 'Scheduled',
+    this.status = ScheduleStatus.scheduled,
     this.attended = false,
     this.billing,
     this.payments = const [],
     this.hasPaidOverHalf = false,
     this.lessonsCompleted = 0,
-    // Initialize new fields
     this.isRecurring = false,
     this.recurrencePattern,
     this.recurrenceEndDate,
   });
 
-  // Remove the hardcoded lessonsDeducted and make it calculated
+  // Calculate lessons deducted based on duration
   int get lessonsDeducted {
     final duration = end.difference(start);
     final minutes = duration.inMinutes;
@@ -62,11 +63,9 @@ class Schedule {
         instructorId: json['instructor'] ?? 0,
         carId: json['car'] ?? 0,
         classType: json['class_type'] ?? '',
-        status: json['status'] ?? 'Scheduled',
+        status: json['status'] ?? ScheduleStatus.scheduled,
         attended: json['attended'] == 1,
         lessonsCompleted: json['lessonsCompleted'] ?? 0,
-        // Remove lessonsDeducted from JSON parsing as it's now calculated
-        // Parse new fields
         isRecurring: json['is_recurring'] == 1,
         recurrencePattern: json['recurrence_pattern'],
         recurrenceEndDate: json['recurrence_end_date'] != null
@@ -86,8 +85,7 @@ class Schedule {
         'status': status,
         'attended': attended ? 1 : 0,
         'lessonsCompleted': lessonsCompleted,
-        'lessonsDeducted': lessonsDeducted, // This will now be calculated
-        // Add new fields to toJson
+        'lessonsDeducted': lessonsDeducted,
         'is_recurring': isRecurring ? 1 : 0,
         'recurrence_pattern': recurrencePattern,
         'recurrence_end_date': recurrenceEndDate?.toIso8601String(),
@@ -144,7 +142,7 @@ class Schedule {
 
   // Helper methods
   bool get isUpcoming {
-    return start.isAfter(DateTime.now()) && status != 'Cancelled';
+    return start.isAfter(DateTime.now()) && status != ScheduleStatus.cancelled;
   }
 
   bool get isPast {
@@ -162,14 +160,39 @@ class Schedule {
     final now = DateTime.now();
     return now.isAfter(start) &&
         now.isBefore(end) &&
-        status != 'Cancelled' &&
+        status != ScheduleStatus.cancelled &&
         !attended;
   }
 
+  /// Get the display status using consistent logic
   String get statusDisplay {
-    if (isInProgress) return 'In Progress';
-    if (isPast && attended) return 'Completed';
-    if (isPast && !attended && status != 'Cancelled') return 'Missed';
-    return status;
+    return ScheduleStatus.getDisplayStatus(status, attended, start, end);
+  }
+
+  /// Validate that the schedule has consistent status and attendance
+  bool get isStatusConsistent {
+    final displayStatus = statusDisplay;
+
+    // Check if attended matches completed status
+    if (attended && displayStatus != ScheduleStatus.completed) return false;
+    if (!attended && displayStatus == ScheduleStatus.completed) return false;
+
+    // Check if cancelled schedules are not marked attended
+    if (status == ScheduleStatus.cancelled && attended) return false;
+
+    return true;
+  }
+
+  /// Get corrected schedule with consistent status
+  Schedule get withConsistentStatus {
+    if (isStatusConsistent) return this;
+
+    final correctStatus = statusDisplay;
+    final correctAttended = correctStatus == ScheduleStatus.completed;
+
+    return copyWith(
+      status: correctStatus,
+      attended: correctAttended,
+    );
   }
 }

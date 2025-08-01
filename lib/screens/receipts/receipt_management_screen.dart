@@ -479,9 +479,13 @@ class _ReceiptManagementScreenState extends State<ReceiptManagementScreen> {
         '${student?.fname ?? 'Unknown'} ${student?.lname ?? 'Student'}';
     final reference = payment.reference ?? 'No Reference';
 
-    final processedBy = userController.users.firstWhereOrNull(
-      (user) => user.id == payment.userId,
-    );
+    // Get the currently logged in user who processed this payment
+    final currentUser = authController.currentUser.value;
+
+    // Create processed by display text using current logged in user
+    final processedByText = currentUser != null
+        ? '${currentUser.fname} ${currentUser.lname} (${currentUser.role})'
+        : 'Unknown User';
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -623,26 +627,36 @@ class _ReceiptManagementScreenState extends State<ReceiptManagementScreen> {
 
             const SizedBox(height: 12),
 
-            // Add the processed by info before the actions row
+            // Processed by info and invoice number row
             Row(
               children: [
                 Icon(Icons.person_outline,
-                    size: 12, color: Colors.grey.shade600),
+                    size: 14, color: Colors.grey.shade600),
                 const SizedBox(width: 4),
-                Text(
-                  'by: ${processedBy?.fname ?? 'Unknown'}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade600,
-                    fontStyle: FontStyle.italic,
+                Expanded(
+                  child: Text(
+                    'Processed by: $processedByText',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
-                const Spacer(),
-                Text(
-                  'Invoice #${invoice?.id ?? 'N/A'}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade500,
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    'Invoice #${invoice?.id ?? 'N/A'}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey.shade600,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
               ],
@@ -668,13 +682,6 @@ class _ReceiptManagementScreenState extends State<ReceiptManagementScreen> {
                     Colors.green.shade600,
                     () => _printReceipt(payment),
                   ),
-                  // const SizedBox(width: 8),
-                  // _buildActionButton(
-                  //   'Share',
-                  //   Icons.share,
-                  //   Colors.orange.shade600,
-                  //   () => _shareReceipt(payment),
-                  // ),
                 ] else ...[
                   _buildActionButton(
                     'Generate Receipt',
@@ -684,13 +691,15 @@ class _ReceiptManagementScreenState extends State<ReceiptManagementScreen> {
                   ),
                 ],
                 const Spacer(),
-                Text(
-                  'Invoice #${invoice?.id ?? 'N/A'}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade500,
+                // Show creation timestamp if available
+                if (payment.paymentDate != null)
+                  Text(
+                    'Created: ${DateFormat('MMM dd, HH:mm').format(payment.paymentDate)}',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: Colors.grey.shade500,
+                    ),
                   ),
-                ),
               ],
             ),
           ],
@@ -911,7 +920,7 @@ class _ReceiptManagementScreenState extends State<ReceiptManagementScreen> {
     var payments = billingController.payments.toList();
 
     // Filter by current user if they are a student
-    final currentUser = authController.currentUser.value; // Use authController
+    final currentUser = authController.currentUser.value;
     if (currentUser != null && currentUser.role.toLowerCase() == 'student') {
       payments = payments.where((payment) {
         final invoice = billingController.invoices.firstWhereOrNull(
@@ -943,6 +952,9 @@ class _ReceiptManagementScreenState extends State<ReceiptManagementScreen> {
         final student = userController.users.firstWhereOrNull(
           (user) => user.id == invoice?.studentId,
         );
+        final processedBy = userController.users.firstWhereOrNull(
+          (user) => user.id == payment.userId,
+        );
 
         final searchableText = [
           payment.reference ?? '',
@@ -951,6 +963,9 @@ class _ReceiptManagementScreenState extends State<ReceiptManagementScreen> {
           payment.method,
           payment.notes ?? '',
           invoice?.id?.toString() ?? '',
+          // Include processed by information in search
+          '${processedBy?.fname ?? ''} ${processedBy?.lname ?? ''}',
+          processedBy?.role ?? '',
         ].join(' ').toLowerCase();
 
         return searchableText.contains(_searchQuery);

@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../models/schedule.dart';
 import '../services/database_helper.dart';
+import '../services/schedule_status_migration.dart';
+import '../constant/schedule_status.dart';
 
 class ScheduleController extends GetxController {
   final RxList<Schedule> schedules = <Schedule>[].obs;
@@ -233,91 +235,6 @@ class ScheduleController extends GetxController {
     return getSchedulesForDay(DateTime.now());
   }
 
-  // Attendance management
-  Future<void> toggleAttendance(int scheduleId, bool attended) async {
-    try {
-      isLoading(true);
-
-      final index = schedules.indexWhere((s) => s.id == scheduleId);
-      if (index == -1) {
-        Get.snackbar('Error', 'Schedule not found');
-        return;
-      }
-
-      final schedule = schedules[index];
-
-      // Calculate lessons based on duration (30 min = 1 lesson)
-      final actualLessonsDeducted = schedule.lessonsDeducted;
-
-      // Create temporary schedule with proposed changes
-      final tempSchedule = schedule.copyWith(
-        attended: attended,
-      );
-
-      if (attended && _isBilledLessonsExceeded(tempSchedule)) {
-        Get.snackbar(
-          'Lesson Limit Exceeded',
-          'Cannot mark as attended. Student has no remaining lessons.',
-          backgroundColor: Colors.red,
-          colorText: Colors.white,
-        );
-        return;
-      }
-
-      final updated = schedule.copyWith(
-        attended: attended,
-        // Update lessons completed based on actual duration
-        lessonsCompleted: attended
-            ? schedule.lessonsCompleted + actualLessonsDeducted
-            : schedule.lessonsCompleted - actualLessonsDeducted,
-      );
-
-      await _dbHelper.updateSchedule({
-        'id': scheduleId,
-        'attended': attended ? 1 : 0,
-        'lessonsCompleted': updated.lessonsCompleted,
-      });
-
-      schedules[index] = updated;
-      schedules.refresh();
-      _applyFilters();
-
-      // Update billing record status if billing controller exists
-      try {
-        final billingController = Get.find<BillingController>();
-        final invoice = billingController.invoices.firstWhereOrNull(
-          (inv) =>
-              inv.studentId == schedule.studentId &&
-              inv.courseId == schedule.courseId,
-        );
-
-        if (invoice != null) {
-          final billingRecords =
-              await billingController.getBillingRecordsForInvoice(invoice.id!);
-          if (billingRecords.isNotEmpty) {
-            await billingController.updateBillingRecordStatus(
-              billingRecords.first.id!,
-              attended ? 'Completed' : 'Pending',
-            );
-          }
-        }
-      } catch (e) {
-        print('Error updating billing record: $e');
-      }
-
-      Get.snackbar(
-        'Success',
-        attended ? 'Marked as attended' : 'Marked as not attended',
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
-      );
-    } catch (e) {
-      Get.snackbar('Error', 'Failed to update attendance: ${e.toString()}');
-    } finally {
-      isLoading(false);
-    }
-  }
-
   // Fix the billing lessons check to use proper calculation
   bool _isBilledLessonsExceeded(Schedule schedule) {
     try {
@@ -349,61 +266,6 @@ class ScheduleController extends GetxController {
     }
   }
 
-  Future<void> cancelSchedule(int scheduleId) async {
-    try {
-      isLoading(true);
-
-      final index = schedules.indexWhere((s) => s.id == scheduleId);
-      if (index == -1) {
-        Get.snackbar('Error', 'Schedule not found');
-        return;
-      }
-
-      final schedule = schedules[index];
-      final cancelledSchedule = schedule.copyWith(status: 'Cancelled');
-
-      await _dbHelper.updateSchedule({
-        'id': scheduleId,
-        'status': 'Cancelled',
-      });
-
-      schedules[index] = cancelledSchedule;
-      schedules.refresh();
-      _applyFilters();
-
-      // Handle billing record cleanup if needed
-      try {
-        final billingController = Get.find<BillingController>();
-        final invoice = billingController.invoices.firstWhereOrNull(
-          (inv) =>
-              inv.studentId == schedule.studentId &&
-              inv.courseId == schedule.courseId,
-        );
-
-        if (invoice != null) {
-          final billingRecords =
-              await billingController.getBillingRecordsForInvoice(invoice.id!);
-          if (billingRecords.isNotEmpty) {
-            await _dbHelper.deleteBillingRecord(billingRecords.first.id!);
-          }
-        }
-      } catch (e) {
-        print('Error handling billing record: $e');
-      }
-
-      Get.snackbar(
-        'Success',
-        'Schedule cancelled successfully',
-        backgroundColor: Colors.orange,
-        colorText: Colors.white,
-      );
-    } catch (e) {
-      Get.snackbar('Error', 'Failed to cancel schedule: ${e.toString()}');
-    } finally {
-      isLoading(false);
-    }
-  }
-
   Future<void> deleteSchedule(int scheduleId) async {
     try {
       isLoading(true);
@@ -421,26 +283,6 @@ class ScheduleController extends GetxController {
       );
     } catch (e) {
       Get.snackbar('Error', 'Failed to delete schedule: ${e.toString()}');
-    } finally {
-      isLoading(false);
-    }
-  }
-
-  Future<void> rescheduleSchedule(int scheduleId, Schedule newSchedule) async {
-    try {
-      isLoading(true);
-
-      await cancelSchedule(scheduleId);
-      await addOrUpdateSchedule(newSchedule);
-
-      Get.snackbar(
-        'Success',
-        'Schedule rescheduled successfully',
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
-      );
-    } catch (e) {
-      Get.snackbar('Error', 'Failed to reschedule: ${e.toString()}');
     } finally {
       isLoading(false);
     }
@@ -717,6 +559,208 @@ class ScheduleController extends GetxController {
         .fold<int>(0, (sum, s) => sum + s.lessonsDeducted);
   }
 
+  /// Toggle attendance with consistent status update
+  Future<void> toggleAttendance(int scheduleId, bool attended) async {
+    try {
+      isLoading(true);
+
+      final index = schedules.indexWhere((s) => s.id == scheduleId);
+      if (index == -1) {
+        Get.snackbar('Error', 'Schedule not found');
+        return;
+      }
+
+      final schedule = schedules[index];
+
+      // Calculate lessons based on duration
+      final actualLessonsDeducted = schedule.lessonsDeducted;
+
+      // Create temporary schedule with proposed changes
+      final tempSchedule = schedule.copyWith(attended: attended);
+
+      if (attended && _isBilledLessonsExceeded(tempSchedule)) {
+        Get.snackbar(
+          'Lesson Limit Exceeded',
+          'Cannot mark as attended. Student has no remaining lessons.',
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+        );
+        return;
+      }
+
+      // Determine the correct status based on attendance
+      String newStatus;
+      if (attended) {
+        newStatus = ScheduleStatus.completed;
+      } else if (schedule.isPast) {
+        newStatus = ScheduleStatus.missed;
+      } else {
+        newStatus = ScheduleStatus.scheduled;
+      }
+
+      final updated = schedule.copyWith(
+        attended: attended,
+        status: newStatus,
+        lessonsCompleted: attended
+            ? schedule.lessonsCompleted + actualLessonsDeducted
+            : schedule.lessonsCompleted - actualLessonsDeducted,
+      );
+
+      // Update database with both attendance and status
+      await _dbHelper.updateSchedule({
+        'id': scheduleId,
+        'attended': attended ? 1 : 0,
+        'status': newStatus,
+        'lessonsCompleted': updated.lessonsCompleted,
+      });
+
+      schedules[index] = updated;
+      schedules.refresh();
+      _applyFilters();
+
+      // Update billing record status if billing controller exists
+      try {
+        final billingController = Get.find<BillingController>();
+        final invoice = billingController.invoices.firstWhereOrNull(
+          (inv) =>
+              inv.studentId == schedule.studentId &&
+              inv.courseId == schedule.courseId,
+        );
+
+        if (invoice != null) {
+          final billingRecords =
+              await billingController.getBillingRecordsForInvoice(invoice.id!);
+          if (billingRecords.isNotEmpty) {
+            await billingController.updateBillingRecordStatus(
+              billingRecords.first.id!,
+              attended ? 'Completed' : 'Pending',
+            );
+          }
+        }
+      } catch (e) {
+        print('Error updating billing record: $e');
+      }
+
+      Get.snackbar(
+        'Success',
+        attended ? 'Marked as attended' : 'Marked as not attended',
+        backgroundColor: attended ? Colors.green : Colors.orange,
+        colorText: Colors.white,
+      );
+    } catch (e) {
+      Get.snackbar('Error', 'Failed to update attendance: ${e.toString()}');
+    } finally {
+      isLoading(false);
+    }
+  }
+
+  /// Cancel schedule with proper status update
+  Future<void> cancelSchedule(int scheduleId) async {
+    try {
+      isLoading(true);
+
+      final index = schedules.indexWhere((s) => s.id == scheduleId);
+      if (index == -1) {
+        Get.snackbar('Error', 'Schedule not found');
+        return;
+      }
+
+      final schedule = schedules[index];
+
+      // Update schedule status to cancelled and ensure not attended
+      final updated = schedule.copyWith(
+        status: ScheduleStatus.cancelled,
+        attended: false,
+      );
+
+      await _dbHelper.updateSchedule({
+        'id': scheduleId,
+        'status': ScheduleStatus.cancelled,
+        'attended': 0,
+      });
+
+      schedules[index] = updated;
+      schedules.refresh();
+      _applyFilters();
+
+      // Handle billing record
+      try {
+        final billingController = Get.find<BillingController>();
+        final invoice = billingController.invoices.firstWhereOrNull(
+          (inv) =>
+              inv.studentId == schedule.studentId &&
+              inv.courseId == schedule.courseId,
+        );
+
+        if (invoice != null) {
+          final billingRecords =
+              await billingController.getBillingRecordsForInvoice(invoice.id!);
+          if (billingRecords.isNotEmpty) {
+            await _dbHelper.deleteBillingRecord(billingRecords.first.id!);
+          }
+        }
+      } catch (e) {
+        print('Error handling billing record: $e');
+      }
+
+      Get.snackbar(
+        'Success',
+        'Schedule cancelled successfully',
+        backgroundColor: Colors.orange,
+        colorText: Colors.white,
+      );
+    } catch (e) {
+      Get.snackbar('Error', 'Failed to cancel schedule: ${e.toString()}');
+    } finally {
+      isLoading(false);
+    }
+  }
+
+  /// Reschedule with proper status handling
+  Future<void> rescheduleSchedule(int scheduleId, Schedule newSchedule) async {
+    try {
+      isLoading(true);
+
+      // Mark original as rescheduled instead of cancelled
+      final index = schedules.indexWhere((s) => s.id == scheduleId);
+      if (index != -1) {
+        final original = schedules[index];
+        final updated = original.copyWith(
+          status: ScheduleStatus.rescheduled,
+          attended: false,
+        );
+
+        await _dbHelper.updateSchedule({
+          'id': scheduleId,
+          'status': ScheduleStatus.rescheduled,
+          'attended': 0,
+        });
+
+        schedules[index] = updated;
+      }
+
+      // Add new schedule with proper status
+      final newScheduleWithStatus = newSchedule.copyWith(
+        status: ScheduleStatus.scheduled,
+        attended: false,
+      );
+
+      await addOrUpdateSchedule(newScheduleWithStatus);
+
+      Get.snackbar(
+        'Success',
+        'Schedule rescheduled successfully',
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
+    } catch (e) {
+      Get.snackbar('Error', 'Failed to reschedule: ${e.toString()}');
+    } finally {
+      isLoading(false);
+    }
+  }
+
+  /// Update lesson progress with consistent status logic
   Future<void> updateLessonProgress() async {
     try {
       final now = DateTime.now();
@@ -724,36 +768,18 @@ class ScheduleController extends GetxController {
 
       for (int i = 0; i < schedules.length; i++) {
         final schedule = schedules[i];
-        final wasInProgress = schedule.status == 'In Progress';
+        final currentStatus = schedule.status;
+        final correctStatus = schedule.statusDisplay;
 
-        // Check if lesson should be marked as in progress
-        final shouldBeInProgress = now.isAfter(schedule.start) &&
-            now.isBefore(schedule.end) &&
-            schedule.status != 'Cancelled' &&
-            !schedule.attended;
-
-        if (shouldBeInProgress && !wasInProgress) {
-          // Mark as in progress
-          final updatedSchedule = schedule.copyWith(status: 'In Progress');
+        // Only update if status has actually changed
+        if (currentStatus != correctStatus) {
           await _dbHelper.updateSchedule({
             'id': schedule.id,
-            'status': 'In Progress',
+            'status': correctStatus,
           });
-          schedules[i] = updatedSchedule;
+
+          schedules[i] = schedule.copyWith(status: correctStatus);
           hasUpdates = true;
-        } else if (!shouldBeInProgress &&
-            wasInProgress &&
-            schedule.status == 'In Progress') {
-          // Lesson time has passed, mark as missed if not attended
-          if (now.isAfter(schedule.end) && !schedule.attended) {
-            final updatedSchedule = schedule.copyWith(status: 'Missed');
-            await _dbHelper.updateSchedule({
-              'id': schedule.id,
-              'status': 'Missed',
-            });
-            schedules[i] = updatedSchedule;
-            hasUpdates = true;
-          }
         }
       }
 
@@ -763,6 +789,87 @@ class ScheduleController extends GetxController {
       }
     } catch (e) {
       print('Error updating lesson progress: $e');
+    }
+  }
+
+  /// Run status migration to fix inconsistencies
+  Future<void> runStatusMigration() async {
+    try {
+      isLoading(true);
+
+      // Get migration stats before running
+      final stats = await ScheduleStatusMigration.instance.getMigrationStats();
+      print('Migration stats before: $stats');
+
+      // Run the migration
+      await ScheduleStatusMigration.instance.runStatusMigration();
+
+      // Reload schedules after migration
+      await fetchSchedules();
+
+      Get.snackbar(
+        'Success',
+        'Schedule status migration completed successfully',
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+        duration: Duration(seconds: 3),
+      );
+    } catch (e) {
+      Get.snackbar(
+        'Error',
+        'Migration failed: ${e.toString()}',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    } finally {
+      isLoading(false);
+    }
+  }
+
+  /// Validate all schedules for consistency
+  List<Schedule> get inconsistentSchedules {
+    return schedules.where((schedule) => !schedule.isStatusConsistent).toList();
+  }
+
+  /// Fix all inconsistent schedules
+  Future<void> fixInconsistentSchedules() async {
+    try {
+      isLoading(true);
+
+      final inconsistent = inconsistentSchedules;
+      if (inconsistent.isEmpty) {
+        Get.snackbar('Info', 'No inconsistent schedules found');
+        return;
+      }
+
+      for (final schedule in inconsistent) {
+        final corrected = schedule.withConsistentStatus;
+
+        await _dbHelper.updateSchedule({
+          'id': schedule.id,
+          'status': corrected.status,
+          'attended': corrected.attended ? 1 : 0,
+        });
+
+        final index = schedules.indexWhere((s) => s.id == schedule.id);
+        if (index != -1) {
+          schedules[index] = corrected;
+        }
+      }
+
+      schedules.refresh();
+      _applyFilters();
+
+      Get.snackbar(
+        'Success',
+        'Fixed ${inconsistent.length} inconsistent schedules',
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
+    } catch (e) {
+      Get.snackbar('Error', 'Failed to fix inconsistencies: ${e.toString()}');
+    } finally {
+      isLoading(false);
     }
   }
 }

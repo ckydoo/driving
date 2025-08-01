@@ -1,4 +1,5 @@
 // lib/services/app_initialization.dart
+import 'package:driving/services/schedule_status_migration.dart';
 import 'package:get/get.dart';
 import '../controllers/auth_controller.dart';
 import '../controllers/schedule_controller.dart';
@@ -23,7 +24,8 @@ class AppInitialization {
       // Run database migration
       await DatabaseMigration.instance.runFullMigration();
       print('Enhanced schedules table created');
-
+      await ScheduleStatusMigration.instance.runStatusMigration();
+      print('Schedule status migration completed');
       // Initialize controllers in proper order
       await _initializeControllers();
 
