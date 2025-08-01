@@ -117,22 +117,28 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
         setState(() {
           _availableCourses = [];
           _remainingLessons = 0;
+          _selectedCourse = null; // Reset selected course
         });
         return;
       }
 
+      // Use a Set to track unique course IDs to avoid duplicates
+      Set<int> uniqueCourseIds = {};
       List<Course> validCourses = [];
+
       for (var invoice in studentInvoices) {
         final course = _courseController.courses.firstWhereOrNull(
           (c) => c.id == invoice.courseId,
         );
-        if (course != null) {
-          final usedLessons = _getUsedLessons(student.id!, invoice.courseId);
-          final remaining = invoice.lessons - usedLessons;
+        if (course != null && !uniqueCourseIds.contains(course.id)) {
+          // Use the centralized method
+          final remaining = _scheduleController.getRemainingLessons(
+              student.id!, invoice.courseId);
 
           // Only include courses with remaining lessons
           if (remaining > 0) {
             validCourses.add(course);
+            uniqueCourseIds.add(course.id!);
           }
         }
       }
@@ -149,20 +155,17 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
         setState(() {
           _availableCourses = [];
           _remainingLessons = 0;
+          _selectedCourse = null; // Reset selected course
         });
         return;
       }
 
       // Auto-select the first course with most remaining lessons
       validCourses.sort((a, b) {
-        final aInvoice =
-            studentInvoices.firstWhere((inv) => inv.courseId == a.id);
-        final bInvoice =
-            studentInvoices.firstWhere((inv) => inv.courseId == b.id);
         final aRemaining =
-            aInvoice.lessons - _getUsedLessons(student.id!, a.id!);
+            _scheduleController.getRemainingLessons(student.id!, a.id!);
         final bRemaining =
-            bInvoice.lessons - _getUsedLessons(student.id!, b.id!);
+            _scheduleController.getRemainingLessons(student.id!, b.id!);
         return bRemaining.compareTo(aRemaining); // Descending order
       });
 
@@ -170,12 +173,9 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
         _availableCourses = validCourses;
         _selectedCourse = validCourses.first;
 
-        // Set remaining lessons for selected course
-        final invoice = studentInvoices.firstWhere(
-          (inv) => inv.courseId == _selectedCourse!.id,
-        );
-        _remainingLessons = invoice.lessons -
-            _getUsedLessons(student.id!, _selectedCourse!.id!);
+        // Set remaining lessons for selected course using centralized method
+        _remainingLessons = _scheduleController.getRemainingLessons(
+            student.id!, _selectedCourse!.id!);
       });
 
       // Auto-assign instructor's vehicle if available
@@ -201,6 +201,7 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
       setState(() {
         _availableCourses = [];
         _remainingLessons = 0;
+        _selectedCourse = null; // Reset selected course
       });
     } finally {
       setState(() {
@@ -210,10 +211,7 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
   }
 
   int _getUsedLessons(int studentId, int courseId) {
-    return _scheduleController.schedules
-        .where((s) =>
-            s.studentId == studentId && s.courseId == courseId && s.attended)
-        .fold<int>(0, (sum, s) => sum + s.lessonsDeducted);
+    return _scheduleController.getUsedLessons(studentId, courseId);
   }
 
   void _assignInstructorVehicle(User instructor) {
@@ -427,8 +425,10 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
               ],
             ),
             SizedBox(height: 16),
-            DropdownButtonFormField<Course>(
-              value: _selectedCourse,
+            DropdownButtonFormField<int>(
+              // Changed from Course to int
+              value:
+                  _selectedCourse?.id, // Use course ID instead of course object
               decoration: InputDecoration(
                 labelText: 'Available Courses',
                 border: OutlineInputBorder(),
@@ -437,27 +437,38 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
               validator: (value) =>
                   value == null ? 'Please select a course' : null,
               items: _availableCourses
-                  .map((course) => DropdownMenuItem(
-                        value: course,
+                  .map((course) => DropdownMenuItem<int>(
+                        // Changed to int
+                        value: course.id, // Use course ID as value
                         child: Text(course.name),
                       ))
                   .toList(),
-              onChanged: (Course? value) {
-                setState(() {
-                  _selectedCourse = value;
-                });
-                if (value != null && _selectedStudent != null) {
-                  final invoice = _billingController.invoices.firstWhereOrNull(
-                    (inv) =>
-                        inv.studentId == _selectedStudent!.id &&
-                        inv.courseId == value.id,
+              onChanged: (int? courseId) {
+                // Changed parameter type
+                if (courseId != null) {
+                  // Find the course object by ID
+                  final selectedCourse = _availableCourses.firstWhereOrNull(
+                    (course) => course.id == courseId,
                   );
-                  if (invoice != null) {
-                    final used =
-                        _getUsedLessons(_selectedStudent!.id!, value.id!);
-                    setState(() {
-                      _remainingLessons = invoice.lessons - used;
-                    });
+
+                  setState(() {
+                    _selectedCourse = selectedCourse;
+                  });
+
+                  if (selectedCourse != null && _selectedStudent != null) {
+                    final invoice =
+                        _billingController.invoices.firstWhereOrNull(
+                      (inv) =>
+                          inv.studentId == _selectedStudent!.id &&
+                          inv.courseId == selectedCourse.id,
+                    );
+                    if (invoice != null) {
+                      final used = _getUsedLessons(
+                          _selectedStudent!.id!, selectedCourse.id!);
+                      setState(() {
+                        _remainingLessons = invoice.lessons - used;
+                      });
+                    }
                   }
                 }
               },

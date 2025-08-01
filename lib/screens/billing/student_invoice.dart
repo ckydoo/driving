@@ -92,7 +92,7 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
       int comparison = 0;
       switch (_sortBy) {
         case 'date':
-          comparison = a.createdDate.compareTo(b.createdDate);
+          comparison = a.createdAt.compareTo(b.createdAt);
           break;
         case 'amount':
           comparison =
@@ -621,14 +621,14 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Invoice #${invoice.id}',
+                  'Invoice #${invoice.invoiceNumber}',
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
                 Text(
-                  'Created: ${DateFormat('MMM dd, yyyy').format(invoice.createdDate)}',
+                  'Created: ${DateFormat('MMM dd, yyyy').format(invoice.createdAt)}',
                   style: TextStyle(
                     fontSize: 12,
                     color: Colors.grey.shade600,
@@ -876,7 +876,7 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Receipts for Invoice #${invoice.id}',
+                            'Receipts for Invoice #${invoice.invoiceNumber}',
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 18,

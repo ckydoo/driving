@@ -1,6 +1,7 @@
 // lib/controllers/schedule_controller.dart
 import 'package:driving/controllers/billing_controller.dart';
 import 'package:driving/controllers/course_controller.dart';
+import 'package:driving/controllers/settings_controller.dart';
 import 'package:driving/controllers/user_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -235,37 +236,6 @@ class ScheduleController extends GetxController {
     return getSchedulesForDay(DateTime.now());
   }
 
-  // Fix the billing lessons check to use proper calculation
-  bool _isBilledLessonsExceeded(Schedule schedule) {
-    try {
-      final billingController = Get.find<BillingController>();
-      final invoice = billingController.invoices.firstWhereOrNull(
-        (inv) =>
-            inv.studentId == schedule.studentId &&
-            inv.courseId == schedule.courseId,
-      );
-
-      if (invoice == null) return false;
-
-      final totalLessons = invoice.lessons;
-      final usedLessons = schedules
-          .where((s) =>
-              s.studentId == schedule.studentId &&
-              s.courseId == schedule.courseId &&
-              s.attended)
-          .fold<int>(0, (sum, s) => sum + s.lessonsDeducted);
-
-      // Use the actual lesson deduction for this schedule
-      final potentialAddedLessons =
-          schedule.attended ? schedule.lessonsDeducted : 0;
-
-      return (usedLessons + potentialAddedLessons) > totalLessons;
-    } catch (e) {
-      print('Error checking billing lessons: $e');
-      return false;
-    }
-  }
-
   Future<void> deleteSchedule(int scheduleId) async {
     try {
       isLoading(true);
@@ -285,35 +255,6 @@ class ScheduleController extends GetxController {
       Get.snackbar('Error', 'Failed to delete schedule: ${e.toString()}');
     } finally {
       isLoading(false);
-    }
-  }
-
-  // Fix the progress calculation method
-  double calculateScheduleProgress(Schedule schedule) {
-    try {
-      final billingController = Get.find<BillingController>();
-      final invoice = billingController.invoices.firstWhereOrNull(
-        (inv) =>
-            inv.studentId == schedule.studentId &&
-            inv.courseId == schedule.courseId,
-      );
-
-      final totalLessons = invoice?.lessons ?? 0;
-      if (totalLessons == 0) return 0;
-
-      // Fix: Use attended lessons with proper deduction calculation
-      final attendedLessons = schedules
-          .where((s) =>
-              s.studentId == schedule.studentId &&
-              s.courseId == schedule.courseId &&
-              s.attended)
-          .fold<int>(0, (sum, s) => sum + s.lessonsDeducted);
-
-      final progress = (attendedLessons / totalLessons) * 100;
-      return progress.clamp(0.0, 100.0);
-    } catch (e) {
-      print('Error calculating progress: $e');
-      return 0;
     }
   }
 
@@ -534,7 +475,7 @@ class ScheduleController extends GetxController {
       if (invoice != null) {
         // Calculate current used lessons (including this new schedule)
         final usedLessons =
-            _getUsedLessons(schedule.studentId, schedule.courseId) +
+            getUsedLessons(schedule.studentId, schedule.courseId) +
                 schedule.lessonsDeducted;
 
         // Check if we have enough lessons
@@ -552,11 +493,24 @@ class ScheduleController extends GetxController {
   }
 
 // Helper method to get used lessons count
-  int _getUsedLessons(int studentId, int courseId) {
-    return schedules
-        .where((s) =>
-            s.studentId == studentId && s.courseId == courseId && s.attended)
-        .fold<int>(0, (sum, s) => sum + s.lessonsDeducted);
+  int getUsedLessons(int studentId, int courseId) {
+    final settingsController = Get.find<SettingsController>();
+
+    if (settingsController.countScheduledLessons.value) {
+      // Count both scheduled and attended lessons (exclude cancelled)
+      return schedules
+          .where((s) =>
+              s.studentId == studentId &&
+              s.courseId == courseId &&
+              s.status.toLowerCase() != 'cancelled')
+          .fold<int>(0, (sum, s) => sum + s.lessonsDeducted);
+    } else {
+      // Only count attended lessons
+      return schedules
+          .where((s) =>
+              s.studentId == studentId && s.courseId == courseId && s.attended)
+          .fold<int>(0, (sum, s) => sum + s.lessonsDeducted);
+    }
   }
 
   /// Toggle attendance with consistent status update
@@ -871,5 +825,140 @@ class ScheduleController extends GetxController {
     } finally {
       isLoading(false);
     }
+  }
+
+// Add this method to ScheduleController
+  int getEffectiveLessonsUsed(int studentId, int courseId) {
+    final settingsController = Get.find<SettingsController>();
+
+    if (settingsController.countScheduledLessons.value) {
+      // Count both scheduled and attended lessons
+      return schedules
+          .where((s) =>
+              s.studentId == studentId &&
+              s.courseId == courseId &&
+              (s.attended || s.status != 'Cancelled'))
+          .fold<int>(0, (sum, s) => sum + s.lessonsDeducted);
+    } else {
+      // Only count attended lessons
+      return schedules
+          .where((s) =>
+              s.studentId == studentId && s.courseId == courseId && s.attended)
+          .fold<int>(0, (sum, s) => sum + s.lessonsDeducted);
+    }
+  }
+
+  bool canCreateSchedule(int studentId, int courseId, int lessonsToDeduct) {
+    final remainingLessons = getRemainingLessons(studentId, courseId);
+    return lessonsToDeduct <= remainingLessons;
+  }
+
+  /// Get a descriptive status of lesson usage for a student's course
+  Map<String, int> getLessonUsageStats(int studentId, int courseId) {
+    final billingController = Get.find<BillingController>();
+    final invoice = billingController.invoices.firstWhereOrNull(
+      (inv) => inv.studentId == studentId && inv.courseId == courseId,
+    );
+
+    if (invoice == null) {
+      return {
+        'total': 0,
+        'used': 0,
+        'remaining': 0,
+        'attended': 0,
+        'scheduled': 0,
+      };
+    }
+
+    final attendedLessons = schedules
+        .where((s) =>
+            s.studentId == studentId && s.courseId == courseId && s.attended)
+        .fold<int>(0, (sum, s) => sum + s.lessonsDeducted);
+
+    final scheduledLessons = schedules
+        .where((s) =>
+            s.studentId == studentId &&
+            s.courseId == courseId &&
+            !s.attended &&
+            s.status.toLowerCase() != 'cancelled')
+        .fold<int>(0, (sum, s) => sum + s.lessonsDeducted);
+
+    final totalUsed = getUsedLessons(studentId, courseId);
+
+    return {
+      'total': invoice.lessons,
+      'used': totalUsed,
+      'remaining': (invoice.lessons - totalUsed).clamp(0, invoice.lessons),
+      'attended': attendedLessons,
+      'scheduled': scheduledLessons,
+    };
+  }
+
+  // Update _isBilledLessonsExceeded method
+  bool _isBilledLessonsExceeded(Schedule schedule) {
+    try {
+      final billingController = Get.find<BillingController>();
+      final invoice = billingController.invoices.firstWhereOrNull(
+        (inv) =>
+            inv.studentId == schedule.studentId &&
+            inv.courseId == schedule.courseId,
+      );
+
+      if (invoice == null) return false;
+
+      final totalLessons = invoice.lessons;
+      final usedLessons = getUsedLessons(schedule.studentId, schedule.courseId);
+
+      // Calculate potential new usage if this schedule is marked as attended
+      final potentialAddedLessons =
+          schedule.attended ? schedule.lessonsDeducted : 0;
+
+      return (usedLessons + potentialAddedLessons) > totalLessons;
+    } catch (e) {
+      print('Error checking billing lessons: $e');
+      return false;
+    }
+  }
+
+// Update calculateScheduleProgress method
+  double calculateScheduleProgress(Schedule schedule) {
+    try {
+      final billingController = Get.find<BillingController>();
+      final invoice = billingController.invoices.firstWhereOrNull(
+        (inv) =>
+            inv.studentId == schedule.studentId &&
+            inv.courseId == schedule.courseId,
+      );
+
+      final totalLessons = invoice?.lessons ?? 0;
+      if (totalLessons == 0) return 0;
+
+      // Use only attended lessons for progress (not scheduled)
+      final attendedLessons = schedules
+          .where((s) =>
+              s.studentId == schedule.studentId &&
+              s.courseId == schedule.courseId &&
+              s.attended)
+          .fold<int>(0, (sum, s) => sum + s.lessonsDeducted);
+
+      final progress = (attendedLessons / totalLessons) * 100;
+      return progress.clamp(0.0, 100.0);
+    } catch (e) {
+      print('Error calculating progress: $e');
+      return 0;
+    }
+  }
+
+  // Add this method to get remaining lessons consistently
+  int getRemainingLessons(int studentId, int courseId) {
+    final billingController = Get.find<BillingController>();
+    final invoice = billingController.invoices.firstWhereOrNull(
+      (inv) => inv.studentId == studentId && inv.courseId == courseId,
+    );
+
+    if (invoice == null) return 0;
+
+    final usedLessons = getUsedLessons(studentId, courseId);
+    return (invoice.lessons - usedLessons).clamp(0, invoice.lessons);
   }
 }

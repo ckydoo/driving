@@ -123,38 +123,65 @@ class BillingController extends GetxController {
     required double pricePerLesson,
   }) async {
     try {
-      isLoading(true);
-      final existingInvoice = invoices.firstWhereOrNull(
-        (inv) => inv.studentId == studentId && inv.courseId == courseId,
+      final db = await DatabaseHelper().database;
+
+      // Generate a unique invoice number
+      String invoiceNumber = await _generateInvoiceNumber();
+
+      await db.insert('invoices', {
+        'invoice_number': invoiceNumber, // Add this field
+        'student': studentId,
+        'course': courseId,
+        'lessons': lessons,
+        'price_per_lesson': pricePerLesson,
+        'amountpaid': 0.0,
+        'created_at': DateTime.now().toIso8601String(),
+        'due_date': DateTime.now().add(Duration(days: 30)).toIso8601String(),
+        'status': 'unpaid',
+        'total_amount': lessons * pricePerLesson,
+      });
+
+      // Refresh the invoice list
+      await fetchBillingData();
+    } catch (e) {
+      Get.snackbar('Error', 'Failed to create invoice: ${e.toString()}');
+      throw e;
+    }
+  }
+
+  // Alternative method using timestamp + random for guaranteed uniqueness
+  Future<String> _generateInvoiceNumber() async {
+    final db = await DatabaseHelper().database;
+
+    String invoiceNumber;
+
+    while (true) {
+      // Use timestamp + random for uniqueness
+      final now = DateTime.now();
+      final timestamp =
+          now.millisecondsSinceEpoch.toString().substring(8); // Last 5 digits
+      final random = (1000 + (999 * DateTime.now().millisecond / 1000)).floor();
+
+      invoiceNumber =
+          'INV-${now.year}${now.month.toString().padLeft(2, '0')}-$timestamp$random';
+
+      // Verify uniqueness
+      final result = await db.query(
+        'invoices',
+        where: 'invoice_number = ?',
+        whereArgs: [invoiceNumber],
       );
 
-      if (existingInvoice != null) {
-        // Update existing invoice
-        final updatedLessons = existingInvoice.lessons + lessons;
-        final updatedTotalAmount = updatedLessons * pricePerLesson;
-        final updatedInvoice = existingInvoice.copyWith(
-          lessons: updatedLessons,
-          totalAmount: updatedTotalAmount,
-          // You might want to adjust dueDate here based on your logic
-        );
-        await _dbHelper.updateInvoice(updatedInvoice.toJson());
-      } else {
-        // Create new invoice
-        final invoice = Invoice(
-          studentId: studentId,
-          courseId: courseId,
-          lessons: lessons,
-          pricePerLesson: pricePerLesson,
-          totalAmount: lessons * pricePerLesson,
-          createdDate: DateTime.now(),
-          dueDate: DateTime.now().add(const Duration(days: 30)),
-        );
-        await _dbHelper.insertInvoice(invoice.toJson());
+      if (result.isEmpty) {
+        break;
       }
-      await fetchBillingData();
-    } finally {
-      isLoading(false);
+
+      // If somehow still not unique, wait a millisecond and try again
+      await Future.delayed(Duration(milliseconds: 1));
     }
+
+    print('Generated unique invoice number: $invoiceNumber');
+    return invoiceNumber;
   }
 
   Future<void> addLessonsBack(int studentId, int lessonsToAdd) async {
@@ -552,21 +579,27 @@ class BillingController extends GetxController {
     }
   }
 
-  /// Enhanced version that also handles course name lookup
+  /// Enhanced version that also handles invoice number generation
   Future<int> createInvoiceWithCourse(
       int studentId, Course course, int lessons, DateTime dueDate) async {
     try {
       isLoading(true);
+
+      // Generate unique invoice number
+      String invoiceNumber = await _generateInvoiceNumber();
 
       final invoice = Invoice(
         studentId: studentId,
         courseId: course.id!,
         lessons: lessons,
         pricePerLesson: course.price.toDouble(),
-        createdDate: DateTime.now(),
+        createdAt: DateTime.now(),
         dueDate: dueDate,
         status: 'unpaid',
-        courseName: course.name, // Store course name for easier display
+        courseName: course.name,
+        invoiceNumber: invoiceNumber, // Use the generated unique number
+        amountPaid: 0.0,
+        totalAmount: lessons * course.price.toDouble(),
       );
 
       final invoiceId = await _dbHelper.insertInvoice(invoice.toJson());
@@ -576,8 +609,8 @@ class BillingController extends GetxController {
       invoices.add(newInvoice);
       invoices.refresh();
 
-      // Log the creation for audit trail
       print('✓ Auto-invoice created during enrollment:');
+      print('  Invoice Number: $invoiceNumber');
       print('  Student ID: $studentId');
       print('  Course: ${course.name}');
       print('  Lessons: $lessons');

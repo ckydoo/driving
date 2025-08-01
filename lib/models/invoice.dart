@@ -3,82 +3,73 @@ import 'package:driving/models/payment.dart';
 import 'package:intl/intl.dart';
 
 class Invoice {
-  late final int? id;
+  final int? id;
+  final String invoiceNumber; // Add this field
   final int studentId;
   final int courseId;
   final int lessons;
   final double pricePerLesson;
-  late final double amountPaid;
-  final DateTime createdDate;
+  final double amountPaid;
+  final DateTime createdAt;
   final DateTime dueDate;
-  late final String status;
-  double? totalAmount;
-  String? courseName;
+  final String status;
+  final double totalAmount;
+  final String? courseName;
   List<BillingRecord> billingRecords;
   List<Payment> payments;
 
   Invoice({
     this.id,
+    required this.invoiceNumber, // Add to constructor
     required this.studentId,
     required this.courseId,
     required this.lessons,
     required this.pricePerLesson,
-    this.amountPaid = 0,
-    required this.createdDate,
+    required this.amountPaid,
+    required this.createdAt,
     required this.dueDate,
-    this.status = 'unpaid',
-    this.totalAmount,
+    required this.status,
+    required this.totalAmount,
     this.courseName,
     this.billingRecords = const [],
     this.payments = const [],
   });
+
+  factory Invoice.fromMap(Map<String, dynamic> map) {
+    return Invoice(
+      id: map['id'],
+      invoiceNumber: map['invoice_number'] ?? '', // Add this line
+      studentId: map['student'],
+      courseId: map['course'],
+      lessons: map['lessons'],
+      pricePerLesson: map['price_per_lesson']?.toDouble() ?? 0.0,
+      amountPaid: map['amountpaid']?.toDouble() ?? 0.0,
+      createdAt: DateTime.parse(map['created_at']),
+      dueDate: DateTime.parse(map['due_date']),
+      status: map['status'] ?? 'unpaid',
+      totalAmount: map['total_amount']?.toDouble() ?? 0.0,
+      courseName: map['courseName'],
+    );
+  }
+
   Map<String, dynamic> toMap() {
     return {
       'id': id,
-      'studentId': studentId,
-      'courseId': courseId,
+      'invoice_number': invoiceNumber, // Add this line
+      'student': studentId,
+      'course': courseId,
       'lessons': lessons,
-      'pricePerLesson': pricePerLesson,
-      'totalAmount': totalAmount,
-      'createdDate': createdDate.toIso8601String(),
-      'dueDate': dueDate.toIso8601String(),
-      'amountPaid': amountPaid,
+      'price_per_lesson': pricePerLesson,
+      'amountpaid': amountPaid,
+      'created_at': createdAt.toIso8601String(),
+      'due_date': dueDate.toIso8601String(),
       'status': status,
+      'total_amount': totalAmount,
+      'courseName': courseName,
     };
   }
 
-  factory Invoice.fromJson(Map<String, dynamic> json) => Invoice(
-        id: json['id'],
-        studentId: json['student'],
-        courseId: json['course'],
-        lessons: json['lessons'],
-        pricePerLesson: json['price_per_lesson'].toDouble(),
-        amountPaid: json['amountpaid'].toDouble(),
-        createdDate: DateTime.parse(json['created_at']),
-        dueDate: DateTime.parse(json['due_date']),
-        status: json['status'],
-        totalAmount: json['total_amount'] != null
-            ? json['total_amount'].toDouble()
-            : null,
-        courseName: json['courseName'],
-        billingRecords: [], // Initialize from DB later
-        payments: [], // Initialize from DB later
-      );
-
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'student': studentId,
-        'course': courseId,
-        'lessons': lessons,
-        'price_per_lesson': pricePerLesson,
-        'amountpaid': amountPaid,
-        'created_at': createdDate.toIso8601String(),
-        'due_date': dueDate.toIso8601String(),
-        'status': status,
-        'total_amount': totalAmount,
-        'courseName': courseName,
-      };
-  double get totalAmountCalculated => pricePerLesson * lessons;
+  double get totalAmountCalculated => lessons * pricePerLesson;
   double get balance => totalAmountCalculated - amountPaid;
   String get formattedDueDate => DateFormat.yMMMd().format(dueDate);
   String get formattedBalance => '\$${balance.toStringAsFixed(2)}';
@@ -86,12 +77,13 @@ class Invoice {
 
   Invoice copyWith({
     int? id,
+    String? invoiceNumber,
     int? studentId,
     int? courseId,
     int? lessons,
     double? pricePerLesson,
     double? amountPaid,
-    DateTime? createdDate,
+    DateTime? createdAt,
     DateTime? dueDate,
     String? status,
     double? totalAmount,
@@ -99,16 +91,51 @@ class Invoice {
   }) {
     return Invoice(
       id: id ?? this.id,
+      invoiceNumber: invoiceNumber ?? this.invoiceNumber,
       studentId: studentId ?? this.studentId,
       courseId: courseId ?? this.courseId,
       lessons: lessons ?? this.lessons,
       pricePerLesson: pricePerLesson ?? this.pricePerLesson,
       amountPaid: amountPaid ?? this.amountPaid,
-      createdDate: createdDate ?? this.createdDate,
+      createdAt: createdAt ?? this.createdAt,
       dueDate: dueDate ?? this.dueDate,
       status: status ?? this.status,
       totalAmount: totalAmount ?? this.totalAmount,
       courseName: courseName ?? this.courseName,
     );
+  }
+
+  factory Invoice.fromJson(Map<String, dynamic> json) {
+    return Invoice(
+      id: json['id'],
+      studentId: json['student'],
+      courseId: json['course'],
+      lessons: json['lessons'],
+      pricePerLesson: (json['price_per_lesson'] as num).toDouble(),
+      amountPaid: (json['amountpaid'] as num?)?.toDouble() ?? 0.0,
+      createdAt: DateTime.parse(json['created_at']),
+      dueDate: DateTime.parse(json['due_date']),
+      status: json['status'],
+      totalAmount: (json['total_amount'] as num?)!.toDouble(),
+      invoiceNumber: json['invoice_number'],
+      courseName: json['course_name'],
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'student': studentId,
+      'course': courseId,
+      'lessons': lessons,
+      'price_per_lesson': pricePerLesson,
+      'amountpaid': amountPaid,
+      'created_at': createdAt.toIso8601String(),
+      'due_date': dueDate.toIso8601String(),
+      'status': status,
+      'total_amount': totalAmount,
+      'invoice_number': invoiceNumber,
+      'course_name': courseName,
+    };
   }
 }

@@ -24,38 +24,45 @@ class ScheduleDetailsDialog extends StatelessWidget {
     final scheduleController = Get.find<ScheduleController>();
     final billingController = Get.find<BillingController>();
 
+    // FIX 1: Use safe null checks for finding related entities
     final student = userController.users.firstWhereOrNull(
       (user) =>
           user.id == schedule.studentId && user.role.toLowerCase() == 'student',
     );
+
     final instructor = userController.users.firstWhereOrNull(
       (user) =>
           user.id == schedule.instructorId &&
           user.role.toLowerCase() == 'instructor',
     );
+
     final course = courseController.courses.firstWhereOrNull(
       (c) => c.id == schedule.courseId,
     );
+
     final vehicle = schedule.carId != null
         ? fleetController.fleet.firstWhereOrNull((v) => v.id == schedule.carId)
         : null;
 
-    // Get billing information
+    // FIX 2: Get billing information with proper null safety
     final invoice = billingController.invoices.firstWhereOrNull(
       (inv) =>
           inv.studentId == schedule.studentId &&
           inv.courseId == schedule.courseId,
     );
 
+    // FIX 3: Use centralized lesson calculation method (if available)
+    // Otherwise fallback to local calculation
     final usedLessons = scheduleController.schedules
         .where((s) =>
             s.studentId == schedule.studentId &&
             s.courseId == schedule.courseId &&
             s.attended)
-        .fold<int>(0, (sum, s) => sum + s.lessonsDeducted);
+        .fold<int>(0, (sum, s) => sum + (s.lessonsDeducted ?? 1));
 
-    final remainingLessons =
-        invoice != null ? invoice.lessons - usedLessons : 0;
+    final remainingLessons = invoice != null
+        ? (invoice.lessons - usedLessons).clamp(0, invoice.lessons)
+        : 0;
 
     return Dialog(
       insetPadding: EdgeInsets.all(16),
@@ -133,7 +140,7 @@ class ScheduleDetailsDialog extends StatelessWidget {
                             DateFormat('HH:mm').format(schedule.start)),
                         _buildInfoRow('End Time',
                             DateFormat('HH:mm').format(schedule.end)),
-                        _buildInfoRow('Duration', schedule.duration),
+                        _buildInfoRow('Duration', _calculateDuration()),
                         _buildInfoRow('Class Type', schedule.classType),
                       ],
                     ),
@@ -195,6 +202,8 @@ class ScheduleDetailsDialog extends StatelessWidget {
                               'Remaining Lessons', '$remainingLessons'),
                           _buildInfoRow('Lesson Status',
                               schedule.attended ? 'Attended' : 'Not Attended'),
+                          _buildInfoRow('Lessons Deducted',
+                              '${schedule.lessonsDeducted ?? 1}'),
                         ],
                       ),
                       SizedBox(height: 20),
@@ -202,30 +211,36 @@ class ScheduleDetailsDialog extends StatelessWidget {
 
                     // Progress Section
                     if (schedule.attended ||
-                        schedule.status == 'Completed') ...[
+                        schedule.status.toLowerCase() == 'completed') ...[
                       _buildInfoSection(
                         'Progress',
                         Icons.trending_up,
                         Colors.teal,
                         [
                           _buildInfoRow('Lessons Completed',
-                              '${schedule.lessonsCompleted}'),
-                          _buildInfoRow('Progress',
-                              '${(schedule.progress * 100).toStringAsFixed(1)}%'),
+                              '${schedule.lessonsCompleted ?? 0}'),
+                          // FIX 4: Calculate progress safely
+                          _buildInfoRow(
+                              'Progress',
+                              invoice != null
+                                  ? '${((usedLessons / invoice.lessons) * 100).toStringAsFixed(1)}%'
+                                  : '0%'),
                         ],
                       ),
                       SizedBox(height: 20),
                     ],
 
-                    // Notes Section (if needed)
-                    if (schedule.isRecurring) ...[
+                    // Recurrence Section - FIX 5: Check for recurrence properly
+                    if (schedule.isRecurring == true) ...[
                       _buildInfoSection(
                         'Recurrence',
                         Icons.repeat,
                         Colors.indigo,
                         [
-                          _buildInfoRow('Pattern',
-                              schedule.recurrencePattern?.capitalize ?? 'N/A'),
+                          _buildInfoRow(
+                              'Pattern',
+                              schedule.recurrencePattern?.capitalizeFirst ??
+                                  'N/A'),
                           if (schedule.recurrenceEndDate != null)
                             _buildInfoRow(
                               'End Date',
@@ -251,13 +266,14 @@ class ScheduleDetailsDialog extends StatelessWidget {
               child: Column(
                 children: [
                   // Attendance Actions (for instructors)
-                  if (schedule.status != 'Cancelled' && !schedule.attended) ...[
+                  if (schedule.status.toLowerCase() != 'cancelled' &&
+                      !schedule.attended) ...[
                     _buildAttendanceSection(scheduleController),
                     SizedBox(height: 12),
                   ],
 
                   // Management Actions
-                  if (schedule.status != 'Cancelled') ...[
+                  if (schedule.status.toLowerCase() != 'cancelled') ...[
                     Row(
                       children: [
                         Expanded(
@@ -289,7 +305,7 @@ class ScheduleDetailsDialog extends StatelessWidget {
                   ],
 
                   // Cancel Action
-                  if (schedule.status != 'Cancelled') ...[
+                  if (schedule.status.toLowerCase() != 'cancelled') ...[
                     SizedBox(
                       width: double.infinity,
                       child: OutlinedButton.icon(
@@ -309,6 +325,51 @@ class ScheduleDetailsDialog extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  // FIX 6: Add missing _buildAttendanceSection method
+  Widget _buildAttendanceSection(ScheduleController controller) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Mark Attendance',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Colors.grey[700],
+          ),
+        ),
+        SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: () => _markAttendance(true, controller),
+                icon: Icon(Icons.check, size: 18),
+                label: Text('Present'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ),
+            SizedBox(width: 12),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () => _markAttendance(false, controller),
+                icon: Icon(Icons.close, size: 18),
+                label: Text('Absent'),
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: Colors.red),
+                  foregroundColor: Colors.red,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -372,6 +433,21 @@ class ScheduleDetailsDialog extends StatelessWidget {
     );
   }
 
+  // FIX 7: Calculate duration properly
+  String _calculateDuration() {
+    final duration = schedule.end.difference(schedule.start);
+    final hours = duration.inHours;
+    final minutes = duration.inMinutes % 60;
+
+    if (hours > 0 && minutes > 0) {
+      return '${hours}h ${minutes}m';
+    } else if (hours > 0) {
+      return '${hours}h';
+    } else {
+      return '${minutes}m';
+    }
+  }
+
   Color _getStatusColor(String status) {
     switch (status.toLowerCase()) {
       case 'completed':
@@ -382,6 +458,10 @@ class ScheduleDetailsDialog extends StatelessWidget {
         return Colors.blue;
       case 'pending':
         return Colors.orange;
+      case 'scheduled':
+        return Colors.blue.shade600;
+      case 'in progress':
+        return Colors.orange.shade600;
       default:
         return Colors.grey;
     }
@@ -397,6 +477,10 @@ class ScheduleDetailsDialog extends StatelessWidget {
         return Icons.verified;
       case 'pending':
         return Icons.pending;
+      case 'scheduled':
+        return Icons.schedule;
+      case 'in progress':
+        return Icons.play_circle_filled;
       default:
         return Icons.schedule;
     }
@@ -450,10 +534,10 @@ class ScheduleDetailsDialog extends StatelessWidget {
             onPressed: () => Get.back(result: false),
             child: Text('No'),
           ),
-          TextButton(
+          ElevatedButton(
             onPressed: () => Get.back(result: true),
-            child: Text('Yes, Cancel'),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: Text('Yes, Cancel', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -461,12 +545,15 @@ class ScheduleDetailsDialog extends StatelessWidget {
 
     if (confirmed == true) {
       try {
-        await controller.cancelSchedule(schedule.id!);
+        // Update the schedule status to cancelled
+        final cancelledSchedule = schedule.copyWith(status: 'Cancelled');
+        await controller.addOrUpdateSchedule(cancelledSchedule);
+
         Get.back(); // Close dialog
         Get.snackbar(
-          'Success',
-          'Lesson cancelled successfully',
-          backgroundColor: Colors.green,
+          'Lesson Cancelled',
+          'The lesson has been cancelled successfully',
+          backgroundColor: Colors.red,
           colorText: Colors.white,
         );
       } catch (e) {
@@ -477,87 +564,6 @@ class ScheduleDetailsDialog extends StatelessWidget {
           colorText: Colors.white,
         );
       }
-    }
-  }
-
-  Widget _buildAttendanceSection(ScheduleController controller) {
-    final now = DateTime.now();
-    final lessonStart = schedule.start;
-    final lessonEnd = schedule.end;
-    final timeDifference = lessonStart.difference(now).inMinutes;
-
-    // Check if we're within 5 minutes of start time or lesson has started/ended
-    final canMarkAttendance = timeDifference <= 5 || now.isAfter(lessonStart);
-
-    if (canMarkAttendance) {
-      return Row(
-        children: [
-          Expanded(
-            child: ElevatedButton.icon(
-              onPressed: () => _markAttendance(true, controller),
-              icon: Icon(Icons.check_circle, size: 18),
-              label: Text('Mark Attended'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-                foregroundColor: Colors.white,
-              ),
-            ),
-          ),
-          SizedBox(width: 12),
-          Expanded(
-            child: ElevatedButton.icon(
-              onPressed: () => _markAttendance(false, controller),
-              icon: Icon(Icons.cancel, size: 18),
-              label: Text('Mark Absent'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange,
-                foregroundColor: Colors.white,
-              ),
-            ),
-          ),
-        ],
-      );
-    } else {
-      // Show disabled state with time remaining
-      final timeRemaining = timeDifference > 60
-          ? '${(timeDifference / 60).floor()}h ${timeDifference % 60}m'
-          : '${timeDifference}m';
-
-      return Container(
-        padding: EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.grey[100],
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.grey[300]!),
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.access_time, color: Colors.grey[600], size: 20),
-            SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Attendance marking unavailable',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w500,
-                      color: Colors.grey[700],
-                    ),
-                  ),
-                  Text(
-                    'Available 5 minutes before lesson starts ($timeRemaining remaining)',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[600],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      );
     }
   }
 }

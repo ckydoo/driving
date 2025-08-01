@@ -651,7 +651,7 @@ class _ReceiptManagementScreenState extends State<ReceiptManagementScreen> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    'Invoice #${invoice?.id ?? 'N/A'}',
+                    'Invoice #${invoice?.invoiceNumber ?? 'N/A'}',
                     style: TextStyle(
                       fontSize: 11,
                       color: Colors.grey.shade600,

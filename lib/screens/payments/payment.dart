@@ -807,7 +807,7 @@ class _PaymentsScreenState extends State<PaymentsScreen>
                         Row(
                           children: [
                             Text(
-                              'Invoice #${invoice.id}',
+                              'Invoice #${invoice.invoiceNumber}',
                               style: const TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 16,

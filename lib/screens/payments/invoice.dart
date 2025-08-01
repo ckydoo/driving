@@ -85,11 +85,10 @@ extension InvoiceNumberExtension on Invoice {
 
   String get dateBasedInvoiceNumber {
     return InvoiceNumberHelper.generateDateBasedInvoiceNumber(
-        id ?? 0, createdDate);
+        id ?? 0, createdAt);
   }
 
   String get yearlyInvoiceNumber {
-    return InvoiceNumberHelper.generateYearlyInvoiceNumber(
-        id ?? 0, createdDate);
+    return InvoiceNumberHelper.generateYearlyInvoiceNumber(id ?? 0, createdAt);
   }
 }

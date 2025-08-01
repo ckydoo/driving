@@ -570,8 +570,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Widget _buildBillingOverview() {
     final filteredInvoices = billingController.invoices
         .where((inv) =>
-            inv.createdDate.isAfter(_startDate) &&
-            inv.createdDate.isBefore(_endDate))
+            inv.createdAt.isAfter(_startDate) &&
+            inv.createdAt.isBefore(_endDate))
         .toList();
 
     final totalInvoices = filteredInvoices.length;

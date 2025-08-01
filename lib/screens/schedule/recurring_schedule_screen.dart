@@ -1262,16 +1262,26 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
             final remaining = invoice.lessons - usedLessons;
 
             if (remaining > 0) {
-              courses.add(course);
+              // Check if course is already in the list to avoid duplicates
+              if (!courses.any((c) => c.id == course.id)) {
+                courses.add(course);
+              }
             }
           }
         }
 
         setState(() {
           _availableCourses = courses;
+          // Only set selected course if it exists in the new list
           if (courses.isNotEmpty) {
-            _selectedCourse = courses.first;
+            if (_selectedCourse == null ||
+                !courses.any((c) => c.id == _selectedCourse!.id)) {
+              _selectedCourse = courses.first;
+            }
             _updateLessonCounts();
+          } else {
+            _selectedCourse = null;
+            _remainingLessons = 0;
           }
         });
       } else {
@@ -1284,6 +1294,7 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
         );
         setState(() {
           _availableCourses = [];
+          _selectedCourse = null;
           _remainingLessons = 0;
         });
       }
@@ -1296,28 +1307,16 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
 
   void _updateLessonCounts() {
     if (_selectedStudent != null && _selectedCourse != null) {
-      final invoice = _billingController.invoices.firstWhereOrNull(
-        (inv) =>
-            inv.studentId == _selectedStudent!.id &&
-            inv.courseId == _selectedCourse!.id,
-      );
-      if (invoice != null) {
-        final used =
-            _getUsedLessons(_selectedStudent!.id!, _selectedCourse!.id!);
-        setState(() {
-          _remainingLessons = invoice.lessons - used;
-          _maxPossibleLessons = _remainingLessons;
-        });
-        _updatePreviewCount();
-      }
+      setState(() {
+        _remainingLessons = _scheduleController.getRemainingLessons(
+            _selectedStudent!.id!, _selectedCourse!.id!);
+      });
+      _updatePreviewCount();
     }
   }
 
   int _getUsedLessons(int studentId, int courseId) {
-    return _scheduleController.schedules
-        .where((s) =>
-            s.studentId == studentId && s.courseId == courseId && s.attended)
-        .fold<int>(0, (sum, s) => sum + s.lessonsDeducted);
+    return _scheduleController.getUsedLessons(studentId, courseId);
   }
 
   void _assignInstructorVehicle(User instructor) {
