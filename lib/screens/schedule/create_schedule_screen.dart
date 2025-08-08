@@ -882,13 +882,11 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
       );
 
       await _scheduleController.addOrUpdateSchedule(schedule);
+
+      // Show success dialog instead of just snackbar
+      await _showSuccessDialog(schedule);
+
       Get.back();
-      Get.snackbar(
-        'Success',
-        'Lesson scheduled successfully!',
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
-      );
     } catch (e) {
       Get.snackbar(
         'Error',
@@ -901,6 +899,164 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
         _isLoading = false;
       });
     }
+  }
+
+  Future<void> _showSuccessDialog(Schedule schedule) async {
+    await Get.dialog(
+      AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(15),
+        ),
+        title: Row(
+          children: [
+            Icon(Icons.check_circle, color: Colors.green, size: 28),
+            SizedBox(width: 12),
+            Text(
+              'Lesson Scheduled Successfully',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.green.shade700,
+              ),
+            ),
+          ],
+        ),
+        content: Container(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.green.shade200),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildDetailRow(Icons.person, 'Student',
+                        '${_selectedStudent?.fname} ${_selectedStudent?.lname}'),
+                    SizedBox(height: 8),
+                    _buildDetailRow(Icons.person_pin, 'Instructor',
+                        '${_selectedInstructor?.fname} ${_selectedInstructor?.lname}'),
+                    SizedBox(height: 8),
+                    _buildDetailRow(
+                        Icons.book, 'Course', '${_selectedCourse?.name}'),
+                    SizedBox(height: 8),
+                    _buildDetailRow(
+                        Icons.calendar_today,
+                        'Date',
+                        DateFormat('EEEE, MMMM dd, yyyy')
+                            .format(schedule.start)),
+                    SizedBox(height: 8),
+                    _buildDetailRow(Icons.access_time, 'Time',
+                        '${DateFormat('hh:mm a').format(schedule.start)} - ${DateFormat('hh:mm a').format(schedule.end)}'),
+                    if (_selectedVehicle != null) ...[
+                      SizedBox(height: 8),
+                      _buildDetailRow(Icons.directions_car, 'Vehicle',
+                          '${_selectedVehicle!.make} ${_selectedVehicle!.model} (${_selectedVehicle!.carPlate})'),
+                    ],
+                    SizedBox(height: 8),
+                    _buildDetailRow(Icons.flag, 'Status', _selectedStatus),
+                  ],
+                ),
+              ),
+              SizedBox(height: 16),
+              Container(
+                padding: EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info, color: Colors.blue, size: 20),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Remaining lessons for ${_selectedCourse?.name}: ${_remainingLessons - 1}',
+                        style: TextStyle(
+                          color: Colors.blue.shade700,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Get.back();
+                    // Schedule another lesson for the same student
+                    setState(() {
+                      _selectedDate = DateTime.now();
+                      _startTime = TimeOfDay(hour: 9, minute: 0);
+                      _endTime = TimeOfDay(hour: 10, minute: 0);
+                      _selectedStatus = 'Scheduled';
+                      _showAvailabilityStatus = false;
+                    });
+                  },
+                  icon: Icon(Icons.add),
+                  label: Text('Schedule Another'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.blue,
+                    side: BorderSide(color: Colors.blue),
+                  ),
+                ),
+              ),
+              SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => Get.back(),
+                  icon: Icon(Icons.check),
+                  label: Text('Done'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+      barrierDismissible: false,
+    );
+  }
+
+  Widget _buildDetailRow(IconData icon, String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 16, color: Colors.grey.shade600),
+        SizedBox(width: 8),
+        Text(
+          '$label: ',
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            color: Colors.grey.shade700,
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: TextStyle(
+              color: Colors.grey.shade800,
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   Future<void> _cancelSchedule() async {

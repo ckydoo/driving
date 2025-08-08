@@ -1508,31 +1508,265 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
 
   void _handleRecurringScheduleComplete(int successCount, int conflictCount) {
     Get.back(); // Close progress dialog
-    Get.back(); // Close recurring schedule screen
 
-    // Single success message - Issue 3 fix
-    if (successCount > 0) {
-      String message =
-          '$successCount recurring lessons scheduled successfully!';
-      if (conflictCount > 0) {
-        message += ' ($conflictCount conflicts skipped)';
-      }
+    // Show detailed results dialog instead of just a snackbar
+    _showScheduleResultsDialog(successCount, conflictCount);
+  }
 
-      Get.snackbar(
-        'Success',
-        message,
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
-        duration: Duration(seconds: 4),
-      );
-    } else {
-      Get.snackbar(
-        'Warning',
-        'No lessons could be scheduled due to conflicts.',
-        backgroundColor: Colors.orange,
-        colorText: Colors.white,
-      );
-    }
+  void _showScheduleResultsDialog(int successCount, int conflictCount) {
+    final totalAttempted = successCount + conflictCount;
+    final bool hasConflicts = conflictCount > 0;
+    final bool allSuccessful =
+        successCount == totalAttempted && totalAttempted > 0;
+
+    Get.dialog(
+      Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Container(
+          width: double.infinity,
+          constraints: BoxConstraints(maxWidth: 400),
+          padding: EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header with icon
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: allSuccessful
+                      ? Colors.green.withOpacity(0.1)
+                      : hasConflicts
+                          ? Colors.orange.withOpacity(0.1)
+                          : Colors.red.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  allSuccessful
+                      ? Icons.check_circle
+                      : hasConflicts
+                          ? Icons.warning
+                          : Icons.error,
+                  size: 48,
+                  color: allSuccessful
+                      ? Colors.green
+                      : hasConflicts
+                          ? Colors.orange
+                          : Colors.red,
+                ),
+              ),
+
+              SizedBox(height: 16),
+
+              // Title
+              Text(
+                allSuccessful
+                    ? 'Scheduling Complete!'
+                    : hasConflicts
+                        ? 'Partially Scheduled'
+                        : 'Scheduling Failed',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: allSuccessful
+                      ? Colors.green
+                      : hasConflicts
+                          ? Colors.orange
+                          : Colors.red,
+                ),
+                textAlign: TextAlign.center,
+              ),
+
+              SizedBox(height: 20),
+
+              // Results summary
+              Container(
+                width: double.infinity,
+                padding: EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.grey.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                ),
+                child: Column(
+                  children: [
+                    // Success count
+                    _buildResultRow(
+                      icon: Icons.check_circle,
+                      color: Colors.green,
+                      label: 'Successfully Scheduled',
+                      value: '$successCount lessons',
+                    ),
+
+                    if (conflictCount > 0) ...[
+                      SizedBox(height: 12),
+                      _buildResultRow(
+                        icon: Icons.sync_problem,
+                        color: Colors.orange,
+                        label: 'Skipped (Conflicts)',
+                        value: '$conflictCount lessons',
+                      ),
+                    ],
+
+                    SizedBox(height: 12),
+                    Divider(),
+                    SizedBox(height: 8),
+
+                    // Total and remaining lessons
+                    _buildResultRow(
+                      icon: Icons.assignment,
+                      color: Colors.blue,
+                      label: 'Total Attempted',
+                      value: '$totalAttempted lessons',
+                    ),
+
+                    SizedBox(height: 8),
+
+                    _buildResultRow(
+                      icon: Icons.schedule,
+                      color: Colors.purple,
+                      label: 'Remaining Lessons',
+                      value: '${_remainingLessons - successCount} lessons',
+                    ),
+                  ],
+                ),
+              ),
+
+              SizedBox(height: 16),
+
+              // Student and course info
+              Container(
+                width: double.infinity,
+                padding: EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Schedule Details:',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue.shade700,
+                      ),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                        'Student: ${_selectedStudent?.fname} ${_selectedStudent?.lname}'),
+                    Text('Course: ${_selectedCourse?.name}'),
+                    Text(
+                        'Instructor: ${_selectedInstructor?.fname} ${_selectedInstructor?.lname}'),
+                    Text('Pattern: ${_recurrencePattern.capitalize}'),
+                    if (_selectedVehicle != null)
+                      Text(
+                          'Vehicle: ${_selectedVehicle!.make} ${_selectedVehicle!.model}'),
+                  ],
+                ),
+              ),
+
+              if (hasConflicts) ...[
+                SizedBox(height: 16),
+                Container(
+                  width: double.infinity,
+                  padding: EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info, color: Colors.orange, size: 20),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Some lessons were skipped due to instructor unavailability. You can reschedule these manually.',
+                          style: TextStyle(
+                            color: Colors.orange.shade700,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
+              SizedBox(height: 24),
+
+              // Action buttons
+              Row(
+                children: [
+                  if (successCount > 0) ...[
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Get.back(); // Close dialog
+                          Get.back(); // Go back to schedule screen
+                          // Navigate to schedule view to see created lessons
+                          Get.toNamed('/schedule');
+                        },
+                        icon: Icon(Icons.calendar_view_day),
+                        label: Text('View Schedule'),
+                        style: OutlinedButton.styleFrom(
+                          padding: EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: 12),
+                  ],
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Get.back(); // Close dialog
+                        Get.back(); // Close recurring schedule screen
+                      },
+                      icon: Icon(Icons.check),
+                      label: Text('Done'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+      barrierDismissible: false,
+    );
+  }
+
+  Widget _buildResultRow({
+    required IconData icon,
+    required Color color,
+    required String label,
+    required String value,
+  }) {
+    return Row(
+      children: [
+        Icon(icon, color: color, size: 20),
+        SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(fontWeight: FontWeight.w500),
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+      ],
+    );
   }
 
   Future<void> _selectStartDate() async {
