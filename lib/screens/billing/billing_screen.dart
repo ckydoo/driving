@@ -971,7 +971,7 @@ class _BillingScreenState extends State<BillingScreen>
       context: context,
       builder: (BuildContext context) {
         return PaymentDialog(
-          invoice: unpaidInvoices.first, // Use the oldest unpaid invoice
+          availableInvoices: unpaidInvoices, // Lets user choose
           studentName: '${student.fname} ${student.lname}',
           studentId: student.id!,
           // If PaymentDialog supports additional parameters, add them here
