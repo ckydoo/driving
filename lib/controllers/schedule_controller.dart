@@ -3,6 +3,7 @@ import 'package:driving/controllers/billing_controller.dart';
 import 'package:driving/controllers/course_controller.dart';
 import 'package:driving/controllers/settings_controller.dart';
 import 'package:driving/controllers/user_controller.dart';
+import 'package:driving/services/lesson_tracking_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../models/schedule.dart';
@@ -15,6 +16,9 @@ class ScheduleController extends GetxController {
   final RxBool isLoading = false.obs;
   final RxString error = ''.obs;
   final DatabaseHelper _dbHelper = Get.find();
+  
+  // Centralized lesson tracking service
+  final LessonTrackingService _lessonTracker = LessonTrackingService();
 
   // Filtered schedules for performance
   final RxList<Schedule> filteredSchedules = <Schedule>[].obs;
@@ -378,6 +382,7 @@ class ScheduleController extends GetxController {
     });
   }
 
+  /// Check if there are enough lessons remaining to create a schedule
   Future<bool> checkBillingLessons(
       int studentId, int courseId, int requiredLessons) async {
     try {
@@ -386,14 +391,7 @@ class ScheduleController extends GetxController {
         (inv) => inv.studentId == studentId && inv.courseId == courseId,
       );
 
-      if (invoice == null) return true;
-
-      final usedLessons = schedules
-          .where((s) =>
-              s.studentId == studentId && s.courseId == courseId && s.attended)
-          .fold<int>(0, (sum, s) => sum + s.lessonsDeducted);
-
-      return (usedLessons + requiredLessons) > invoice.lessons;
+      return _lessonTracker.canCreateSchedule(schedules, invoice, studentId, courseId, requiredLessons);
     } catch (e) {
       print('Error checking billing lessons: $e');
       return false;
@@ -419,15 +417,13 @@ class ScheduleController extends GetxController {
       isLoading(true);
 
       if (schedule.id == null) {
-        // Creating new schedule
+        // Creating new schedule - NO LONGER deduct lessons automatically
+        // Lessons are only deducted when the lesson is attended/completed
         final newSchedule = await _dbHelper.insertSchedule(schedule.toJson());
         final scheduleWithId = Schedule.fromJson({
           ...schedule.toJson(),
           'id': newSchedule,
         });
-
-        // FIXED: Deduct lessons from billing when scheduling (not just attending)
-        await _deductLessonsFromBilling(scheduleWithId);
 
         schedules.add(scheduleWithId);
       } else {
@@ -439,7 +435,7 @@ class ScheduleController extends GetxController {
         }
       }
 
-      // FIXED: Ensure UI updates by refreshing observables
+      // Ensure UI updates by refreshing observables
       schedules.refresh();
       _applyFilters();
 
@@ -462,58 +458,16 @@ class ScheduleController extends GetxController {
     }
   }
 
-// New method to handle lesson deduction from billing
-  Future<void> _deductLessonsFromBilling(Schedule schedule) async {
-    try {
-      final billingController = Get.find<BillingController>();
-      final invoice = billingController.invoices.firstWhereOrNull(
-        (inv) =>
-            inv.studentId == schedule.studentId &&
-            inv.courseId == schedule.courseId,
-      );
 
-      if (invoice != null) {
-        // Calculate current used lessons (including this new schedule)
-        final usedLessons =
-            getUsedLessons(schedule.studentId, schedule.courseId) +
-                schedule.lessonsDeducted;
 
-        // Check if we have enough lessons
-        if (usedLessons > invoice.lessons) {
-          print(
-              'Insufficient lessons remaining. Please add more lessons to the invoice.');
-        }
-
-        // Update the invoice to reflect used lessons
-        await billingController.updateUsedLessons(invoice.id!, usedLessons);
-      }
-    } catch (e) {
-      rethrow; // Re-throw to handle in calling method
-    }
-  }
-
-// Helper method to get used lessons count
+  /// Get lessons used (attended/completed only) for a student in a specific course
+  /// This now uses centralized logic and ONLY counts attended/completed lessons
   int getUsedLessons(int studentId, int courseId) {
-    final settingsController = Get.find<SettingsController>();
-
-    if (settingsController.countScheduledLessons.value) {
-      // Count both scheduled and attended lessons (exclude cancelled)
-      return schedules
-          .where((s) =>
-              s.studentId == studentId &&
-              s.courseId == courseId &&
-              s.status.toLowerCase() != 'cancelled')
-          .fold<int>(0, (sum, s) => sum + s.lessonsDeducted);
-    } else {
-      // Only count attended lessons
-      return schedules
-          .where((s) =>
-              s.studentId == studentId && s.courseId == courseId && s.attended)
-          .fold<int>(0, (sum, s) => sum + s.lessonsDeducted);
-    }
+    return _lessonTracker.getUsedLessons(schedules, studentId, courseId);
   }
 
   /// Toggle attendance with consistent status update
+  /// When marking as attended, always set status to 'completed'
   Future<void> toggleAttendance(int scheduleId, bool attended) async {
     try {
       isLoading(true);
@@ -526,23 +480,26 @@ class ScheduleController extends GetxController {
 
       final schedule = schedules[index];
 
-      // Calculate lessons based on duration
-      final actualLessonsDeducted = schedule.lessonsDeducted;
-
-      // Create temporary schedule with proposed changes
-      final tempSchedule = schedule.copyWith(attended: attended);
-
-      if (attended && _isBilledLessonsExceeded(tempSchedule)) {
-        Get.snackbar(
-          'Lesson Limit Exceeded',
-          'Cannot mark as attended. Student has no remaining lessons.',
-          backgroundColor: Colors.red,
-          colorText: Colors.white,
+      // Check if marking as attended would exceed billed lessons
+      if (attended) {
+        final billingController = Get.find<BillingController>();
+        final invoice = billingController.invoices.firstWhereOrNull(
+          (inv) => inv.studentId == schedule.studentId && inv.courseId == schedule.courseId,
         );
-        return;
+        
+        if (_lessonTracker.wouldExceedBilledLessons(schedules, invoice, schedule)) {
+          Get.snackbar(
+            'Lesson Limit Exceeded',
+            'Cannot mark as attended. Student has no remaining lessons.',
+            backgroundColor: Colors.red,
+            colorText: Colors.white,
+          );
+          return;
+        }
       }
 
       // Determine the correct status based on attendance
+      // Key rule: If attended=true, status must be 'completed'
       String newStatus;
       if (attended) {
         newStatus = ScheduleStatus.completed;
@@ -555,9 +512,6 @@ class ScheduleController extends GetxController {
       final updated = schedule.copyWith(
         attended: attended,
         status: newStatus,
-        lessonsCompleted: attended
-            ? schedule.lessonsCompleted + actualLessonsDeducted
-            : schedule.lessonsCompleted - actualLessonsDeducted,
       );
 
       // Update database with both attendance and status
@@ -565,7 +519,6 @@ class ScheduleController extends GetxController {
         'id': scheduleId,
         'attended': attended ? 1 : 0,
         'status': newStatus,
-        'lessonsCompleted': updated.lessonsCompleted,
       });
 
       schedules[index] = updated;
@@ -597,7 +550,7 @@ class ScheduleController extends GetxController {
 
       Get.snackbar(
         'Success',
-        attended ? 'Marked as attended' : 'Marked as not attended',
+        attended ? 'Marked as attended and completed' : 'Marked as not attended',
         backgroundColor: attended ? Colors.green : Colors.orange,
         colorText: Colors.white,
       );
@@ -780,12 +733,12 @@ class ScheduleController extends GetxController {
     }
   }
 
-  /// Validate all schedules for consistency
+  /// Validate all schedules for consistency using centralized logic
   List<Schedule> get inconsistentSchedules {
-    return schedules.where((schedule) => !schedule.isStatusConsistent).toList();
+    return _lessonTracker.findInconsistentSchedules(schedules);
   }
 
-  /// Fix all inconsistent schedules
+  /// Fix all inconsistent schedules using centralized logic
   Future<void> fixInconsistentSchedules() async {
     try {
       isLoading(true);
@@ -797,7 +750,7 @@ class ScheduleController extends GetxController {
       }
 
       for (final schedule in inconsistent) {
-        final corrected = schedule.withConsistentStatus;
+        final corrected = _lessonTracker.getScheduleWithConsistentStatus(schedule);
 
         await _dbHelper.updateSchedule({
           'id': schedule.id,
@@ -827,100 +780,17 @@ class ScheduleController extends GetxController {
     }
   }
 
-// Add this method to ScheduleController
-  int getEffectiveLessonsUsed(int studentId, int courseId) {
-    final settingsController = Get.find<SettingsController>();
-
-    if (settingsController.countScheduledLessons.value) {
-      // Count both scheduled and attended lessons
-      return schedules
-          .where((s) =>
-              s.studentId == studentId &&
-              s.courseId == courseId &&
-              (s.attended || s.status != 'Cancelled'))
-          .fold<int>(0, (sum, s) => sum + s.lessonsDeducted);
-    } else {
-      // Only count attended lessons
-      return schedules
-          .where((s) =>
-              s.studentId == studentId && s.courseId == courseId && s.attended)
-          .fold<int>(0, (sum, s) => sum + s.lessonsDeducted);
-    }
-  }
-
-  bool canCreateSchedule(int studentId, int courseId, int lessonsToDeduct) {
-    final remainingLessons = getRemainingLessons(studentId, courseId);
-    return lessonsToDeduct <= remainingLessons;
-  }
-
-  /// Get a descriptive status of lesson usage for a student's course
-  Map<String, int> getLessonUsageStats(int studentId, int courseId) {
+  /// Get remaining lessons using centralized logic
+  int getRemainingLessons(int studentId, int courseId) {
     final billingController = Get.find<BillingController>();
     final invoice = billingController.invoices.firstWhereOrNull(
       (inv) => inv.studentId == studentId && inv.courseId == courseId,
     );
 
-    if (invoice == null) {
-      return {
-        'total': 0,
-        'used': 0,
-        'remaining': 0,
-        'attended': 0,
-        'scheduled': 0,
-      };
-    }
-
-    final attendedLessons = schedules
-        .where((s) =>
-            s.studentId == studentId && s.courseId == courseId && s.attended)
-        .fold<int>(0, (sum, s) => sum + s.lessonsDeducted);
-
-    final scheduledLessons = schedules
-        .where((s) =>
-            s.studentId == studentId &&
-            s.courseId == courseId &&
-            !s.attended &&
-            s.status.toLowerCase() != 'cancelled')
-        .fold<int>(0, (sum, s) => sum + s.lessonsDeducted);
-
-    final totalUsed = getUsedLessons(studentId, courseId);
-
-    return {
-      'total': invoice.lessons,
-      'used': totalUsed,
-      'remaining': (invoice.lessons - totalUsed).clamp(0, invoice.lessons),
-      'attended': attendedLessons,
-      'scheduled': scheduledLessons,
-    };
+    return _lessonTracker.getRemainingLessons(schedules, invoice, studentId, courseId);
   }
 
-  // Update _isBilledLessonsExceeded method
-  bool _isBilledLessonsExceeded(Schedule schedule) {
-    try {
-      final billingController = Get.find<BillingController>();
-      final invoice = billingController.invoices.firstWhereOrNull(
-        (inv) =>
-            inv.studentId == schedule.studentId &&
-            inv.courseId == schedule.courseId,
-      );
-
-      if (invoice == null) return false;
-
-      final totalLessons = invoice.lessons;
-      final usedLessons = getUsedLessons(schedule.studentId, schedule.courseId);
-
-      // Calculate potential new usage if this schedule is marked as attended
-      final potentialAddedLessons =
-          schedule.attended ? schedule.lessonsDeducted : 0;
-
-      return (usedLessons + potentialAddedLessons) > totalLessons;
-    } catch (e) {
-      print('Error checking billing lessons: $e');
-      return false;
-    }
-  }
-
-// Update calculateScheduleProgress method
+  /// Calculate progress using centralized logic (attended lessons only)
   double calculateScheduleProgress(Schedule schedule) {
     try {
       final billingController = Get.find<BillingController>();
@@ -930,35 +800,30 @@ class ScheduleController extends GetxController {
             inv.courseId == schedule.courseId,
       );
 
-      final totalLessons = invoice?.lessons ?? 0;
-      if (totalLessons == 0) return 0;
-
-      // Use only attended lessons for progress (not scheduled)
-      final attendedLessons = schedules
-          .where((s) =>
-              s.studentId == schedule.studentId &&
-              s.courseId == schedule.courseId &&
-              s.attended)
-          .fold<int>(0, (sum, s) => sum + s.lessonsDeducted);
-
-      final progress = (attendedLessons / totalLessons) * 100;
-      return progress.clamp(0.0, 100.0);
+      return _lessonTracker.calculateLessonProgress(schedules, invoice, schedule.studentId, schedule.courseId);
     } catch (e) {
       print('Error calculating progress: $e');
       return 0;
     }
   }
 
-  // Add this method to get remaining lessons consistently
-  int getRemainingLessons(int studentId, int courseId) {
+  /// Check if a schedule can be created without exceeding billed lessons
+  bool canCreateSchedule(int studentId, int courseId, int lessonsToDeduct) {
     final billingController = Get.find<BillingController>();
     final invoice = billingController.invoices.firstWhereOrNull(
       (inv) => inv.studentId == studentId && inv.courseId == courseId,
     );
 
-    if (invoice == null) return 0;
+    return _lessonTracker.canCreateSchedule(schedules, invoice, studentId, courseId, lessonsToDeduct);
+  }
 
-    final usedLessons = getUsedLessons(studentId, courseId);
-    return (invoice.lessons - usedLessons).clamp(0, invoice.lessons);
+  /// Get detailed lesson usage statistics using centralized logic
+  LessonUsageStats getLessonUsageStats(int studentId, int courseId) {
+    final billingController = Get.find<BillingController>();
+    final invoice = billingController.invoices.firstWhereOrNull(
+      (inv) => inv.studentId == studentId && inv.courseId == courseId,
+    );
+
+    return _lessonTracker.getLessonUsageStats(schedules, invoice, studentId, courseId);
   }
 }
