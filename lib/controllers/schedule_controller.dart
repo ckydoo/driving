@@ -385,18 +385,26 @@ class ScheduleController extends GetxController {
       int studentId, int courseId, int requiredLessons) async {
     try {
       final billingController = Get.find<BillingController>();
-      final invoice = billingController.invoices.firstWhereOrNull(
-        (inv) => inv.studentId == studentId && inv.courseId == courseId,
-      );
 
-      if (invoice == null) return true;
+      // GET ALL invoices instead of just one
+      final invoices = billingController.invoices
+          .where(
+            (inv) => inv.studentId == studentId && inv.courseId == courseId,
+          )
+          .toList();
+
+      if (invoices.isEmpty) return true;
+
+      // SUM total lessons from all invoices
+      final totalLessons =
+          invoices.fold<int>(0, (sum, invoice) => sum + invoice.lessons);
 
       final usedLessons = schedules
           .where((s) =>
               s.studentId == studentId && s.courseId == courseId && s.attended)
           .fold<int>(0, (sum, s) => sum + s.lessonsDeducted);
 
-      return (usedLessons + requiredLessons) > invoice.lessons;
+      return (usedLessons + requiredLessons) <= totalLessons;
     } catch (e) {
       print('Error checking billing lessons: $e');
       return false;
@@ -465,33 +473,40 @@ class ScheduleController extends GetxController {
     }
   }
 
-// New method to handle lesson deduction from billing
   Future<void> _deductLessonsFromBilling(Schedule schedule) async {
     try {
       final billingController = Get.find<BillingController>();
-      final invoice = billingController.invoices.firstWhereOrNull(
-        (inv) =>
-            inv.studentId == schedule.studentId &&
-            inv.courseId == schedule.courseId,
-      );
 
-      if (invoice != null) {
+      // GET ALL invoices for this student/course
+      final invoices = billingController.invoices
+          .where(
+            (inv) =>
+                inv.studentId == schedule.studentId &&
+                inv.courseId == schedule.courseId,
+          )
+          .toList();
+
+      if (invoices.isNotEmpty) {
+        // Calculate total available lessons
+        final totalLessons =
+            invoices.fold<int>(0, (sum, invoice) => sum + invoice.lessons);
+
         // Calculate current used lessons (including this new schedule)
         final usedLessons =
             getUsedLessons(schedule.studentId, schedule.courseId) +
                 schedule.lessonsDeducted;
 
         // Check if we have enough lessons
-        if (usedLessons > invoice.lessons) {
-          print(
-              'Insufficient lessons remaining. Please add more lessons to the invoice.');
+        if (usedLessons > totalLessons) {
+          throw Exception(
+              'Insufficient lessons remaining. Total available: $totalLessons, Will be used: $usedLessons');
         }
 
-        // Update the invoice to reflect used lessons
-        await billingController.updateUsedLessons(invoice.id!, usedLessons);
+        // Note: You might want to update the "used_lessons" tracking
+        // across multiple invoices here if needed
       }
     } catch (e) {
-      rethrow; // Re-throw to handle in calling method
+      rethrow;
     }
   }
 
@@ -1209,22 +1224,33 @@ class ScheduleController extends GetxController {
     }
   }
 
-// FIX: Updated getRemainingLessons method
   int getRemainingLessons(int studentId, int courseId) {
     final billingController = Get.find<BillingController>();
-    final invoice = billingController.invoices.firstWhereOrNull(
-      (inv) => inv.studentId == studentId && inv.courseId == courseId,
-    );
 
-    if (invoice == null) return 0;
+    // GET ALL invoices for this student/course combination
+    final invoices = billingController.invoices
+        .where(
+          (inv) => inv.studentId == studentId && inv.courseId == courseId,
+        )
+        .toList();
+
+    if (invoices.isEmpty) return 0;
+
+    // SUM all lessons from all invoices
+    final totalLessons =
+        invoices.fold<int>(0, (sum, invoice) => sum + invoice.lessons);
 
     // Use the centralized getUsedLessons method for consistency
     final usedLessons = getUsedLessons(studentId, courseId);
-    final remaining = (invoice.lessons - usedLessons).clamp(0, invoice.lessons);
+    final remaining = (totalLessons - usedLessons).clamp(0, totalLessons);
 
     // Debug logging to help troubleshoot
     print('DEBUG: Student $studentId, Course $courseId');
-    print('Total lessons in invoice: ${invoice.lessons}');
+    print('Found ${invoices.length} invoices for student');
+    for (var i = 0; i < invoices.length; i++) {
+      print('  Invoice ${i + 1}: ${invoices[i].lessons} lessons');
+    }
+    print('Total lessons across all invoices: $totalLessons');
     print('Used lessons: $usedLessons');
     print('Remaining lessons: $remaining');
 
@@ -1236,9 +1262,12 @@ class ScheduleController extends GetxController {
     final billingController = Get.find<BillingController>();
     final settingsController = Get.find<SettingsController>();
 
-    final invoice = billingController.invoices.firstWhereOrNull(
-      (inv) => inv.studentId == studentId && inv.courseId == courseId,
-    );
+    // GET ALL invoices for this student/course
+    final invoices = billingController.invoices
+        .where(
+          (inv) => inv.studentId == studentId && inv.courseId == courseId,
+        )
+        .toList();
 
     final studentSchedules = schedules
         .where((s) => s.studentId == studentId && s.courseId == courseId)
@@ -1246,18 +1275,24 @@ class ScheduleController extends GetxController {
 
     print('=== BILLING DEBUG ===');
     print('Student ID: $studentId, Course ID: $courseId');
-    print('Invoice found: ${invoice != null}');
-    if (invoice != null) {
-      print('Invoice lessons: ${invoice.lessons}');
+    print('Found ${invoices.length} invoices for student');
+
+    int totalLessons = 0;
+    for (var i = 0; i < invoices.length; i++) {
+      print(
+          'Invoice ${i + 1}: ID=${invoices[i].id}, Lessons=${invoices[i].lessons}');
+      totalLessons += invoices[i].lessons;
     }
+    print('Total lessons across all invoices: $totalLessons');
+
     print(
         'Total schedules for this student/course: ${studentSchedules.length}');
     print(
         'countScheduledLessons setting: ${settingsController.countScheduledLessons.value}');
 
     for (var schedule in studentSchedules) {
-      print(
-          'Schedule ID: ${schedule.id}, Status: ${schedule.status}, Attended: ${schedule.attended}, LessonsDeducted: ${schedule.lessonsDeducted}');
+      print('Schedule ID: ${schedule.id}, Status: ${schedule.status}, '
+          'Attended: ${schedule.attended}, LessonsDeducted: ${schedule.lessonsDeducted}');
     }
 
     final usedLessons = getUsedLessons(studentId, courseId);
