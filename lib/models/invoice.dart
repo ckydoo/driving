@@ -14,7 +14,6 @@ class Invoice {
   final DateTime dueDate;
   final String status;
   final double totalAmount;
-  final String? courseName;
   List<BillingRecord> billingRecords;
   List<Payment> payments;
 
@@ -30,7 +29,6 @@ class Invoice {
     required this.dueDate,
     required this.status,
     required this.totalAmount,
-    this.courseName,
     this.billingRecords = const [],
     this.payments = const [],
   });
@@ -48,7 +46,6 @@ class Invoice {
       dueDate: DateTime.parse(map['due_date']),
       status: map['status'] ?? 'unpaid',
       totalAmount: map['total_amount']?.toDouble() ?? 0.0,
-      courseName: map['courseName'],
     );
   }
 
@@ -65,7 +62,6 @@ class Invoice {
       'due_date': dueDate.toIso8601String(),
       'status': status,
       'total_amount': totalAmount,
-      'courseName': courseName,
     };
   }
 
@@ -101,7 +97,6 @@ class Invoice {
       dueDate: dueDate ?? this.dueDate,
       status: status ?? this.status,
       totalAmount: totalAmount ?? this.totalAmount,
-      courseName: courseName ?? this.courseName,
     );
   }
 
@@ -117,7 +112,6 @@ class Invoice {
       createdAt: DateTime.parse(json['created_at']),
       dueDate: DateTime.parse(json['due_date']),
       status: json['status'] ?? 'unpaid',
-      courseName: json['course_name'],
       totalAmount: (json['total_amount'] as num?)!.toDouble(),
       payments: [],
     );
@@ -135,7 +129,6 @@ class Invoice {
       'created_at': createdAt.toIso8601String(),
       'due_date': dueDate.toIso8601String(),
       'status': status,
-      'course_name': courseName,
       'total_amount': totalAmount,
     };
   }

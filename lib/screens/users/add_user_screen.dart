@@ -1779,20 +1779,28 @@ class _AddUserScreenState extends State<AddUserScreen> {
         created_at: DateTime.now(),
       );
 
-      // Save the user and get the created user with ID
+      // Save the user to database and get the created user with ID
+      await userController.handleUser(user, isUpdate: false);
+
+      // Get the saved user from the controller (it should now have an ID)
+      final savedUser = userController.users.firstWhereOrNull(
+        (u) => u.email == user.email && u.phone == user.phone,
+      );
+
+      if (savedUser == null || savedUser.id == null) {
+        throw Exception('Failed to save user to database');
+      }
 
       // 2. Auto-create invoice if student and course selected
       String successMessage = '';
-      if (widget.role == 'student' &&
-          _selectedCourse != null &&
-          user.id != null) {
+      if (widget.role == 'student' && _selectedCourse != null) {
         final lessons = int.parse(_lessonsController.text);
         final pricePerLesson = _selectedCourse!.price.toDouble();
         final totalAmount = lessons * pricePerLesson;
 
         final invoice = Invoice(
           invoiceNumber: 'INV-${DateTime.now().millisecondsSinceEpoch}',
-          studentId: user.id!,
+          studentId: savedUser.id!, // Use the saved user's ID
           courseId: _selectedCourse!.id!,
           lessons: lessons,
           pricePerLesson: pricePerLesson,
@@ -1801,7 +1809,6 @@ class _AddUserScreenState extends State<AddUserScreen> {
           createdAt: DateTime.now(),
           dueDate: _invoiceDueDate!,
           status: 'unpaid',
-          courseName: _selectedCourse!.name,
         );
 
         // Create the invoice
@@ -1813,7 +1820,7 @@ class _AddUserScreenState extends State<AddUserScreen> {
         successMessage = '${widget.role.capitalize} created successfully';
       }
 
-      // Show success dialog
+      // Show success dialog (rest of the method remains the same)...
       Get.dialog(
         AlertDialog(
           title: Row(

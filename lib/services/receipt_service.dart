@@ -130,8 +130,6 @@ class ReceiptService {
                         pw.SizedBox(height: 8),
                         pw.Text('Invoice #${invoice.invoiceNumber}',
                             style: const pw.TextStyle(fontSize: 12)),
-                        pw.Text('Course: ${invoice.courseName ?? "N/A"}',
-                            style: const pw.TextStyle(fontSize: 12)),
                         pw.Text('Lessons: ${invoice.lessons}',
                             style: const pw.TextStyle(fontSize: 12)),
                       ],

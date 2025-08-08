@@ -576,7 +576,6 @@ class BillingController extends GetxController {
         createdAt: DateTime.now(),
         dueDate: dueDate,
         status: 'unpaid',
-        courseName: course.name,
         invoiceNumber: await _generateInvoiceNumber(),
         amountPaid: 0.0,
         totalAmount: lessons * course.price.toDouble(),

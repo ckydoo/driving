@@ -952,11 +952,29 @@ class _BillingScreenState extends State<BillingScreen>
 
   void _showPaymentDialog(
       BuildContext context, List<Invoice> studentInvoices, User student) {
+    // Calculate total outstanding balance for all unpaid invoices
+    double totalOutstanding = 0;
+    List<Invoice> unpaidInvoices = [];
+
+    for (var invoice in studentInvoices) {
+      double invoiceBalance =
+          invoice.totalAmountCalculated - invoice.amountPaid;
+      if (invoiceBalance > 0) {
+        unpaidInvoices.add(invoice);
+        totalOutstanding += invoiceBalance;
+      }
+    }
+
+    if (unpaidInvoices.isEmpty) {
+      _showErrorSnackbar('No outstanding balance for this student');
+      return;
+    }
+
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return PaymentDialog(
-          invoice: studentInvoices.first,
+          invoice: unpaidInvoices.first, // Primary invoice for reference
           studentName: '${student.fname} ${student.lname}',
           studentId: student.id!,
         );
