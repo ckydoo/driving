@@ -70,6 +70,37 @@ class SettingsController extends GetxController {
   final RxInt _tempLowLessonThreshold = 3.obs;
   final RxInt _tempAutoSaveInterval = 5.obs;
 
+// Lesson duration options (in hours)
+  static const List<double> lessonDurationOptions = [0.5, 1.0, 1.5, 2.0];
+  static Map<double, String> lessonDurationLabels = {
+    0.5: '30 minutes',
+    1.0: '1 hour',
+    1.5: '1.5 hours',
+    2.0: '2 hours',
+  };
+
+  // Method to set lesson duration
+  void setDefaultLessonDuration(double duration) {
+    if (lessonDurationOptions.contains(duration)) {
+      updateSetting('default_lesson_duration', duration, defaultLessonDuration);
+      _showSettingUpdatedSnackbar('lesson_duration');
+    }
+  }
+
+  // Helper method to get duration label
+  String getLessonDurationLabel(double duration) {
+    return lessonDurationLabels[duration] ?? '${duration} hours';
+  }
+
+  // Method to format duration for display
+  String formatLessonDuration(double hours) {
+    if (hours == 0.5) return '30 min';
+    if (hours == 1.0) return '1 hr';
+    if (hours == 1.5) return '1.5 hrs';
+    if (hours == 2.0) return '2 hrs';
+    return '${hours} hrs';
+  }
+
   @override
   void onInit() {
     super.onInit();
@@ -239,9 +270,6 @@ class SettingsController extends GetxController {
 
   void toggleAutoAssignVehicles(bool value) =>
       updateSetting('auto_assign_vehicles', value, autoAssignVehicles);
-
-  void setDefaultLessonDuration(double value) =>
-      updateSetting('default_lesson_duration', value, defaultLessonDuration);
 
   // Billing Settings Methods
   void toggleLowLessonWarning(bool value) =>

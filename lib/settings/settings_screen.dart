@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import '../controllers/settings_controller.dart';
 import '../controllers/auth_controller.dart';
+import '../widgets/lesson_duration_setting_tile.dart';
 
 class SettingsScreen extends StatefulWidget {
   @override
@@ -202,6 +203,14 @@ class _SettingsScreenState extends State<SettingsScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _buildSectionHeader('Lesson Configuration'),
+
+          // ADD THIS LINE - Choose one of the two options:
+          LessonDurationSettingTile(settingsController: settingsController),
+          // OR use the compact version:
+          // CompactLessonDurationSetting(settingsController: settingsController),
+
+          SizedBox(height: 16),
           _buildSectionHeader('Scheduling Policies'),
           _buildSettingsCard([
             _buildSwitchTile(

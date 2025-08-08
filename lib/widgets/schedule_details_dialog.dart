@@ -3,6 +3,7 @@ import 'package:driving/screens/schedule/create_schedule_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
+import 'dart:async';
 import '../models/schedule.dart';
 import '../controllers/schedule_controller.dart';
 import '../controllers/user_controller.dart';
@@ -10,11 +11,84 @@ import '../controllers/course_controller.dart';
 import '../controllers/fleet_controller.dart';
 import '../controllers/billing_controller.dart';
 
-class ScheduleDetailsDialog extends StatelessWidget {
+class ScheduleDetailsDialog extends StatefulWidget {
   final Schedule schedule;
 
   const ScheduleDetailsDialog({Key? key, required this.schedule})
       : super(key: key);
+
+  @override
+  State<ScheduleDetailsDialog> createState() => _ScheduleDetailsDialogState();
+}
+
+class _ScheduleDetailsDialogState extends State<ScheduleDetailsDialog> {
+  late Schedule currentSchedule;
+  Timer? _lessonTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    currentSchedule = widget.schedule;
+    _startLessonTimer();
+  }
+
+  @override
+  void dispose() {
+    _lessonTimer?.cancel();
+    super.dispose();
+  }
+
+  // Auto-complete lesson when time ends
+  void _startLessonTimer() {
+    if (currentSchedule.status.toLowerCase() == 'in progress') {
+      final now = DateTime.now();
+      final timeUntilEnd = currentSchedule.end.difference(now);
+
+      if (timeUntilEnd.isNegative) {
+        // Lesson should already be completed
+        _autoCompleteLessonIfNeeded();
+      } else {
+        // Set timer to auto-complete when lesson ends
+        _lessonTimer = Timer(timeUntilEnd, () {
+          _autoCompleteLessonIfNeeded();
+        });
+      }
+    }
+  }
+
+  Future<void> _autoCompleteLessonIfNeeded() async {
+    if (currentSchedule.status.toLowerCase() == 'in progress' && mounted) {
+      try {
+        final scheduleController = Get.find<ScheduleController>();
+        final completedSchedule = currentSchedule.copyWith(status: 'Completed');
+
+        await scheduleController.addOrUpdateSchedule(completedSchedule);
+
+        if (mounted) {
+          setState(() {
+            currentSchedule = completedSchedule;
+          });
+
+          Get.snackbar(
+            'Lesson Auto-Completed',
+            'The lesson has been automatically marked as completed',
+            backgroundColor: Colors.green,
+            colorText: Colors.white,
+            duration: Duration(seconds: 3),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          Get.snackbar(
+            'Auto-Complete Error',
+            'Failed to auto-complete lesson: ${e.toString()}',
+            backgroundColor: Colors.red,
+            colorText: Colors.white,
+          );
+        }
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -27,36 +101,38 @@ class ScheduleDetailsDialog extends StatelessWidget {
     // FIX 1: Use safe null checks for finding related entities
     final student = userController.users.firstWhereOrNull(
       (user) =>
-          user.id == schedule.studentId && user.role.toLowerCase() == 'student',
+          user.id == currentSchedule.studentId &&
+          user.role.toLowerCase() == 'student',
     );
 
     final instructor = userController.users.firstWhereOrNull(
       (user) =>
-          user.id == schedule.instructorId &&
+          user.id == currentSchedule.instructorId &&
           user.role.toLowerCase() == 'instructor',
     );
 
     final course = courseController.courses.firstWhereOrNull(
-      (c) => c.id == schedule.courseId,
+      (c) => c.id == currentSchedule.courseId,
     );
 
-    final vehicle = schedule.carId != null
-        ? fleetController.fleet.firstWhereOrNull((v) => v.id == schedule.carId)
+    final vehicle = currentSchedule.carId != null
+        ? fleetController.fleet
+            .firstWhereOrNull((v) => v.id == currentSchedule.carId)
         : null;
 
     // FIX 2: Get billing information with proper null safety
     final invoice = billingController.invoices.firstWhereOrNull(
       (inv) =>
-          inv.studentId == schedule.studentId &&
-          inv.courseId == schedule.courseId,
+          inv.studentId == currentSchedule.studentId &&
+          inv.courseId == currentSchedule.courseId,
     );
 
     // FIX 3: Use centralized lesson calculation method (if available)
     // Otherwise fallback to local calculation
     final usedLessons = scheduleController.schedules
         .where((s) =>
-            s.studentId == schedule.studentId &&
-            s.courseId == schedule.courseId &&
+            s.studentId == currentSchedule.studentId &&
+            s.courseId == currentSchedule.courseId &&
             s.attended)
         .fold<int>(0, (sum, s) => sum + (s.lessonsDeducted ?? 1));
 
@@ -77,13 +153,13 @@ class ScheduleDetailsDialog extends StatelessWidget {
             Container(
               padding: EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: _getStatusColor(schedule.status),
+                color: _getStatusColor(currentSchedule.status),
                 borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
               ),
               child: Row(
                 children: [
                   Icon(
-                    _getStatusIcon(schedule.status),
+                    _getStatusIcon(currentSchedule.status),
                     color: Colors.white,
                     size: 24,
                   ),
@@ -101,7 +177,7 @@ class ScheduleDetailsDialog extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          schedule.status.toUpperCase(),
+                          currentSchedule.status.toUpperCase(),
                           style: TextStyle(
                             fontSize: 12,
                             color: Colors.white.withOpacity(0.9),
@@ -135,13 +211,13 @@ class ScheduleDetailsDialog extends StatelessWidget {
                         _buildInfoRow(
                             'Date',
                             DateFormat('EEEE, MMMM dd, yyyy')
-                                .format(schedule.start)),
+                                .format(currentSchedule.start)),
                         _buildInfoRow('Start Time',
-                            DateFormat('HH:mm').format(schedule.start)),
+                            DateFormat('HH:mm').format(currentSchedule.start)),
                         _buildInfoRow('End Time',
-                            DateFormat('HH:mm').format(schedule.end)),
+                            DateFormat('HH:mm').format(currentSchedule.end)),
                         _buildInfoRow('Duration', _calculateDuration()),
-                        _buildInfoRow('Class Type', schedule.classType),
+                        _buildInfoRow('Class Type', currentSchedule.classType),
                       ],
                     ),
 
@@ -200,25 +276,29 @@ class ScheduleDetailsDialog extends StatelessWidget {
                           _buildInfoRow('Used Lessons', '$usedLessons'),
                           _buildInfoRow(
                               'Remaining Lessons', '$remainingLessons'),
-                          _buildInfoRow('Lesson Status',
-                              schedule.attended ? 'Attended' : 'Not Attended'),
+                          _buildInfoRow(
+                              'Lesson Status',
+                              currentSchedule.attended
+                                  ? 'Attended'
+                                  : 'Not Attended'),
                           _buildInfoRow('Lessons Deducted',
-                              '${schedule.lessonsDeducted ?? 1}'),
+                              '${currentSchedule.lessonsDeducted ?? 1}'),
                         ],
                       ),
                       SizedBox(height: 20),
                     ],
 
                     // Progress Section
-                    if (schedule.attended ||
-                        schedule.status.toLowerCase() == 'completed') ...[
+                    if (currentSchedule.attended ||
+                        currentSchedule.status.toLowerCase() ==
+                            'completed') ...[
                       _buildInfoSection(
                         'Progress',
                         Icons.trending_up,
                         Colors.teal,
                         [
                           _buildInfoRow('Lessons Completed',
-                              '${schedule.lessonsCompleted ?? 0}'),
+                              '${currentSchedule.lessonsCompleted ?? 0}'),
                           // FIX 4: Calculate progress safely
                           _buildInfoRow(
                               'Progress',
@@ -231,7 +311,7 @@ class ScheduleDetailsDialog extends StatelessWidget {
                     ],
 
                     // Recurrence Section - FIX 5: Check for recurrence properly
-                    if (schedule.isRecurring == true) ...[
+                    if (currentSchedule.isRecurring == true) ...[
                       _buildInfoSection(
                         'Recurrence',
                         Icons.repeat,
@@ -239,13 +319,14 @@ class ScheduleDetailsDialog extends StatelessWidget {
                         [
                           _buildInfoRow(
                               'Pattern',
-                              schedule.recurrencePattern?.capitalizeFirst ??
+                              currentSchedule
+                                      .recurrencePattern?.capitalizeFirst ??
                                   'N/A'),
-                          if (schedule.recurrenceEndDate != null)
+                          if (currentSchedule.recurrenceEndDate != null)
                             _buildInfoRow(
                               'End Date',
                               DateFormat('MMM dd, yyyy')
-                                  .format(schedule.recurrenceEndDate!),
+                                  .format(currentSchedule.recurrenceEndDate!),
                             ),
                         ],
                       ),
@@ -265,15 +346,150 @@ class ScheduleDetailsDialog extends StatelessWidget {
               ),
               child: Column(
                 children: [
+                  // Show attendance status if already marked
+                  if (currentSchedule.attended) ...[
+                    Container(
+                      padding: EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: _getAttendanceStatusColor(currentSchedule.status)
+                            .withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                            color: _getAttendanceStatusColor(
+                                    currentSchedule.status)
+                                .withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          // Animated icon for "In Progress"
+                          if (currentSchedule.status.toLowerCase() ==
+                              'in progress')
+                            TweenAnimationBuilder<double>(
+                              duration: Duration(seconds: 2),
+                              tween: Tween(begin: 0.0, end: 1.0),
+                              builder: (context, value, child) {
+                                return Transform.rotate(
+                                  angle: value * 2 * 3.14159,
+                                  child: Icon(
+                                    Icons.access_time,
+                                    color: Colors.orange,
+                                    size: 20,
+                                  ),
+                                );
+                              },
+                            )
+                          else
+                            Icon(
+                                _getAttendanceStatusIcon(
+                                    currentSchedule.status),
+                                color: _getAttendanceStatusColor(
+                                    currentSchedule.status),
+                                size: 20),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      _getAttendanceStatusText(
+                                          currentSchedule.status),
+                                      style: TextStyle(
+                                        color: _getAttendanceStatusColor(
+                                            currentSchedule.status),
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    if (currentSchedule.status.toLowerCase() ==
+                                        'in progress') ...[
+                                      SizedBox(width: 8),
+                                      Container(
+                                        padding: EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: Colors.orange,
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          'AUTO',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                                if (currentSchedule.status.toLowerCase() ==
+                                    'in progress') ...[
+                                  SizedBox(height: 4),
+                                  StreamBuilder<DateTime>(
+                                    stream: Stream.periodic(
+                                        Duration(seconds: 1),
+                                        (_) => DateTime.now()),
+                                    builder: (context, snapshot) {
+                                      final now =
+                                          snapshot.data ?? DateTime.now();
+                                      final timeRemaining =
+                                          currentSchedule.end.difference(now);
+
+                                      if (timeRemaining.isNegative) {
+                                        return Text(
+                                          'Auto-completing lesson...',
+                                          style: TextStyle(
+                                            color: Colors.green,
+                                            fontSize: 12,
+                                            fontStyle: FontStyle.italic,
+                                          ),
+                                        );
+                                      }
+
+                                      final minutes = timeRemaining.inMinutes;
+                                      final seconds =
+                                          timeRemaining.inSeconds % 60;
+
+                                      return Text(
+                                        'Auto-completes in ${minutes}m ${seconds}s',
+                                        style: TextStyle(
+                                          color: Colors.orange.withOpacity(0.7),
+                                          fontSize: 12,
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    SizedBox(height: 12),
+                  ],
+
                   // Attendance Actions (for instructors)
-                  if (schedule.status.toLowerCase() != 'cancelled' &&
-                      !schedule.attended) ...[
+                  if (currentSchedule.status.toLowerCase() != 'cancelled' &&
+                      !currentSchedule.attended &&
+                      _canMarkAttendance()) ...[
                     _buildAttendanceSection(scheduleController),
                     SizedBox(height: 12),
                   ],
 
-                  // Management Actions
-                  if (schedule.status.toLowerCase() != 'cancelled') ...[
+                  // Show time remaining message if attendance not available yet
+                  if (currentSchedule.status.toLowerCase() != 'cancelled' &&
+                      !currentSchedule.attended &&
+                      !_canMarkAttendance()) ...[
+                    _buildAttendanceTimeMessage(),
+                    SizedBox(height: 12),
+                  ],
+
+                  // Management Actions (only if not attended)
+                  if (currentSchedule.status.toLowerCase() != 'cancelled' &&
+                      !currentSchedule.attended) ...[
                     Row(
                       children: [
                         Expanded(
@@ -304,8 +520,9 @@ class ScheduleDetailsDialog extends StatelessWidget {
                     SizedBox(height: 12),
                   ],
 
-                  // Cancel Action
-                  if (schedule.status.toLowerCase() != 'cancelled') ...[
+                  // Cancel Action (only if not attended)
+                  if (currentSchedule.status.toLowerCase() != 'cancelled' &&
+                      !currentSchedule.attended) ...[
                     SizedBox(
                       width: double.infinity,
                       child: OutlinedButton.icon(
@@ -328,7 +545,6 @@ class ScheduleDetailsDialog extends StatelessWidget {
     );
   }
 
-  // FIX 6: Add missing _buildAttendanceSection method
   Widget _buildAttendanceSection(ScheduleController controller) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -370,6 +586,78 @@ class ScheduleDetailsDialog extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+
+  // Check if attendance can be marked (5 minutes before lesson starts)
+  bool _canMarkAttendance() {
+    final now = DateTime.now();
+    final fiveMinutesBeforeStart =
+        currentSchedule.start.subtract(Duration(minutes: 5));
+
+    // Allow marking attendance from 5 minutes before start until lesson end
+    return now.isAfter(fiveMinutesBeforeStart) &&
+        now.isBefore(currentSchedule.end);
+  }
+
+  // Build message showing when attendance will be available
+  Widget _buildAttendanceTimeMessage() {
+    final now = DateTime.now();
+    final fiveMinutesBeforeStart =
+        currentSchedule.start.subtract(Duration(minutes: 5));
+
+    String message;
+    Color messageColor;
+    IconData messageIcon;
+
+    if (now.isBefore(fiveMinutesBeforeStart)) {
+      final timeUntilAvailable = fiveMinutesBeforeStart.difference(now);
+      final hours = timeUntilAvailable.inHours;
+      final minutes = timeUntilAvailable.inMinutes % 60;
+
+      String timeString;
+      if (hours > 0) {
+        timeString = '${hours}h ${minutes}m';
+      } else {
+        timeString = '${minutes}m';
+      }
+
+      message = 'Attendance will be available in $timeString';
+      messageColor = Colors.orange;
+      messageIcon = Icons.access_time;
+    } else if (now.isAfter(currentSchedule.end)) {
+      message = 'Lesson time has ended - attendance no longer available';
+      messageColor = Colors.red;
+      messageIcon = Icons.event_busy;
+    } else {
+      // This case shouldn't happen if _canMarkAttendance() is working correctly
+      message = 'Attendance is now available';
+      messageColor = Colors.green;
+      messageIcon = Icons.check_circle_outline;
+    }
+
+    return Container(
+      padding: EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: messageColor.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: messageColor.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(messageIcon, color: messageColor, size: 20),
+          SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(
+                color: messageColor,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -435,7 +723,7 @@ class ScheduleDetailsDialog extends StatelessWidget {
 
   // FIX 7: Calculate duration properly
   String _calculateDuration() {
-    final duration = schedule.end.difference(schedule.start);
+    final duration = currentSchedule.end.difference(currentSchedule.start);
     final hours = duration.inHours;
     final minutes = duration.inMinutes % 60;
 
@@ -489,13 +777,58 @@ class ScheduleDetailsDialog extends StatelessWidget {
   Future<void> _markAttendance(
       bool attended, ScheduleController controller) async {
     try {
-      await controller.toggleAttendance(schedule.id!, attended);
-      Get.back(); // Close dialog
+      String newStatus;
+
+      if (attended) {
+        // Check if lesson is currently happening (between start and end time)
+        final now = DateTime.now();
+        if (now.isBefore(currentSchedule.end)) {
+          // If current time is before lesson end, it's still in progress
+          newStatus = 'In Progress';
+        } else {
+          // Only mark as completed if lesson time has actually ended
+          newStatus = 'Completed';
+        }
+      } else {
+        newStatus = 'Absent';
+      }
+
+      // Update the schedule with attendance information
+      final updatedSchedule = currentSchedule.copyWith(
+        attended: attended,
+        status: newStatus,
+      );
+
+      // Call the controller method
+      await controller.addOrUpdateSchedule(updatedSchedule);
+
+      // Update local state to reflect changes immediately
+      setState(() {
+        currentSchedule = updatedSchedule;
+      });
+
+      // Start auto-completion timer if lesson is in progress
+      if (newStatus == 'In Progress') {
+        _startLessonTimer();
+      }
+
+      String message;
+      if (attended) {
+        message = newStatus == 'In Progress'
+            ? 'Student marked present - lesson started. Will auto-complete at ${DateFormat('HH:mm').format(currentSchedule.end)}'
+            : 'Lesson marked as completed';
+      } else {
+        message = 'Lesson marked as absent';
+      }
+
       Get.snackbar(
         'Success',
-        attended ? 'Lesson marked as attended' : 'Lesson marked as absent',
-        backgroundColor: attended ? Colors.green : Colors.orange,
+        message,
+        backgroundColor: attended
+            ? (newStatus == 'In Progress' ? Colors.orange : Colors.green)
+            : Colors.red,
         colorText: Colors.white,
+        duration: Duration(seconds: 4),
       );
     } catch (e) {
       Get.snackbar(
@@ -509,13 +842,13 @@ class ScheduleDetailsDialog extends StatelessWidget {
 
   void _editSchedule() {
     Get.back(); // Close dialog
-    Get.to(() => SingleScheduleScreen(existingSchedule: schedule));
+    Get.to(() => SingleScheduleScreen(existingSchedule: currentSchedule));
   }
 
   void _rescheduleLesson() {
     Get.back(); // Close dialog
     // Create a copy of the schedule for rescheduling
-    final rescheduleSchedule = schedule.copyWith(
+    final rescheduleSchedule = currentSchedule.copyWith(
       id: null, // New schedule
       status: 'Scheduled',
       attended: false,
@@ -546,7 +879,7 @@ class ScheduleDetailsDialog extends StatelessWidget {
     if (confirmed == true) {
       try {
         // Update the schedule status to cancelled
-        final cancelledSchedule = schedule.copyWith(status: 'Cancelled');
+        final cancelledSchedule = currentSchedule.copyWith(status: 'Cancelled');
         await controller.addOrUpdateSchedule(cancelledSchedule);
 
         Get.back(); // Close dialog
@@ -564,6 +897,46 @@ class ScheduleDetailsDialog extends StatelessWidget {
           colorText: Colors.white,
         );
       }
+    }
+  }
+
+  // Helper methods for attendance status display
+  Color _getAttendanceStatusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'in progress':
+        return Colors.orange;
+      case 'completed':
+        return Colors.green;
+      case 'absent':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  IconData _getAttendanceStatusIcon(String status) {
+    switch (status.toLowerCase()) {
+      case 'in progress':
+        return Icons.access_time;
+      case 'completed':
+        return Icons.check_circle;
+      case 'absent':
+        return Icons.cancel;
+      default:
+        return Icons.info;
+    }
+  }
+
+  String _getAttendanceStatusText(String status) {
+    switch (status.toLowerCase()) {
+      case 'in progress':
+        return 'Lesson In Progress';
+      case 'completed':
+        return 'Lesson Completed';
+      case 'absent':
+        return 'Student Absent';
+      default:
+        return 'Attendance Marked';
     }
   }
 }
