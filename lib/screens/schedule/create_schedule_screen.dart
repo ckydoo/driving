@@ -100,13 +100,19 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
     });
 
     try {
+      // IMPORTANT: Force refresh billing data before checking courses
+      await _billingController.fetchBillingData();
+      print('✓ Billing data refreshed before loading student courses');
+
       // Get student's invoices to determine available courses
       final studentInvoices = _billingController.invoices
           .where((invoice) => invoice.studentId == student.id)
           .toList();
 
+      print(
+          'DEBUG: Found ${studentInvoices.length} invoices for student ${student.id}');
+
       if (studentInvoices.isEmpty) {
-        // No billing found - show error and prevent scheduling
         Get.snackbar(
           'No Billing Found',
           'This student has no invoices. Please create an invoice before scheduling.',
@@ -117,7 +123,7 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
         setState(() {
           _availableCourses = [];
           _remainingLessons = 0;
-          _selectedCourse = null; // Reset selected course
+          _selectedCourse = null;
         });
         return;
       }
@@ -131,12 +137,17 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
           (c) => c.id == invoice.courseId,
         );
         if (course != null && !uniqueCourseIds.contains(course.id)) {
-          // Use the centralized method
+          // Force refresh and get remaining lessons
           final remaining = _scheduleController.getRemainingLessons(
               student.id!, invoice.courseId);
 
-          // Only include courses with remaining lessons
-          if (remaining > 0) {
+          print(
+              'DEBUG: Course ${course.name} (ID: ${course.id}) has $remaining remaining lessons');
+
+          // Check settings for billing validation
+          final settingsController = Get.find<SettingsController>();
+          if (remaining > 0 ||
+              !settingsController.enforceBillingValidation.value) {
             validCourses.add(course);
             uniqueCourseIds.add(course.id!);
           }
@@ -144,7 +155,6 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
       }
 
       if (validCourses.isEmpty) {
-        // Student has invoices but no remaining lessons
         Get.snackbar(
           'No Lessons Remaining',
           'This student has used all their billed lessons. Please add more lessons to their invoice.',
@@ -155,25 +165,23 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
         setState(() {
           _availableCourses = [];
           _remainingLessons = 0;
-          _selectedCourse = null; // Reset selected course
+          _selectedCourse = null;
         });
         return;
       }
 
-      // Auto-select the first course with most remaining lessons
+      // Sort courses by remaining lessons (descending)
       validCourses.sort((a, b) {
         final aRemaining =
             _scheduleController.getRemainingLessons(student.id!, a.id!);
         final bRemaining =
             _scheduleController.getRemainingLessons(student.id!, b.id!);
-        return bRemaining.compareTo(aRemaining); // Descending order
+        return bRemaining.compareTo(aRemaining);
       });
 
       setState(() {
         _availableCourses = validCourses;
         _selectedCourse = validCourses.first;
-
-        // Set remaining lessons for selected course using centralized method
         _remainingLessons = _scheduleController.getRemainingLessons(
             student.id!, _selectedCourse!.id!);
       });
@@ -183,7 +191,6 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
         _assignInstructorVehicle(_selectedInstructor!);
       }
 
-      // Show success message with lesson count
       Get.snackbar(
         'Student Selected',
         'Found ${validCourses.length} course(s) with remaining lessons',
@@ -192,6 +199,7 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
         duration: Duration(seconds: 3),
       );
     } catch (e) {
+      print('ERROR in _loadStudentCourses: $e');
       Get.snackbar(
         'Error',
         'Failed to load student courses: ${e.toString()}',
@@ -201,13 +209,29 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
       setState(() {
         _availableCourses = [];
         _remainingLessons = 0;
-        _selectedCourse = null; // Reset selected course
+        _selectedCourse = null;
       });
     } finally {
       setState(() {
         _isLoading = false;
       });
     }
+  }
+
+  // Add a method to manually refresh student courses
+  Future<void> _refreshStudentCourses() async {
+    if (_selectedStudent != null) {
+      await _loadStudentCourses(_selectedStudent!);
+    }
+  }
+
+  // Add refresh button to your UI (optional)
+  Widget _buildRefreshButton() {
+    return IconButton(
+      icon: Icon(Icons.refresh),
+      onPressed: _refreshStudentCourses,
+      tooltip: 'Refresh billing data',
+    );
   }
 
   int _getUsedLessons(int studentId, int courseId) {

@@ -1312,64 +1312,119 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     );
   }
 
-  // Helper methods
   Future<void> _loadStudentCourses(User student) async {
     setState(() {
       _isLoading = true;
     });
 
     try {
+      // Get student's invoices to determine available courses
       final studentInvoices = _billingController.invoices
           .where((invoice) => invoice.studentId == student.id)
           .toList();
 
-      if (studentInvoices.isNotEmpty) {
-        List<Course> courses = [];
-        for (var invoice in studentInvoices) {
-          final course = _courseController.courses.firstWhereOrNull(
-            (c) => c.id == invoice.courseId,
-          );
-          if (course != null) {
-            final usedLessons = _getUsedLessons(student.id!, invoice.courseId);
-            final remaining = invoice.lessons - usedLessons;
+      print(
+          'DEBUG: Found ${studentInvoices.length} invoices for student ${student.id}');
 
-            if (remaining > 0) {
-              // Check if course is already in the list to avoid duplicates
-              if (!courses.any((c) => c.id == course.id)) {
-                courses.add(course);
-              }
-            }
-          }
-        }
-
-        setState(() {
-          _availableCourses = courses;
-          // Only set selected course if it exists in the new list
-          if (courses.isNotEmpty) {
-            if (_selectedCourse == null ||
-                !courses.any((c) => c.id == _selectedCourse!.id)) {
-              _selectedCourse = courses.first;
-            }
-            _updateLessonCounts();
-          } else {
-            _selectedCourse = null;
-            _remainingLessons = 0;
-          }
-        });
-      } else {
+      if (studentInvoices.isEmpty) {
+        // No billing found - show error and prevent scheduling
         Get.snackbar(
           'No Billing Found',
-          'This student has no active billing. Please create an invoice first.',
-          backgroundColor: Colors.orange,
+          'This student has no invoices. Please create an invoice before scheduling.',
+          backgroundColor: Colors.red,
           colorText: Colors.white,
-          duration: Duration(seconds: 4),
+          duration: Duration(seconds: 5),
         );
         setState(() {
           _availableCourses = [];
-          _selectedCourse = null;
           _remainingLessons = 0;
+          _selectedCourse = null;
         });
+        return;
       }
+
+      // Use a Set to track unique course IDs to avoid duplicates
+      Set<int> uniqueCourseIds = {};
+      List<Course> validCourses = [];
+
+      for (var invoice in studentInvoices) {
+        final course = _courseController.courses.firstWhereOrNull(
+          (c) => c.id == invoice.courseId,
+        );
+        if (course != null && !uniqueCourseIds.contains(course.id)) {
+          // Use the centralized method
+          final remaining = _scheduleController.getRemainingLessons(
+              student.id!, invoice.courseId);
+
+          print(
+              'DEBUG: Course ${course.name} (ID: ${course.id}) has $remaining remaining lessons');
+
+          // FIXED: Only include courses with remaining lessons OR if billing validation is disabled
+          final settingsController = Get.find<SettingsController>();
+          if (remaining > 0 ||
+              !settingsController.enforceBillingValidation.value) {
+            validCourses.add(course);
+            uniqueCourseIds.add(course.id!);
+          }
+        }
+      }
+
+      if (validCourses.isEmpty) {
+        // Student has invoices but no remaining lessons
+        Get.snackbar(
+          'No Lessons Remaining',
+          'This student has used all their billed lessons. Please add more lessons to their invoice.',
+          backgroundColor: Colors.orange,
+          colorText: Colors.white,
+          duration: Duration(seconds: 5),
+        );
+        setState(() {
+          _availableCourses = [];
+          _remainingLessons = 0;
+          _selectedCourse = null;
+        });
+        return;
+      }
+
+      // Auto-select the first course with most remaining lessons
+      validCourses.sort((a, b) {
+        final aRemaining =
+            _scheduleController.getRemainingLessons(student.id!, a.id!);
+        final bRemaining =
+            _scheduleController.getRemainingLessons(student.id!, b.id!);
+        return bRemaining.compareTo(aRemaining); // Descending order
+      });
+
+      setState(() {
+        _availableCourses = validCourses;
+        _selectedCourse = validCourses.first;
+
+        // Set remaining lessons for selected course using centralized method
+        _remainingLessons = _scheduleController.getRemainingLessons(
+            student.id!, _selectedCourse!.id!);
+      });
+
+      // Show success message with lesson count
+      Get.snackbar(
+        'Student Selected',
+        'Found ${validCourses.length} course(s) with remaining lessons',
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+        duration: Duration(seconds: 3),
+      );
+    } catch (e) {
+      print('ERROR in _loadStudentCourses: $e');
+      Get.snackbar(
+        'Error',
+        'Failed to load student courses: ${e.toString()}',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+      setState(() {
+        _availableCourses = [];
+        _remainingLessons = 0;
+        _selectedCourse = null;
+      });
     } finally {
       setState(() {
         _isLoading = false;
@@ -1401,6 +1456,44 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
         _selectedVehicle = assignedVehicle;
       });
     }
+  }
+
+// DEBUGGING METHOD: Add this to help troubleshoot
+  void debugBillingAndSchedules(int studentId, int courseId) {
+    final billingController = Get.find<BillingController>();
+    final settingsController = Get.find<SettingsController>();
+
+    final invoice = billingController.invoices.firstWhereOrNull(
+      (inv) => inv.studentId == studentId && inv.courseId == courseId,
+    );
+
+    final studentSchedules = _scheduleController.schedules
+        .where((s) => s.studentId == studentId && s.courseId == courseId)
+        .toList();
+
+    print('=== BILLING DEBUG ===');
+    print('Student ID: $studentId, Course ID: $courseId');
+    print('Invoice found: ${invoice != null}');
+    if (invoice != null) {
+      print('Invoice lessons: ${invoice.lessons}');
+    }
+    print(
+        'Total schedules for this student/course: ${studentSchedules.length}');
+    print(
+        'countScheduledLessons setting: ${settingsController.countScheduledLessons.value}');
+
+    for (var schedule in studentSchedules) {
+      print(
+          'Schedule ID: ${schedule.id}, Status: ${schedule.status}, Attended: ${schedule.attended}, LessonsDeducted: ${schedule.lessonsDeducted}');
+    }
+
+    final usedLessons = _getUsedLessons(studentId, courseId);
+    final remainingLessons =
+        _scheduleController.getRemainingLessons(studentId, courseId);
+
+    print('Used lessons: $usedLessons');
+    print('Remaining lessons: $remainingLessons');
+    print('=== END DEBUG ===');
   }
 
   Future<void> _selectTime(bool isStartTime) async {

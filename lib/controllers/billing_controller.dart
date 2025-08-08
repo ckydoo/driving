@@ -1,3 +1,4 @@
+import 'package:driving/controllers/schedule_controller.dart';
 import 'package:driving/models/billing_record.dart';
 import 'package:driving/models/course.dart';
 import 'package:driving/models/invoice.dart';
@@ -69,22 +70,6 @@ class BillingController extends GetxController {
   Future<void> deleteInvoice(int invoiceId) async {
     await DatabaseHelper.instance.deleteInvoice(invoiceId);
     fetchBillingData(); // Refresh the list of invoices
-  }
-
-  Future<void> updateInvoice(Map<String, dynamic> updatedInvoiceData) async {
-    try {
-      isLoading(true);
-      print(
-          'BillingController: updateInvoice called with data: $updatedInvoiceData'); // ADD THIS
-      await _dbHelper.updateInvoice(updatedInvoiceData);
-      await fetchBillingData(); // Refresh the invoice list
-    } catch (e) {
-      print(
-          'BillingController: Error updating invoice: ${e.toString()}'); // ADD THIS
-      Get.snackbar('Error', 'Failed to update invoice');
-    } finally {
-      isLoading(false);
-    }
   }
 
   // Edit an invoice
@@ -165,44 +150,6 @@ class BillingController extends GetxController {
     final sequenceNumber = (count + 1).toString().padLeft(4, '0');
 
     return 'INV-$datePrefix-$sequenceNumber';
-  }
-
-  Future<void> addLessonsBack(int studentId, int lessonsToAdd) async {
-    try {
-      print(
-          'BillingController: addLessonsBack called with studentId: $studentId, lessonsToAdd: $lessonsToAdd'); // ADD THIS
-      final index = invoices.indexWhere((inv) => inv.studentId == studentId);
-      print('BillingController: index of invoice: $index'); // ADD THIS
-      if (index == -1) {
-        print(
-            'BillingController: Invoice not found for studentId: $studentId'); // ADD THIS
-        return;
-      }
-
-      final invoice = invoices[index];
-      print(
-          'BillingController: Found invoice: ${invoice.toString()}'); // ADD THIS  (You might need to override toString() in your Invoice model)
-      final updatedLessons = invoice.lessons + lessonsToAdd;
-      print(
-          'BillingController: Updated lessons count: $updatedLessons'); // ADD THIS
-
-      // Update in the database
-      await _dbHelper.updateInvoice({
-        'id': invoice.id,
-        'lessons': updatedLessons,
-      });
-      print('BillingController: Invoice updated in DB'); // ADD THIS
-
-      // Update locally
-      final updatedInvoice = invoice.copyWith(lessons: updatedLessons);
-      invoices[index] = updatedInvoice;
-      invoices.refresh();
-      print('BillingController: Invoice updated locally'); // ADD THIS
-    } catch (e) {
-      print(
-          'BillingController: Error in addLessonsBack: ${e.toString()}'); // ADD THIS
-      Get.snackbar('Error', 'Failed to update billing info');
-    }
   }
 
   Future<void> updateUsedLessons(int invoiceId, int usedLessons) async {
@@ -686,6 +633,84 @@ class BillingController extends GetxController {
       await fetchBillingData();
     } catch (e) {
       throw Exception('Failed to process bulk payment: $e');
+    }
+  }
+
+  Future<void> updateInvoice(Map<String, dynamic> updatedInvoiceData) async {
+    try {
+      isLoading(true);
+      print(
+          'BillingController: updateInvoice called with data: $updatedInvoiceData');
+
+      // Update in database
+      await _dbHelper.updateInvoice(updatedInvoiceData);
+      print('✓ Invoice updated in database');
+
+      // Force refresh all billing data
+      await fetchBillingData();
+      print('✓ Billing data refreshed after update');
+
+      // Notify other controllers that billing data has changed
+      Get.find<ScheduleController>().refreshBillingData();
+
+      Get.snackbar(
+        'Success',
+        'Invoice updated successfully',
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
+    } catch (e) {
+      print('BillingController: Error updating invoice: ${e.toString()}');
+      Get.snackbar('Error', 'Failed to update invoice: ${e.toString()}');
+    } finally {
+      isLoading(false);
+    }
+  }
+
+  // Enhanced addLessonsBack method
+  Future<void> addLessonsBack(int studentId, int lessonsToAdd) async {
+    try {
+      print(
+          'BillingController: addLessonsBack called with studentId: $studentId, lessonsToAdd: $lessonsToAdd');
+
+      final index = invoices.indexWhere((inv) => inv.studentId == studentId);
+      print('BillingController: index of invoice: $index');
+
+      if (index == -1) {
+        print('BillingController: Invoice not found for studentId: $studentId');
+        Get.snackbar('Error', 'No invoice found for this student');
+        return;
+      }
+
+      final invoice = invoices[index];
+      print('BillingController: Found invoice with ${invoice.lessons} lessons');
+
+      final updatedLessons = invoice.lessons + lessonsToAdd;
+      print('BillingController: Updated lessons count: $updatedLessons');
+
+      // Update in the database
+      await _dbHelper.updateInvoice({
+        'id': invoice.id,
+        'lessons': updatedLessons,
+      });
+      print('✓ Invoice updated in DB');
+
+      // Force refresh all data instead of just local update
+      await fetchBillingData();
+      print('✓ Billing data refreshed');
+
+      // Notify schedule controller
+      Get.find<ScheduleController>().refreshBillingData();
+
+      Get.snackbar(
+        'Success',
+        'Added $lessonsToAdd lessons. Total now: $updatedLessons',
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
+    } catch (e) {
+      print('BillingController: Error in addLessonsBack: ${e.toString()}');
+      Get.snackbar('Error', 'Failed to update billing info: ${e.toString()}');
     }
   }
 }
