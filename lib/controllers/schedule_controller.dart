@@ -1,9 +1,9 @@
-// lib/controllers/schedule_controller.dart
 import 'package:driving/controllers/billing_controller.dart';
 import 'package:driving/controllers/course_controller.dart';
 import 'package:driving/controllers/settings_controller.dart';
 import 'package:driving/controllers/user_controller.dart';
 import 'package:driving/services/lesson_tracking_service.dart';
+import 'package:driving/services/lesson_tracking_validator.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../models/schedule.dart';
@@ -19,6 +19,9 @@ class ScheduleController extends GetxController {
   
   // Centralized lesson tracking service
   final LessonTrackingService _lessonTracker = LessonTrackingService();
+  
+  // Validation service
+  final LessonTrackingValidator _validator = LessonTrackingValidator();
 
   // Filtered schedules for performance
   final RxList<Schedule> filteredSchedules = <Schedule>[].obs;
@@ -825,5 +828,87 @@ class ScheduleController extends GetxController {
     );
 
     return _lessonTracker.getLessonUsageStats(schedules, invoice, studentId, courseId);
+  }
+
+  /// Run comprehensive validation of the lesson tracking system
+  Future<void> validateLessonTrackingSystem() async {
+    try {
+      isLoading(true);
+
+      // Get billing data for validation
+      final billingController = Get.find<BillingController>();
+      
+      // Run validation
+      final result = _validator.validateSystem(
+        schedules: schedules,
+        invoices: billingController.invoices,
+      );
+
+      // Generate and display report
+      final report = _validator.generateHealthReport(result);
+      print('=== LESSON TRACKING VALIDATION REPORT ===');
+      print(report);
+
+      // Show summary to user
+      if (result.isValid) {
+        Get.snackbar(
+          'System Validation',
+          'All validations passed! System is operating correctly.',
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+          duration: Duration(seconds: 4),
+        );
+      } else {
+        Get.snackbar(
+          'System Validation',
+          'Found ${result.errors.length} errors and ${result.warnings.length} warnings. Check console for details.',
+          backgroundColor: result.errors.isNotEmpty ? Colors.red : Colors.orange,
+          colorText: Colors.white,
+          duration: Duration(seconds: 6),
+        );
+      }
+
+      // Auto-fix inconsistent schedules if found
+      if (result.stats.inconsistentSchedules > 0) {
+        final shouldFix = await Get.dialog<bool>(
+          AlertDialog(
+            title: Text('Inconsistent Schedules Found'),
+            content: Text(
+              'Found ${result.stats.inconsistentSchedules} schedules with inconsistent status/attendance flags. '
+              'Would you like to automatically fix them?'
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Get.back(result: false),
+                child: Text('No'),
+              ),
+              ElevatedButton(
+                onPressed: () => Get.back(result: true),
+                child: Text('Yes, Fix Them'),
+              ),
+            ],
+          ),
+        ) ?? false;
+
+        if (shouldFix) {
+          await fixInconsistentSchedules();
+        }
+      }
+
+    } catch (e) {
+      Get.snackbar(
+        'Validation Error',
+        'Failed to run validation: ${e.toString()}',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    } finally {
+      isLoading(false);
+    }
+  }
+
+  /// Validate a single schedule
+  ScheduleValidationResult validateSingleSchedule(Schedule schedule) {
+    return _validator.validateSchedule(schedule);
   }
 }
