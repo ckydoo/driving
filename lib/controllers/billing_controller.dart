@@ -4,9 +4,13 @@ import 'package:driving/models/invoice.dart';
 import 'package:driving/models/payment.dart';
 import 'package:driving/models/user.dart';
 import 'package:driving/services/receipt_service.dart';
+import 'package:driving/services/lesson_tracking_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../services/database_helper.dart';
+
+// Forward declaration to avoid circular import
+class ScheduleController;
 
 class BillingController extends GetxController {
   final RxList<Invoice> invoices = <Invoice>[].obs;
@@ -14,6 +18,9 @@ class BillingController extends GetxController {
   final RxBool isLoading = false.obs;
 
   final DatabaseHelper _dbHelper = Get.find();
+  
+  // Use centralized lesson tracking service
+  final LessonTrackingService _lessonTracker = LessonTrackingService();
 
   @override
   void onInit() {
@@ -167,74 +174,41 @@ class BillingController extends GetxController {
     return 'INV-$datePrefix-$sequenceNumber';
   }
 
-  Future<void> addLessonsBack(int studentId, int lessonsToAdd) async {
+  /// Get lesson usage statistics using centralized tracking service
+  /// This method needs access to schedules, so it coordinates with ScheduleController
+  LessonUsageStats? getLessonUsageStats(int studentId, int courseId) {
     try {
-      print(
-          'BillingController: addLessonsBack called with studentId: $studentId, lessonsToAdd: $lessonsToAdd'); // ADD THIS
-      final index = invoices.indexWhere((inv) => inv.studentId == studentId);
-      print('BillingController: index of invoice: $index'); // ADD THIS
-      if (index == -1) {
-        print(
-            'BillingController: Invoice not found for studentId: $studentId'); // ADD THIS
-        return;
-      }
+      // Get the schedule controller to access current schedules
+      final scheduleController = Get.find<ScheduleController>();
+      final invoice = invoices.firstWhereOrNull(
+        (inv) => inv.studentId == studentId && inv.courseId == courseId,
+      );
 
-      final invoice = invoices[index];
-      print(
-          'BillingController: Found invoice: ${invoice.toString()}'); // ADD THIS  (You might need to override toString() in your Invoice model)
-      final updatedLessons = invoice.lessons + lessonsToAdd;
-      print(
-          'BillingController: Updated lessons count: $updatedLessons'); // ADD THIS
-
-      // Update in the database
-      await _dbHelper.updateInvoice({
-        'id': invoice.id,
-        'lessons': updatedLessons,
-      });
-      print('BillingController: Invoice updated in DB'); // ADD THIS
-
-      // Update locally
-      final updatedInvoice = invoice.copyWith(lessons: updatedLessons);
-      invoices[index] = updatedInvoice;
-      invoices.refresh();
-      print('BillingController: Invoice updated locally'); // ADD THIS
+      return _lessonTracker.getLessonUsageStats(
+        scheduleController.schedules, 
+        invoice, 
+        studentId, 
+        courseId
+      );
     } catch (e) {
-      print(
-          'BillingController: Error in addLessonsBack: ${e.toString()}'); // ADD THIS
-      Get.snackbar('Error', 'Failed to update billing info');
+      print('Error getting lesson usage stats: $e');
+      return null;
     }
   }
 
-  Future<void> updateUsedLessons(int invoiceId, int usedLessons) async {
-    try {
-      final index = invoices.indexWhere((inv) => inv.id == invoiceId);
-      if (index == -1) {
-        throw Exception('Invoice not found');
-      }
-
-      final invoice = invoices[index];
-
-      // Update in the database
-      await _dbHelper.updateInvoice({
-        'id': invoiceId,
-        'used_lessons':
-            usedLessons, // Add this field to your database if not exists
-      });
-
-      // Update locally - you might need to add usedLessons field to your Invoice model
-      // For now, we'll track it through the existing lessons field relationship
-      final updatedInvoice = invoice.copyWith(
-          // If you have a usedLessons field in Invoice model, update it here
-          // usedLessons: usedLessons,
-          );
-
-      invoices[index] = updatedInvoice;
-      invoices.refresh();
-    } catch (e) {
-      print('Error updating used lessons: ${e.toString()}');
-      throw Exception('Failed to update lesson usage');
-    }
+  /// Check if a student has remaining lessons for a course
+  bool hasRemainingLessons(int studentId, int courseId) {
+    final stats = getLessonUsageStats(studentId, courseId);
+    return stats != null && stats.remainingLessons > 0;
   }
+
+  /// Get remaining lesson count for a student's course
+  int getRemainingLessonsCount(int studentId, int courseId) {
+    final stats = getLessonUsageStats(studentId, courseId);
+    return stats?.remainingLessons ?? 0;
+  }
+
+
 
   Future<List<Map<String, dynamic>>> getPayments() async {
     final db = await _dbHelper.database;

@@ -127,18 +127,13 @@ class _ScheduleDetailsDialogState extends State<ScheduleDetailsDialog> {
           inv.courseId == currentSchedule.courseId,
     );
 
-    // FIX 3: Use centralized lesson calculation method (if available)
-    // Otherwise fallback to local calculation
-    final usedLessons = scheduleController.schedules
-        .where((s) =>
-            s.studentId == currentSchedule.studentId &&
-            s.courseId == currentSchedule.courseId &&
-            s.attended)
-        .fold<int>(0, (sum, s) => sum + (s.lessonsDeducted ?? 1));
-
-    final remainingLessons = invoice != null
-        ? (invoice.lessons - usedLessons).clamp(0, invoice.lessons)
-        : 0;
+    // Use centralized lesson tracking service for consistent calculations
+    final lessonStats = scheduleController.getLessonUsageStats(
+      currentSchedule.studentId, 
+      currentSchedule.courseId
+    );
+    final usedLessons = lessonStats.usedLessons;
+    final remainingLessons = lessonStats.remainingLessons;
 
     return Dialog(
       insetPadding: EdgeInsets.all(16),

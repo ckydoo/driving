@@ -848,8 +848,8 @@ class _SettingsScreenState extends State<SettingsScreen>
               settingsController.toggleAutoCreateBillingRecords,
             ),
             _buildSwitchTile(
-              'Count Scheduled Lessons',
-              'Include scheduled lessons in billing calculations',
+              'Count Scheduled Lessons (Legacy)',
+              'NOTE: This setting no longer affects billing calculations. Only attended/completed lessons are deducted from billing.',
               settingsController.countScheduledLessons,
               settingsController.toggleCountScheduledLessons,
             ),
