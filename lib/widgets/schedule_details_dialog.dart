@@ -133,7 +133,8 @@ class _ScheduleDetailsDialogState extends State<ScheduleDetailsDialog> {
         .where((s) =>
             s.studentId == currentSchedule.studentId &&
             s.courseId == currentSchedule.courseId &&
-            s.attended)
+            s.attended &&
+            s.status.toLowerCase() != 'cancelled') // Exclude cancelled lessons
         .fold<int>(0, (sum, s) => sum + (s.lessonsDeducted ?? 1));
 
     final remainingLessons = invoice != null
@@ -860,8 +861,31 @@ class _ScheduleDetailsDialogState extends State<ScheduleDetailsDialog> {
     final confirmed = await Get.dialog<bool>(
       AlertDialog(
         title: Text('Cancel Lesson'),
-        content: Text(
-            'Are you sure you want to cancel this lesson? This action cannot be undone.'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Are you sure you want to cancel this lesson?'),
+            SizedBox(height: 8),
+            Text(
+              'This will:',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            Text('• Mark the lesson as cancelled'),
+            if (currentSchedule.attended &&
+                (currentSchedule.lessonsDeducted ?? 1) > 0)
+              Text(
+                  '• Return ${currentSchedule.lessonsDeducted ?? 1} lesson(s) to the student'),
+            SizedBox(height: 8),
+            Text(
+              'This action cannot be undone.',
+              style: TextStyle(
+                color: Colors.red,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+        ),
         actions: [
           TextButton(
             onPressed: () => Get.back(result: false),
@@ -878,8 +902,45 @@ class _ScheduleDetailsDialogState extends State<ScheduleDetailsDialog> {
 
     if (confirmed == true) {
       try {
-        // Update the schedule status to cancelled
-        final cancelledSchedule = currentSchedule.copyWith(status: 'Cancelled');
+        final billingController = Get.find<BillingController>();
+
+        // If the lesson was attended and lessons were deducted, refund them
+        if (currentSchedule.attended &&
+            (currentSchedule.lessonsDeducted ?? 1) > 0) {
+          // Find the invoice for this student and course
+          final invoice = billingController.invoices.firstWhereOrNull(
+            (inv) =>
+                inv.studentId == currentSchedule.studentId &&
+                inv.courseId == currentSchedule.courseId,
+          );
+
+          if (invoice != null) {
+            // Create a new invoice with lessons refunded
+            final lessonsToRefund = currentSchedule.lessonsDeducted ?? 1;
+            final updatedInvoice = invoice.copyWith(
+              lessons: invoice.lessons + lessonsToRefund,
+            );
+
+            // Update the invoice
+            await billingController.updateInvoice(updatedInvoice.toMap());
+
+            // Optional: Add a note to track the refund
+            Get.snackbar(
+              'Lessons Refunded',
+              '$lessonsToRefund lesson(s) have been returned to the student\'s account',
+              backgroundColor: Colors.green,
+              colorText: Colors.white,
+              duration: Duration(seconds: 3),
+            );
+          }
+        }
+
+        // Update the schedule status to cancelled and reset attendance
+        final cancelledSchedule = currentSchedule.copyWith(
+          status: 'Cancelled',
+          attended: false,
+        );
+
         await controller.addOrUpdateSchedule(cancelledSchedule);
 
         Get.back(); // Close dialog

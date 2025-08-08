@@ -445,10 +445,6 @@ class _PaymentDialogState extends State<PaymentDialog>
         }
 
         await _showSuccessAnimation();
-
-        if (mounted && Navigator.canPop(context)) {
-          Navigator.of(context).pop(true);
-        }
       } catch (e) {
         Get.snackbar(
           'Error',
@@ -621,7 +617,12 @@ class _PaymentDialogState extends State<PaymentDialog>
               ),
               const SizedBox(height: 20),
               ElevatedButton(
-                onPressed: () => Navigator.of(context).pop(),
+                onPressed: () {
+                  // Close the success dialog
+                  Navigator.of(context).pop();
+                  // Close the main payment dialog
+                  Navigator.of(context).pop(true);
+                },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.green.shade600,
                   foregroundColor: Colors.white,

@@ -867,30 +867,6 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
             ),
             SizedBox(height: 16),
             DropdownButtonFormField<String>(
-              value: _selectedClassType,
-              decoration: InputDecoration(
-                labelText: 'Class Type',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.school),
-              ),
-              items: ['Practical', 'Theory']
-                  .map((type) => DropdownMenuItem(
-                        value: type,
-                        child: Text(type),
-                      ))
-                  .toList(),
-              onChanged: (String? value) {
-                setState(() {
-                  _selectedClassType = value!;
-                  // Reset instructor and vehicle when class type changes
-                  _selectedInstructor = null;
-                  _selectedVehicle = null;
-                  _showAvailabilityStatus = false;
-                });
-              },
-            ),
-            SizedBox(height: 16),
-            DropdownButtonFormField<String>(
               value: _selectedStatus,
               decoration: InputDecoration(
                 labelText: 'Status',
