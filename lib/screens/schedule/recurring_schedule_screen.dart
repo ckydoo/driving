@@ -156,6 +156,7 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
               onChanged: (User? value) {
                 setState(() {
                   _selectedStudent = value;
+
                   _selectedCourse = null;
                   _remainingLessons = 0;
                   _availableCourses = [];
@@ -313,6 +314,16 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
                   value == null ? 'Please select an instructor' : null,
               items: _userController.users
                   .where((user) => user.role.toLowerCase() == 'instructor')
+                  .where((instructor) {
+                    // For practical lessons, only show instructors with assigned vehicles
+                    if (_selectedClassType == 'Practical') {
+                      return _fleetController.fleet.any(
+                        (vehicle) => vehicle.instructor == instructor.id,
+                      );
+                    }
+                    // For theory lessons, show all instructors
+                    return true;
+                  })
                   .map((user) => DropdownMenuItem(
                         value: user,
                         child: Text('${user.fname} ${user.lname}'),
@@ -329,26 +340,63 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
               },
             ),
             SizedBox(height: 16),
-            DropdownButtonFormField<Fleet>(
-              value: _selectedVehicle,
-              decoration: InputDecoration(
-                labelText: 'Vehicle',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.directions_car),
+            // Vehicle field - make it read-only for practical lessons
+            if (_selectedClassType == 'Practical') ...[
+              TextFormField(
+                readOnly: true,
+                decoration: InputDecoration(
+                  labelText: 'Assigned Vehicle',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.directions_car),
+                  suffixIcon: Icon(Icons.lock, color: Colors.grey),
+                ),
+                controller: TextEditingController(
+                  text: _selectedVehicle != null
+                      ? '${_selectedVehicle!.make} ${_selectedVehicle!.model} (${_selectedVehicle!.carPlate})'
+                      : 'No vehicle assigned to instructor',
+                ),
+                validator: (value) => _selectedVehicle == null
+                    ? 'Instructor must have an assigned vehicle for practical lessons'
+                    : null,
               ),
-              items: _fleetController.fleet
-                  .map((vehicle) => DropdownMenuItem(
-                        value: vehicle,
-                        child: Text(
-                            '${vehicle.make} ${vehicle.model} (${vehicle.carPlate})'),
-                      ))
-                  .toList(),
-              onChanged: (Fleet? value) {
-                setState(() {
-                  _selectedVehicle = value;
-                });
-              },
-            ),
+              SizedBox(height: 8),
+              Text(
+                'Vehicle is automatically assigned based on instructor selection',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade600,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ] else ...[
+              // For theory lessons, vehicle is optional and can be manually selected
+              DropdownButtonFormField<Fleet>(
+                value: _selectedVehicle,
+                decoration: InputDecoration(
+                  labelText: 'Vehicle (Optional)',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.directions_car),
+                ),
+                items: [
+                  DropdownMenuItem<Fleet>(
+                    value: null,
+                    child: Text('No vehicle required'),
+                  ),
+                  ..._fleetController.fleet
+                      .map((vehicle) => DropdownMenuItem(
+                            value: vehicle,
+                            child: Text(
+                                '${vehicle.make} ${vehicle.model} (${vehicle.carPlate})'),
+                          ))
+                      .toList(),
+                ],
+                onChanged: (Fleet? value) {
+                  setState(() {
+                    _selectedVehicle = value;
+                  });
+                },
+              ),
+            ],
           ],
         ),
       ),
@@ -624,6 +672,30 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
               ],
+            ),
+            SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              value: _selectedClassType,
+              decoration: InputDecoration(
+                labelText: 'Class Type',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.school),
+              ),
+              items: ['Practical', 'Theory']
+                  .map((type) => DropdownMenuItem(
+                        value: type,
+                        child: Text(type),
+                      ))
+                  .toList(),
+              onChanged: (String? value) {
+                setState(() {
+                  _selectedClassType = value!;
+                  // Reset instructor and vehicle when class type changes
+                  _selectedInstructor = null;
+                  _selectedVehicle = null;
+                });
+                _updatePreviewCount();
+              },
             ),
             SizedBox(height: 16),
             DropdownButtonFormField<String>(
@@ -1922,6 +1994,17 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
       return false;
     }
 
+    // Check if vehicle is required and available for practical lessons
+    if (_selectedClassType == 'Practical') {
+      if (_selectedVehicle == null) {
+        return false;
+      }
+      // Ensure the vehicle is actually assigned to the selected instructor
+      if (_selectedVehicle!.instructor != _selectedInstructor!.id) {
+        return false;
+      }
+    }
+
     // Check if start date and time is not in the past
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -1932,7 +2015,7 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
       return false;
     }
 
-    // NEW: Check if time is in the past for today's date
+    // Check if time is in the past for today's date
     if (startDay.isAtSameMomentAs(today)) {
       final startDateTime = DateTime(
         _selectedStartDate.year,
@@ -1954,6 +2037,11 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
 
     // Check if preview count doesn't exceed remaining lessons
     if (_previewCount > _remainingLessons) {
+      return false;
+    }
+
+    // Check for validation errors
+    if (_getValidationErrors().isNotEmpty) {
       return false;
     }
 

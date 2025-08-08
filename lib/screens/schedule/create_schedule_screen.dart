@@ -220,15 +220,30 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
       (vehicle) => vehicle.instructor == instructor.id,
     );
 
-    if (assignedVehicle != null) {
-      setState(() {
-        _selectedVehicle = assignedVehicle;
-      });
+    setState(() {
+      _selectedVehicle = assignedVehicle;
+    });
+
+    // Show message if instructor has no assigned vehicle for practical lessons
+    if (assignedVehicle == null && _selectedClassType == 'Practical') {
+      Get.snackbar(
+        'No Vehicle Assigned',
+        'This instructor has no vehicle assigned. Please assign a vehicle to this instructor first.',
+        backgroundColor: Colors.orange,
+        colorText: Colors.white,
+        duration: Duration(seconds: 4),
+      );
     }
   }
 
   Future<void> _checkInstructorAvailability() async {
-    if (_selectedInstructor == null) return;
+    if (_selectedInstructor == null) {
+      setState(() {
+        _instructorAvailable = true;
+        _showAvailabilityStatus = false;
+      });
+      return;
+    }
 
     final startDateTime = DateTime(
       _selectedDate.year,
@@ -246,16 +261,53 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
       _endTime.minute,
     );
 
-    final available = await _scheduleController.checkAvailability(
-      _selectedInstructor!.id!,
-      startDateTime,
-      endDateTime,
-    );
+    try {
+      // Check if instructor has any conflicting schedules
+      final conflictingSchedules =
+          _scheduleController.schedules.where((schedule) {
+        // Skip checking against the current schedule being edited
+        if (widget.existingSchedule != null &&
+            schedule.id == widget.existingSchedule!.id) {
+          return false;
+        }
 
-    setState(() {
-      _instructorAvailable = available;
-      _showAvailabilityStatus = true;
-    });
+        // Check if it's the same instructor
+        if (schedule.instructorId != _selectedInstructor!.id) {
+          return false;
+        }
+
+        // Check for time overlap
+        return (startDateTime.isBefore(schedule.end) &&
+            endDateTime.isAfter(schedule.start));
+      }).toList();
+
+      setState(() {
+        _instructorAvailable = conflictingSchedules.isEmpty;
+        _showAvailabilityStatus = true;
+      });
+
+      // If there are conflicts, show details
+      if (conflictingSchedules.isNotEmpty) {
+        final conflictTime =
+            DateFormat('hh:mm a').format(conflictingSchedules.first.start);
+        final conflictEndTime =
+            DateFormat('hh:mm a').format(conflictingSchedules.first.end);
+
+        Get.snackbar(
+          'Instructor Conflict',
+          'Instructor has a lesson from $conflictTime to $conflictEndTime',
+          backgroundColor: Colors.orange,
+          colorText: Colors.white,
+          duration: Duration(seconds: 4),
+        );
+      }
+    } catch (e) {
+      print('Error checking instructor availability: $e');
+      setState(() {
+        _instructorAvailable = false;
+        _showAvailabilityStatus = true;
+      });
+    }
   }
 
   @override
@@ -558,6 +610,16 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
                   value == null ? 'Please select an instructor' : null,
               items: _userController.users
                   .where((user) => user.role.toLowerCase() == 'instructor')
+                  .where((instructor) {
+                    // For practical lessons, only show instructors with assigned vehicles
+                    if (_selectedClassType == 'Practical') {
+                      return _fleetController.fleet.any(
+                        (vehicle) => vehicle.instructor == instructor.id,
+                      );
+                    }
+                    // For theory lessons, show all instructors
+                    return true;
+                  })
                   .map((user) => DropdownMenuItem(
                         value: user,
                         child: Text('${user.fname} ${user.lname}'),
@@ -567,6 +629,7 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
                 setState(() {
                   _selectedInstructor = value;
                   _showAvailabilityStatus = false;
+                  _instructorAvailable = true;
                 });
                 if (value != null) {
                   _assignInstructorVehicle(value);
@@ -575,26 +638,63 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
               },
             ),
             SizedBox(height: 16),
-            DropdownButtonFormField<Fleet>(
-              value: _selectedVehicle,
-              decoration: InputDecoration(
-                labelText: 'Vehicle',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.directions_car),
+            // Vehicle field - make it read-only for practical lessons
+            if (_selectedClassType == 'Practical') ...[
+              TextFormField(
+                readOnly: true,
+                decoration: InputDecoration(
+                  labelText: 'Assigned Vehicle',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.directions_car),
+                  suffixIcon: Icon(Icons.lock, color: Colors.grey),
+                ),
+                controller: TextEditingController(
+                  text: _selectedVehicle != null
+                      ? '${_selectedVehicle!.make} ${_selectedVehicle!.model} (${_selectedVehicle!.carPlate})'
+                      : 'No vehicle assigned to instructor',
+                ),
+                validator: (value) => _selectedVehicle == null
+                    ? 'Instructor must have an assigned vehicle for practical lessons'
+                    : null,
               ),
-              items: _fleetController.fleet
-                  .map((vehicle) => DropdownMenuItem(
-                        value: vehicle,
-                        child: Text(
-                            '${vehicle.make} ${vehicle.model} (${vehicle.carPlate})'),
-                      ))
-                  .toList(),
-              onChanged: (Fleet? value) {
-                setState(() {
-                  _selectedVehicle = value;
-                });
-              },
-            ),
+              SizedBox(height: 8),
+              Text(
+                'Vehicle is automatically assigned based on instructor selection',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade600,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ] else ...[
+              // For theory lessons, vehicle is optional and can be manually selected
+              DropdownButtonFormField<Fleet>(
+                value: _selectedVehicle,
+                decoration: InputDecoration(
+                  labelText: 'Vehicle (Optional)',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.directions_car),
+                ),
+                items: [
+                  DropdownMenuItem<Fleet>(
+                    value: null,
+                    child: Text('No vehicle required'),
+                  ),
+                  ..._fleetController.fleet
+                      .map((vehicle) => DropdownMenuItem(
+                            value: vehicle,
+                            child: Text(
+                                '${vehicle.make} ${vehicle.model} (${vehicle.carPlate})'),
+                          ))
+                      .toList(),
+                ],
+                onChanged: (Fleet? value) {
+                  setState(() {
+                    _selectedVehicle = value;
+                  });
+                },
+              ),
+            ],
             if (_showAvailabilityStatus) ...[
               SizedBox(height: 12),
               Container(
@@ -621,7 +721,7 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
                     Text(
                       _instructorAvailable
                           ? 'Instructor Available'
-                          : 'Instructor Not Available',
+                          : 'Instructor Not Available - Time Conflict',
                       style: TextStyle(
                         color: _instructorAvailable
                             ? Colors.green.shade700
@@ -743,6 +843,30 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
             ),
             SizedBox(height: 16),
             DropdownButtonFormField<String>(
+              value: _selectedClassType,
+              decoration: InputDecoration(
+                labelText: 'Class Type',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.school),
+              ),
+              items: ['Practical', 'Theory']
+                  .map((type) => DropdownMenuItem(
+                        value: type,
+                        child: Text(type),
+                      ))
+                  .toList(),
+              onChanged: (String? value) {
+                setState(() {
+                  _selectedClassType = value!;
+                  // Reset instructor and vehicle when class type changes
+                  _selectedInstructor = null;
+                  _selectedVehicle = null;
+                  _showAvailabilityStatus = false;
+                });
+              },
+            ),
+            SizedBox(height: 16),
+            DropdownButtonFormField<String>(
               value: _selectedStatus,
               decoration: InputDecoration(
                 labelText: 'Status',
@@ -833,6 +957,11 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
             _endTime = picked;
           }
         });
+
+        // Re-check instructor availability when time changes
+        if (_selectedInstructor != null) {
+          _checkInstructorAvailability();
+        }
       }
     } catch (e) {
       print('Error in time picker: $e');
@@ -1289,9 +1418,24 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
     if (_selectedStudent == null ||
         _selectedInstructor == null ||
         _selectedCourse == null ||
-        _remainingLessons <= 0 ||
-        !_instructorAvailable) {
+        _remainingLessons <= 0) {
       return false;
+    }
+
+    // Check if instructor is available
+    if (!_instructorAvailable) {
+      return false;
+    }
+
+    // Check if vehicle is required and available for practical lessons
+    if (_selectedClassType == 'Practical') {
+      if (_selectedVehicle == null) {
+        return false;
+      }
+      // Ensure the vehicle is actually assigned to the selected instructor
+      if (_selectedVehicle!.instructor != _selectedInstructor!.id) {
+        return false;
+      }
     }
 
     // Check for validation errors
@@ -1314,7 +1458,7 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
       }
     }
 
-    // NEW: Check if the selected day is a business operating day
+    // Check if the selected day is a business operating day
     final settingsController = Get.find<SettingsController>();
     final selectedDayName = _getDayName(_selectedDate.weekday);
 

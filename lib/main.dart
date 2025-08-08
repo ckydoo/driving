@@ -66,7 +66,7 @@ class MyApp extends StatelessWidget {
           ),
         ),
       ),
-      initialBinding: FinalAppBindings(),
+      initialBinding: InitialBinding(),
 
       // Use protected routes with middleware
       getPages: ProtectedRoutes.routes,

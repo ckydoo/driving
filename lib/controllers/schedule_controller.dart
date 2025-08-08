@@ -3,6 +3,9 @@ import 'package:driving/controllers/billing_controller.dart';
 import 'package:driving/controllers/course_controller.dart';
 import 'package:driving/controllers/settings_controller.dart';
 import 'package:driving/controllers/user_controller.dart';
+import 'package:driving/models/billing_record.dart';
+import 'package:driving/services/consistency_checker_service.dart';
+import 'package:driving/services/lesson_counting_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../models/schedule.dart';
@@ -492,122 +495,6 @@ class ScheduleController extends GetxController {
     }
   }
 
-// Helper method to get used lessons count
-  int getUsedLessons(int studentId, int courseId) {
-    final settingsController = Get.find<SettingsController>();
-
-    if (settingsController.countScheduledLessons.value) {
-      // Count both scheduled and attended lessons (exclude cancelled)
-      return schedules
-          .where((s) =>
-              s.studentId == studentId &&
-              s.courseId == courseId &&
-              s.status.toLowerCase() != 'cancelled')
-          .fold<int>(0, (sum, s) => sum + s.lessonsDeducted);
-    } else {
-      // Only count attended lessons
-      return schedules
-          .where((s) =>
-              s.studentId == studentId && s.courseId == courseId && s.attended)
-          .fold<int>(0, (sum, s) => sum + s.lessonsDeducted);
-    }
-  }
-
-  /// Toggle attendance with consistent status update
-  Future<void> toggleAttendance(int scheduleId, bool attended) async {
-    try {
-      isLoading(true);
-
-      final index = schedules.indexWhere((s) => s.id == scheduleId);
-      if (index == -1) {
-        Get.snackbar('Error', 'Schedule not found');
-        return;
-      }
-
-      final schedule = schedules[index];
-
-      // Calculate lessons based on duration
-      final actualLessonsDeducted = schedule.lessonsDeducted;
-
-      // Create temporary schedule with proposed changes
-      final tempSchedule = schedule.copyWith(attended: attended);
-
-      if (attended && _isBilledLessonsExceeded(tempSchedule)) {
-        Get.snackbar(
-          'Lesson Limit Exceeded',
-          'Cannot mark as attended. Student has no remaining lessons.',
-          backgroundColor: Colors.red,
-          colorText: Colors.white,
-        );
-        return;
-      }
-
-      // Determine the correct status based on attendance
-      String newStatus;
-      if (attended) {
-        newStatus = ScheduleStatus.completed;
-      } else if (schedule.isPast) {
-        newStatus = ScheduleStatus.missed;
-      } else {
-        newStatus = ScheduleStatus.scheduled;
-      }
-
-      final updated = schedule.copyWith(
-        attended: attended,
-        status: newStatus,
-        lessonsCompleted: attended
-            ? schedule.lessonsCompleted + actualLessonsDeducted
-            : schedule.lessonsCompleted - actualLessonsDeducted,
-      );
-
-      // Update database with both attendance and status
-      await _dbHelper.updateSchedule({
-        'id': scheduleId,
-        'attended': attended ? 1 : 0,
-        'status': newStatus,
-        'lessonsCompleted': updated.lessonsCompleted,
-      });
-
-      schedules[index] = updated;
-      schedules.refresh();
-      _applyFilters();
-
-      // Update billing record status if billing controller exists
-      try {
-        final billingController = Get.find<BillingController>();
-        final invoice = billingController.invoices.firstWhereOrNull(
-          (inv) =>
-              inv.studentId == schedule.studentId &&
-              inv.courseId == schedule.courseId,
-        );
-
-        if (invoice != null) {
-          final billingRecords =
-              await billingController.getBillingRecordsForInvoice(invoice.id!);
-          if (billingRecords.isNotEmpty) {
-            await billingController.updateBillingRecordStatus(
-              billingRecords.first.id!,
-              attended ? 'Completed' : 'Pending',
-            );
-          }
-        }
-      } catch (e) {
-        print('Error updating billing record: $e');
-      }
-
-      Get.snackbar(
-        'Success',
-        attended ? 'Marked as attended' : 'Marked as not attended',
-        backgroundColor: attended ? Colors.green : Colors.orange,
-        colorText: Colors.white,
-      );
-    } catch (e) {
-      Get.snackbar('Error', 'Failed to update attendance: ${e.toString()}');
-    } finally {
-      isLoading(false);
-    }
-  }
-
   /// Cancel schedule with proper status update
   Future<void> cancelSchedule(int scheduleId) async {
     try {
@@ -746,87 +633,6 @@ class ScheduleController extends GetxController {
     }
   }
 
-  /// Run status migration to fix inconsistencies
-  Future<void> runStatusMigration() async {
-    try {
-      isLoading(true);
-
-      // Get migration stats before running
-      final stats = await ScheduleStatusMigration.instance.getMigrationStats();
-      print('Migration stats before: $stats');
-
-      // Run the migration
-      await ScheduleStatusMigration.instance.runStatusMigration();
-
-      // Reload schedules after migration
-      await fetchSchedules();
-
-      Get.snackbar(
-        'Success',
-        'Schedule status migration completed successfully',
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
-        duration: Duration(seconds: 3),
-      );
-    } catch (e) {
-      Get.snackbar(
-        'Error',
-        'Migration failed: ${e.toString()}',
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-      );
-    } finally {
-      isLoading(false);
-    }
-  }
-
-  /// Validate all schedules for consistency
-  List<Schedule> get inconsistentSchedules {
-    return schedules.where((schedule) => !schedule.isStatusConsistent).toList();
-  }
-
-  /// Fix all inconsistent schedules
-  Future<void> fixInconsistentSchedules() async {
-    try {
-      isLoading(true);
-
-      final inconsistent = inconsistentSchedules;
-      if (inconsistent.isEmpty) {
-        Get.snackbar('Info', 'No inconsistent schedules found');
-        return;
-      }
-
-      for (final schedule in inconsistent) {
-        final corrected = schedule.withConsistentStatus;
-
-        await _dbHelper.updateSchedule({
-          'id': schedule.id,
-          'status': corrected.status,
-          'attended': corrected.attended ? 1 : 0,
-        });
-
-        final index = schedules.indexWhere((s) => s.id == schedule.id);
-        if (index != -1) {
-          schedules[index] = corrected;
-        }
-      }
-
-      schedules.refresh();
-      _applyFilters();
-
-      Get.snackbar(
-        'Success',
-        'Fixed ${inconsistent.length} inconsistent schedules',
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
-      );
-    } catch (e) {
-      Get.snackbar('Error', 'Failed to fix inconsistencies: ${e.toString()}');
-    } finally {
-      isLoading(false);
-    }
-  }
-
 // Add this method to ScheduleController
   int getEffectiveLessonsUsed(int studentId, int courseId) {
     final settingsController = Get.find<SettingsController>();
@@ -848,54 +654,107 @@ class ScheduleController extends GetxController {
     }
   }
 
+  int getUsedLessons(int studentId, int courseId) {
+    return LessonCountingService.instance.getUsedLessons(studentId, courseId);
+  }
+
+  /// Updated to use centralized lesson counting service
+  int getRemainingLessons(int studentId, int courseId) {
+    return LessonCountingService.instance
+        .getRemainingLessons(studentId, courseId);
+  }
+
+  /// Updated to use centralized lesson counting service
   bool canCreateSchedule(int studentId, int courseId, int lessonsToDeduct) {
-    final remainingLessons = getRemainingLessons(studentId, courseId);
-    return lessonsToDeduct <= remainingLessons;
+    return LessonCountingService.instance
+        .canScheduleLessons(studentId, courseId, lessonsToDeduct);
   }
 
-  /// Get a descriptive status of lesson usage for a student's course
+  /// Updated to use centralized lesson counting service
   Map<String, int> getLessonUsageStats(int studentId, int courseId) {
-    final billingController = Get.find<BillingController>();
-    final invoice = billingController.invoices.firstWhereOrNull(
-      (inv) => inv.studentId == studentId && inv.courseId == courseId,
-    );
-
-    if (invoice == null) {
-      return {
-        'total': 0,
-        'used': 0,
-        'remaining': 0,
-        'attended': 0,
-        'scheduled': 0,
-      };
-    }
-
-    final attendedLessons = schedules
-        .where((s) =>
-            s.studentId == studentId && s.courseId == courseId && s.attended)
-        .fold<int>(0, (sum, s) => sum + s.lessonsDeducted);
-
-    final scheduledLessons = schedules
-        .where((s) =>
-            s.studentId == studentId &&
-            s.courseId == courseId &&
-            !s.attended &&
-            s.status.toLowerCase() != 'cancelled')
-        .fold<int>(0, (sum, s) => sum + s.lessonsDeducted);
-
-    final totalUsed = getUsedLessons(studentId, courseId);
-
-    return {
-      'total': invoice.lessons,
-      'used': totalUsed,
-      'remaining': (invoice.lessons - totalUsed).clamp(0, invoice.lessons),
-      'attended': attendedLessons,
-      'scheduled': scheduledLessons,
-    };
+    return LessonCountingService.instance
+        .getLessonUsageStats(studentId, courseId);
   }
 
-  // Update _isBilledLessonsExceeded method
-  bool _isBilledLessonsExceeded(Schedule schedule) {
+  /// ENHANCED: Toggle attendance with full consistency checking
+  Future<void> toggleAttendance(int scheduleId, bool attended) async {
+    try {
+      isLoading(true);
+
+      final index = schedules.indexWhere((s) => s.id == scheduleId);
+      if (index == -1) {
+        Get.snackbar('Error', 'Schedule not found');
+        return;
+      }
+
+      final schedule = schedules[index];
+
+      // CONSISTENCY CHECK: Validate lesson availability before marking attended
+      if (attended) {
+        final canMark = LessonCountingService.instance
+            .validateScheduleChange(schedule, willBeAttended: true);
+
+        if (!canMark) {
+          final remaining = LessonCountingService.instance
+              .getRemainingLessons(schedule.studentId, schedule.courseId);
+
+          Get.snackbar(
+            'Lesson Limit Exceeded',
+            'Cannot mark as attended. Remaining lessons: $remaining',
+            backgroundColor: Colors.red,
+            colorText: Colors.white,
+          );
+          return;
+        }
+      }
+
+      // ALWAYS SYNC: Determine correct status based on attendance and timing
+      String newStatus;
+      if (attended) {
+        newStatus = ScheduleStatus.completed;
+      } else if (schedule.isPast && !attended) {
+        newStatus = ScheduleStatus.missed;
+      } else {
+        newStatus = ScheduleStatus.scheduled;
+      }
+
+      final updated = schedule.copyWith(
+        attended: attended,
+        status: newStatus, // Always sync these two fields
+      );
+
+      // ATOMIC UPDATE: Update both attendance and status together
+      await _dbHelper.updateSchedule({
+        'id': scheduleId,
+        'attended': attended ? 1 : 0,
+        'status': newStatus,
+      });
+
+      // Update local state
+      schedules[index] = updated;
+      schedules.refresh();
+      _applyFilters();
+
+      // Update billing record status consistently
+      await _updateBillingRecordStatus(schedule, attended);
+
+      Get.snackbar(
+        'Success',
+        attended ? 'Marked as attended' : 'Marked as not attended',
+        backgroundColor: attended ? Colors.green : Colors.orange,
+        colorText: Colors.white,
+      );
+    } catch (e) {
+      print('Error toggling attendance: $e');
+      Get.snackbar('Error', 'Failed to update attendance: ${e.toString()}');
+    } finally {
+      isLoading(false);
+    }
+  }
+
+  /// Helper method for consistent billing record updates
+  Future<void> _updateBillingRecordStatus(
+      Schedule schedule, bool attended) async {
     try {
       final billingController = Get.find<BillingController>();
       final invoice = billingController.invoices.firstWhereOrNull(
@@ -904,61 +763,429 @@ class ScheduleController extends GetxController {
             inv.courseId == schedule.courseId,
       );
 
-      if (invoice == null) return false;
-
-      final totalLessons = invoice.lessons;
-      final usedLessons = getUsedLessons(schedule.studentId, schedule.courseId);
-
-      // Calculate potential new usage if this schedule is marked as attended
-      final potentialAddedLessons =
-          schedule.attended ? schedule.lessonsDeducted : 0;
-
-      return (usedLessons + potentialAddedLessons) > totalLessons;
+      if (invoice != null) {
+        final billingRecords =
+            await billingController.getBillingRecordsForInvoice(invoice.id!);
+        if (billingRecords.isNotEmpty) {
+          await billingController.updateBillingRecordStatus(
+            billingRecords.first.id!,
+            attended ? 'Completed' : 'Pending',
+          );
+        }
+      }
     } catch (e) {
-      print('Error checking billing lessons: $e');
-      return false;
+      print('Error updating billing record: $e');
+      // Don't throw - this is a secondary operation that shouldn't fail the main operation
     }
   }
 
-// Update calculateScheduleProgress method
+  /// ENHANCED: Create schedule with comprehensive validation
+  Future<void> createSchedule(Schedule schedule) async {
+    try {
+      isLoading(true);
+
+      // PRE-VALIDATION: Check lesson availability
+      if (!LessonCountingService.instance.canScheduleLessons(
+          schedule.studentId, schedule.courseId, schedule.lessonsDeducted)) {
+        final remaining = LessonCountingService.instance
+            .getRemainingLessons(schedule.studentId, schedule.courseId);
+
+        throw Exception(
+            'Insufficient lessons available. Needed: ${schedule.lessonsDeducted}, Available: $remaining');
+      }
+
+      // CONSISTENCY CHECK: Ensure status and attendance are aligned
+      final consistentSchedule = _ensureStatusConsistency(schedule);
+
+      // Create in database
+      final id = await _dbHelper.insertSchedule(consistentSchedule.toJson());
+      final createdSchedule = consistentSchedule.copyWith(id: id);
+
+      // Update local state
+      schedules.add(createdSchedule);
+      schedules.refresh();
+      _applyFilters();
+
+      // Create billing record if needed
+      await _createBillingRecordIfNeeded(createdSchedule);
+
+      Get.snackbar(
+        'Success',
+        'Schedule created successfully',
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
+    } catch (e) {
+      print('Error creating schedule: $e');
+      Get.snackbar('Error', 'Failed to create schedule: ${e.toString()}');
+      rethrow;
+    } finally {
+      isLoading(false);
+    }
+  }
+
+  /// ENHANCED: Update schedule with consistency checks
+  Future<void> updateSchedule(Schedule schedule) async {
+    try {
+      isLoading(true);
+
+      final index = schedules.indexWhere((s) => s.id == schedule.id);
+      if (index == -1) {
+        throw Exception('Schedule not found');
+      }
+
+      final originalSchedule = schedules[index];
+
+      // Check if lesson deduction changed and validate availability
+      if (schedule.lessonsDeducted != originalSchedule.lessonsDeducted) {
+        final lessonDifference =
+            schedule.lessonsDeducted - originalSchedule.lessonsDeducted;
+
+        if (lessonDifference > 0) {
+          // Adding lessons - check availability
+          if (!LessonCountingService.instance.canScheduleLessons(
+              schedule.studentId, schedule.courseId, lessonDifference)) {
+            final remaining = LessonCountingService.instance
+                .getRemainingLessons(schedule.studentId, schedule.courseId);
+
+            throw Exception(
+                'Insufficient lessons for update. Additional needed: $lessonDifference, Available: $remaining');
+          }
+        }
+      }
+
+      // CONSISTENCY CHECK: Ensure status and attendance alignment
+      final consistentSchedule = _ensureStatusConsistency(schedule);
+
+      // Update database
+      await _dbHelper.updateSchedule(consistentSchedule.toJson());
+
+      // Update local state
+      schedules[index] = consistentSchedule;
+      schedules.refresh();
+      _applyFilters();
+
+      Get.snackbar(
+        'Success',
+        'Schedule updated successfully',
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
+    } catch (e) {
+      print('Error updating schedule: $e');
+      Get.snackbar('Error', 'Failed to update schedule: ${e.toString()}');
+      rethrow;
+    } finally {
+      isLoading(false);
+    }
+  }
+
+  /// Ensure status and attendance are consistent
+  Schedule _ensureStatusConsistency(Schedule schedule) {
+    String correctStatus = schedule.status;
+    bool correctAttended = schedule.attended;
+
+    // Rule 1: If attended = true, status must be 'Completed'
+    if (schedule.attended && schedule.status != ScheduleStatus.completed) {
+      correctStatus = ScheduleStatus.completed;
+    }
+
+    // Rule 2: If status = 'Completed', attended must be true
+    if (schedule.status == ScheduleStatus.completed && !schedule.attended) {
+      correctAttended = true;
+    }
+
+    // Rule 3: If past and not attended, should be 'Missed'
+    if (schedule.isPast &&
+        !correctAttended &&
+        correctStatus != ScheduleStatus.cancelled) {
+      correctStatus = ScheduleStatus.missed;
+    }
+
+    // Rule 4: If future and not attended, should be 'Scheduled'
+    if (!schedule.isPast &&
+        !correctAttended &&
+        correctStatus == ScheduleStatus.missed) {
+      correctStatus = ScheduleStatus.scheduled;
+    }
+
+    // Return corrected schedule if changes were needed
+    if (correctStatus != schedule.status ||
+        correctAttended != schedule.attended) {
+      print(
+          'Schedule consistency correction: status ${schedule.status} -> $correctStatus, attended ${schedule.attended} -> $correctAttended');
+
+      return schedule.copyWith(
+        status: correctStatus,
+        attended: correctAttended,
+      );
+    }
+
+    return schedule;
+  }
+
+  /// Create billing record if auto-creation is enabled
+  Future<void> _createBillingRecordIfNeeded(Schedule schedule) async {
+    try {
+      final settingsController = Get.find<SettingsController>();
+      if (!settingsController.autoCreateBillingRecords.value) return;
+
+      final billingController = Get.find<BillingController>();
+      final invoice = billingController.invoices.firstWhereOrNull(
+        (inv) =>
+            inv.studentId == schedule.studentId &&
+            inv.courseId == schedule.courseId,
+      );
+
+      if (invoice != null) {
+        final billingRecord = BillingRecord(
+          invoiceId: invoice.id!,
+          scheduleId: schedule.id!,
+          studentId: schedule.studentId,
+          amount: 0.0, // Will be calculated based on course rates
+          status: schedule.attended ? 'Completed' : 'Pending',
+          createdAt: DateTime.now(),
+        );
+
+        await billingController.insertBillingRecord(billingRecord);
+      }
+    } catch (e) {
+      print('Error creating billing record: $e');
+      // Don't throw - billing record creation is secondary
+    }
+  }
+
+  /// ENHANCED: Run consistency migration with better reporting
+  Future<void> runStatusMigration() async {
+    try {
+      isLoading(true);
+
+      // Get pre-migration stats
+      final preMigrationStats =
+          await ConsistencyCheckerService.instance.runFullConsistencyCheck();
+      print('Pre-migration consistency check completed');
+
+      // Run the actual migration
+      await ScheduleStatusMigration.instance.runStatusMigration();
+
+      // Run our enhanced consistency fixes
+      await ConsistencyCheckerService.instance.fixAllInconsistencies();
+
+      // Reload schedules after migration
+      await fetchSchedules();
+
+      Get.snackbar(
+        'Migration Complete',
+        'Schedule migration and consistency fixes completed successfully',
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+        duration: Duration(seconds: 4),
+      );
+    } catch (e) {
+      print('Error in migration: $e');
+      Get.snackbar(
+        'Migration Error',
+        'Migration failed: ${e.toString()}',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    } finally {
+      isLoading(false);
+    }
+  }
+
+  /// ENHANCED: Fix inconsistent schedules using the new service
+  Future<void> fixInconsistentSchedules() async {
+    try {
+      isLoading(true);
+
+      final results =
+          await ConsistencyCheckerService.instance.fixAllInconsistencies();
+
+      // Reload schedules to reflect fixes
+      await fetchSchedules();
+
+      final totalFixed =
+          results.values.fold<int>(0, (sum, count) => sum + count);
+
+      if (totalFixed > 0) {
+        Get.snackbar(
+          'Fixes Applied',
+          'Fixed $totalFixed inconsistencies successfully',
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+        );
+      } else {
+        Get.snackbar(
+          'No Issues Found',
+          'All schedules are already consistent',
+          backgroundColor: Colors.blue,
+          colorText: Colors.white,
+        );
+      }
+    } catch (e) {
+      print('Error fixing inconsistencies: $e');
+      Get.snackbar('Error', 'Failed to fix inconsistencies: ${e.toString()}');
+    } finally {
+      isLoading(false);
+    }
+  }
+
+  /// Get inconsistent schedules using centralized logic
+  List<Schedule> get inconsistentSchedules {
+    return schedules.where((schedule) {
+      // Check if attended and status are aligned
+      if (schedule.attended && schedule.status != ScheduleStatus.completed) {
+        return true;
+      }
+
+      if (schedule.status == ScheduleStatus.completed && !schedule.attended) {
+        return true;
+      }
+
+      // Check if past lessons should be marked as missed
+      if (schedule.isPast &&
+          !schedule.attended &&
+          schedule.status == ScheduleStatus.scheduled) {
+        return true;
+      }
+
+      return false;
+    }).toList();
+  }
+
+  /// ENHANCED: Bulk create schedules with validation
+  Future<void> createMultipleSchedules(List<Schedule> schedulesToCreate) async {
+    try {
+      isLoading(true);
+
+      if (schedulesToCreate.isEmpty) {
+        throw Exception('No schedules to create');
+      }
+
+      // GROUP VALIDATION: Check total lesson requirements by student/course
+      final lessonRequirements = <String, int>{};
+      for (final schedule in schedulesToCreate) {
+        final key = '${schedule.studentId}_${schedule.courseId}';
+        lessonRequirements[key] =
+            (lessonRequirements[key] ?? 0) + schedule.lessonsDeducted;
+      }
+
+      // Validate each group
+      for (final entry in lessonRequirements.entries) {
+        final parts = entry.key.split('_');
+        final studentId = int.parse(parts[0]);
+        final courseId = int.parse(parts[1]);
+        final lessonsNeeded = entry.value;
+
+        if (!LessonCountingService.instance
+            .canScheduleLessons(studentId, courseId, lessonsNeeded)) {
+          final available = LessonCountingService.instance
+              .getRemainingLessons(studentId, courseId);
+          throw Exception(
+              'Insufficient lessons for student $studentId, course $courseId. Needed: $lessonsNeeded, Available: $available');
+        }
+      }
+
+      // Create all schedules (they're pre-validated)
+      final createdSchedules = <Schedule>[];
+      for (final schedule in schedulesToCreate) {
+        final consistentSchedule = _ensureStatusConsistency(schedule);
+        final id = await _dbHelper.insertSchedule(consistentSchedule.toJson());
+        createdSchedules.add(consistentSchedule.copyWith(id: id));
+      }
+
+      // Update local state
+      schedules.addAll(createdSchedules);
+      schedules.refresh();
+      _applyFilters();
+
+      // Create billing records if needed
+      for (final schedule in createdSchedules) {
+        await _createBillingRecordIfNeeded(schedule);
+      }
+
+      Get.snackbar(
+        'Bulk Creation Success',
+        'Created ${createdSchedules.length} schedules successfully',
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
+    } catch (e) {
+      print('Error in bulk schedule creation: $e');
+      Get.snackbar(
+          'Bulk Creation Error', 'Failed to create schedules: ${e.toString()}');
+      rethrow;
+    } finally {
+      isLoading(false);
+    }
+  }
+
+  /// Check system consistency on demand
+  Future<void> runConsistencyCheck() async {
+    try {
+      isLoading(true);
+
+      final results =
+          await ConsistencyCheckerService.instance.runFullConsistencyCheck();
+      final report =
+          ConsistencyCheckerService.instance.generateDetailedReport(results);
+
+      print('=== CONSISTENCY CHECK RESULTS ===');
+      print(report);
+
+      // Show summary to user
+      final attendanceIssues =
+          (results['attendance_status_mismatches'] as List).length;
+      final lessonIssues = (results['lesson_count_issues'] as List).length;
+      final billingIssues = (results['billing_record_issues'] as List).length;
+      final totalIssues = attendanceIssues + lessonIssues + billingIssues;
+
+      if (totalIssues == 0) {
+        Get.snackbar(
+          'System Healthy',
+          'No consistency issues found',
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+        );
+      } else {
+        Get.snackbar(
+          'Issues Found',
+          '$totalIssues consistency issues detected. Check logs for details.',
+          backgroundColor: Colors.orange,
+          colorText: Colors.white,
+          duration: Duration(seconds: 5),
+        );
+      }
+    } catch (e) {
+      print('Error running consistency check: $e');
+      Get.snackbar(
+          'Check Error', 'Failed to run consistency check: ${e.toString()}');
+    } finally {
+      isLoading(false);
+    }
+  }
+
+  /// Updated _isBilledLessonsExceeded to use centralized logic
+  bool _isBilledLessonsExceeded(Schedule schedule) {
+    return !LessonCountingService.instance
+        .validateScheduleChange(schedule, willBeAttended: schedule.attended);
+  }
+
+  /// Updated calculateScheduleProgress to use centralized logic
   double calculateScheduleProgress(Schedule schedule) {
     try {
-      final billingController = Get.find<BillingController>();
-      final invoice = billingController.invoices.firstWhereOrNull(
-        (inv) =>
-            inv.studentId == schedule.studentId &&
-            inv.courseId == schedule.courseId,
-      );
+      final stats = LessonCountingService.instance
+          .getLessonUsageStats(schedule.studentId, schedule.courseId);
 
-      final totalLessons = invoice?.lessons ?? 0;
-      if (totalLessons == 0) return 0;
+      final totalLessons = stats['total'] ?? 0;
+      if (totalLessons == 0) return 0.0;
 
-      // Use only attended lessons for progress (not scheduled)
-      final attendedLessons = schedules
-          .where((s) =>
-              s.studentId == schedule.studentId &&
-              s.courseId == schedule.courseId &&
-              s.attended)
-          .fold<int>(0, (sum, s) => sum + s.lessonsDeducted);
-
-      final progress = (attendedLessons / totalLessons) * 100;
-      return progress.clamp(0.0, 100.0);
+      final usedLessons = stats['used'] ?? 0;
+      return (usedLessons / totalLessons).clamp(0.0, 1.0);
     } catch (e) {
       print('Error calculating progress: $e');
-      return 0;
+      return 0.0;
     }
-  }
-
-  // Add this method to get remaining lessons consistently
-  int getRemainingLessons(int studentId, int courseId) {
-    final billingController = Get.find<BillingController>();
-    final invoice = billingController.invoices.firstWhereOrNull(
-      (inv) => inv.studentId == studentId && inv.courseId == courseId,
-    );
-
-    if (invoice == null) return 0;
-
-    final usedLessons = getUsedLessons(studentId, courseId);
-    return (invoice.lessons - usedLessons).clamp(0, invoice.lessons);
   }
 }
