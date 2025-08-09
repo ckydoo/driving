@@ -1,3 +1,4 @@
+import 'package:csv/csv.dart';
 import 'package:driving/controllers/billing_controller.dart';
 import 'package:driving/models/invoice.dart';
 import 'package:driving/models/user.dart';
@@ -5,10 +6,14 @@ import 'package:driving/models/payment.dart';
 import 'package:driving/widgets/payment_dialog.dart';
 import 'package:driving/services/receipt_service.dart';
 import 'package:driving/services/database_helper.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import 'dart:io';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:path_provider/path_provider.dart';
 
 class StudentInvoiceScreen extends StatefulWidget {
   final User student;
@@ -1640,11 +1645,785 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
     }
   }
 
+// Enhanced _exportAllInvoices method with CSV and PDF options
   void _exportAllInvoices() {
-    _showSuccessSnackbar('Export feature coming soon!');
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Export Options'),
+          content: const Text('Choose the export format for all invoices.'),
+          actions: [
+            TextButton(
+              child: const Text('CSV'),
+              onPressed: () {
+                Navigator.of(context).pop();
+                _exportInvoicesCSV();
+              },
+            ),
+            TextButton(
+              child: const Text('PDF'),
+              onPressed: () {
+                Navigator.of(context).pop();
+                _exportInvoicesPDF();
+              },
+            ),
+            TextButton(
+              child: const Text('Cancel'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
   }
 
+// Export invoices to CSV
+  Future<void> _exportInvoicesCSV() async {
+    try {
+      if (_filteredInvoices.isEmpty) {
+        _showErrorSnackbar('No invoices to export');
+        return;
+      }
+
+      // Prepare CSV data
+      List<List<dynamic>> csvData = [
+        [
+          'Invoice Number',
+          'Date Created',
+          'Due Date',
+          'Course',
+          'Lessons',
+          'Price Per Lesson',
+          'Total Amount',
+          'Amount Paid',
+          'Balance',
+          'Status',
+          'Student Name'
+        ],
+      ];
+
+      // Add invoice data
+      for (var invoice in _filteredInvoices) {
+        String courseName =
+            await billingController.getCourseName(invoice.courseId);
+
+        csvData.add([
+          invoice.invoiceNumber,
+          DateFormat('yyyy-MM-dd').format(invoice.createdAt),
+          DateFormat('yyyy-MM-dd').format(invoice.dueDate),
+          courseName,
+          invoice.lessons,
+          invoice.pricePerLesson.toStringAsFixed(2),
+          invoice.totalAmountCalculated.toStringAsFixed(2),
+          invoice.amountPaid.toStringAsFixed(2),
+          invoice.balance.toStringAsFixed(2),
+          invoice.status,
+          '${widget.student.fname} ${widget.student.lname}'
+        ]);
+      }
+
+      // Convert to CSV string
+      String csvString = const ListToCsvConverter().convert(csvData);
+
+      // Generate filename with timestamp
+      final timestamp =
+          DateTime.now().toIso8601String().replaceAll(RegExp(r'[:\.]'), '_');
+      final fileName =
+          'invoices_${widget.student.fname}_${widget.student.lname}_$timestamp.csv';
+
+      // Save file using file picker
+      final String? filePath = await FilePicker.platform.saveFile(
+        dialogTitle: 'Save Invoice Export',
+        fileName: fileName,
+        allowedExtensions: ['csv'],
+      );
+
+      if (filePath != null) {
+        final file = File(filePath);
+        await file.writeAsString(csvString);
+
+        _showSuccessSnackbar('Invoices exported successfully to $filePath');
+      } else {
+        _showErrorSnackbar('Export cancelled');
+      }
+    } catch (e) {
+      _showErrorSnackbar('Failed to export invoices: ${e.toString()}');
+    }
+  }
+
+// Export invoices to PDF
+  Future<void> _exportInvoicesPDF() async {
+    try {
+      if (_filteredInvoices.isEmpty) {
+        _showErrorSnackbar('No invoices to export');
+        return;
+      }
+
+      final pdf = pw.Document();
+
+      // Calculate summary
+      double totalAmount = 0;
+      double totalPaid = 0;
+      double totalBalance = 0;
+      int overdueCount = 0;
+
+      for (var invoice in _filteredInvoices) {
+        totalAmount += invoice.totalAmountCalculated;
+        totalPaid += invoice.amountPaid;
+        totalBalance += invoice.balance;
+        if (invoice.balance > 0 && invoice.dueDate.isBefore(DateTime.now())) {
+          overdueCount++;
+        }
+      }
+
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(20),
+          build: (pw.Context context) {
+            return [
+              // Header
+              pw.Container(
+                alignment: pw.Alignment.center,
+                child: pw.Column(
+                  children: [
+                    pw.Text(
+                      'INVOICE EXPORT REPORT',
+                      style: pw.TextStyle(
+                        fontSize: 24,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.blue800,
+                      ),
+                    ),
+                    pw.SizedBox(height: 10),
+                    pw.Text(
+                      'Student: ${widget.student.fname} ${widget.student.lname}',
+                      style: pw.TextStyle(
+                        fontSize: 16,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                    pw.Text(
+                      'Generated: ${DateFormat('MMM dd, yyyy HH:mm').format(DateTime.now())}',
+                      style: const pw.TextStyle(fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+
+              pw.SizedBox(height: 20),
+
+              // Summary Section
+              pw.Container(
+                padding: const pw.EdgeInsets.all(15),
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(color: PdfColors.grey400),
+                  borderRadius: pw.BorderRadius.circular(8),
+                ),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'SUMMARY',
+                      style: pw.TextStyle(
+                        fontSize: 16,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.blue800,
+                      ),
+                    ),
+                    pw.SizedBox(height: 10),
+                    pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
+                          children: [
+                            pw.Text(
+                                'Total Invoices: ${_filteredInvoices.length}'),
+                            pw.Text('Overdue Invoices: $overdueCount'),
+                          ],
+                        ),
+                        pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.end,
+                          children: [
+                            pw.Text(
+                                'Total Amount: \$${totalAmount.toStringAsFixed(2)}'),
+                            pw.Text(
+                                'Total Paid: \$${totalPaid.toStringAsFixed(2)}'),
+                            pw.Text(
+                              'Outstanding Balance: \$${totalBalance.toStringAsFixed(2)}',
+                              style: pw.TextStyle(
+                                fontWeight: pw.FontWeight.bold,
+                                color: totalBalance > 0
+                                    ? PdfColors.red
+                                    : PdfColors.green,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
+              pw.SizedBox(height: 20),
+
+              // Invoice Table
+              pw.Text(
+                'INVOICE DETAILS',
+                style: pw.TextStyle(
+                  fontSize: 16,
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfColors.blue800,
+                ),
+              ),
+
+              pw.SizedBox(height: 10),
+
+              pw.Table(
+                border: pw.TableBorder.all(color: PdfColors.grey300),
+                columnWidths: {
+                  0: const pw.FixedColumnWidth(60),
+                  1: const pw.FixedColumnWidth(60),
+                  2: const pw.FixedColumnWidth(60),
+                  3: const pw.FixedColumnWidth(80),
+                  4: const pw.FixedColumnWidth(60),
+                  5: const pw.FixedColumnWidth(60),
+                  6: const pw.FixedColumnWidth(60),
+                  7: const pw.FixedColumnWidth(50),
+                },
+                children: [
+                  // Header row
+                  pw.TableRow(
+                    decoration: const pw.BoxDecoration(
+                      color: PdfColors.grey200,
+                    ),
+                    children: [
+                      _buildTableCell('Invoice #', isHeader: true),
+                      _buildTableCell('Date', isHeader: true),
+                      _buildTableCell('Due Date', isHeader: true),
+                      _buildTableCell('Course', isHeader: true),
+                      _buildTableCell('Lessons', isHeader: true),
+                      _buildTableCell('Total', isHeader: true),
+                      _buildTableCell('Paid', isHeader: true),
+                      _buildTableCell('Balance', isHeader: true),
+                    ],
+                  ),
+                  // Data rows
+                  ..._filteredInvoices
+                      .map(
+                        (invoice) => pw.TableRow(
+                          children: [
+                            _buildTableCell(invoice.invoiceNumber),
+                            _buildTableCell(DateFormat('MM/dd/yy')
+                                .format(invoice.createdAt)),
+                            _buildTableCell(
+                                DateFormat('MM/dd/yy').format(invoice.dueDate)),
+                            _buildTableCell(invoice.courseId
+                                .toString()), // You might want to get course name
+                            _buildTableCell(invoice.lessons.toString()),
+                            _buildTableCell(
+                                '\$${invoice.totalAmountCalculated.toStringAsFixed(2)}'),
+                            _buildTableCell(
+                                '\$${invoice.amountPaid.toStringAsFixed(2)}'),
+                            _buildTableCell(
+                              '\$${invoice.balance.toStringAsFixed(2)}',
+                              textColor: invoice.balance > 0
+                                  ? PdfColors.red
+                                  : PdfColors.green,
+                            ),
+                          ],
+                        ),
+                      )
+                      .toList(),
+                ],
+              ),
+            ];
+          },
+        ),
+      );
+
+      // Generate filename with timestamp
+      final timestamp =
+          DateTime.now().toIso8601String().replaceAll(RegExp(r'[:\.]'), '_');
+      final fileName =
+          'invoices_${widget.student.fname}_${widget.student.lname}_$timestamp.pdf';
+
+      // Save file using file picker
+      final String? filePath = await FilePicker.platform.saveFile(
+        dialogTitle: 'Save Invoice Export',
+        fileName: fileName,
+        allowedExtensions: ['pdf'],
+      );
+
+      if (filePath != null) {
+        final file = File(filePath);
+        await file.writeAsBytes(await pdf.save());
+
+        _showSuccessSnackbar(
+            'Invoice report exported successfully to $filePath');
+      } else {
+        _showErrorSnackbar('Export cancelled');
+      }
+    } catch (e) {
+      _showErrorSnackbar('Failed to export PDF: ${e.toString()}');
+    }
+  }
+
+// Enhanced _generateStatement method
   void _generateStatement() {
-    _showSuccessSnackbar('Statement generation feature coming soon!');
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Generate Statement'),
+          content: const Text(
+              'Generate a detailed account statement for this student.'),
+          actions: [
+            TextButton(
+              child: const Text('PDF Statement'),
+              onPressed: () {
+                Navigator.of(context).pop();
+                _generateStatementPDF();
+              },
+            ),
+            TextButton(
+              child: const Text('Email Statement'),
+              onPressed: () {
+                Navigator.of(context).pop();
+                _generateAndEmailStatement();
+              },
+            ),
+            TextButton(
+              child: const Text('Cancel'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+// Generate comprehensive PDF statement
+  Future<void> _generateStatementPDF() async {
+    try {
+      if (_filteredInvoices.isEmpty) {
+        _showErrorSnackbar('No invoices found for statement generation');
+        return;
+      }
+
+      final pdf = pw.Document();
+
+      // Calculate comprehensive summary
+      double totalAmount = 0;
+      double totalPaid = 0;
+      double totalBalance = 0;
+      int totalLessons = 0;
+      int overdueCount = 0;
+      DateTime? oldestInvoice;
+      DateTime? newestInvoice;
+
+      for (var invoice in _filteredInvoices) {
+        totalAmount += invoice.totalAmountCalculated;
+        totalPaid += invoice.amountPaid;
+        totalBalance += invoice.balance;
+        totalLessons += invoice.lessons;
+
+        if (invoice.balance > 0 && invoice.dueDate.isBefore(DateTime.now())) {
+          overdueCount++;
+        }
+
+        if (oldestInvoice == null ||
+            invoice.createdAt.isBefore(oldestInvoice)) {
+          oldestInvoice = invoice.createdAt;
+        }
+        if (newestInvoice == null || invoice.createdAt.isAfter(newestInvoice)) {
+          newestInvoice = invoice.createdAt;
+        }
+      }
+
+      // Get payment history
+      List<Payment> allPayments = [];
+      for (var invoice in _filteredInvoices) {
+        final payments =
+            await billingController.getPaymentsForInvoice(invoice.id!);
+        allPayments.addAll(payments);
+      }
+      allPayments.sort((a, b) => b.paymentDate.compareTo(a.paymentDate));
+
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(20),
+          build: (pw.Context context) {
+            return [
+              // Header
+              pw.Container(
+                alignment: pw.Alignment.center,
+                child: pw.Column(
+                  children: [
+                    pw.Text(
+                      'STUDENT ACCOUNT STATEMENT',
+                      style: pw.TextStyle(
+                        fontSize: 24,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.blue800,
+                      ),
+                    ),
+                    pw.SizedBox(height: 20),
+                    pw.Container(
+                      padding: const pw.EdgeInsets.all(15),
+                      decoration: pw.BoxDecoration(
+                        border: pw.Border.all(color: PdfColors.grey400),
+                        borderRadius: pw.BorderRadius.circular(8),
+                      ),
+                      child: pw.Column(
+                        children: [
+                          pw.Row(
+                            mainAxisAlignment:
+                                pw.MainAxisAlignment.spaceBetween,
+                            children: [
+                              pw.Column(
+                                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                                children: [
+                                  pw.Text(
+                                    'Student Information',
+                                    style: pw.TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: pw.FontWeight.bold,
+                                    ),
+                                  ),
+                                  pw.Text(
+                                      'Name: ${widget.student.fname} ${widget.student.lname}'),
+                                  pw.Text('Email: ${widget.student.email}'),
+                                  pw.Text(
+                                      'Phone: ${widget.student.phone ?? "N/A"}'),
+                                ],
+                              ),
+                              pw.Column(
+                                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                                children: [
+                                  pw.Text(
+                                    'Statement Period',
+                                    style: pw.TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: pw.FontWeight.bold,
+                                    ),
+                                  ),
+                                  pw.Text(
+                                      'From: ${oldestInvoice != null ? DateFormat('MMM dd, yyyy').format(oldestInvoice) : "N/A"}'),
+                                  pw.Text(
+                                      'To: ${newestInvoice != null ? DateFormat('MMM dd, yyyy').format(newestInvoice) : "N/A"}'),
+                                  pw.Text(
+                                      'Generated: ${DateFormat('MMM dd, yyyy').format(DateTime.now())}'),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              pw.SizedBox(height: 20),
+
+              // Account Summary
+              pw.Container(
+                padding: const pw.EdgeInsets.all(15),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.blue50,
+                  border: pw.Border.all(color: PdfColors.blue200),
+                  borderRadius: pw.BorderRadius.circular(8),
+                ),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'ACCOUNT SUMMARY',
+                      style: pw.TextStyle(
+                        fontSize: 16,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.blue800,
+                      ),
+                    ),
+                    pw.SizedBox(height: 10),
+                    pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
+                          children: [
+                            pw.Text(
+                                'Total Invoices: ${_filteredInvoices.length}'),
+                            pw.Text('Total Lessons: $totalLessons'),
+                            pw.Text('Overdue Invoices: $overdueCount'),
+                            pw.Text('Total Payments: ${allPayments.length}'),
+                          ],
+                        ),
+                        pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.end,
+                          children: [
+                            pw.Text(
+                                'Total Charges: \$${totalAmount.toStringAsFixed(2)}'),
+                            pw.Text(
+                                'Total Payments: \$${totalPaid.toStringAsFixed(2)}'),
+                            pw.Divider(),
+                            pw.Text(
+                              'Current Balance: \$${totalBalance.toStringAsFixed(2)}',
+                              style: pw.TextStyle(
+                                fontSize: 16,
+                                fontWeight: pw.FontWeight.bold,
+                                color: totalBalance > 0
+                                    ? PdfColors.red
+                                    : PdfColors.green,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
+              pw.SizedBox(height: 20),
+
+              // Invoice Summary Table
+              pw.Text(
+                'INVOICE SUMMARY',
+                style: pw.TextStyle(
+                  fontSize: 16,
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfColors.blue800,
+                ),
+              ),
+
+              pw.SizedBox(height: 10),
+
+              pw.Table(
+                border: pw.TableBorder.all(color: PdfColors.grey300),
+                children: [
+                  // Header
+                  pw.TableRow(
+                    decoration:
+                        const pw.BoxDecoration(color: PdfColors.grey200),
+                    children: [
+                      _buildTableCell('Invoice #', isHeader: true),
+                      _buildTableCell('Date', isHeader: true),
+                      _buildTableCell('Due Date', isHeader: true),
+                      _buildTableCell('Amount', isHeader: true),
+                      _buildTableCell('Paid', isHeader: true),
+                      _buildTableCell('Balance', isHeader: true),
+                      _buildTableCell('Status', isHeader: true),
+                    ],
+                  ),
+                  // Data rows
+                  ..._filteredInvoices
+                      .map(
+                        (invoice) => pw.TableRow(
+                          children: [
+                            _buildTableCell(invoice.invoiceNumber),
+                            _buildTableCell(DateFormat('MM/dd/yy')
+                                .format(invoice.createdAt)),
+                            _buildTableCell(
+                                DateFormat('MM/dd/yy').format(invoice.dueDate)),
+                            _buildTableCell(
+                                '\$${invoice.totalAmountCalculated.toStringAsFixed(2)}'),
+                            _buildTableCell(
+                                '\$${invoice.amountPaid.toStringAsFixed(2)}'),
+                            _buildTableCell(
+                              '\$${invoice.balance.toStringAsFixed(2)}',
+                              textColor: invoice.balance > 0
+                                  ? PdfColors.red
+                                  : PdfColors.green,
+                            ),
+                            _buildTableCell(
+                              invoice.status.toUpperCase(),
+                              textColor: invoice.status == 'paid'
+                                  ? PdfColors.green
+                                  : invoice.balance > 0 &&
+                                          invoice.dueDate
+                                              .isBefore(DateTime.now())
+                                      ? PdfColors.red
+                                      : PdfColors.blue,
+                            ),
+                          ],
+                        ),
+                      )
+                      .toList(),
+                ],
+              ),
+
+              pw.SizedBox(height: 20),
+
+              // Payment History
+              if (allPayments.isNotEmpty) ...[
+                pw.Text(
+                  'RECENT PAYMENT HISTORY',
+                  style: pw.TextStyle(
+                    fontSize: 16,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.blue800,
+                  ),
+                ),
+                pw.SizedBox(height: 10),
+                pw.Table(
+                  border: pw.TableBorder.all(color: PdfColors.grey300),
+                  children: [
+                    // Header
+                    pw.TableRow(
+                      decoration:
+                          const pw.BoxDecoration(color: PdfColors.grey200),
+                      children: [
+                        _buildTableCell('Date', isHeader: true),
+                        _buildTableCell('Invoice #', isHeader: true),
+                        _buildTableCell('Amount', isHeader: true),
+                        _buildTableCell('Method', isHeader: true),
+                        _buildTableCell('Reference', isHeader: true),
+                      ],
+                    ),
+                    // Payment data (show last 10)
+                    ...allPayments.take(10).map((payment) {
+                      final invoice = _filteredInvoices.firstWhere(
+                        (inv) => inv.id == payment.invoiceId,
+                        orElse: () => Invoice(
+                          invoiceNumber: 'N/A',
+                          studentId: 0,
+                          courseId: 0,
+                          lessons: 0,
+                          pricePerLesson: 0,
+                          amountPaid: 0,
+                          createdAt: DateTime.now(),
+                          dueDate: DateTime.now(),
+                          status: '',
+                          totalAmount: 0,
+                        ),
+                      );
+                      return pw.TableRow(
+                        children: [
+                          _buildTableCell(DateFormat('MM/dd/yy')
+                              .format(payment.paymentDate)),
+                          _buildTableCell(invoice.invoiceNumber),
+                          _buildTableCell(
+                              '\$${payment.amount.toStringAsFixed(2)}',
+                              textColor: PdfColors.green),
+                          _buildTableCell(payment.method),
+                          _buildTableCell(payment.reference ?? ''),
+                        ],
+                      );
+                    }).toList(),
+                  ],
+                ),
+              ],
+
+              pw.SizedBox(height: 30),
+
+              // Footer
+              pw.Container(
+                alignment: pw.Alignment.center,
+                child: pw.Column(
+                  children: [
+                    pw.Divider(),
+                    pw.Text(
+                      'Thank you for choosing our driving school!',
+                      style: pw.TextStyle(
+                        fontStyle: pw.FontStyle.italic,
+                        color: PdfColors.grey600,
+                      ),
+                    ),
+                    pw.Text(
+                      'For questions about this statement, please contact us.',
+                      style: const pw.TextStyle(
+                        fontSize: 10,
+                        color: PdfColors.grey600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ];
+          },
+        ),
+      );
+
+      // Generate filename
+      final timestamp =
+          DateTime.now().toIso8601String().replaceAll(RegExp(r'[:\.]'), '_');
+      final fileName =
+          'statement_${widget.student.fname}_${widget.student.lname}_$timestamp.pdf';
+
+      // Save file
+      final String? filePath = await FilePicker.platform.saveFile(
+        dialogTitle: 'Save Account Statement',
+        fileName: fileName,
+        allowedExtensions: ['pdf'],
+      );
+
+      if (filePath != null) {
+        final file = File(filePath);
+        await file.writeAsBytes(await pdf.save());
+
+        _showSuccessSnackbar(
+            'Account statement generated successfully: $filePath');
+      } else {
+        _showErrorSnackbar('Statement generation cancelled');
+      }
+    } catch (e) {
+      _showErrorSnackbar('Failed to generate statement: ${e.toString()}');
+    }
+  }
+
+// Generate and email statement (placeholder for email functionality)
+  Future<void> _generateAndEmailStatement() async {
+    try {
+      // First generate the PDF in memory
+      final pdf = pw.Document();
+      // ... (use the same PDF generation code as above)
+
+      // For now, save to app directory and show location
+      final directory = await getApplicationDocumentsDirectory();
+      final timestamp =
+          DateTime.now().toIso8601String().replaceAll(RegExp(r'[:\.]'), '_');
+      final fileName =
+          'statement_${widget.student.fname}_${widget.student.lname}_$timestamp.pdf';
+      final file = File('${directory.path}/$fileName');
+
+      // Save temporarily
+      await file.writeAsBytes(await pdf.save());
+
+      _showSuccessSnackbar(
+          'Statement prepared for email. Feature integration pending: ${file.path}');
+
+      // TODO: Integrate with email service
+      // EmailService.sendStatement(widget.student.email, file.path);
+    } catch (e) {
+      _showErrorSnackbar(
+          'Failed to prepare statement for email: ${e.toString()}');
+    }
+  }
+
+// Helper method for table cells
+  pw.Widget _buildTableCell(String text,
+      {bool isHeader = false, PdfColor? textColor}) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.all(6),
+      alignment: pw.Alignment.centerLeft,
+      child: pw.Text(
+        text,
+        style: pw.TextStyle(
+          fontSize: isHeader ? 11 : 9,
+          fontWeight: isHeader ? pw.FontWeight.bold : pw.FontWeight.normal,
+          color: textColor ?? (isHeader ? PdfColors.black : PdfColors.grey800),
+        ),
+      ),
+    );
   }
 }

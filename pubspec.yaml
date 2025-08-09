@@ -54,6 +54,7 @@ dependencies:
   equatable: ^2.0.5
   shared_preferences: ^2.0.15
   pdf_render: ^1.4.0
+  pdf: ^3.10.4
 
 
 

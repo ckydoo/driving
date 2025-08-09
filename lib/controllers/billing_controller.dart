@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:csv/csv.dart';
 import 'package:driving/controllers/schedule_controller.dart';
 import 'package:driving/models/billing_record.dart';
 import 'package:driving/models/course.dart';
@@ -5,9 +8,13 @@ import 'package:driving/models/invoice.dart';
 import 'package:driving/models/payment.dart';
 import 'package:driving/models/user.dart';
 import 'package:driving/services/receipt_service.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:pdf/pdf.dart';
 import '../services/database_helper.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:intl/intl.dart';
 
 class BillingController extends GetxController {
   final RxList<Invoice> invoices = <Invoice>[].obs;
@@ -78,11 +85,18 @@ class BillingController extends GetxController {
     fetchBillingData(); // Refresh the list of invoices
   }
 
-// BillingController
+// Enhanced getCourseName method with better error handling
   Future<String> getCourseName(int courseId) async {
-    // Fetch the course name from your database or service
-    final course = await DatabaseHelper.instance.getCourseById(courseId);
-    return course?.name ?? 'Unknown Course';
+    try {
+      print('Getting course name for courseId: $courseId');
+      final course = await DatabaseHelper.instance.getCourseById(courseId);
+      final courseName = course?.name ?? 'Course ID: $courseId';
+      print('Course name found: $courseName');
+      return courseName;
+    } catch (e) {
+      print('Error getting course name for ID $courseId: $e');
+      return 'Course ID: $courseId';
+    }
   }
 
   Future<void> fetchBillingDataForStudent(int studentId) async {
@@ -711,6 +725,857 @@ class BillingController extends GetxController {
     } catch (e) {
       print('BillingController: Error in addLessonsBack: ${e.toString()}');
       Get.snackbar('Error', 'Failed to update billing info: ${e.toString()}');
+    }
+  }
+
+// Enhanced CSV export with course details
+  Future<void> exportAllInvoicesCSV() async {
+    try {
+      isLoading(true);
+
+      await fetchBillingData();
+
+      if (invoices.isEmpty) {
+        Get.snackbar('No Data', 'No invoices found to export');
+        return;
+      }
+
+      // Prepare enhanced CSV data with course information
+      List<List<dynamic>> csvData = [
+        [
+          'Invoice Number',
+          'Student ID',
+          'Student Name',
+          'Student Email',
+          'Course ID',
+          'Course Name',
+          'Date Created',
+          'Due Date',
+          'Lessons Purchased',
+          'Price Per Lesson',
+          'Total Amount',
+          'Amount Paid',
+          'Balance',
+          'Status',
+          'Payment Count',
+          'Last Payment Date',
+          'Days Overdue',
+          'Course Total Value',
+          'Payment Percentage'
+        ],
+      ];
+
+      // Process each invoice with detailed course information
+      for (var invoice in invoices) {
+        try {
+          // Get student details
+          final student = await _dbHelper.getUserById(invoice.studentId);
+          final studentName = student != null
+              ? '${student['fname']} ${student['lname']}'
+              : 'Unknown';
+          final studentEmail = student?['email'] ?? 'Unknown';
+
+          // Get course name
+          final courseName = await getCourseName(invoice.courseId);
+
+          // Get payment information
+          final payments = await getPaymentsForInvoice(invoice.id!);
+          final lastPaymentDate = payments.isNotEmpty
+              ? payments
+                  .map((p) => p.paymentDate)
+                  .reduce((a, b) => a.isAfter(b) ? a : b)
+              : null;
+
+          // Calculate additional metrics
+          final daysOverdue =
+              invoice.balance > 0 && invoice.dueDate.isBefore(DateTime.now())
+                  ? DateTime.now().difference(invoice.dueDate).inDays
+                  : 0;
+
+          final courseTotal = invoice.lessons * invoice.pricePerLesson;
+          final paymentPercentage =
+              courseTotal > 0 ? (invoice.amountPaid / courseTotal * 100) : 0.0;
+
+          csvData.add([
+            invoice.invoiceNumber,
+            invoice.studentId,
+            studentName,
+            studentEmail,
+            invoice.courseId,
+            courseName,
+            DateFormat('yyyy-MM-dd').format(invoice.createdAt),
+            DateFormat('yyyy-MM-dd').format(invoice.dueDate),
+            invoice.lessons,
+            invoice.pricePerLesson.toStringAsFixed(2),
+            invoice.totalAmountCalculated.toStringAsFixed(2),
+            invoice.amountPaid.toStringAsFixed(2),
+            invoice.balance.toStringAsFixed(2),
+            invoice.status,
+            payments.length,
+            lastPaymentDate != null
+                ? DateFormat('yyyy-MM-dd').format(lastPaymentDate)
+                : '',
+            daysOverdue > 0 ? daysOverdue.toString() : '0',
+            courseTotal.toStringAsFixed(2),
+            paymentPercentage.toStringAsFixed(1)
+          ]);
+        } catch (e) {
+          print('Error processing invoice ${invoice.id}: $e');
+          // Continue with next invoice
+        }
+      }
+
+      // Convert to CSV string
+      String csvString = const ListToCsvConverter().convert(csvData);
+
+      // Generate filename with timestamp
+      final timestamp =
+          DateTime.now().toIso8601String().replaceAll(RegExp(r'[:\.]'), '_');
+      final fileName = 'detailed_invoices_export_$timestamp.csv';
+
+      // Save file using file picker
+      final String? filePath = await FilePicker.platform.saveFile(
+        dialogTitle: 'Save Detailed Invoices Export',
+        fileName: fileName,
+        allowedExtensions: ['csv'],
+      );
+
+      if (filePath != null) {
+        final file = File(filePath);
+        await file.writeAsString(csvString);
+
+        Get.snackbar(
+          'Export Successful',
+          'Detailed invoices with course information exported to $filePath',
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+          duration: Duration(seconds: 3),
+        );
+      } else {
+        Get.snackbar('Export Cancelled', 'No file path selected');
+      }
+    } catch (e) {
+      Get.snackbar(
+        'Export Failed',
+        'Failed to export detailed invoices: ${e.toString()}',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    } finally {
+      isLoading(false);
+    }
+  }
+
+// Generate comprehensive billing report PDF with enhanced course information
+  Future<void> generateBillingReportPDF({
+    DateTime? startDate,
+    DateTime? endDate,
+    int? studentId,
+    String? status,
+  }) async {
+    try {
+      isLoading(true);
+
+      // Set default date range if not provided
+      startDate ??= DateTime.now().subtract(Duration(days: 30));
+      endDate ??= DateTime.now();
+
+      // Filter invoices based on criteria
+      List<Invoice> filteredInvoices = invoices.where((invoice) {
+        bool matchesDate = invoice.createdAt.isAfter(startDate!) &&
+            invoice.createdAt.isBefore(endDate!.add(Duration(days: 1)));
+        bool matchesStudent =
+            studentId == null || invoice.studentId == studentId;
+        bool matchesStatus = status == null || invoice.status == status;
+
+        return matchesDate && matchesStudent && matchesStatus;
+      }).toList();
+
+      if (filteredInvoices.isEmpty) {
+        Get.snackbar('No Data', 'No invoices found for the specified criteria');
+        return;
+      }
+
+      final pdf = pw.Document();
+
+      // Pre-fetch all course names to avoid async issues in PDF generation
+      Map<int, String> courseNames = {};
+      Map<int, double> coursePrices = {};
+
+      for (var invoice in filteredInvoices) {
+        if (!courseNames.containsKey(invoice.courseId)) {
+          try {
+            final course =
+                await DatabaseHelper.instance.getCourseById(invoice.courseId);
+            courseNames[invoice.courseId] = course?.name ?? 'Unknown Course';
+            coursePrices[invoice.courseId] =
+                course?.price?.toDouble() ?? invoice.pricePerLesson;
+            print(
+                'Cached course: ${courseNames[invoice.courseId]} (ID: ${invoice.courseId})');
+          } catch (e) {
+            print('Error fetching course ${invoice.courseId}: $e');
+            courseNames[invoice.courseId] = 'Course ID: ${invoice.courseId}';
+            coursePrices[invoice.courseId] = invoice.pricePerLesson;
+          }
+        }
+      }
+
+      // Pre-fetch all student names
+      Map<int, String> studentNames = {};
+      for (var invoice in filteredInvoices) {
+        if (!studentNames.containsKey(invoice.studentId)) {
+          try {
+            final student = await _dbHelper.getUserById(invoice.studentId);
+            studentNames[invoice.studentId] = student != null
+                ? '${student['fname']} ${student['lname']}'
+                : 'Unknown Student';
+          } catch (e) {
+            studentNames[invoice.studentId] =
+                'Student ID: ${invoice.studentId}';
+          }
+        }
+      }
+
+      // Calculate comprehensive statistics
+      double totalRevenue = 0;
+      double totalPaid = 0;
+      double totalOutstanding = 0;
+      int totalLessons = 0;
+      int paidInvoices = 0;
+      int overdueInvoices = 0;
+      Map<String, int> statusCounts = {};
+      Map<String, double> courseRevenue = {};
+      Map<String, int> courseLessons = {};
+      Map<String, List<Invoice>> courseInvoicesMap = {};
+
+      for (var invoice in filteredInvoices) {
+        totalRevenue += invoice.totalAmountCalculated;
+        totalPaid += invoice.amountPaid;
+        totalOutstanding += invoice.balance;
+        totalLessons += invoice.lessons;
+
+        if (invoice.status == 'paid') paidInvoices++;
+        if (invoice.balance > 0 && invoice.dueDate.isBefore(DateTime.now())) {
+          overdueInvoices++;
+        }
+
+        // Count by status
+        statusCounts[invoice.status] = (statusCounts[invoice.status] ?? 0) + 1;
+
+        // Revenue and lessons by course using cached names
+        String courseName = courseNames[invoice.courseId] ?? 'Unknown Course';
+        courseRevenue[courseName] =
+            (courseRevenue[courseName] ?? 0) + invoice.totalAmountCalculated;
+        courseLessons[courseName] =
+            (courseLessons[courseName] ?? 0) + invoice.lessons;
+
+        // Group invoices by course for detailed breakdown
+        if (!courseInvoicesMap.containsKey(courseName)) {
+          courseInvoicesMap[courseName] = [];
+        }
+        courseInvoicesMap[courseName]!.add(invoice);
+      }
+
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(20),
+          build: (pw.Context context) {
+            return [
+              // Header
+              pw.Container(
+                alignment: pw.Alignment.center,
+                child: pw.Column(
+                  children: [
+                    pw.Text(
+                      'COMPREHENSIVE BILLING REPORT',
+                      style: pw.TextStyle(
+                        fontSize: 24,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.blue800,
+                      ),
+                    ),
+                    pw.SizedBox(height: 10),
+                    pw.Text(
+                      'Period: ${DateFormat('MMM dd, yyyy').format(startDate!)} - ${DateFormat('MMM dd, yyyy').format(endDate!)}',
+                      style: pw.TextStyle(
+                          fontSize: 14, fontWeight: pw.FontWeight.bold),
+                    ),
+                    pw.Text(
+                      'Generated: ${DateFormat('MMM dd, yyyy HH:mm').format(DateTime.now())}',
+                      style: const pw.TextStyle(fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+
+              pw.SizedBox(height: 20),
+
+              // Executive Summary
+              pw.Container(
+                padding: const pw.EdgeInsets.all(15),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.blue50,
+                  border: pw.Border.all(color: PdfColors.blue200),
+                  borderRadius: pw.BorderRadius.circular(8),
+                ),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'EXECUTIVE SUMMARY',
+                      style: pw.TextStyle(
+                        fontSize: 18,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.blue800,
+                      ),
+                    ),
+                    pw.SizedBox(height: 15),
+                    pw.Row(
+                      children: [
+                        pw.Expanded(
+                          child: pw.Column(
+                            crossAxisAlignment: pw.CrossAxisAlignment.start,
+                            children: [
+                              pw.Text(
+                                  'Total Invoices: ${filteredInvoices.length}'),
+                              pw.Text('Paid Invoices: $paidInvoices'),
+                              pw.Text('Overdue Invoices: $overdueInvoices'),
+                              pw.Text('Total Lessons: $totalLessons'),
+                              pw.Text(
+                                  'Avg Lessons/Invoice: ${(totalLessons / filteredInvoices.length).toStringAsFixed(1)}'),
+                            ],
+                          ),
+                        ),
+                        pw.Expanded(
+                          child: pw.Column(
+                            crossAxisAlignment: pw.CrossAxisAlignment.end,
+                            children: [
+                              pw.Text(
+                                  'Total Revenue: \$${totalRevenue.toStringAsFixed(2)}'),
+                              pw.Text(
+                                  'Amount Collected: \$${totalPaid.toStringAsFixed(2)}'),
+                              pw.Text(
+                                  'Outstanding: \$${totalOutstanding.toStringAsFixed(2)}'),
+                              pw.Text(
+                                  'Collection Rate: ${((totalPaid / totalRevenue) * 100).toStringAsFixed(1)}%'),
+                              pw.Text(
+                                  'Avg Invoice Value: \$${(totalRevenue / filteredInvoices.length).toStringAsFixed(2)}'),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
+              pw.SizedBox(height: 20),
+
+              // Enhanced Course Revenue Breakdown with Pricing Details
+              pw.Text(
+                'COURSE REVENUE & PRICING BREAKDOWN',
+                style: pw.TextStyle(
+                  fontSize: 16,
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfColors.blue800,
+                ),
+              ),
+              pw.SizedBox(height: 10),
+              pw.Container(
+                padding: const pw.EdgeInsets.all(10),
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(color: PdfColors.grey300),
+                  borderRadius: pw.BorderRadius.circular(5),
+                ),
+                child: pw.Table(
+                  border: pw.TableBorder.all(color: PdfColors.grey300),
+                  columnWidths: {
+                    0: const pw.FlexColumnWidth(3),
+                    1: const pw.FlexColumnWidth(2),
+                    2: const pw.FlexColumnWidth(2),
+                    3: const pw.FlexColumnWidth(2),
+                    4: const pw.FlexColumnWidth(2),
+                  },
+                  children: [
+                    pw.TableRow(
+                      decoration:
+                          const pw.BoxDecoration(color: PdfColors.grey200),
+                      children: [
+                        _buildTableCell('Course Name', isHeader: true),
+                        _buildTableCell('Total Lessons', isHeader: true),
+                        _buildTableCell('Avg Price/Lesson', isHeader: true),
+                        _buildTableCell('Total Revenue', isHeader: true),
+                        _buildTableCell('% of Total', isHeader: true),
+                      ],
+                    ),
+                    ...courseRevenue.entries.map((entry) {
+                      String courseName = entry.key;
+                      double revenue = entry.value;
+                      int lessons = courseLessons[courseName] ?? 0;
+                      double avgPricePerLesson =
+                          lessons > 0 ? revenue / lessons : 0;
+                      double percentage = (revenue / totalRevenue) * 100;
+
+                      return pw.TableRow(
+                        children: [
+                          _buildTableCell(courseName),
+                          _buildTableCell(lessons.toString()),
+                          _buildTableCell(
+                              '\$${avgPricePerLesson.toStringAsFixed(2)}'),
+                          _buildTableCell('\$${revenue.toStringAsFixed(2)}'),
+                          _buildTableCell('${percentage.toStringAsFixed(1)}%'),
+                        ],
+                      );
+                    }).toList(),
+                  ],
+                ),
+              ),
+
+              pw.SizedBox(height: 20),
+
+              // Status Breakdown
+              pw.Text(
+                'INVOICE STATUS BREAKDOWN',
+                style: pw.TextStyle(
+                  fontSize: 16,
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfColors.blue800,
+                ),
+              ),
+              pw.SizedBox(height: 10),
+              pw.Container(
+                padding: const pw.EdgeInsets.all(10),
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(color: PdfColors.grey300),
+                  borderRadius: pw.BorderRadius.circular(5),
+                ),
+                child: pw.Column(
+                  children: statusCounts.entries.map((entry) {
+                    double percentage =
+                        (entry.value / filteredInvoices.length) * 100;
+                    return pw.Padding(
+                      padding: const pw.EdgeInsets.symmetric(vertical: 2),
+                      child: pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                        children: [
+                          pw.Text('${entry.key.toUpperCase()}: ${entry.value}'),
+                          pw.Text('${percentage.toStringAsFixed(1)}%'),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+
+              pw.SizedBox(height: 20),
+
+              // Detailed Invoice List with Course Information
+              pw.Text(
+                'DETAILED INVOICE LIST WITH COURSE INFORMATION',
+                style: pw.TextStyle(
+                  fontSize: 16,
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfColors.blue800,
+                ),
+              ),
+
+              pw.SizedBox(height: 10),
+
+              pw.Table(
+                border: pw.TableBorder.all(color: PdfColors.grey300),
+                columnWidths: {
+                  0: const pw.FixedColumnWidth(50), // Invoice #
+                  1: const pw.FixedColumnWidth(75), // Student
+                  2: const pw.FixedColumnWidth(90), // Course (increased width)
+                  3: const pw.FixedColumnWidth(30), // Lessons
+                  4: const pw.FixedColumnWidth(35), // Price/Lesson
+                  5: const pw.FixedColumnWidth(40), // Total
+                  6: const pw.FixedColumnWidth(40), // Paid
+                  7: const pw.FixedColumnWidth(40), // Balance
+                  8: const pw.FixedColumnWidth(35), // Status
+                },
+                children: [
+                  // Header row
+                  pw.TableRow(
+                    decoration:
+                        const pw.BoxDecoration(color: PdfColors.grey200),
+                    children: [
+                      _buildTableCell('Invoice #', isHeader: true),
+                      _buildTableCell('Student', isHeader: true),
+                      _buildTableCell('Course', isHeader: true),
+                      _buildTableCell('Lessons', isHeader: true),
+                      _buildTableCell('Price/Lesson', isHeader: true),
+                      _buildTableCell('Total', isHeader: true),
+                      _buildTableCell('Paid', isHeader: true),
+                      _buildTableCell('Balance', isHeader: true),
+                      _buildTableCell('Status', isHeader: true),
+                    ],
+                  ),
+                  // Data rows using cached names
+                  ...filteredInvoices.map((invoice) {
+                    final studentName =
+                        studentNames[invoice.studentId] ?? 'Unknown';
+                    final courseName =
+                        courseNames[invoice.courseId] ?? 'Unknown Course';
+
+                    return pw.TableRow(
+                      children: [
+                        _buildTableCell(invoice.invoiceNumber),
+                        _buildTableCell(studentName),
+                        _buildTableCell(courseName),
+                        _buildTableCell(invoice.lessons.toString()),
+                        _buildTableCell(
+                            '\$${invoice.pricePerLesson.toStringAsFixed(2)}'),
+                        _buildTableCell(
+                            '\$${invoice.totalAmountCalculated.toStringAsFixed(2)}'),
+                        _buildTableCell(
+                            '\$${invoice.amountPaid.toStringAsFixed(2)}'),
+                        _buildTableCell(
+                          '\$${invoice.balance.toStringAsFixed(2)}',
+                          textColor: invoice.balance > 0
+                              ? PdfColors.red
+                              : PdfColors.green,
+                        ),
+                        _buildTableCell(
+                          invoice.status.toUpperCase(),
+                          textColor: invoice.status == 'paid'
+                              ? PdfColors.green
+                              : invoice.balance > 0 &&
+                                      invoice.dueDate.isBefore(DateTime.now())
+                                  ? PdfColors.red
+                                  : PdfColors.blue,
+                        ),
+                      ],
+                    );
+                  }).toList(),
+                ],
+              ),
+
+              pw.SizedBox(height: 20),
+
+              // Payment Breakdown by Course using pre-grouped data
+              pw.Text(
+                'PAYMENT BREAKDOWN BY COURSE',
+                style: pw.TextStyle(
+                  fontSize: 16,
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfColors.blue800,
+                ),
+              ),
+              pw.SizedBox(height: 10),
+
+              ...courseInvoicesMap.entries.map((entry) {
+                String courseName = entry.key;
+                List<Invoice> courseInvoices = entry.value;
+
+                double courseTotalBilled = courseInvoices.fold(
+                    0.0, (sum, inv) => sum + inv.totalAmountCalculated);
+                double courseTotalPaid = courseInvoices.fold(
+                    0.0, (sum, inv) => sum + inv.amountPaid);
+                double courseBalance = courseTotalBilled - courseTotalPaid;
+                int totalCourseLessons =
+                    courseInvoices.fold(0, (sum, inv) => sum + inv.lessons);
+
+                // Get typical course price (from first invoice or course data)
+                double typicalPrice = courseInvoices.isNotEmpty
+                    ? courseInvoices.first.pricePerLesson
+                    : 0.0;
+
+                return pw.Container(
+                  margin: const pw.EdgeInsets.only(bottom: 15),
+                  padding: const pw.EdgeInsets.all(10),
+                  decoration: pw.BoxDecoration(
+                    color: PdfColors.grey50,
+                    border: pw.Border.all(color: PdfColors.grey300),
+                    borderRadius: pw.BorderRadius.circular(5),
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        '$courseName (${courseInvoices.length} invoices)',
+                        style: pw.TextStyle(
+                          fontSize: 14,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.blue800,
+                        ),
+                      ),
+                      pw.SizedBox(height: 8),
+                      pw.Row(
+                        children: [
+                          pw.Expanded(
+                            child: pw.Column(
+                              crossAxisAlignment: pw.CrossAxisAlignment.start,
+                              children: [
+                                pw.Text('Total Lessons: $totalCourseLessons'),
+                                pw.Text(
+                                    'Standard Price/Lesson: \$${typicalPrice.toStringAsFixed(2)}'),
+                                pw.Text(
+                                    'Avg Price/Lesson: \$${totalCourseLessons > 0 ? (courseTotalBilled / totalCourseLessons).toStringAsFixed(2) : "0.00"}'),
+                              ],
+                            ),
+                          ),
+                          pw.Expanded(
+                            child: pw.Column(
+                              crossAxisAlignment: pw.CrossAxisAlignment.end,
+                              children: [
+                                pw.Text(
+                                    'Total Billed: \$${courseTotalBilled.toStringAsFixed(2)}'),
+                                pw.Text(
+                                    'Total Paid: \$${courseTotalPaid.toStringAsFixed(2)}'),
+                                pw.Text(
+                                  'Balance: \$${courseBalance.toStringAsFixed(2)}',
+                                  style: pw.TextStyle(
+                                    color: courseBalance > 0
+                                        ? PdfColors.red
+                                        : PdfColors.green,
+                                    fontWeight: pw.FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+
+              pw.SizedBox(height: 30),
+
+              // Footer
+              pw.Container(
+                alignment: pw.Alignment.center,
+                child: pw.Column(
+                  children: [
+                    pw.Divider(),
+                    pw.Text(
+                      'This report was generated automatically by the Driving School Management System',
+                      style: pw.TextStyle(
+                        fontSize: 10,
+                        fontStyle: pw.FontStyle.italic,
+                        color: PdfColors.grey600,
+                      ),
+                    ),
+                    pw.SizedBox(height: 5),
+                    pw.Text(
+                      'All amounts are in USD. Course pricing reflects actual billed rates.',
+                      style: pw.TextStyle(
+                        fontSize: 9,
+                        color: PdfColors.grey600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ];
+          },
+        ),
+      );
+
+      // Generate filename with timestamp
+      final timestamp =
+          DateTime.now().toIso8601String().replaceAll(RegExp(r'[:\.]'), '_');
+      final fileName = 'billing_report_detailed_$timestamp.pdf';
+
+      // Save file using file picker
+      final String? filePath = await FilePicker.platform.saveFile(
+        dialogTitle: 'Save Detailed Billing Report',
+        fileName: fileName,
+        allowedExtensions: ['pdf'],
+      );
+
+      if (filePath != null) {
+        final file = File(filePath);
+        await file.writeAsBytes(await pdf.save());
+
+        Get.snackbar(
+          'Report Generated',
+          'Detailed billing report with course information saved to $filePath',
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+          duration: Duration(seconds: 3),
+        );
+      } else {
+        Get.snackbar('Export Cancelled', 'No file path selected');
+      }
+    } catch (e) {
+      print('Error in generateBillingReportPDF: $e');
+      Get.snackbar(
+        'Report Failed',
+        'Failed to generate detailed report: ${e.toString()}',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    } finally {
+      isLoading(false);
+    }
+  }
+
+// Helper method for PDF table cells
+  pw.Widget _buildTableCell(String text,
+      {bool isHeader = false, PdfColor? textColor}) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.all(6),
+      alignment: pw.Alignment.centerLeft,
+      child: pw.Text(
+        text,
+        style: pw.TextStyle(
+          fontSize: isHeader ? 10 : 8,
+          fontWeight: isHeader ? pw.FontWeight.bold : pw.FontWeight.normal,
+          color: textColor ?? (isHeader ? PdfColors.black : PdfColors.grey800),
+        ),
+      ),
+    );
+  }
+
+// Get student name by ID (helper method)
+  Future<String> getStudentName(int studentId) async {
+    try {
+      final student = await _dbHelper.getUserById(studentId);
+      return student != null
+          ? '${student['fname']} ${student['lname']}'
+          : 'Unknown Student';
+    } catch (e) {
+      return 'Unknown Student';
+    }
+  }
+
+// Export overdue invoices specifically
+  Future<void> exportOverdueInvoicesCSV() async {
+    try {
+      isLoading(true);
+
+      await fetchBillingData();
+
+      // Filter overdue invoices
+      List<Invoice> overdueInvoices = invoices.where((invoice) {
+        return invoice.balance > 0 && invoice.dueDate.isBefore(DateTime.now());
+      }).toList();
+
+      if (overdueInvoices.isEmpty) {
+        Get.snackbar('No Data', 'No overdue invoices found');
+        return;
+      }
+
+      // Sort by days overdue (most overdue first)
+      overdueInvoices.sort((a, b) {
+        int aDaysOverdue = DateTime.now().difference(a.dueDate).inDays;
+        int bDaysOverdue = DateTime.now().difference(b.dueDate).inDays;
+        return bDaysOverdue.compareTo(aDaysOverdue);
+      });
+
+      // Prepare CSV data
+      List<List<dynamic>> csvData = [
+        [
+          'Invoice Number',
+          'Student ID',
+          'Student Name',
+          'Student Email',
+          'Student Phone',
+          'Course Name',
+          'Due Date',
+          'Days Overdue',
+          'Total Amount',
+          'Amount Paid',
+          'Balance Due',
+          'Original Lessons',
+          'Last Payment Date',
+          'Contact Priority'
+        ],
+      ];
+
+      // Process each overdue invoice
+      for (var invoice in overdueInvoices) {
+        try {
+          final student = await _dbHelper.getUserById(invoice.studentId);
+          final studentName = student != null
+              ? '${student['fname']} ${student['lname']}'
+              : 'Unknown';
+          final studentEmail = student?['email'] ?? 'Unknown';
+          final studentPhone = student?['phone'] ?? 'Unknown';
+
+          final courseName = await getCourseName(invoice.courseId);
+          final payments = await getPaymentsForInvoice(invoice.id!);
+          final lastPaymentDate = payments.isNotEmpty
+              ? payments
+                  .map((p) => p.paymentDate)
+                  .reduce((a, b) => a.isAfter(b) ? a : b)
+              : null;
+
+          final daysOverdue = DateTime.now().difference(invoice.dueDate).inDays;
+
+          // Determine contact priority based on days overdue and amount
+          String priority = 'LOW';
+          if (daysOverdue > 60 || invoice.balance > 500) {
+            priority = 'HIGH';
+          } else if (daysOverdue > 30 || invoice.balance > 200) {
+            priority = 'MEDIUM';
+          }
+
+          csvData.add([
+            invoice.invoiceNumber,
+            invoice.studentId,
+            studentName,
+            studentEmail,
+            studentPhone,
+            courseName,
+            DateFormat('yyyy-MM-dd').format(invoice.dueDate),
+            daysOverdue,
+            invoice.totalAmountCalculated.toStringAsFixed(2),
+            invoice.amountPaid.toStringAsFixed(2),
+            invoice.balance.toStringAsFixed(2),
+            invoice.lessons,
+            lastPaymentDate != null
+                ? DateFormat('yyyy-MM-dd').format(lastPaymentDate)
+                : 'No payments',
+            priority
+          ]);
+        } catch (e) {
+          print('Error processing overdue invoice ${invoice.id}: $e');
+        }
+      }
+
+      // Convert to CSV string
+      String csvString = const ListToCsvConverter().convert(csvData);
+
+      // Generate filename with timestamp
+      final timestamp =
+          DateTime.now().toIso8601String().replaceAll(RegExp(r'[:\.]'), '_');
+      final fileName = 'overdue_invoices_$timestamp.csv';
+
+      // Save file using file picker
+      final String? filePath = await FilePicker.platform.saveFile(
+        dialogTitle: 'Save Overdue Invoices Export',
+        fileName: fileName,
+        allowedExtensions: ['csv'],
+      );
+
+      if (filePath != null) {
+        final file = File(filePath);
+        await file.writeAsString(csvString);
+
+        Get.snackbar(
+          'Export Successful',
+          'Overdue invoices exported to $filePath\n${overdueInvoices.length} overdue invoices found',
+          backgroundColor: Colors.orange,
+          colorText: Colors.white,
+          duration: Duration(seconds: 4),
+        );
+      } else {
+        Get.snackbar('Export Cancelled', 'No file path selected');
+      }
+    } catch (e) {
+      Get.snackbar(
+        'Export Failed',
+        'Failed to export overdue invoices: ${e.toString()}',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    } finally {
+      isLoading(false);
     }
   }
 }

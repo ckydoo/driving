@@ -13,7 +13,8 @@ class CreateInvoiceDialog extends StatefulWidget {
   State<CreateInvoiceDialog> createState() => _CreateInvoiceDialogState();
 }
 
-class _CreateInvoiceDialogState extends State<CreateInvoiceDialog> {
+class _CreateInvoiceDialogState extends State<CreateInvoiceDialog>
+    with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   int? _selectedStudentId;
   int? _selectedCourseId;
@@ -23,10 +24,62 @@ class _CreateInvoiceDialogState extends State<CreateInvoiceDialog> {
   bool _isCreating = false;
   String? _errorMessage;
 
+  // Animation controllers for smooth transitions
+  late AnimationController _animationController;
+  late Animation<double> _slideAnimation;
+  late Animation<double> _fadeAnimation;
+
+  // Controllers for better UX
+  final TextEditingController _studentController = TextEditingController();
+  final TextEditingController _courseController = TextEditingController();
+  final TextEditingController _lessonsController =
+      TextEditingController(text: '1');
+
+  // Focus nodes for better navigation
+  final FocusNode _studentFocusNode = FocusNode();
+  final FocusNode _courseFocusNode = FocusNode();
+  final FocusNode _lessonsFocusNode = FocusNode();
+
   @override
   void initState() {
     super.initState();
+    _initializeAnimations();
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadData());
+  }
+
+  void _initializeAnimations() {
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 500),
+      vsync: this,
+    );
+
+    _slideAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeOutBack,
+    ));
+
+    _fadeAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeInOut,
+    ));
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    _studentController.dispose();
+    _courseController.dispose();
+    _lessonsController.dispose();
+    _studentFocusNode.dispose();
+    _courseFocusNode.dispose();
+    _lessonsFocusNode.dispose();
+    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -49,12 +102,98 @@ class _CreateInvoiceDialogState extends State<CreateInvoiceDialog> {
             .price
             .toDouble();
       });
+
+      // Start animation after data loads
+      _animationController.forward();
     } catch (e) {
       setState(() {
         _isLoading = false;
         _errorMessage = 'Failed to load required data: ${e.toString()}';
       });
     }
+  }
+
+  Widget _buildLoadingState() {
+    return Container(
+      width: 400,
+      height: 300,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CircularProgressIndicator(
+            strokeWidth: 3,
+            valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade600),
+          ),
+          SizedBox(height: 20),
+          Text(
+            'Loading students and courses...',
+            style: TextStyle(
+              fontSize: 16,
+              color: Colors.grey.shade600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorState() {
+    return Container(
+      width: 400,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.error_outline,
+            size: 64,
+            color: Colors.red.shade400,
+          ),
+          SizedBox(height: 16),
+          Text(
+            'Error Loading Data',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Colors.red.shade700,
+            ),
+          ),
+          SizedBox(height: 8),
+          Text(
+            _errorMessage!,
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey.shade600),
+          ),
+          SizedBox(height: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              TextButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _isLoading = true;
+                    _errorMessage = null;
+                  });
+                  _loadData();
+                },
+                icon: Icon(Icons.refresh),
+                label: Text('Retry'),
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.blue.shade600,
+                ),
+              ),
+              TextButton.icon(
+                onPressed: Get.back,
+                icon: Icon(Icons.close),
+                label: Text('Close'),
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.grey.shade600,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildStudentAutocomplete() {
@@ -65,47 +204,158 @@ class _CreateInvoiceDialogState extends State<CreateInvoiceDialog> {
             u.status.toLowerCase() == 'active')
         .toList();
 
-    return Autocomplete<User>(
-      optionsBuilder: (TextEditingValue textEditingValue) {
-        if (textEditingValue.text.isEmpty) {
-          return students;
-        }
-        return students.where((student) => "${student.fname} ${student.lname}"
-            .toLowerCase()
-            .contains(textEditingValue.text.toLowerCase()));
-      },
-      displayStringForOption: (User student) =>
-          "${student.fname} ${student.lname}",
-      fieldViewBuilder: (BuildContext context,
-          TextEditingController fieldTextEditingController,
-          FocusNode fieldFocusNode,
-          VoidCallback onFieldSubmitted) {
-        return TextFormField(
-          controller: fieldTextEditingController,
-          focusNode: fieldFocusNode,
-          decoration: InputDecoration(
-            labelText: 'Student',
-            hintText: 'Search student',
-            prefixIcon: const Icon(Icons.person, color: Colors.blue),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            filled: true,
-            fillColor: Colors.grey.shade100,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Student *',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: Colors.grey.shade700,
           ),
-          validator: (value) {
-            if (_selectedStudentId == null) {
-              return 'Please select a student';
+        ),
+        SizedBox(height: 8),
+        Autocomplete<User>(
+          optionsBuilder: (TextEditingValue textEditingValue) {
+            if (textEditingValue.text.isEmpty) {
+              return students.take(10); // Limit initial suggestions
             }
-            return null;
+            return students
+                .where((student) => "${student.fname} ${student.lname}"
+                    .toLowerCase()
+                    .contains(textEditingValue.text.toLowerCase()))
+                .take(10);
           },
-        );
-      },
-      onSelected: (User student) {
-        setState(() {
-          _selectedStudentId = student.id;
-        });
-      },
+          displayStringForOption: (User student) =>
+              "${student.fname} ${student.lname}",
+          optionsViewBuilder: (context, onSelected, options) {
+            return Align(
+              alignment: Alignment.topLeft,
+              child: Material(
+                elevation: 8,
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  width: 300,
+                  constraints: BoxConstraints(maxHeight: 200),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: ListView.builder(
+                    padding: EdgeInsets.zero,
+                    shrinkWrap: true,
+                    itemCount: options.length,
+                    itemBuilder: (context, index) {
+                      final option = options.elementAt(index);
+                      return InkWell(
+                        onTap: () => onSelected(option),
+                        child: Container(
+                          padding: EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 12),
+                          decoration: BoxDecoration(
+                            border: Border(
+                              bottom: BorderSide(
+                                color: index == options.length - 1
+                                    ? Colors.transparent
+                                    : Colors.grey.shade200,
+                              ),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 20,
+                                backgroundColor: Colors.blue.shade100,
+                                child: Text(
+                                  "${option.fname[0]}${option.lname[0]}",
+                                  style: TextStyle(
+                                    color: Colors.blue.shade700,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      "${option.fname} ${option.lname}",
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w500,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                    Text(
+                                      option.email,
+                                      style: TextStyle(
+                                        color: Colors.grey.shade600,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            );
+          },
+          fieldViewBuilder: (BuildContext context,
+              TextEditingController fieldTextEditingController,
+              FocusNode fieldFocusNode,
+              VoidCallback onFieldSubmitted) {
+            return TextFormField(
+              controller: fieldTextEditingController,
+              focusNode: fieldFocusNode,
+              decoration: InputDecoration(
+                hintText: 'Search for a student...',
+                prefixIcon:
+                    Icon(Icons.person_search, color: Colors.blue.shade600),
+                suffixIcon: _selectedStudentId != null
+                    ? Icon(Icons.check_circle, color: Colors.green.shade600)
+                    : null,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.blue.shade600, width: 2),
+                ),
+                filled: true,
+                fillColor: Colors.grey.shade50,
+                contentPadding:
+                    EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              ),
+              validator: (value) {
+                if (_selectedStudentId == null) {
+                  return 'Please select a student';
+                }
+                return null;
+              },
+              onTap: () {
+                if (fieldTextEditingController.text.isEmpty) {
+                  fieldTextEditingController.clear();
+                }
+              },
+            );
+          },
+          onSelected: (User student) {
+            setState(() {
+              _selectedStudentId = student.id;
+            });
+            // Auto-focus next field
+            FocusScope.of(context).requestFocus(_courseFocusNode);
+          },
+        ),
+      ],
     );
   }
 
@@ -115,203 +365,645 @@ class _CreateInvoiceDialogState extends State<CreateInvoiceDialog> {
         .where((course) => course.status.toLowerCase() == 'active')
         .toList();
 
-    return Autocomplete<Course>(
-      optionsBuilder: (TextEditingValue textEditingValue) {
-        if (textEditingValue.text.isEmpty) {
-          return courses;
-        }
-        return courses.where((course) => course.name
-            .toLowerCase()
-            .contains(textEditingValue.text.toLowerCase()));
-      },
-      displayStringForOption: (Course course) => course.name,
-      fieldViewBuilder: (BuildContext context,
-          TextEditingController fieldTextEditingController,
-          FocusNode fieldFocusNode,
-          VoidCallback onFieldSubmitted) {
-        return TextFormField(
-          controller: fieldTextEditingController,
-          focusNode: fieldFocusNode,
-          decoration: InputDecoration(
-            labelText: 'Course',
-            hintText: 'Search course',
-            prefixIcon: const Icon(Icons.school, color: Colors.blue),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            filled: true,
-            fillColor: Colors.grey.shade100,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Course *',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: Colors.grey.shade700,
           ),
-          validator: (value) {
-            if (_selectedCourseId == null) {
-              return 'Please select a course';
-            }
-            return null;
-          },
-        );
-      },
-      onSelected: (Course course) {
-        setState(() {
-          _selectedCourseId = course.id;
-          _pricePerLesson = course.price.toDouble();
-        });
-      },
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_errorMessage != null) {
-      return AlertDialog(
-        title: const Text('Error'),
-        content: Text(_errorMessage!),
-        actions: [
-          TextButton(
-            onPressed: Get.back,
-            child: const Text('OK'),
-          ),
-        ],
-      );
-    }
-
-    return AlertDialog(
-      title: const Text(
-        'Create New Invoice',
-        style: TextStyle(
-          fontSize: 22,
-          fontWeight: FontWeight.bold,
-          color: Colors.blue,
         ),
-      ),
-      content: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _buildStudentAutocomplete(),
-                    const SizedBox(height: 16),
-                    _buildCourseAutocomplete(),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      keyboardType: TextInputType.number,
-                      initialValue: '1',
-                      decoration: InputDecoration(
-                        labelText: 'Number of Lessons',
-                        hintText: 'Enter number of lessons',
-                        prefixIcon: const Icon(Icons.format_list_numbered,
-                            color: Colors.blue),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        filled: true,
-                        fillColor: Colors.grey.shade100,
-                      ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) return 'Required';
-                        final lessons = int.tryParse(value);
-                        if (lessons == null || lessons < 1)
-                          return 'Invalid number';
-                        return null;
-                      },
-                      onChanged: (value) => setState(
-                        () => _numberOfLessons = int.tryParse(value) ?? 1,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Card(
-                      color: Colors.blue.shade50,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Price per Lesson: \$${_pricePerLesson.toStringAsFixed(2)}',
-                              style: const TextStyle(fontSize: 16),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Total Amount: \$${(_pricePerLesson * _numberOfLessons).toStringAsFixed(2)}',
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.blue,
+        SizedBox(height: 8),
+        Autocomplete<Course>(
+          optionsBuilder: (TextEditingValue textEditingValue) {
+            if (textEditingValue.text.isEmpty) {
+              return courses;
+            }
+            return courses.where((course) => course.name
+                .toLowerCase()
+                .contains(textEditingValue.text.toLowerCase()));
+          },
+          displayStringForOption: (Course course) => course.name,
+          optionsViewBuilder: (context, onSelected, options) {
+            return Align(
+              alignment: Alignment.topLeft,
+              child: Material(
+                elevation: 8,
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  width: 300,
+                  constraints: BoxConstraints(maxHeight: 200),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: ListView.builder(
+                    padding: EdgeInsets.zero,
+                    shrinkWrap: true,
+                    itemCount: options.length,
+                    itemBuilder: (context, index) {
+                      final option = options.elementAt(index);
+                      return InkWell(
+                        onTap: () => onSelected(option),
+                        child: Container(
+                          padding: EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 12),
+                          decoration: BoxDecoration(
+                            border: Border(
+                              bottom: BorderSide(
+                                color: index == options.length - 1
+                                    ? Colors.transparent
+                                    : Colors.grey.shade200,
                               ),
                             ),
-                          ],
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 40,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  color: Colors.green.shade100,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Icon(
+                                  Icons.school,
+                                  color: Colors.green.shade700,
+                                  size: 20,
+                                ),
+                              ),
+                              SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      option.name,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w500,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                    Text(
+                                      '\$${option.price.toStringAsFixed(2)} per lesson',
+                                      style: TextStyle(
+                                        color: Colors.grey.shade600,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ),
-                  ],
+                      );
+                    },
+                  ),
                 ),
               ),
-            ),
-      actions: [
-        TextButton(
-          onPressed: Get.back,
-          child: const Text(
-            'Cancel',
-            style: TextStyle(color: Colors.grey),
-          ),
-        ),
-        ElevatedButton(
-          onPressed: _isCreating
-              ? null
-              : () async {
-                  if (_formKey.currentState!.validate() &&
-                      _selectedStudentId != null &&
-                      _selectedCourseId != null) {
-                    _showConfirmationDialog(); // Show confirmation dialog
-                  }
-                },
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.blue.shade800,
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-          ),
-          child: _isCreating
-              ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    color: Colors.white,
-                    strokeWidth: 2,
-                  ),
-                )
-              : const Text('Create Invoice'),
+            );
+          },
+          fieldViewBuilder: (BuildContext context,
+              TextEditingController fieldTextEditingController,
+              FocusNode fieldFocusNode,
+              VoidCallback onFieldSubmitted) {
+            return TextFormField(
+              controller: fieldTextEditingController,
+              focusNode: fieldFocusNode,
+              decoration: InputDecoration(
+                hintText: 'Search for a course...',
+                prefixIcon: Icon(Icons.school, color: Colors.green.shade600),
+                suffixIcon: _selectedCourseId != null
+                    ? Icon(Icons.check_circle, color: Colors.green.shade600)
+                    : null,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide:
+                      BorderSide(color: Colors.green.shade600, width: 2),
+                ),
+                filled: true,
+                fillColor: Colors.grey.shade50,
+                contentPadding:
+                    EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              ),
+              validator: (value) {
+                if (_selectedCourseId == null) {
+                  return 'Please select a course';
+                }
+                return null;
+              },
+            );
+          },
+          onSelected: (Course course) {
+            setState(() {
+              _selectedCourseId = course.id;
+              _pricePerLesson = course.price.toDouble();
+            });
+            // Auto-focus next field
+            FocusScope.of(context).requestFocus(_lessonsFocusNode);
+          },
         ),
       ],
     );
   }
 
-  // Confirmation dialog
+  Widget _buildLessonsField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Number of Lessons *',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: Colors.grey.shade700,
+          ),
+        ),
+        SizedBox(height: 8),
+        Row(
+          children: [
+            // Decrease button
+            Container(
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey.shade300),
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(12),
+                  bottomLeft: Radius.circular(12),
+                ),
+              ),
+              child: IconButton(
+                onPressed: _numberOfLessons > 1
+                    ? () {
+                        setState(() {
+                          _numberOfLessons--;
+                          _lessonsController.text = _numberOfLessons.toString();
+                        });
+                      }
+                    : null,
+                icon: Icon(Icons.remove),
+                color: _numberOfLessons > 1
+                    ? Colors.blue.shade600
+                    : Colors.grey.shade400,
+              ),
+            ),
+            // Text field
+            Expanded(
+              child: TextFormField(
+                controller: _lessonsController,
+                focusNode: _lessonsFocusNode,
+                keyboardType: TextInputType.number,
+                textAlign: TextAlign.center,
+                decoration: InputDecoration(
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.zero,
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.zero,
+                    borderSide:
+                        BorderSide(color: Colors.blue.shade600, width: 2),
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey.shade50,
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) return 'Required';
+                  final lessons = int.tryParse(value);
+                  if (lessons == null || lessons < 1) return 'Invalid number';
+                  return null;
+                },
+                onChanged: (value) {
+                  final lessons = int.tryParse(value);
+                  if (lessons != null && lessons > 0) {
+                    setState(() => _numberOfLessons = lessons);
+                  }
+                },
+              ),
+            ),
+            // Increase button
+            Container(
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey.shade300),
+                borderRadius: BorderRadius.only(
+                  topRight: Radius.circular(12),
+                  bottomRight: Radius.circular(12),
+                ),
+              ),
+              child: IconButton(
+                onPressed: () {
+                  setState(() {
+                    _numberOfLessons++;
+                    _lessonsController.text = _numberOfLessons.toString();
+                  });
+                },
+                icon: Icon(Icons.add),
+                color: Colors.blue.shade600,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPricingSummary() {
+    return AnimatedContainer(
+      duration: Duration(milliseconds: 300),
+      padding: EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.blue.shade50, Colors.blue.shade100],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.blue.shade200),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Icon(Icons.receipt_long, color: Colors.blue.shade700),
+              SizedBox(width: 8),
+              Text(
+                'Pricing Summary',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blue.shade700,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Price per Lesson:',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+              Text(
+                '\$${_pricePerLesson.toStringAsFixed(2)}',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey.shade800,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Number of Lessons:',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+              Text(
+                '$_numberOfLessons',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey.shade800,
+                ),
+              ),
+            ],
+          ),
+          Divider(height: 24, color: Colors.blue.shade300),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Total Amount:',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blue.shade800,
+                ),
+              ),
+              Text(
+                '\$${(_pricePerLesson * _numberOfLessons).toStringAsFixed(2)}',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blue.shade800,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: Container(
+        width: 500,
+        constraints: BoxConstraints(
+          maxHeight:
+              MediaQuery.of(context).size.height * 0.9, // Limit dialog height
+        ),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 20,
+              offset: Offset(0, 10),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Header
+            Container(
+              padding: EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.blue.shade600, Colors.blue.shade700],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(20),
+                  topRight: Radius.circular(20),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      Icons.receipt_long,
+                      color: Colors.white,
+                      size: 24,
+                    ),
+                  ),
+                  SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Create New Invoice',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        Text(
+                          'Generate invoice for student lessons',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.white.withOpacity(0.8),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: Get.back,
+                    icon: Icon(Icons.close, color: Colors.white),
+                  ),
+                ],
+              ),
+            ),
+
+            // Content - Wrap in Flexible and SingleChildScrollView
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    if (_errorMessage != null)
+                      Padding(
+                        padding: EdgeInsets.all(24),
+                        child: _buildErrorState(),
+                      )
+                    else if (_isLoading)
+                      Padding(
+                        padding: EdgeInsets.all(24),
+                        child: _buildLoadingState(),
+                      )
+                    else
+                      AnimatedBuilder(
+                        animation: _fadeAnimation,
+                        builder: (context, child) {
+                          return Opacity(
+                            opacity: _fadeAnimation.value,
+                            child: Transform.translate(
+                              offset:
+                                  Offset(0, 20 * (1 - _slideAnimation.value)),
+                              child: Padding(
+                                padding: EdgeInsets.all(24),
+                                child: Form(
+                                  key: _formKey,
+                                  child: Column(
+                                    children: [
+                                      _buildStudentAutocomplete(),
+                                      SizedBox(height: 20),
+                                      _buildCourseAutocomplete(),
+                                      SizedBox(height: 20),
+                                      _buildLessonsField(),
+                                      SizedBox(height: 24),
+                                      _buildPricingSummary(),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Actions
+            if (!_isLoading && _errorMessage == null)
+              Container(
+                padding: EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade50,
+                  borderRadius: BorderRadius.only(
+                    bottomLeft: Radius.circular(20),
+                    bottomRight: Radius.circular(20),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: Get.back,
+                        style: OutlinedButton.styleFrom(
+                          padding: EdgeInsets.symmetric(vertical: 16),
+                          side: BorderSide(color: Colors.grey.shade400),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: Text(
+                          'Cancel',
+                          style: TextStyle(
+                            color: Colors.grey.shade700,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: 16),
+                    Expanded(
+                      flex: 2,
+                      child: ElevatedButton(
+                        onPressed: _isCreating
+                            ? null
+                            : () async {
+                                if (_formKey.currentState!.validate() &&
+                                    _selectedStudentId != null &&
+                                    _selectedCourseId != null) {
+                                  _showConfirmationDialog();
+                                }
+                              },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue.shade600,
+                          foregroundColor: Colors.white,
+                          padding: EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 2,
+                        ),
+                        child: _isCreating
+                            ? Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2,
+                                    ),
+                                  ),
+                                  SizedBox(width: 12),
+                                  Text('Creating...'),
+                                ],
+                              )
+                            : Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.add_circle_outline, size: 20),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    'Create Invoice',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Confirmation dialog - keeping original logic
   void _showConfirmationDialog() {
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('Confirm Invoice Creation'),
-          content: const Text('Are you sure you want to create this invoice?'),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              Icon(Icons.help_outline, color: Colors.orange.shade600),
+              SizedBox(width: 12),
+              Text('Confirm Invoice Creation'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Are you sure you want to create this invoice?'),
+              SizedBox(height: 16),
+              Container(
+                padding: EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Invoice Details:',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    SizedBox(height: 8),
+                    Text('Lessons: $_numberOfLessons'),
+                    Text(
+                        'Total: \$${(_pricePerLesson * _numberOfLessons).toStringAsFixed(2)}'),
+                  ],
+                ),
+              ),
+            ],
+          ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(), // Cancel
-              child: const Text('Cancel'),
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('Cancel'),
             ),
             ElevatedButton(
               onPressed: () {
-                Navigator.of(context).pop(); // Close dialog
-                _createInvoice(); // Proceed with invoice creation
+                Navigator.of(context).pop();
+                _createInvoice();
               },
-              child: const Text('Confirm'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue.shade600,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: Text('Confirm'),
             ),
           ],
         );
@@ -319,7 +1011,7 @@ class _CreateInvoiceDialogState extends State<CreateInvoiceDialog> {
     );
   }
 
-  // Invoice creation logic
+  // Invoice creation logic - keeping original logic
   Future<void> _createInvoice() async {
     setState(() => _isCreating = true);
     await Get.find<BillingController>().generateInvoice(

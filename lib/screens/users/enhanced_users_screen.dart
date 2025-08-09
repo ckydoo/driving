@@ -11,6 +11,7 @@ import 'package:get/get.dart';
 import '../../controllers/user_controller.dart';
 import '../../models/user.dart';
 import 'package:driving/screens/users/instructor_details_screen.dart';
+import 'package:driving/screens/users/bulk_student_upload_screen.dart';
 
 class EnhancedUsersScreen extends StatefulWidget {
   final String role;
@@ -265,6 +266,17 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
               SizedBox(width: 8),
               _buildSortButton(),
               SizedBox(width: 8),
+              if (widget.role.toLowerCase() == 'student')
+                ElevatedButton.icon(
+                  onPressed: _showImportDialog,
+                  icon: Icon(Icons.upload_file),
+                  label: Text('Import Students'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue[600],
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              if (widget.role.toLowerCase() == 'student') SizedBox(width: 8),
               _buildRefreshButton(),
             ],
           ),
@@ -872,37 +884,6 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
     );
   }
 
-  void _showImportDialog() {
-    Get.defaultDialog(
-      title: 'Import ${widget.role.capitalize}s',
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text('Import multiple ${widget.role}s from a CSV file.'),
-          SizedBox(height: 16),
-          ElevatedButton(
-            onPressed: () async {
-              final result = await FilePicker.platform.pickFiles(
-                type: FileType.custom,
-                allowedExtensions: ['csv'],
-              );
-              if (result != null) {
-                // Handle CSV import logic here
-                Get.back();
-                Get.snackbar('Import', 'CSV import functionality coming soon!');
-              }
-            },
-            child: Text('Select CSV File'),
-          ),
-        ],
-      ),
-      confirm: TextButton(
-        onPressed: Get.back,
-        child: Text('Cancel'),
-      ),
-    );
-  }
-
   void _showQuickEnrollDialog() {
     Get.defaultDialog(
       title: 'Quick Enrollment',
@@ -1010,5 +991,48 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
         child: Text('Cancel'),
       ),
     );
+  }
+
+  void _showImportDialog() {
+    if (widget.role == 'student') {
+      // Navigate to the new bulk upload screen for students
+      Get.to(() => BulkStudentUploadScreen())?.then((result) {
+        if (result == true) {
+          // Refresh the users list after successful upload
+          _loadUsers();
+        }
+      });
+    } else {
+      // For other roles, show the existing simple dialog
+      Get.defaultDialog(
+        title: 'Import ${widget.role.capitalize}s',
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Import multiple ${widget.role}s from a CSV file.'),
+            SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () async {
+                final result = await FilePicker.platform.pickFiles(
+                  type: FileType.custom,
+                  allowedExtensions: ['csv'],
+                );
+                if (result != null) {
+                  // Handle CSV import logic here for other roles
+                  Get.back();
+                  Get.snackbar('Import',
+                      'CSV import functionality coming soon for ${widget.role}s!');
+                }
+              },
+              child: Text('Select CSV File'),
+            ),
+          ],
+        ),
+        confirm: TextButton(
+          onPressed: Get.back,
+          child: Text('Cancel'),
+        ),
+      );
+    }
   }
 }
