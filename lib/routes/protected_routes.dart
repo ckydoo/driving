@@ -89,6 +89,11 @@ class ProtectedRoutes {
       page: () => const CompleteMainLayout(),
       middlewares: [AuthenticatedMiddleware()], // All authenticated users
     ),
+    GetPage(
+      name: '/pos',
+      page: () => const CompleteMainLayout(),
+      middlewares: [InstructorMiddleware()], // Admin + Instructor
+    ),
   ];
 }
 
@@ -103,6 +108,7 @@ class AccessControl {
     'courses': ['admin', 'instructor'],
     'fleet': ['admin'],
     'schedules': ['admin', 'instructor'],
+    'pos': ['admin', 'instructor'],
     'billing': ['admin'],
     'receipts': ['admin'],
     'settings': ['admin', 'instructor', 'student'],

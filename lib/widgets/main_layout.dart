@@ -12,6 +12,7 @@ import 'package:driving/screens/users/enhanced_users_screen.dart';
 import 'package:driving/settings/settings_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:driving/screens/payments/pos.dart';
 import '../controllers/navigation_controller.dart';
 
 class CompleteMainLayout extends StatelessWidget {
@@ -184,6 +185,15 @@ class CompleteMainLayout extends StatelessWidget {
                             ),
                           ),
                           const Spacer(),
+                          // Search bar (optional)
+                          if (authController
+                              .hasAnyRole(['admin', 'instructor']))
+                            IconButton(
+                              icon:
+                                  Icon(Icons.payment, color: Colors.grey[600]),
+                              onPressed: () =>
+                                  navController.navigateToPage('pos'),
+                            ),
                           // Search bar (optional)
                           if (authController
                               .hasAnyRole(['admin', 'instructor']))
@@ -387,6 +397,8 @@ class CompleteMainLayout extends StatelessWidget {
         return CourseReportsScreen();
       case 'settings':
         return SettingsScreen();
+      case 'pos':
+        return POSCashierScreen();
       default:
         return const DashboardContent();
     }

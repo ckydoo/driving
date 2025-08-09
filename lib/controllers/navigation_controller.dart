@@ -63,6 +63,13 @@ class NavigationController extends GetxController {
       requiredRoles: ['admin'],
     ),
     NavigationItem(
+      title: 'POS',
+      icon: Icons.payment,
+      route: '/pos',
+      pageKey: 'pos',
+      requiredRoles: ['admin', 'instructor'],
+    ),
+    NavigationItem(
       title: 'Receipts',
       icon: Icons.receipt_long,
       route: '/receipts',

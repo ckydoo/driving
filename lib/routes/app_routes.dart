@@ -14,6 +14,7 @@ class AppRoutes {
   static const String schedules = '/schedules';
   static const String billing = '/billing';
   static const String quickSearch = '/quick-search';
+  static const String pos = '/pos';
   static const String settings = '/settings';
 
   static final routes = [
@@ -55,6 +56,10 @@ class AppRoutes {
     ),
     GetPage(
       name: receipts,
+      page: () => CompleteMainLayout(),
+    ),
+    GetPage(
+      name: pos,
       page: () => CompleteMainLayout(),
     ),
   ];
