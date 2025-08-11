@@ -398,7 +398,7 @@ class CompleteMainLayout extends StatelessWidget {
       case 'settings':
         return SettingsScreen();
       case 'pos':
-        return POSCashierScreen();
+        return POSScreen();
       default:
         return const DashboardContent();
     }
