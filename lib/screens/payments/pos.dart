@@ -1,4 +1,5 @@
 // lib/screens/payments/enhanced_pos_screen.dart
+import 'package:driving/services/receipt_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
@@ -10,7 +11,6 @@ import '../../models/user.dart';
 import '../../models/course.dart';
 import '../../models/invoice.dart';
 import '../../models/payment.dart';
-import '../../services/receipt_service.dart';
 
 class POSScreen extends StatefulWidget {
   const POSScreen({Key? key}) : super(key: key);
@@ -166,6 +166,36 @@ class _POSScreenState extends State<POSScreen> with TickerProviderStateMixin {
     });
   }
 
+  // Replace your POS screen balance calculation methods with these exact copies from student details screen and payment dialog:
+
+// EXACT COPY from student_details_screen.dart _buildBillingTab method
+  double _getStudentBalance(User student) {
+    final studentInvoices = billingController.invoices
+        .where((invoice) => invoice.studentId == student.id)
+        .toList();
+
+    final totalBalance = studentInvoices.fold<double>(
+        0.0, (sum, invoice) => sum + invoice.balance);
+
+    return totalBalance;
+  }
+
+// EXACT COPY from payment_dialog.dart logic
+  List<Invoice> _getStudentInvoices(User student) {
+    return billingController.invoices
+        .where((invoice) => invoice.studentId == student.id)
+        .toList();
+  }
+
+// EXACT COPY from payment_dialog.dart - filter unpaid invoices
+  List<Invoice> _getUnpaidInvoices(User student) {
+    return billingController.invoices
+        .where(
+            (invoice) => invoice.studentId == student.id && invoice.balance > 0)
+        .toList();
+  }
+
+// Updated _selectStudent method using exact same logic as student details screen
   void _selectStudent(User student) {
     setState(() {
       _selectedStudent = student;
@@ -185,26 +215,14 @@ class _POSScreenState extends State<POSScreen> with TickerProviderStateMixin {
     _scaleController.reset();
     _scaleController.forward();
 
-    // Auto-populate payment amount with outstanding balance
+    // Use EXACT same balance calculation as student details screen
     final balance = _getStudentBalance(student);
     if (balance > 0) {
       _paymentAmountController.text = balance.toStringAsFixed(2);
     }
   }
 
-  double _getStudentBalance(User student) {
-    return billingController.invoices
-        .where((invoice) => invoice.studentId == student.id)
-        .fold(0.0,
-            (sum, invoice) => sum + (invoice.totalAmount - invoice.amountPaid));
-  }
-
-  List<Invoice> _getStudentInvoices(User student) {
-    return billingController.invoices
-        .where((invoice) => invoice.studentId == student.id)
-        .toList();
-  }
-
+// Updated _processPayment using EXACT same logic as payment dialog
   void _processPayment() async {
     if (_selectedStudent == null || _paymentAmountController.text.isEmpty) {
       _showEnhancedSnackbar('Please select a student and enter payment amount',
@@ -225,37 +243,53 @@ class _POSScreenState extends State<POSScreen> with TickerProviderStateMixin {
     });
 
     try {
-      // Find the oldest unpaid invoice
-      final studentInvoices = _getStudentInvoices(_selectedStudent!)
-          .where((invoice) => invoice.totalAmount > invoice.amountPaid)
-          .toList();
+      // Use EXACT same logic as payment dialog - filter unpaid invoices
+      final unpaidInvoices = _getUnpaidInvoices(_selectedStudent!);
 
-      if (studentInvoices.isEmpty) {
+      if (unpaidInvoices.isEmpty) {
         throw Exception('No outstanding invoices found for this student');
       }
 
-      studentInvoices.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-      final invoice = studentInvoices.first;
+      // EXACT same sorting logic as payment dialog
+      unpaidInvoices.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      final invoice = unpaidInvoices.first;
 
+      // EXACT same reference generation as payment dialog
+      final reference = ReceiptService.generateReference();
+
+      // EXACT same Payment object creation as payment dialog
       final payment = Payment(
         invoiceId: invoice.id!,
         amount: amount,
         method: _paymentMethod,
         paymentDate: DateTime.now(),
-        notes: _notesController.text.isEmpty ? null : _notesController.text,
+        notes: _notesController.text.trim().isEmpty
+            ? null
+            : _notesController.text.trim(),
+        reference: reference,
+        receiptGenerated: false,
         userId: userController.currentUser.value?.id ?? 1,
-        reference: 'POS-${DateTime.now().millisecondsSinceEpoch}',
       );
 
-      await billingController.recordPayment(payment);
+      print('POS Payment details:');
+      print('- Invoice ID: ${payment.invoiceId}');
+      print('- Invoice Balance: ${invoice.balance}');
+      print('- Payment Amount: ${payment.amount}');
+      print('- Method: ${payment.method}');
+      print('- Reference: ${payment.reference}');
+      print('- Generate Receipt: $_generateReceipt');
 
+      // Use EXACT same logic as payment dialog _processSingleInvoicePayment
       if (_generateReceipt) {
-        await ReceiptService.generateReceipt(
-          payment,
-          invoice,
-          _selectedStudent!,
-        );
+        print('Using recordPaymentWithReceipt...');
+        await billingController.recordPaymentWithReceipt(
+            payment, invoice, _selectedStudent!);
+      } else {
+        print('Using recordPayment...');
+        await billingController.recordPayment(payment);
       }
+
+      print('Payment processing completed successfully');
 
       setState(() {
         _currentStep = 'success';
@@ -271,6 +305,7 @@ class _POSScreenState extends State<POSScreen> with TickerProviderStateMixin {
         _clearAll();
       });
     } catch (e) {
+      print('Payment processing error: $e');
       _showEnhancedSnackbar(
           'Error processing payment: ${e.toString()}', SnackbarType.error);
       setState(() {
@@ -920,10 +955,7 @@ class _POSScreenState extends State<POSScreen> with TickerProviderStateMixin {
         _buildModeSelector(),
         SizedBox(height: 20),
         Expanded(
-          child: SingleChildScrollView(
-            // Add scrollable wrapper
-            child: _buildOperationForm(),
-          ),
+          child: _buildOperationForm(),
         ),
       ],
     );
@@ -1059,9 +1091,11 @@ class _POSScreenState extends State<POSScreen> with TickerProviderStateMixin {
     } else if (_currentStep == 'success') {
       return _buildSuccessScreen();
     } else if (_operationMode == 'payment') {
-      return _buildEnhancedPaymentForm();
+      return SingleChildScrollView(
+          child: _buildEnhancedPaymentForm()); // Add scrolling here
     } else {
-      return _buildEnhancedInvoiceForm();
+      return SingleChildScrollView(
+          child: _buildEnhancedInvoiceForm()); // Add scrolling here
     }
   }
 
@@ -1114,84 +1148,85 @@ class _POSScreenState extends State<POSScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildSuccessScreen() {
-    return Container(
-      padding: EdgeInsets.all(40),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            blurRadius: 20,
-            spreadRadius: 2,
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 80,
-            height: 80,
-            decoration: BoxDecoration(
-              color: Colors.green.shade100,
-              shape: BoxShape.circle,
+    return SingleChildScrollView(
+      child: Container(
+        padding: EdgeInsets.all(40),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.1),
+              blurRadius: 20,
+              spreadRadius: 2,
             ),
-            child: Icon(
-              Icons.check_circle,
-              color: Colors.green.shade600,
-              size: 50,
-            ),
-          ),
-          SizedBox(height: 32),
-          Text(
-            'Payment Successful!',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: Colors.green.shade700,
-            ),
-          ),
-          SizedBox(height: 16),
-          Text(
-            'Transaction completed successfully',
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.grey[600],
-            ),
-            textAlign: TextAlign.center,
-          ),
-          SizedBox(height: 32),
-          ElevatedButton(
-            onPressed: _clearAll,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green.shade600,
-              padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+          ],
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: Colors.green.shade100,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.check_circle,
+                color: Colors.green.shade600,
+                size: 50,
               ),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.add, color: Colors.white),
-                SizedBox(width: 8),
-                Text(
-                  'New Transaction',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
+            SizedBox(height: 32),
+            Text(
+              'Payment Successful!',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.green.shade700,
+              ),
             ),
-          ),
-        ],
+            SizedBox(height: 12),
+            Text(
+              'Transaction completed successfully',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey[600],
+              ),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 10),
+            ElevatedButton(
+              onPressed: _clearAll,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green.shade600,
+                padding: EdgeInsets.symmetric(horizontal: 32, vertical: 10),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.add, color: Colors.white),
+                  SizedBox(width: 5),
+                  Text(
+                    'New Transaction',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  // ...existing code...
   Widget _buildEnhancedPaymentForm() {
     final canProcessPayment =
         _selectedStudent != null && _getStudentBalance(_selectedStudent!) > 0;
@@ -1211,331 +1246,328 @@ class _POSScreenState extends State<POSScreen> with TickerProviderStateMixin {
           ),
         ],
       ),
-      child: SingleChildScrollView(
-        // Add this wrapper
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header
-            Row(
-              children: [
-                Container(
-                  padding: EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.green.shade100,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(Icons.payment,
-                      color: Colors.green.shade700, size: 24),
-                ),
-                SizedBox(width: 16),
-                Expanded(
-                  // Add Expanded to prevent overflow
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Process Payment',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.grey[800],
-                        ),
-                      ),
-                      Text(
-                        'Accept payment for outstanding balance',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey[600],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 24),
-
-            if (!canProcessPayment) ...[
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Row(
+            children: [
               Container(
-                padding: EdgeInsets.all(20),
+                padding: EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.orange.shade50,
+                  color: Colors.green.shade100,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.orange.shade200),
                 ),
-                child: Row(
+                child:
+                    Icon(Icons.payment, color: Colors.green.shade700, size: 24),
+              ),
+              SizedBox(width: 16),
+              Expanded(
+                // Add Expanded to prevent overflow
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.info_outline,
-                        color: Colors.orange.shade700, size: 24),
-                    SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _selectedStudent == null
-                                ? 'No Student Selected'
-                                : 'No Outstanding Balance',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.orange.shade800,
-                            ),
-                          ),
-                          SizedBox(height: 4),
-                          Text(
-                            _selectedStudent == null
-                                ? 'Please search and select a student to continue'
-                                : 'This student has no outstanding balance to pay',
-                            style: TextStyle(
-                              color: Colors.orange.shade700,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
+                    Text(
+                      'Process Payment',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey[800],
+                      ),
+                    ),
+                    Text(
+                      'Accept payment for outstanding balance',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[600],
                       ),
                     ),
                   ],
                 ),
               ),
-            ] else ...[
-              // Payment Amount Section
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            ],
+          ),
+          SizedBox(height: 24),
+
+          if (!canProcessPayment) ...[
+            Container(
+              padding: EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.orange.shade200),
+              ),
+              child: Row(
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Payment Amount',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.grey[800],
-                        ),
-                      ),
-                      Text(
-                        'Outstanding: \$${balance.toStringAsFixed(2)}',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.red.shade600,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 12),
-                  Container(
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey.shade300),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: TextFormField(
-                      controller: _paymentAmountController,
-                      focusNode: _amountFocusNode,
-                      keyboardType:
-                          TextInputType.numberWithOptions(decimal: true),
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(
-                            RegExp(r'^\d+\.?\d{0,2}')),
-                      ],
-                      decoration: InputDecoration(
-                        hintText: '0.00',
-                        prefixIcon: Container(
-                          padding: EdgeInsets.all(16),
-                          child: Text(
-                            '\$',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.grey.shade600,
-                            ),
+                  Icon(Icons.info_outline,
+                      color: Colors.orange.shade700, size: 24),
+                  SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _selectedStudent == null
+                              ? 'No Student Selected'
+                              : 'No Outstanding Balance',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.orange.shade800,
                           ),
                         ),
-                        border: InputBorder.none,
-                        contentPadding:
-                            EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                      ),
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
+                        SizedBox(height: 4),
+                        Text(
+                          _selectedStudent == null
+                              ? 'Please search and select a student to continue'
+                              : 'This student has no outstanding balance to pay',
+                          style: TextStyle(
+                            color: Colors.orange.shade700,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  SizedBox(height: 12),
-                  // Quick Amount Buttons
-                  Row(
-                    children: [
-                      Text(
-                        'Quick amounts:',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey.shade600,
+                ],
+              ),
+            ),
+          ] else ...[
+            // Payment Amount Section
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Payment Amount',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey[800],
+                      ),
+                    ),
+                    Text(
+                      'Outstanding: \$${balance.toStringAsFixed(2)}',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.red.shade600,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 12),
+                Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey.shade300),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: TextFormField(
+                    controller: _paymentAmountController,
+                    focusNode: _amountFocusNode,
+                    keyboardType:
+                        TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(
+                          RegExp(r'^\d+\.?\d{0,2}')),
+                    ],
+                    decoration: InputDecoration(
+                      hintText: '0.00',
+                      prefixIcon: Container(
+                        padding: EdgeInsets.all(16),
+                        child: Text(
+                          '\$',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey.shade600,
+                          ),
                         ),
                       ),
-                      SizedBox(width: 12),
-                      ..._quickAmounts
-                          .where((amount) => amount <= balance)
-                          .map(
-                            (amount) => Container(
-                              margin: EdgeInsets.only(right: 8),
-                              child: Material(
-                                color: Colors.transparent,
-                                child: InkWell(
-                                  borderRadius: BorderRadius.circular(20),
-                                  onTap: () {
-                                    _paymentAmountController.text =
-                                        amount.toStringAsFixed(2);
-                                  },
-                                  child: Container(
-                                    padding: EdgeInsets.symmetric(
-                                        horizontal: 12, vertical: 6),
-                                    decoration: BoxDecoration(
-                                      color: Colors.blue.shade50,
-                                      borderRadius: BorderRadius.circular(20),
-                                      border: Border.all(
-                                          color: Colors.blue.shade200),
-                                    ),
-                                    child: Text(
-                                      '\$${amount.toStringAsFixed(0)}',
-                                      style: TextStyle(
-                                        color: Colors.blue.shade700,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                      ),
+                      border: InputBorder.none,
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                    ),
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                SizedBox(height: 12),
+                // Quick Amount Buttons
+                Row(
+                  children: [
+                    Text(
+                      'Quick amounts:',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                    SizedBox(width: 12),
+                    ..._quickAmounts
+                        .where((amount) => amount <= balance)
+                        .map(
+                          (amount) => Container(
+                            margin: EdgeInsets.only(right: 8),
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(20),
+                                onTap: () {
+                                  _paymentAmountController.text =
+                                      amount.toStringAsFixed(2);
+                                },
+                                child: Container(
+                                  padding: EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.shade50,
+                                    borderRadius: BorderRadius.circular(20),
+                                    border:
+                                        Border.all(color: Colors.blue.shade200),
+                                  ),
+                                  child: Text(
+                                    '\$${amount.toStringAsFixed(0)}',
+                                    style: TextStyle(
+                                      color: Colors.blue.shade700,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
                                 ),
                               ),
                             ),
-                          )
-                          .toList(),
-                      // Full Balance Button
-                      Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(20),
-                          onTap: () {
-                            _paymentAmountController.text =
-                                balance.toStringAsFixed(2);
-                          },
-                          child: Container(
-                            padding: EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: Colors.green.shade50,
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: Colors.green.shade200),
-                            ),
-                            child: Text(
-                              'Full Balance',
-                              style: TextStyle(
-                                color: Colors.green.shade700,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                              ),
+                          ),
+                        )
+                        .toList(),
+                    // Full Balance Button
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(20),
+                        onTap: () {
+                          _paymentAmountController.text =
+                              balance.toStringAsFixed(2);
+                        },
+                        child: Container(
+                          padding:
+                              EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.green.shade50,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: Colors.green.shade200),
+                          ),
+                          child: Text(
+                            'Full Balance',
+                            style: TextStyle(
+                              color: Colors.green.shade700,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ),
                       ),
-                    ],
-                  ),
-                ],
-              ),
-              SizedBox(height: 24),
-
-              // Payment Method Section
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Payment Method',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey[800],
                     ),
-                  ),
-                  SizedBox(height: 12),
-                  Row(
-                    children: [
-                      _buildPaymentMethodButton(
-                          'Cash', Icons.money, Colors.green),
-                      SizedBox(width: 12),
-                      _buildPaymentMethodButton(
-                          'Ecocash', Icons.credit_card, Colors.blue),
-                    ],
-                  ),
-                ],
-              ),
-              SizedBox(height: 24),
-
-              // Generate Receipt Option
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade50,
-                  borderRadius: BorderRadius.circular(12),
+                  ],
                 ),
-                child: CheckboxListTile(
-                  title: Text(
-                    'Generate Receipt',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  subtitle: Text(
-                    'Automatically generate and print receipt',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                  ),
-                  value: _generateReceipt,
-                  onChanged: (value) =>
-                      setState(() => _generateReceipt = value ?? true),
-                  activeColor: Colors.green.shade600,
-                  controlAffinity: ListTileControlAffinity.leading,
-                ),
-              ),
-              SizedBox(height: 32),
+              ],
+            ),
+            SizedBox(height: 24),
 
-              // Process Button
-              SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: ElevatedButton(
-                  onPressed: _isProcessing ? null : _processPayment,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green.shade600,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    elevation: 2,
+            // Payment Method Section
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Payment Method',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey[800],
                   ),
-                  child: _isProcessing
-                      ? SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 2,
-                          ),
-                        )
-                      : Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.payment, color: Colors.white, size: 24),
-                            SizedBox(width: 12),
-                            Text(
-                              'Process Payment',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ],
+                ),
+                SizedBox(height: 12),
+                Row(
+                  children: [
+                    _buildPaymentMethodButton(
+                        'Cash', Icons.money, Colors.green),
+                    SizedBox(width: 12),
+                    _buildPaymentMethodButton(
+                        'Ecocash', Icons.credit_card, Colors.blue),
+                  ],
+                ),
+              ],
+            ),
+            SizedBox(height: 24),
+
+            // Generate Receipt Option
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: CheckboxListTile(
+                title: Text(
+                  'Generate Receipt',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                subtitle: Text(
+                  'Automatically generate and print receipt',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
+                value: _generateReceipt,
+                onChanged: (value) =>
+                    setState(() => _generateReceipt = value ?? true),
+                activeColor: Colors.green.shade600,
+                controlAffinity: ListTileControlAffinity.leading,
+              ),
+            ),
+            SizedBox(height: 32),
+
+            // Process Button
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: ElevatedButton(
+                onPressed: _isProcessing ? null : _processPayment,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green.shade600,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  elevation: 2,
+                ),
+                child: _isProcessing
+                    ? SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
                         ),
-                ),
+                      )
+                    : Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.payment, color: Colors.white, size: 24),
+                          SizedBox(width: 12),
+                          Text(
+                            'Process Payment',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
               ),
-            ],
+            ),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -1687,19 +1719,21 @@ class _POSScreenState extends State<POSScreen> with TickerProviderStateMixin {
                   Text(
                     'Select Course',
                     style: TextStyle(
-                      fontSize: 16,
+                      fontSize: 14,
                       fontWeight: FontWeight.bold,
                       color: Colors.grey[800],
                     ),
                   ),
                   SizedBox(height: 12),
                   Container(
+                    width: double.infinity,
                     decoration: BoxDecoration(
                       border: Border.all(color: Colors.grey.shade300),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: DropdownButtonFormField<Course>(
                       value: _selectedCourse,
+                      isExpanded: true,
                       onChanged: (Course? course) {
                         setState(() {
                           _selectedCourse = course;
@@ -1715,39 +1749,29 @@ class _POSScreenState extends State<POSScreen> with TickerProviderStateMixin {
                         return DropdownMenuItem<Course>(
                           value: course,
                           child: Row(
-                            mainAxisSize: MainAxisSize.min,
                             children: [
                               Container(
-                                width: 40,
-                                height: 40,
+                                padding: EdgeInsets.all(6),
                                 decoration: BoxDecoration(
                                   color: Colors.blue.shade100,
-                                  borderRadius: BorderRadius.circular(8),
+                                  borderRadius: BorderRadius.circular(6),
                                 ),
-                                child: Icon(Icons.school,
-                                    color: Colors.blue.shade700),
+                                child: Icon(
+                                  Icons.school,
+                                  color: Colors.blue.shade700,
+                                  size: 16,
+                                ),
                               ),
                               SizedBox(width: 12),
-                              Flexible(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      course.name,
-                                      style: TextStyle(
-                                          fontWeight: FontWeight.w600),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    Text(
-                                      '\$${course.price.toStringAsFixed(2)} per lesson',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.grey.shade600,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
+                              Expanded(
+                                child: Text(
+                                  '${course.name} - \$${course.price.toStringAsFixed(2)}',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 14,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
                                 ),
                               ),
                             ],
@@ -1777,7 +1801,6 @@ class _POSScreenState extends State<POSScreen> with TickerProviderStateMixin {
                           ),
                         ),
                         SizedBox(height: 12),
-                        // ...existing code...
                         Container(
                           decoration: BoxDecoration(
                             border: Border.all(color: Colors.grey.shade300),
@@ -1790,7 +1813,6 @@ class _POSScreenState extends State<POSScreen> with TickerProviderStateMixin {
                               FilteringTextInputFormatter.digitsOnly
                             ],
                             onChanged: (value) {
-                              // Add this onChanged callback to trigger UI update
                               setState(() {});
                             },
                             decoration: InputDecoration(
@@ -1837,7 +1859,7 @@ class _POSScreenState extends State<POSScreen> with TickerProviderStateMixin {
                               Text(
                                 _selectedCourse != null
                                     ? '\$${(_selectedCourse!.price * (int.tryParse(_lessonsController.text) ?? 1)).toStringAsFixed(2)}'
-                                    : '\$${0.00}',
+                                    : '\$0.00',
                                 style: TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.bold,

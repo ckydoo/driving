@@ -48,6 +48,7 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
+    _initializeData();
     _loadData();
   }
 
@@ -783,73 +784,101 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
     );
   }
 
-  Widget _buildInvoiceActions(Invoice invoice) {
-    // Get payments for this invoice
-    final invoicePayments = billingController.payments
-        .where((payment) => payment.invoiceId == invoice.id)
-        .toList();
+// Add this method to force fresh data loading
+  Future<void> _initializeData() async {
+    // Force refresh billing data when screen loads
+    await billingController.fetchBillingData();
+    await _loadData();
+  }
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade50,
-        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(12)),
-      ),
-      child: Row(
-        children: [
-          if (invoice.balance > 0) ...[
-            Expanded(
-              child: ElevatedButton.icon(
-                onPressed: () => _showPaymentDialog(invoice, widget.student),
-                icon: const Icon(Icons.payment, size: 16),
-                label: const Text('Record Payment'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green.shade600,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+// Also add this to your _buildInvoiceActions method to ensure fresh data
+  Widget _buildInvoiceActions(Invoice invoice) {
+    return FutureBuilder(
+      future: _ensureFreshInvoiceData(invoice.id!),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(child: CircularProgressIndicator());
+        }
+
+        final freshInvoice = snapshot.data as Invoice? ?? invoice;
+
+        // Get payments for this invoice
+        final invoicePayments = billingController.payments
+            .where((payment) => payment.invoiceId == freshInvoice.id)
+            .toList();
+
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade50,
+            borderRadius:
+                const BorderRadius.vertical(bottom: Radius.circular(12)),
+          ),
+          child: Row(
+            children: [
+              if (freshInvoice.balance > 0.01) ...[
+                // Use 0.01 instead of 0 to handle floating point precision
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () =>
+                        _showPaymentDialog(freshInvoice, widget.student),
+                    icon: const Icon(Icons.payment, size: 16),
+                    label: const Text('Record Payment'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green.shade600,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+              ],
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: invoicePayments.isNotEmpty
+                      ? () =>
+                          _showInvoiceReceipts(freshInvoice, invoicePayments)
+                      : null,
+                  icon: Icon(
+                    Icons.receipt_long,
+                    size: 16,
+                    color: invoicePayments.isEmpty ? Colors.grey : null,
+                  ),
+                  label: Text(invoicePayments.isEmpty
+                      ? 'No Receipts'
+                      : 'View Receipts (${invoicePayments.length})'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    foregroundColor:
+                        invoicePayments.isEmpty ? Colors.grey : null,
                   ),
                 ),
               ),
-            ),
-            const SizedBox(width: 12),
-          ],
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: invoicePayments.isNotEmpty
-                  ? () => _showInvoiceReceipts(invoice, invoicePayments)
-                  : null,
-              icon: Icon(
-                Icons.receipt_long,
-                size: 16,
-                color: invoicePayments.isEmpty ? Colors.grey : null,
-              ),
-              label: Text(invoicePayments.isEmpty
-                  ? 'No Receipts'
-                  : 'View Receipts (${invoicePayments.length})'),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                foregroundColor: invoicePayments.isEmpty
-                    ? Colors.grey
-                    : Colors.blue.shade600,
-              ),
-            ),
+            ],
           ),
-          const SizedBox(width: 12),
-          IconButton(
-            onPressed: () => _showInvoiceOptions(invoice),
-            icon: const Icon(Icons.more_vert),
-            style: IconButton.styleFrom(
-              backgroundColor: Colors.grey.shade200,
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
+  }
+
+// Add this method to get fresh invoice data from database
+  Future<Invoice> _ensureFreshInvoiceData(int invoiceId) async {
+    // Force refresh billing data
+    await billingController.fetchBillingData();
+
+    // Find the invoice with fresh data
+    final freshInvoice = billingController.invoices.firstWhere(
+      (inv) => inv.id == invoiceId,
+      orElse: () => throw Exception('Invoice not found'),
+    );
+
+    return freshInvoice;
   }
 
   void _showInvoiceReceipts(Invoice invoice, List<Payment> payments) {
