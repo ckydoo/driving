@@ -254,7 +254,6 @@ class _POSScreenState extends State<POSScreen> with TickerProviderStateMixin {
           payment,
           invoice,
           _selectedStudent!,
-          'Your Driving School',
         );
       }
 

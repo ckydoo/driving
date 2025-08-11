@@ -153,7 +153,7 @@ class DashboardContent extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Here\'s what\'s happening with your driving school today.',
+                  'Analytics and insights at your fingertips',
                   style: TextStyle(
                     fontSize: 16,
                     color: Colors.white.withOpacity(0.9),

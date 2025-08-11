@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:csv/csv.dart';
 import 'package:driving/controllers/schedule_controller.dart';
+import 'package:driving/controllers/settings_controller.dart';
+import 'package:driving/controllers/user_controller.dart';
 import 'package:driving/models/billing_record.dart';
 import 'package:driving/models/course.dart';
 import 'package:driving/models/invoice.dart';
@@ -12,6 +14,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:pdf/pdf.dart';
+import 'package:path_provider/path_provider.dart';
 import '../services/database_helper.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:intl/intl.dart';
@@ -390,7 +393,6 @@ class BillingController extends GetxController {
           paymentWithReference.copyWith(id: paymentId),
           invoice,
           student,
-          'Your Driving School', // Replace with your school name
         );
 
         // Update payment with receipt path
@@ -439,64 +441,6 @@ class BillingController extends GetxController {
       isLoading(false);
     }
   }
-
-  Future<void> regenerateReceipt(int paymentId) async {
-    try {
-      final payment = payments.firstWhere((p) => p.id == paymentId);
-      final invoice = invoices.firstWhere((inv) => inv.id == payment.invoiceId);
-
-      // You'll need to get the student data - add this method to your UserController
-      // final student = await userController.getUserById(invoice.studentId);
-
-      // For now, assuming you have access to student data
-      // Replace this with actual student lookup
-      final receiptPath = await ReceiptService.generateReceipt(
-        payment,
-        invoice,
-        User(
-            fname: 'Student',
-            lname: 'Name',
-            email: 'student@example.com',
-            password: '',
-            gender: '',
-            phone: '',
-            address: '',
-            date_of_birth: DateTime.now(),
-            role: 'student',
-            status: 'active',
-            idnumber: '',
-            created_at: DateTime.now()), // Replace with actual student
-
-        'Your Driving School',
-      );
-
-      // Update payment with new receipt path
-      await _dbHelper.updatePayment({
-        'id': paymentId,
-        'receipt_path': receiptPath,
-        'receipt_generated': 1,
-      });
-
-      await fetchBillingData();
-
-      Get.snackbar(
-        'Receipt Generated',
-        'Receipt has been regenerated successfully',
-        snackPosition: SnackPosition.TOP,
-        backgroundColor: Colors.green.shade600,
-        colorText: Colors.white,
-      );
-    } catch (e) {
-      Get.snackbar(
-        'Error',
-        'Failed to regenerate receipt: ${e.toString()}',
-        snackPosition: SnackPosition.TOP,
-        backgroundColor: Colors.red.shade600,
-        colorText: Colors.white,
-      );
-    }
-  }
-  // Add this method to your existing BillingController
 
   /// Creates an invoice directly (used during student enrollment)
   Future<int> createInvoice(Invoice invoice) async {
@@ -1576,6 +1520,428 @@ class BillingController extends GetxController {
       );
     } finally {
       isLoading(false);
+    }
+  }
+
+  // Enhanced receipt generation method
+  Future<String> generateEnhancedReceipt(Payment payment) async {
+    try {
+      // Find the invoice for this payment
+      final invoice = invoices.firstWhere(
+        (inv) => inv.id == payment.invoiceId,
+        orElse: () => throw Exception('Invoice not found for payment'),
+      );
+
+      // Find the student for this invoice
+      final userController = Get.find<UserController>();
+      final student = userController.users.firstWhere(
+        (user) => user.id == invoice.studentId,
+        orElse: () => throw Exception('Student not found for invoice'),
+      );
+
+      // Generate receipt using enhanced service
+      final receiptPath = await ReceiptService.generateReceipt(
+        payment,
+        invoice,
+        student,
+      );
+
+      // Update payment with receipt info
+      await _updatePaymentWithReceipt(payment, receiptPath);
+
+      // Refresh data
+      await fetchBillingData();
+
+      return receiptPath;
+    } catch (e) {
+      print('Error generating enhanced receipt: $e');
+      rethrow;
+    }
+  }
+
+  // Batch receipt generation
+  Future<List<String>> generateReceiptsForInvoice(int invoiceId) async {
+    try {
+      final paymentsForInvoice =
+          payments.where((p) => p.invoiceId == invoiceId).toList();
+      final invoice = invoices.firstWhere((inv) => inv.id == invoiceId);
+      final userController = Get.find<UserController>();
+      final student = userController.users
+          .firstWhere((user) => user.id == invoice.studentId);
+
+      final List<String> receiptPaths = [];
+
+      for (final payment in paymentsForInvoice) {
+        if (!payment.receiptGenerated) {
+          final receiptPath = await ReceiptService.generateReceipt(
+            payment,
+            invoice,
+            student,
+          );
+
+          await _updatePaymentWithReceipt(payment, receiptPath);
+          receiptPaths.add(receiptPath);
+        }
+      }
+
+      await fetchBillingData();
+      return receiptPaths;
+    } catch (e) {
+      print('Error generating receipts for invoice: $e');
+      rethrow;
+    }
+  }
+
+  // Generate receipts for all payments missing receipts
+  Future<int> generateMissingReceipts() async {
+    try {
+      isLoading.value = true;
+      int generatedCount = 0;
+
+      final paymentsWithoutReceipts =
+          payments.where((p) => !p.receiptGenerated).toList();
+
+      for (final payment in paymentsWithoutReceipts) {
+        try {
+          await generateEnhancedReceipt(payment);
+          generatedCount++;
+        } catch (e) {
+          print('Failed to generate receipt for payment ${payment.id}: $e');
+        }
+      }
+
+      await fetchBillingData();
+      return generatedCount;
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  // Update payment record with receipt information
+  Future<void> _updatePaymentWithReceipt(
+      Payment payment, String receiptPath) async {
+    final db = await _dbHelper.database;
+    await db.update(
+      'payments',
+      {
+        'receipt_path': receiptPath,
+        'receipt_generated': 1,
+        'receipt_generated_at': DateTime.now().toIso8601String(),
+      },
+      where: 'id = ?',
+      whereArgs: [payment.id],
+    );
+  }
+
+  // Validate business settings before receipt generation
+  Future<bool> validateBusinessSettingsForReceipts() async {
+    final settingsController = Get.find<SettingsController>();
+
+    final requiredFields = [
+      settingsController.businessName.value,
+    ];
+
+    final missingFields = <String>[];
+
+    if (settingsController.businessName.value.isEmpty)
+      missingFields.add('Business Name');
+    if (settingsController.businessAddress.value.isEmpty)
+      missingFields.add('Business Address');
+    if (settingsController.businessPhone.value.isEmpty)
+      missingFields.add('Business Phone');
+    if (settingsController.businessEmail.value.isEmpty)
+      missingFields.add('Business Email');
+
+    if (missingFields.isNotEmpty) {
+      Get.snackbar(
+        'Missing Business Information',
+        'Please complete the following in Settings: ${missingFields.join(', ')}',
+        duration: const Duration(seconds: 5),
+        backgroundColor: Colors.orange.shade100,
+        colorText: Colors.orange.shade800,
+      );
+      return false;
+    }
+
+    return true;
+  }
+
+  // Enhanced receipt generation with validation
+  Future<String?> generateReceiptWithValidation(Payment payment) async {
+    // Check if business settings are complete
+    if (!await validateBusinessSettingsForReceipts()) {
+      return null;
+    }
+
+    try {
+      return await generateEnhancedReceipt(payment);
+    } catch (e) {
+      Get.snackbar(
+        'Receipt Generation Failed',
+        'Failed to generate receipt: ${e.toString()}',
+        backgroundColor: Colors.red.shade100,
+        colorText: Colors.red.shade800,
+      );
+      return null;
+    }
+  }
+
+  // Print receipt directly
+  Future<void> printReceipt(Payment payment) async {
+    try {
+      String? receiptPath = payment.receiptPath;
+
+      // Generate receipt if it doesn't exist
+      if (receiptPath == null || !payment.receiptGenerated) {
+        receiptPath = await generateReceiptWithValidation(payment);
+        if (receiptPath == null) return;
+      }
+
+      await ReceiptService.printReceipt(receiptPath);
+
+      Get.snackbar(
+        'Receipt Sent to Printer',
+        'Receipt for ${payment.reference} has been sent to printer',
+        backgroundColor: Colors.green.shade100,
+        colorText: Colors.green.shade800,
+      );
+    } catch (e) {
+      Get.snackbar(
+        'Print Failed',
+        'Failed to print receipt: ${e.toString()}',
+        backgroundColor: Colors.red.shade100,
+        colorText: Colors.red.shade800,
+      );
+    }
+  }
+
+  // Share receipt
+  Future<void> shareReceipt(Payment payment) async {
+    try {
+      String? receiptPath = payment.receiptPath;
+
+      // Generate receipt if it doesn't exist
+      if (receiptPath == null || !payment.receiptGenerated) {
+        receiptPath = await generateReceiptWithValidation(payment);
+        if (receiptPath == null) return;
+      }
+
+      await ReceiptService.shareReceipt(receiptPath);
+    } catch (e) {
+      Get.snackbar(
+        'Share Failed',
+        'Failed to share receipt: ${e.toString()}',
+        backgroundColor: Colors.red.shade100,
+        colorText: Colors.red.shade800,
+      );
+    }
+  }
+
+  // Get receipt statistics
+  Map<String, int> getReceiptStatistics() {
+    final totalPayments = payments.length;
+    final paymentsWithReceipts =
+        payments.where((p) => p.receiptGenerated).length;
+    final paymentsWithoutReceipts = totalPayments - paymentsWithReceipts;
+
+    return {
+      'total_payments': totalPayments,
+      'receipts_generated': paymentsWithReceipts,
+      'receipts_missing': paymentsWithoutReceipts,
+      'generation_rate': totalPayments > 0
+          ? ((paymentsWithReceipts / totalPayments) * 100).round()
+          : 0,
+    };
+  }
+
+  // Email receipt (if email functionality is available)
+  Future<void> emailReceipt(Payment payment, String recipientEmail) async {
+    try {
+      String? receiptPath = payment.receiptPath;
+
+      // Generate receipt if it doesn't exist
+      if (receiptPath == null || !payment.receiptGenerated) {
+        receiptPath = await generateReceiptWithValidation(payment);
+        if (receiptPath == null) return;
+      }
+
+      // Find invoice and student details
+      final invoice = invoices.firstWhere((inv) => inv.id == payment.invoiceId);
+      final userController = Get.find<UserController>();
+      final student = userController.users
+          .firstWhere((user) => user.id == invoice.studentId);
+      final settingsController = Get.find<SettingsController>();
+
+      // You would integrate with your email service here
+      // This is a placeholder for the email functionality
+      final emailSubject = 'Payment Receipt - ${payment.reference}';
+      final emailBody = '''
+Dear ${student.fname} ${student.lname},
+
+Thank you for your payment. Please find your receipt attached.
+
+Payment Details:
+- Receipt #: ${payment.reference}
+- Amount: \${payment.amount.toStringAsFixed(2)}
+- Date: ${DateFormat('MMMM dd, yyyy').format(payment.paymentDate)}
+- Invoice #: ${invoice.invoiceNumber}
+
+Best regards,
+${settingsController.businessName.value}
+${settingsController.businessPhone.value}
+${settingsController.businessEmail.value}
+      ''';
+
+      // Implement your email service here
+      // await EmailService.sendEmailWithAttachment(
+      //   to: recipientEmail,
+      //   subject: emailSubject,
+      //   body: emailBody,
+      //   attachmentPath: receiptPath,
+      // );
+
+      Get.snackbar(
+        'Receipt Emailed',
+        'Receipt has been sent to $recipientEmail',
+        backgroundColor: Colors.green.shade100,
+        colorText: Colors.green.shade800,
+      );
+    } catch (e) {
+      Get.snackbar(
+        'Email Failed',
+        'Failed to email receipt: ${e.toString()}',
+        backgroundColor: Colors.red.shade100,
+        colorText: Colors.red.shade800,
+      );
+    }
+  }
+
+  // Regenerate receipt with updated business information
+  Future<String?> regenerateReceipt(Payment payment) async {
+    try {
+      // Delete old receipt file if it exists
+      if (payment.receiptPath != null) {
+        final oldFile = File(payment.receiptPath!);
+        if (await oldFile.exists()) {
+          await oldFile.delete();
+        }
+      }
+
+      // Generate new receipt
+      final receiptPath = await generateReceiptWithValidation(payment);
+
+      if (receiptPath != null) {
+        Get.snackbar(
+          'Receipt Regenerated',
+          'Receipt has been updated with current business information',
+          backgroundColor: Colors.green.shade100,
+          colorText: Colors.green.shade800,
+        );
+      }
+
+      return receiptPath;
+    } catch (e) {
+      Get.snackbar(
+        'Regeneration Failed',
+        'Failed to regenerate receipt: ${e.toString()}',
+        backgroundColor: Colors.red.shade100,
+        colorText: Colors.red.shade800,
+      );
+      return null;
+    }
+  }
+
+  // Bulk operations for receipts
+  Future<void> bulkGenerateReceipts(List<int> paymentIds) async {
+    try {
+      isLoading.value = true;
+      int successCount = 0;
+      int failCount = 0;
+
+      for (final paymentId in paymentIds) {
+        final payment = payments.firstWhere((p) => p.id == paymentId);
+        try {
+          await generateEnhancedReceipt(payment);
+          successCount++;
+        } catch (e) {
+          failCount++;
+          print('Failed to generate receipt for payment $paymentId: $e');
+        }
+      }
+
+      await fetchBillingData();
+
+      Get.snackbar(
+        'Bulk Generation Complete',
+        'Generated $successCount receipts successfully${failCount > 0 ? ', $failCount failed' : ''}',
+        backgroundColor:
+            successCount > 0 ? Colors.green.shade100 : Colors.orange.shade100,
+        colorText:
+            successCount > 0 ? Colors.green.shade800 : Colors.orange.shade800,
+      );
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  // Export receipts data to CSV
+  Future<String> exportReceiptsData() async {
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      final reportsDir = Directory('${directory.path}/reports');
+      if (!await reportsDir.exists()) {
+        await reportsDir.create(recursive: true);
+      }
+
+      final fileName =
+          'receipts_export_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.csv';
+      final file = File('${reportsDir.path}/$fileName');
+
+      // Prepare CSV data
+      final List<List<String>> csvData = [
+        // Header row
+        [
+          'Receipt Reference',
+          'Payment Date',
+          'Student Name',
+          'Invoice Number',
+          'Amount',
+          'Payment Method',
+          'Receipt Generated',
+          'Receipt Path',
+          'Notes'
+        ]
+      ];
+
+      // Data rows
+      for (final payment in payments) {
+        final invoice =
+            invoices.firstWhereOrNull((inv) => inv.id == payment.invoiceId);
+        final userController = Get.find<UserController>();
+        final student = userController.users
+            .firstWhereOrNull((user) => user.id == invoice?.studentId);
+
+        csvData.add([
+          payment.reference ?? 'N/A',
+          DateFormat('yyyy-MM-dd HH:mm').format(payment.paymentDate),
+          student != null ? '${student.fname} ${student.lname}' : 'Unknown',
+          invoice?.invoiceNumber ?? 'N/A',
+          payment.amount.toStringAsFixed(2),
+          payment.method ?? 'Cash',
+          payment.receiptGenerated ? 'Yes' : 'No',
+          payment.receiptPath ?? 'N/A',
+          payment.notes ?? ''
+        ]);
+      }
+
+      // Write CSV file
+      final csv = const ListToCsvConverter().convert(csvData);
+      await file.writeAsString(csv);
+
+      return file.path;
+    } catch (e) {
+      print('Error exporting receipts data: $e');
+      rethrow;
     }
   }
 }

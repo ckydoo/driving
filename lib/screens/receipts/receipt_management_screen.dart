@@ -1083,7 +1083,6 @@ class _ReceiptManagementScreenState extends State<ReceiptManagementScreen> {
         payment,
         invoice,
         student,
-        'Your Driving School', // Replace with your school name
       );
 
       // Update payment with receipt info

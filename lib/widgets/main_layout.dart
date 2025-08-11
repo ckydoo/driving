@@ -184,6 +184,19 @@ class CompleteMainLayout extends StatelessWidget {
                                 )),
                           ),
                         ),
+                        IconButton(
+                          onPressed: () {
+                            navController.navigateToPage('pos');
+                          },
+                          icon: const Icon(Icons.payment),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.search),
+                          tooltip: 'Search',
+                          onPressed: () {
+                            navController.navigateToPage('quick_search');
+                          },
+                        ),
 
                         // User menu dropdown
                         PopupMenuButton<String>(

@@ -1497,8 +1497,7 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
       final receiptPath = await ReceiptService.generateReceipt(
         payment,
         invoice,
-        widget.student,
-        'Your Driving School', // Replace with your school name
+        widget.student, // Replace with your school name
       );
 
       // Update payment with receipt info
