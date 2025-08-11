@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 class NavigationController extends GetxController {
   var currentPage = 'dashboard'.obs;
+  var expandedDropdowns = <String>{}.obs; // Track which dropdowns are expanded
 
   // Get current user from AuthController
   AuthController get authController => Get.find<AuthController>();
@@ -19,6 +20,7 @@ class NavigationController extends GetxController {
     '/schedules': 'schedules',
     '/billing': 'billing',
     '/receipts': 'receipts',
+    '/pos': 'pos',
     '/users': 'users',
     '/quick-search': 'quick_search',
     '/settings': 'settings',
@@ -62,26 +64,39 @@ class NavigationController extends GetxController {
       pageKey: 'vehicles',
       requiredRoles: ['admin'],
     ),
+    // NEW: Combined Financial dropdown group
     NavigationItem(
-      title: 'POS',
-      icon: Icons.payment,
-      route: '/pos',
-      pageKey: 'pos',
-      requiredRoles: ['admin', 'instructor'],
-    ),
-    NavigationItem(
-      title: 'Receipts',
-      icon: Icons.receipt_long,
-      route: '/receipts',
-      pageKey: 'receipts',
-      requiredRoles: ['admin', 'instructor', 'student'],
-    ),
-    NavigationItem(
-      title: 'Billing',
+      title: 'Financial',
       icon: Icons.account_balance_wallet,
-      route: '/billing',
-      pageKey: 'billing',
-      requiredRoles: ['admin'],
+      pageKey: 'financial_group',
+      requiredRoles: [
+        'admin',
+        'instructor'
+      ], // Combined roles from all children
+      isDropdown: true,
+      children: [
+        NavigationItem(
+          title: 'POS',
+          icon: Icons.payment,
+          route: '/pos',
+          pageKey: 'pos',
+          requiredRoles: ['admin', 'instructor'],
+        ),
+        NavigationItem(
+          title: 'Receipts',
+          icon: Icons.receipt_long,
+          route: '/receipts',
+          pageKey: 'receipts',
+          requiredRoles: ['admin', 'instructor', 'student'],
+        ),
+        NavigationItem(
+          title: 'Billing',
+          icon: Icons.account_balance_wallet,
+          route: '/billing',
+          pageKey: 'billing',
+          requiredRoles: ['admin'],
+        ),
+      ],
     ),
     NavigationItem(
       title: 'Schedule',
@@ -127,6 +142,20 @@ class NavigationController extends GetxController {
     }).toList();
   }
 
+  // Toggle dropdown expansion
+  void toggleDropdown(String pageKey) {
+    if (expandedDropdowns.contains(pageKey)) {
+      expandedDropdowns.remove(pageKey);
+    } else {
+      expandedDropdowns.add(pageKey);
+    }
+  }
+
+  // Check if dropdown is expanded
+  bool isDropdownExpanded(String pageKey) {
+    return expandedDropdowns.contains(pageKey);
+  }
+
   @override
   void onInit() {
     super.onInit();
@@ -135,6 +164,7 @@ class NavigationController extends GetxController {
     ever(authController.isLoggedIn, (bool loggedIn) {
       if (!loggedIn) {
         currentPage.value = 'login';
+        expandedDropdowns.clear(); // Clear expanded dropdowns on logout
       } else {
         // Reset to dashboard when user logs in
         currentPage.value = 'dashboard';
@@ -169,8 +199,21 @@ class NavigationController extends GetxController {
     // Update current page - this will trigger the UI to update
     currentPage.value = pageKey;
 
-    // No need to navigate to different routes since we're staying in the main layout
-    // The main layout will handle showing the correct content based on currentPage
+    // Auto-expand parent dropdown if navigating to a child page
+    _autoExpandParentDropdown(pageKey);
+  }
+
+  // Auto-expand parent dropdown when navigating to child page
+  void _autoExpandParentDropdown(String childPageKey) {
+    for (final item in allNavigationItems) {
+      if (item.isDropdown && item.children != null) {
+        final hasChild =
+            item.children!.any((child) => child.pageKey == childPageKey);
+        if (hasChild && !expandedDropdowns.contains(item.pageKey)) {
+          expandedDropdowns.add(item.pageKey);
+        }
+      }
+    }
   }
 
   // Navigate directly by route (for external calls)
@@ -189,13 +232,29 @@ class NavigationController extends GetxController {
     }
 
     final userRole = authController.currentUser.value!.role.toLowerCase();
+
+    // Check in main items
     final item = allNavigationItems.firstWhereOrNull(
       (item) => item.pageKey == pageKey,
     );
 
-    if (item == null) return false;
+    if (item != null) {
+      return item.requiredRoles.contains(userRole);
+    }
 
-    return item.requiredRoles.contains(userRole);
+    // Check in dropdown children
+    for (final parentItem in allNavigationItems) {
+      if (parentItem.children != null) {
+        final childItem = parentItem.children!.firstWhereOrNull(
+          (child) => child.pageKey == pageKey,
+        );
+        if (childItem != null) {
+          return childItem.requiredRoles.contains(userRole);
+        }
+      }
+    }
+
+    return false;
   }
 
   // Logout with proper cleanup
@@ -203,6 +262,7 @@ class NavigationController extends GetxController {
     try {
       await authController.logout();
       currentPage.value = 'login';
+      expandedDropdowns.clear();
       Get.offAllNamed('/login');
     } catch (e) {
       print('Error during logout: $e');
@@ -217,12 +277,25 @@ class NavigationController extends GetxController {
 
   // Get current page title
   String getCurrentPageTitle() {
+    // Check main items first
     final item = allNavigationItems.firstWhereOrNull(
       (item) => item.pageKey == currentPage.value,
     );
 
     if (item != null) {
       return item.title;
+    }
+
+    // Check dropdown children
+    for (final parentItem in allNavigationItems) {
+      if (parentItem.children != null) {
+        final childItem = parentItem.children!.firstWhereOrNull(
+          (child) => child.pageKey == currentPage.value,
+        );
+        if (childItem != null) {
+          return childItem.title;
+        }
+      }
     }
 
     // Fallback titles for custom pages
@@ -243,6 +316,8 @@ class NavigationController extends GetxController {
         return 'Receipts Management';
       case 'billing':
         return 'Payments & Invoices';
+      case 'pos':
+        return 'Point of Sale';
       case 'schedules':
         return 'Schedule Management';
       case 'users':
@@ -286,15 +361,19 @@ class NavigationController extends GetxController {
 class NavigationItem {
   final String title;
   final IconData icon;
-  final String route;
+  final String? route;
   final String pageKey;
   final List<String> requiredRoles;
+  final bool isDropdown;
+  final List<NavigationItem>? children;
 
   NavigationItem({
     required this.title,
     required this.icon,
-    required this.route,
+    this.route,
     required this.pageKey,
     required this.requiredRoles,
+    this.isDropdown = false,
+    this.children,
   });
 }

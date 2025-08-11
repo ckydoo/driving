@@ -1,4 +1,4 @@
-// lib/widgets/main_layout.dart
+// lib/widgets/main_layout.dart - Updated with dropdown support
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/controllers/settings_controller.dart';
 import 'package:driving/dashboard.dart';
@@ -55,20 +55,21 @@ class CompleteMainLayout extends StatelessWidget {
                         Obx(() => Text(
                               settingsController.businessName.value.isNotEmpty
                                   ? settingsController.businessName.value
-                                  : 'Myla Driving School',
-                              style: TextStyle(
+                                  : 'Driving School',
+                              style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 20,
                                 fontWeight: FontWeight.bold,
                               ),
+                              textAlign: TextAlign.center,
                             )),
                         const SizedBox(height: 16),
-                        // User info with role badge
                         Row(
                           children: [
                             CircleAvatar(
                               backgroundColor:
                                   navController.getRoleBadgeColor(),
+                              radius: 20,
                               child: Text(
                                 navController.currentUserName
                                     .split(' ')
@@ -90,8 +91,7 @@ class CompleteMainLayout extends StatelessWidget {
                                     navController.currentUserName,
                                     style: const TextStyle(
                                       color: Colors.white,
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
                                     ),
                                     overflow: TextOverflow.ellipsis,
                                   ),
@@ -124,18 +124,13 @@ class CompleteMainLayout extends StatelessWidget {
                   ),
                   const Divider(color: Colors.white24),
 
-                  // Navigation items (filtered by role)
+                  // Navigation items (filtered by role) with dropdown support
                   Expanded(
                     child: ListView(
-                      children: navController.navigationItems.map((item) {
-                        return _buildSidebarItem(
-                          item.icon,
-                          item.title,
-                          item.pageKey,
-                          navController.currentPage.value,
-                          () => navController.navigateToPage(item.pageKey),
-                        );
-                      }).toList(),
+                      children: navController.navigationItems
+                          .expand((item) =>
+                              _buildNavigationItems(item, navController))
+                          .toList(),
                     ),
                   ),
 
@@ -145,13 +140,17 @@ class CompleteMainLayout extends StatelessWidget {
                     child: SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
-                        onPressed: () => _showLogoutDialog(navController),
-                        icon: const Icon(Icons.logout, size: 18),
-                        label: const Text('Logout'),
+                        onPressed: () => navController.logout(),
+                        icon: const Icon(Icons.logout, color: Colors.red),
+                        label: const Text(
+                          'Logout',
+                          style: TextStyle(color: Colors.red),
+                        ),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red[600],
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          backgroundColor: Colors.white,
+                          foregroundColor: Colors.red,
+                          elevation: 0,
+                          side: const BorderSide(color: Colors.red),
                         ),
                       ),
                     ),
@@ -160,75 +159,52 @@ class CompleteMainLayout extends StatelessWidget {
               ),
             ),
 
-            // Main Content Area
+            // Top navigation bar and content area
             Expanded(
               child: Column(
                 children: [
-                  // Top Bar with user actions
+                  // Top navigation bar
                   Container(
                     height: 60,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.grey.withOpacity(0.1),
-                          offset: const Offset(0, 2),
-                          blurRadius: 4,
+                    color: Colors.white,
+                    child: Row(
+                      children: [
+                        // Page title
+                        Expanded(
+                          child: Padding(
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 24.0),
+                            child: Obx(() => Text(
+                                  navController.getCurrentPageTitle(),
+                                  style: const TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.black87,
+                                  ),
+                                )),
+                          ),
                         ),
-                      ],
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                      child: Row(
-                        children: [
-                          Text(
-                            navController.getCurrentPageTitle(),
-                            style: const TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black87,
-                            ),
-                          ),
-                          const Spacer(),
-                          // Search bar (optional)
-                          if (authController
-                              .hasAnyRole(['admin', 'instructor']))
-                            IconButton(
-                              icon:
-                                  Icon(Icons.payment, color: Colors.grey[600]),
-                              onPressed: () =>
-                                  navController.navigateToPage('pos'),
-                            ),
-                          // Search bar (optional)
-                          if (authController
-                              .hasAnyRole(['admin', 'instructor']))
-                            IconButton(
-                              icon: Icon(Icons.search, color: Colors.grey[600]),
-                              onPressed: () =>
-                                  navController.navigateToPage('quick_search'),
-                            ),
-                          IconButton(
-                            icon: Icon(Icons.notifications,
-                                color: Colors.grey[600]),
-                            onPressed: () {},
-                          ),
-                          const SizedBox(width: 16),
-                          // User menu
-                          PopupMenuButton<String>(
-                            onSelected: (value) {
-                              switch (value) {
-                                case 'profile':
-                                  _showProfileDialog(navController);
-                                  break;
-                                case 'settings':
-                                  navController.navigateToPage('settings');
-                                  break;
-                                case 'logout':
-                                  _showLogoutDialog(navController);
-                                  break;
-                              }
-                            },
+
+                        // User menu dropdown
+                        PopupMenuButton<String>(
+                          onSelected: (value) {
+                            switch (value) {
+                              case 'profile':
+                                // Handle profile navigation
+                                break;
+                              case 'settings':
+                                navController.navigateToPage('settings');
+                                break;
+                              case 'logout':
+                                navController.logout();
+                                break;
+                            }
+                          },
+                          child: Padding(
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 16.0),
                             child: Row(
+                              mainAxisSize: MainAxisSize.min,
                               children: [
                                 CircleAvatar(
                                   backgroundColor:
@@ -250,45 +226,45 @@ class CompleteMainLayout extends StatelessWidget {
                                 const SizedBox(width: 8),
                               ],
                             ),
-                            itemBuilder: (context) => [
-                              const PopupMenuItem<String>(
-                                value: 'profile',
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.person, size: 18),
-                                    SizedBox(width: 8),
-                                    Text('Profile'),
-                                  ],
-                                ),
-                              ),
-                              if (navController.hasAccessToPage('settings'))
-                                const PopupMenuItem<String>(
-                                  value: 'settings',
-                                  child: Row(
-                                    children: [
-                                      Icon(Icons.settings, size: 18),
-                                      SizedBox(width: 8),
-                                      Text('Settings'),
-                                    ],
-                                  ),
-                                ),
-                              const PopupMenuDivider(),
-                              const PopupMenuItem<String>(
-                                value: 'logout',
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.logout,
-                                        size: 18, color: Colors.red),
-                                    SizedBox(width: 8),
-                                    Text('Logout',
-                                        style: TextStyle(color: Colors.red)),
-                                  ],
-                                ),
-                              ),
-                            ],
                           ),
-                        ],
-                      ),
+                          itemBuilder: (context) => [
+                            const PopupMenuItem<String>(
+                              value: 'profile',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.person, size: 18),
+                                  SizedBox(width: 8),
+                                  Text('Profile'),
+                                ],
+                              ),
+                            ),
+                            if (navController.hasAccessToPage('settings'))
+                              const PopupMenuItem<String>(
+                                value: 'settings',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.settings, size: 18),
+                                    SizedBox(width: 8),
+                                    Text('Settings'),
+                                  ],
+                                ),
+                              ),
+                            const PopupMenuDivider(),
+                            const PopupMenuItem<String>(
+                              value: 'logout',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.logout,
+                                      size: 18, color: Colors.red),
+                                  SizedBox(width: 8),
+                                  Text('Logout',
+                                      style: TextStyle(color: Colors.red)),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
 
@@ -342,6 +318,152 @@ class CompleteMainLayout extends StatelessWidget {
     );
   }
 
+  // Build navigation items with dropdown support
+  List<Widget> _buildNavigationItems(
+      NavigationItem item, NavigationController navController) {
+    final userRole =
+        navController.authController.currentUser.value!.role.toLowerCase();
+
+    // Filter children based on user role
+    List<NavigationItem>? filteredChildren;
+    if (item.children != null) {
+      filteredChildren = item.children!
+          .where((child) => child.requiredRoles.contains(userRole))
+          .toList();
+    }
+
+    if (item.isDropdown &&
+        filteredChildren != null &&
+        filteredChildren.isNotEmpty) {
+      // This is a dropdown with accessible children
+      List<Widget> widgets = [];
+
+      // Add the dropdown header
+      widgets.add(_buildDropdownHeader(item, navController));
+
+      // Add children if dropdown is expanded
+      if (navController.isDropdownExpanded(item.pageKey)) {
+        widgets.addAll(
+          filteredChildren
+              .map((child) => _buildDropdownChild(child, navController)),
+        );
+      }
+
+      return widgets;
+    } else if (!item.isDropdown) {
+      // Regular navigation item
+      return [
+        _buildSidebarItem(
+          item.icon,
+          item.title,
+          item.pageKey,
+          navController.currentPage.value,
+          () => navController.navigateToPage(item.pageKey),
+        )
+      ];
+    }
+
+    // Hide dropdown if no accessible children
+    return [];
+  }
+
+  // Build dropdown header
+  Widget _buildDropdownHeader(
+      NavigationItem item, NavigationController navController) {
+    final isExpanded = navController.isDropdownExpanded(item.pageKey);
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: () => navController.toggleDropdown(item.pageKey),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  item.icon,
+                  color: Colors.white70,
+                  size: 20,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    item.title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                AnimatedRotation(
+                  turns: isExpanded ? 0.5 : 0,
+                  duration: const Duration(milliseconds: 200),
+                  child: const Icon(
+                    Icons.keyboard_arrow_down,
+                    color: Colors.white70,
+                    size: 20,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Build dropdown child item
+  Widget _buildDropdownChild(
+      NavigationItem item, NavigationController navController) {
+    final isActive = navController.currentPage.value == item.pageKey;
+
+    return Container(
+      margin: const EdgeInsets.only(left: 24, right: 8, top: 2, bottom: 2),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: () => navController.navigateToPage(item.pageKey),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+              color: isActive ? Colors.white24 : Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  item.icon,
+                  color: isActive ? Colors.white : Colors.white60,
+                  size: 18,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    item.title,
+                    style: TextStyle(
+                      color: isActive ? Colors.white : Colors.white70,
+                      fontSize: 13,
+                      fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Build regular sidebar item
   Widget _buildSidebarItem(
     IconData icon,
     String title,
@@ -353,167 +475,80 @@ class CompleteMainLayout extends StatelessWidget {
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: isActive ? Colors.blue[600] : Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: ListTile(
-        leading: Icon(
-          icon,
-          color: isActive ? Colors.white : Colors.white70,
-        ),
-        title: Text(
-          title,
-          style: TextStyle(
-            color: isActive ? Colors.white : Colors.white70,
-            fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
-          ),
-        ),
-        onTap: onTap,
-      ),
-    );
-  }
-
-  Widget _getCurrentPageWidget(String currentPage) {
-    switch (currentPage) {
-      case 'dashboard':
-        return const DashboardContent();
-      case 'courses':
-        return CourseScreen();
-      case 'students':
-        return EnhancedUsersScreen(
-            role: 'student', key: const ValueKey('students'));
-      case 'instructors':
-        return EnhancedUsersScreen(
-            role: 'instructor', key: const ValueKey('instructors'));
-      case 'vehicles':
-        return FleetScreen();
-      case 'quick_search':
-        return QuickSearchScreen();
-      case 'receipts':
-        return ReceiptManagementScreen();
-      case 'billing':
-        return BillingScreen();
-      case 'schedules':
-        return ScheduleScreen();
-      case 'users':
-        return EnhancedUsersScreen(role: 'admin');
-      case 'course_reports':
-        return CourseReportsScreen();
-      case 'settings':
-        return SettingsScreen();
-      case 'pos':
-        return POSScreen();
-      default:
-        return const DashboardContent();
-    }
-  }
-
-  void _showLogoutDialog(NavigationController navController) {
-    Get.dialog(
-      AlertDialog(
-        title: const Text('Logout'),
-        content: const Text('Are you sure you want to logout?'),
-        actions: [
-          TextButton(
-            onPressed: () => Get.back(),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Get.back();
-              navController.logout();
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: isActive ? Colors.white24 : Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
             ),
-            child: const Text('Logout'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showProfileDialog(NavigationController navController) {
-    Get.dialog(
-      AlertDialog(
-        title: const Text('Profile'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+            child: Row(
               children: [
-                CircleAvatar(
-                  radius: 30,
-                  backgroundColor: navController.getRoleBadgeColor(),
-                  child: Text(
-                    navController.currentUserName
-                        .split(' ')
-                        .map((name) => name[0])
-                        .take(2)
-                        .join(),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 20,
-                    ),
-                  ),
+                Icon(
+                  icon,
+                  color: isActive ? Colors.white : Colors.white70,
+                  size: 20,
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: 12),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        navController.currentUserName,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: navController.getRoleBadgeColor(),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          navController.currentUserRole.toUpperCase(),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ],
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      color: isActive ? Colors.white : Colors.white70,
+                      fontSize: 14,
+                      fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
+                    ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            Text(
-              'Email: ${navController.currentUserEmail}',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[600],
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Get.back(),
-            child: const Text('Close'),
           ),
-        ],
+        ),
       ),
     );
+  }
+
+  Widget _getCurrentPageWidget(String pageKey) {
+    switch (pageKey) {
+      case 'dashboard':
+        return const DashboardContent();
+      case 'students':
+        return const EnhancedUsersScreen(
+          key: ValueKey('student_screen'),
+          role: 'student',
+        );
+      case 'instructors':
+        return const EnhancedUsersScreen(
+          key: ValueKey('instructor_screen'),
+          role: 'instructor',
+        );
+      case 'courses':
+        return const CourseScreen();
+      case 'vehicles':
+        return const FleetScreen();
+      case 'schedules':
+        return ScheduleScreen();
+      case 'billing':
+        return const BillingScreen();
+      case 'receipts':
+        return const ReceiptManagementScreen();
+      case 'pos':
+        return const POSScreen();
+      case 'users':
+        return const EnhancedUsersScreen(
+          key: ValueKey('admin_users_screen'),
+          role: 'admin',
+        );
+      case 'quick_search':
+        return const QuickSearchScreen();
+      case 'settings':
+        return SettingsScreen();
+      default:
+        return const DashboardContent();
+    }
   }
 }
