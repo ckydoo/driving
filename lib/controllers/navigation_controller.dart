@@ -22,6 +22,8 @@ class NavigationController extends GetxController {
     '/receipts': 'receipts',
     '/pos': 'pos',
     '/users': 'users',
+    '/financial_reports': 'financial_reports',
+    '/user_reports': 'user_reports',
     '/quick-search': 'quick_search',
     '/settings': 'settings',
     '/reports': 'reports',
@@ -120,12 +122,32 @@ class NavigationController extends GetxController {
       pageKey: 'quick_search',
       requiredRoles: ['admin', 'instructor'],
     ),
+
     NavigationItem(
       title: 'Reports',
-      icon: Icons.report,
-      route: '/reports',
-      pageKey: 'reports',
-      requiredRoles: ['admin', 'instructor'],
+      icon: Icons.account_balance_wallet,
+      pageKey: 'reports_group',
+      requiredRoles: [
+        'admin',
+        'instructor'
+      ], // Combined roles from all children
+      isDropdown: true,
+      children: [
+        NavigationItem(
+          title: 'financial',
+          icon: Icons.pie_chart,
+          route: 'financial_reports',
+          pageKey: 'financial_reports',
+          requiredRoles: ['admin', 'instructor'],
+        ),
+        NavigationItem(
+          title: 'users',
+          icon: Icons.people,
+          route: 'user_reports',
+          pageKey: 'user_reports',
+          requiredRoles: ['admin', 'instructor'],
+        ),
+      ], // Children will be added dynamically
     ),
     NavigationItem(
       title: 'Settings',
@@ -326,6 +348,10 @@ class NavigationController extends GetxController {
         return 'Payments & Invoices';
       case 'reports':
         return 'Financial Overview';
+      case 'financial_reports':
+        return 'Financial Reports';
+      case 'user_reports':
+        return 'User Reports';
       case 'pos':
         return 'Point of Sale';
       case 'schedules':
