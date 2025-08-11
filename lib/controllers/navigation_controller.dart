@@ -24,6 +24,7 @@ class NavigationController extends GetxController {
     '/users': 'users',
     '/quick-search': 'quick_search',
     '/settings': 'settings',
+    '/reports': 'reports',
     '/main': 'dashboard',
   };
 
@@ -117,6 +118,13 @@ class NavigationController extends GetxController {
       icon: Icons.search,
       route: '/quick-search',
       pageKey: 'quick_search',
+      requiredRoles: ['admin', 'instructor'],
+    ),
+    NavigationItem(
+      title: 'Reports',
+      icon: Icons.report,
+      route: '/reports',
+      pageKey: 'reports',
       requiredRoles: ['admin', 'instructor'],
     ),
     NavigationItem(
@@ -316,6 +324,8 @@ class NavigationController extends GetxController {
         return 'Receipts Management';
       case 'billing':
         return 'Payments & Invoices';
+      case 'reports':
+        return 'Financial Overview';
       case 'pos':
         return 'Point of Sale';
       case 'schedules':

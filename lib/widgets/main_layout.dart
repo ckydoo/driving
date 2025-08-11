@@ -8,6 +8,7 @@ import 'package:driving/screens/billing/billing_screen.dart';
 import 'package:driving/screens/course/course_screen.dart';
 import 'package:driving/screens/fleet/fleet_screen.dart';
 import 'package:driving/screens/receipts/receipt_management_screen.dart';
+import 'package:driving/screens/reports/financial_reports_screen.dart';
 import 'package:driving/screens/schedule/schedule_screen.dart';
 import 'package:driving/screens/users/enhanced_users_screen.dart';
 import 'package:driving/settings/settings_screen.dart';
@@ -551,6 +552,8 @@ class CompleteMainLayout extends StatelessWidget {
         return const ReceiptManagementScreen();
       case 'pos':
         return const POSScreen();
+      case 'reports':
+        return FinancialReportsScreen();
       case 'users':
         return const EnhancedUsersScreen(
           key: ValueKey('admin_users_screen'),
