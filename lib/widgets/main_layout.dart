@@ -1,5 +1,6 @@
 // lib/widgets/main_layout.dart
 import 'package:driving/controllers/auth_controller.dart';
+import 'package:driving/controllers/settings_controller.dart';
 import 'package:driving/dashboard.dart';
 import 'package:driving/overview/quick_search_screen.dart';
 import 'package:driving/reports/course.dart';
@@ -22,6 +23,8 @@ class CompleteMainLayout extends StatelessWidget {
   Widget build(BuildContext context) {
     final NavigationController navController = Get.find<NavigationController>();
     final AuthController authController = Get.find<AuthController>();
+    final SettingsController settingsController =
+        Get.find<SettingsController>();
 
     return Scaffold(
       body: Obx(() {
@@ -49,14 +52,16 @@ class CompleteMainLayout extends StatelessWidget {
                     padding: const EdgeInsets.all(16.0),
                     child: Column(
                       children: [
-                        Text(
-                          'Myla Driving School',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                        Obx(() => Text(
+                              settingsController.businessName.value.isNotEmpty
+                                  ? settingsController.businessName.value
+                                  : 'Myla Driving School',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            )),
                         const SizedBox(height: 16),
                         // User info with role badge
                         Row(

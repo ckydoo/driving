@@ -75,7 +75,6 @@ class _EnhancedRecommendationsScreenState
           'icon': Icons.person_off,
           'color': Colors.orange,
           'priority': 'medium',
-          'onTap': () => _showInactiveUsers(),
         });
       }
 
@@ -96,7 +95,6 @@ class _EnhancedRecommendationsScreenState
           'icon': Icons.trending_up,
           'color': Colors.blue,
           'priority': 'low',
-          'onTap': () => _showMarketingTips(),
         });
       }
     }
@@ -116,7 +114,6 @@ class _EnhancedRecommendationsScreenState
         'icon': Icons.celebration,
         'color': Colors.green,
         'priority': 'info',
-        'onTap': () => _showGrowthAnalytics(),
       });
     }
   }
@@ -138,7 +135,6 @@ class _EnhancedRecommendationsScreenState
         'icon': Icons.receipt_long,
         'color': Colors.red,
         'priority': 'high',
-        'onTap': () => _createMissingInvoices(),
       });
     }
 
@@ -157,7 +153,6 @@ class _EnhancedRecommendationsScreenState
         'icon': Icons.schedule,
         'color': Colors.orange,
         'priority': 'medium',
-        'onTap': () => _scheduleStudentLessons(),
       });
     }
   }
@@ -179,7 +174,6 @@ class _EnhancedRecommendationsScreenState
         'icon': Icons.directions_car,
         'color': Colors.orange,
         'priority': 'medium',
-        'onTap': () => _assignVehiclesToInstructors(),
       });
     }
 
@@ -209,7 +203,6 @@ class _EnhancedRecommendationsScreenState
         'icon': Icons.warning,
         'color': Colors.red,
         'priority': 'high',
-        'onTap': () => _balanceInstructorWorkload(),
       });
     }
 
@@ -223,7 +216,6 @@ class _EnhancedRecommendationsScreenState
         'icon': Icons.schedule,
         'color': Colors.blue,
         'priority': 'low',
-        'onTap': () => _optimizeInstructorSchedules(),
       });
     }
   }
@@ -568,47 +560,5 @@ class _EnhancedRecommendationsScreenState
         ),
       ),
     );
-  }
-
-  // Action methods
-  void _showInactiveUsers() {
-    Get.snackbar(
-        'Info', 'Showing inactive ${widget.role}s feature coming soon!');
-  }
-
-  void _showMarketingTips() {
-    Get.dialog(
-      AlertDialog(
-        title: Text('Marketing Tips for ${widget.role.capitalize}s'),
-        content: Text('Marketing strategies and tips will be available here.'),
-        actions: [
-          TextButton(onPressed: Get.back, child: Text('Close')),
-        ],
-      ),
-    );
-  }
-
-  void _showGrowthAnalytics() {
-    Get.snackbar('Analytics', 'Growth analytics feature coming soon!');
-  }
-
-  void _createMissingInvoices() {
-    Get.snackbar('Invoices', 'Bulk invoice creation feature coming soon!');
-  }
-
-  void _scheduleStudentLessons() {
-    Get.snackbar('Scheduling', 'Bulk lesson scheduling feature coming soon!');
-  }
-
-  void _assignVehiclesToInstructors() {
-    Get.snackbar('Vehicles', 'Vehicle assignment feature coming soon!');
-  }
-
-  void _balanceInstructorWorkload() {
-    Get.snackbar('Workload', 'Workload balancing feature coming soon!');
-  }
-
-  void _optimizeInstructorSchedules() {
-    Get.snackbar('Optimization', 'Schedule optimization feature coming soon!');
   }
 }
