@@ -26,6 +26,7 @@ class NavigationController extends GetxController {
     '/user_reports': 'user_reports',
     '/quick-search': 'quick_search',
     '/settings': 'settings',
+    '/financial': 'financial_group',
     '/reports': 'reports',
     '/main': 'dashboard',
   };
@@ -352,6 +353,8 @@ class NavigationController extends GetxController {
         return 'Financial Reports';
       case 'user_reports':
         return 'User Reports';
+      case 'financial_group':
+        return 'Financial Management';
       case 'pos':
         return 'Point of Sale';
       case 'schedules':

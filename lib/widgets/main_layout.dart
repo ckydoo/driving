@@ -457,29 +457,8 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
         },
       ));
 
-      widgets.add(_buildSidebarItem(
-        Icons.attach_money,
-        'Billing',
-        'billing',
-        navController.currentPage.value,
-        () {
-          navController.navigateToPage('billing');
-          if (autoClose) Navigator.of(context).pop();
-        },
-      ));
+      widgets.addAll(_buildFinancesDropdown(navController, autoClose));
 
-      widgets.add(_buildSidebarItem(
-        Icons.receipt,
-        'Receipts',
-        'receipts',
-        navController.currentPage.value,
-        () {
-          navController.navigateToPage('receipts');
-          if (autoClose) Navigator.of(context).pop();
-        },
-      ));
-
-      // Reports dropdown - EXACT copy of your dropdown logic
       widgets.addAll(_buildReportsDropdown(navController, autoClose));
     }
 
@@ -499,6 +478,96 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
   }
 
   // Build reports dropdown - EXACT copy of your dropdown logic
+  List<Widget> _buildFinancesDropdown(
+      NavigationController navController, bool autoClose) {
+    List<Widget> widgets = [];
+    final isExpanded = navController.isDropdownExpanded('financial_group');
+
+    // Dropdown header
+    widgets.add(Container(
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: () => navController.toggleDropdown('financial_group'),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.analytics,
+                  color: Colors.white70,
+                  size: 20,
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Finance',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                AnimatedRotation(
+                  turns: isExpanded ? 0.5 : 0,
+                  duration: const Duration(milliseconds: 200),
+                  child: const Icon(
+                    Icons.keyboard_arrow_down,
+                    color: Colors.white70,
+                    size: 20,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ));
+
+    // Dropdown children
+    if (isExpanded) {
+      widgets.add(_buildDropdownChild(
+        Icons.analytics,
+        'POS',
+        'pos',
+        navController.currentPage.value,
+        () {
+          navController.navigateToPage('pos');
+          if (autoClose) Navigator.of(context).pop();
+        },
+      ));
+
+      widgets.add(_buildDropdownChild(
+        Icons.people_alt,
+        'Receipts',
+        'receipts',
+        navController.currentPage.value,
+        () {
+          navController.navigateToPage('receipts');
+          if (autoClose) Navigator.of(context).pop();
+        },
+      ));
+      widgets.add(_buildDropdownChild(
+        Icons.people_alt,
+        'Invoices',
+        'billing',
+        navController.currentPage.value,
+        () {
+          navController.navigateToPage('billing');
+          if (autoClose) Navigator.of(context).pop();
+        },
+      ));
+    }
+
+    return widgets;
+  }
+
   List<Widget> _buildReportsDropdown(
       NavigationController navController, bool autoClose) {
     List<Widget> widgets = [];
@@ -566,7 +635,7 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
 
       widgets.add(_buildDropdownChild(
         Icons.people_alt,
-        'User Reports',
+        'Receipts',
         'user_reports',
         navController.currentPage.value,
         () {

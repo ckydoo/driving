@@ -235,10 +235,7 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
               padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(
                 children: [
-                  IconButton(
-                    icon: Icon(Icons.arrow_back, color: Colors.white),
-                    onPressed: () => Get.back(),
-                  ),
+                  Spacer(),
                   Expanded(
                     child: Text(
                       'Student Details',

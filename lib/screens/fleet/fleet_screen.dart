@@ -46,7 +46,7 @@ class _FleetScreenState extends State<FleetScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 2, vsync: this);
     _loadVehicles();
   }
 
@@ -373,7 +373,6 @@ class _FleetScreenState extends State<FleetScreen>
               indicatorColor: Colors.blue[600],
               isScrollable: MediaQuery.of(context).size.width < 600,
               tabs: [
-                Tab(icon: Icon(Icons.grid_view), text: 'Grid View'),
                 Tab(icon: Icon(Icons.list), text: 'List View'),
                 Tab(icon: Icon(Icons.lightbulb), text: 'Recommendations'),
               ],
@@ -424,7 +423,6 @@ class _FleetScreenState extends State<FleetScreen>
                 : TabBarView(
                     controller: _tabController,
                     children: [
-                      _buildGridView(),
                       _buildListView(),
                       _buildRecommendationsView(),
                     ],
@@ -650,186 +648,6 @@ class _FleetScreenState extends State<FleetScreen>
               _sortVehicles();
             });
           },
-        ),
-      ),
-    );
-  }
-
-  Widget _buildGridView() {
-    final vehicles = _getPaginatedVehicles();
-
-    return Column(
-      children: [
-        Expanded(
-          child: Container(
-            padding: EdgeInsets.all(16),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                int crossAxisCount;
-                if (constraints.maxWidth > 1400) {
-                  crossAxisCount = 4;
-                } else if (constraints.maxWidth > 1000) {
-                  crossAxisCount = 3;
-                } else if (constraints.maxWidth > 600) {
-                  crossAxisCount = 2;
-                } else {
-                  crossAxisCount = 1;
-                }
-
-                return GridView.builder(
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: crossAxisCount,
-                    crossAxisSpacing: 16,
-                    mainAxisSpacing: 16,
-                    childAspectRatio: 1.1,
-                  ),
-                  itemCount: vehicles.length,
-                  itemBuilder: (context, index) {
-                    final vehicle = vehicles[index];
-                    return _buildVehicleGridCard(vehicle);
-                  },
-                );
-              },
-            ),
-          ),
-        ),
-        _buildPagination(),
-      ],
-    );
-  }
-
-  Widget _buildVehicleGridCard(Fleet vehicle) {
-    final isSelected = _selectedVehicles.contains(vehicle.id);
-    final instructorName = _getInstructorName(vehicle.instructor);
-    final isAssigned = vehicle.instructor != 0;
-    final currentYear = DateTime.now().year;
-    final vehicleAge = currentYear - int.parse(vehicle.modelYear);
-
-    return Card(
-      elevation: isSelected ? 8 : 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: isSelected
-            ? BorderSide(color: Colors.blue[400]!, width: 2)
-            : BorderSide.none,
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => FleetDetailsScreen(fleetId: vehicle.id!),
-            ),
-          );
-        },
-        onLongPress: () => _toggleVehicleSelection(vehicle.id!),
-        child: Padding(
-          padding: EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  if (_isMultiSelectionActive)
-                    Checkbox(
-                      value: isSelected,
-                      onChanged: (value) =>
-                          _toggleVehicleSelection(vehicle.id!),
-                    ),
-                  Spacer(),
-                  Flexible(
-                    child: Container(
-                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color:
-                            isAssigned ? Colors.green[100] : Colors.orange[100],
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        isAssigned ? 'Assigned' : 'Available',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w500,
-                          color: isAssigned
-                              ? Colors.green[800]
-                              : Colors.orange[800],
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              SizedBox(height: 8),
-              Icon(
-                Icons.directions_car,
-                size: 32,
-                color: isAssigned ? Colors.blue[400] : Colors.grey[400],
-              ),
-              SizedBox(height: 12),
-              Flexible(
-                child: Text(
-                  '${vehicle.make} ${vehicle.model}',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey[800],
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              SizedBox(height: 4),
-              Text(
-                vehicle.carPlate,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.blue[600],
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-              SizedBox(height: 8),
-              Row(
-                children: [
-                  Icon(Icons.calendar_today, size: 12, color: Colors.grey[500]),
-                  SizedBox(width: 4),
-                  Flexible(
-                    child: Text(
-                      vehicle.modelYear,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.grey[600],
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (vehicleAge > 5) ...[
-                    SizedBox(width: 8),
-                    Icon(Icons.warning, size: 12, color: Colors.orange[600]),
-                  ],
-                ],
-              ),
-              SizedBox(height: 4),
-              Row(
-                children: [
-                  Icon(Icons.person, size: 12, color: Colors.grey[500]),
-                  SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      instructorName,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.grey[600],
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
         ),
       ),
     );

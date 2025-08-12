@@ -48,7 +48,7 @@ class _CourseScreenState extends State<CourseScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 2, vsync: this);
     _loadCourses();
     _generateRecommendations();
   }
@@ -118,13 +118,6 @@ class _CourseScreenState extends State<CourseScreen>
       MediaQuery.of(context).size.width < 1024;
   bool _isDesktop(BuildContext context) =>
       MediaQuery.of(context).size.width >= 1024;
-
-  // Get responsive grid count
-  int _getGridCrossAxisCount(BuildContext context) {
-    if (_isMobile(context)) return 1;
-    if (_isTablet(context)) return 2;
-    return 3;
-  }
 
   // Get responsive card aspect ratio
   double _getCardAspectRatio(BuildContext context) {
@@ -348,11 +341,6 @@ class _CourseScreenState extends State<CourseScreen>
               isScrollable: _isMobile(context),
               tabs: [
                 Tab(
-                  icon:
-                      Icon(Icons.grid_view, size: _isMobile(context) ? 20 : 24),
-                  text: _isMobile(context) ? 'Grid' : 'Grid View',
-                ),
-                Tab(
                   icon: Icon(Icons.list, size: _isMobile(context) ? 20 : 24),
                   text: _isMobile(context) ? 'List' : 'List View',
                 ),
@@ -375,7 +363,6 @@ class _CourseScreenState extends State<CourseScreen>
                 : TabBarView(
                     controller: _tabController,
                     children: [
-                      _buildGridView(),
                       _buildListView(),
                       _buildRecommendationsView(),
                     ],
@@ -689,137 +676,6 @@ class _CourseScreenState extends State<CourseScreen>
               overflow: TextOverflow.ellipsis,
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildGridView() {
-    final courses = _getPaginatedCourses();
-
-    return Column(
-      children: [
-        Expanded(
-          child: Container(
-            padding: EdgeInsets.all(_isMobile(context) ? 12 : 16),
-            child: GridView.builder(
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: _getGridCrossAxisCount(context),
-                crossAxisSpacing: _isMobile(context) ? 12 : 16,
-                mainAxisSpacing: _isMobile(context) ? 12 : 16,
-                childAspectRatio: _getCardAspectRatio(context),
-              ),
-              itemCount: courses.length,
-              itemBuilder: (context, index) {
-                final course = courses[index];
-                return _buildCourseGridCard(course);
-              },
-            ),
-          ),
-        ),
-        _buildPagination(),
-      ],
-    );
-  }
-
-  Widget _buildCourseGridCard(Course course) {
-    final isSelected = _selectedCourses.contains(course.id);
-    final enrollments = billingController.invoices
-        .where((invoice) =>
-            scheduleController.schedules.any((s) => s.classType == course.name))
-        .length;
-
-    return Card(
-      elevation: isSelected ? 8 : 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: isSelected
-            ? BorderSide(color: Colors.blue[400]!, width: 2)
-            : BorderSide.none,
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => CourseDetailsScreen(courseId: course.id!),
-            ),
-          );
-        },
-        onLongPress: () => _toggleCourseSelection(course.id!),
-        child: Padding(
-          padding: EdgeInsets.all(_isMobile(context) ? 12 : 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  if (_isMultiSelectionActive)
-                    Checkbox(
-                      value: isSelected,
-                      onChanged: (value) => _toggleCourseSelection(course.id!),
-                    ),
-                  Spacer(),
-                  _buildStatusChip(course.status),
-                ],
-              ),
-              SizedBox(height: 8),
-              Icon(
-                Icons.school,
-                size: _isMobile(context) ? 24 : 32,
-                color: course.status.toLowerCase() == 'active'
-                    ? Colors.blue[400]
-                    : Colors.grey[400],
-              ),
-              SizedBox(height: 12),
-              Flexible(
-                child: Text(
-                  course.name,
-                  style: TextStyle(
-                    fontSize: _isMobile(context) ? 14 : 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey[800],
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              SizedBox(height: 8),
-              Row(
-                children: [
-                  Icon(Icons.attach_money, size: 16, color: Colors.green[600]),
-                  Flexible(
-                    child: Text(
-                      '\$${course.price}',
-                      style: TextStyle(
-                        fontSize: _isMobile(context) ? 16 : 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.green[600],
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-              SizedBox(height: 4),
-              Row(
-                children: [
-                  Icon(Icons.people, size: 14, color: Colors.grey[500]),
-                  SizedBox(width: 4),
-                  Flexible(
-                    child: Text(
-                      '$enrollments enrollments',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[500],
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
         ),
       ),
     );

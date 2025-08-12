@@ -458,10 +458,6 @@ class _InstructorDetailsScreenState extends State<InstructorDetailsScreen>
               // Top Row
               Row(
                 children: [
-                  IconButton(
-                    icon: Icon(Icons.arrow_back, color: Colors.white),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
                   Spacer(),
                   IconButton(
                     icon: Icon(Icons.more_vert, color: Colors.white),
@@ -580,6 +576,7 @@ class _InstructorDetailsScreenState extends State<InstructorDetailsScreen>
 
               // Quick Stats Row
               Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   _buildQuickStat(
                     'Students',
@@ -618,8 +615,6 @@ class _InstructorDetailsScreenState extends State<InstructorDetailsScreen>
         ),
         child: Column(
           children: [
-            Icon(icon, color: Colors.white, size: isSmallScreen ? 18 : 20),
-            SizedBox(height: 4),
             Text(
               value,
               style: TextStyle(
