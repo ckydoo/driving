@@ -24,31 +24,31 @@ class AppRoutes {
     ),
     GetPage(
       name: students,
-      page: () => CompleteMainLayout(),
+      page: () => ResponsiveMainLayout(),
     ),
     GetPage(
       name: instructors,
-      page: () => CompleteMainLayout(),
+      page: () => ResponsiveMainLayout(),
     ),
     GetPage(
       name: courses,
-      page: () => CompleteMainLayout(),
+      page: () => ResponsiveMainLayout(),
     ),
     GetPage(
       name: fleet,
-      page: () => CompleteMainLayout(),
+      page: () => ResponsiveMainLayout(),
     ),
     GetPage(
       name: schedules,
-      page: () => CompleteMainLayout(),
+      page: () => ResponsiveMainLayout(),
     ),
     GetPage(
       name: billing,
-      page: () => CompleteMainLayout(),
+      page: () => ResponsiveMainLayout(),
     ),
     GetPage(
       name: settings,
-      page: () => CompleteMainLayout(),
+      page: () => ResponsiveMainLayout(),
     ),
     GetPage(
       name: quickSearch,
@@ -56,11 +56,11 @@ class AppRoutes {
     ),
     GetPage(
       name: receipts,
-      page: () => CompleteMainLayout(),
+      page: () => ResponsiveMainLayout(),
     ),
     GetPage(
       name: pos,
-      page: () => CompleteMainLayout(),
+      page: () => ResponsiveMainLayout(),
     ),
   ];
 }

@@ -12,7 +12,7 @@ class UpdatedDashboardScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CompleteMainLayout();
+    return ResponsiveMainLayout();
   }
 }
 

@@ -19,79 +19,79 @@ class ProtectedRoutes {
     // The main layout will handle showing the correct content based on navigation state
     GetPage(
       name: main,
-      page: () => const CompleteMainLayout(),
+      page: () => const ResponsiveMainLayout(),
       middlewares: [AuthenticatedMiddleware()], // All authenticated users
     ),
 
     // Alternative routes that redirect to main layout
     GetPage(
       name: '/dashboard',
-      page: () => const CompleteMainLayout(),
+      page: () => const ResponsiveMainLayout(),
       middlewares: [AuthenticatedMiddleware()],
     ),
 
     GetPage(
       name: '/students',
-      page: () => const CompleteMainLayout(),
+      page: () => const ResponsiveMainLayout(),
       middlewares: [InstructorMiddleware()], // Admin + Instructor
     ),
 
     GetPage(
       name: '/instructors',
-      page: () => const CompleteMainLayout(),
+      page: () => const ResponsiveMainLayout(),
       middlewares: [AdminMiddleware()], // Admin only
     ),
 
     GetPage(
       name: '/users',
-      page: () => const CompleteMainLayout(),
+      page: () => const ResponsiveMainLayout(),
       middlewares: [AdminMiddleware()], // Admin only
     ),
 
     GetPage(
       name: '/courses',
-      page: () => const CompleteMainLayout(),
+      page: () => const ResponsiveMainLayout(),
       middlewares: [InstructorMiddleware()], // Admin + Instructor
     ),
 
     GetPage(
       name: '/fleet',
-      page: () => const CompleteMainLayout(),
+      page: () => const ResponsiveMainLayout(),
       middlewares: [AdminMiddleware()], // Admin only
     ),
 
     GetPage(
       name: '/schedules',
-      page: () => const CompleteMainLayout(),
+      page: () => const ResponsiveMainLayout(),
       middlewares: [InstructorMiddleware()], // Admin + Instructor
     ),
 
     GetPage(
       name: '/billing',
-      page: () => const CompleteMainLayout(),
+      page: () => const ResponsiveMainLayout(),
       middlewares: [AdminMiddleware()], // Admin only
     ),
 
     GetPage(
       name: '/receipts',
-      page: () => const CompleteMainLayout(),
+      page: () => const ResponsiveMainLayout(),
       middlewares: [AdminMiddleware()], // Admin only
     ),
 
     GetPage(
       name: '/settings',
-      page: () => const CompleteMainLayout(),
+      page: () => const ResponsiveMainLayout(),
       middlewares: [AuthenticatedMiddleware()], // All authenticated users
     ),
 
     GetPage(
       name: '/quick-search',
-      page: () => const CompleteMainLayout(),
+      page: () => const ResponsiveMainLayout(),
       middlewares: [AuthenticatedMiddleware()], // All authenticated users
     ),
     GetPage(
       name: '/pos',
-      page: () => const CompleteMainLayout(),
+      page: () => const ResponsiveMainLayout(),
       middlewares: [InstructorMiddleware()], // Admin + Instructor
     ),
   ];
