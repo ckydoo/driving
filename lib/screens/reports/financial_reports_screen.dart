@@ -123,292 +123,6 @@ class _FinancialReportsScreenState extends State<FinancialReportsScreen> {
     );
   }
 
-  Widget _buildReportSelector() {
-    return Container(
-      padding: EdgeInsets.all(16),
-      color: Colors.grey.shade50,
-      child: Row(
-        children: [
-          Expanded(
-            child: DropdownButtonFormField<String>(
-              value: selectedReportType.isEmpty ? null : selectedReportType,
-              hint: Text('Select Report Type'),
-              decoration: InputDecoration(
-                border:
-                    OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                contentPadding:
-                    EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              ),
-              items: _getAllReports().map((report) {
-                return DropdownMenuItem<String>(
-                  value: report['id'],
-                  child: Text(report['title']),
-                );
-              }).toList(),
-              onChanged: (value) {
-                setState(() {
-                  selectedReportType = value ?? '';
-                });
-              },
-            ),
-          ),
-          SizedBox(width: 16),
-          if (selectedReportType.isNotEmpty)
-            Row(
-              children: [
-                ElevatedButton.icon(
-                  onPressed:
-                      isGenerating ? null : () => _generateReport('view'),
-                  icon: Icon(Icons.visibility),
-                  label: Text('Preview'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green.shade600,
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-                SizedBox(width: 8),
-                ElevatedButton.icon(
-                  onPressed: isGenerating ? null : () => _generateReport('pdf'),
-                  icon: isGenerating
-                      ? SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Icon(Icons.file_download),
-                  label: Text(isGenerating ? 'Generating...' : 'Export PDF'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue.shade800,
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-              ],
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildReportCategoriesView() {
-    return ListView.builder(
-      padding: EdgeInsets.all(16),
-      itemCount: reportCategories.length,
-      itemBuilder: (context, index) {
-        final category = reportCategories.keys.elementAt(index);
-        final reports = reportCategories[category]!;
-
-        return Card(
-          margin: EdgeInsets.only(bottom: 16),
-          elevation: 4,
-          child: ExpansionTile(
-            title: Text(
-              category,
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.blue.shade800,
-              ),
-            ),
-            leading: Icon(
-              Icons.folder,
-              color: Colors.blue.shade800,
-              size: 28,
-            ),
-            children:
-                reports.map((report) => _buildReportTile(report)).toList(),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildReportTile(Map<String, dynamic> report) {
-    return ListTile(
-      leading: Container(
-        padding: EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: (report['color'] as Color).withOpacity(0.1),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Icon(
-          report['icon'],
-          color: report['color'],
-          size: 24,
-        ),
-      ),
-      title: Text(
-        report['title'],
-        style: TextStyle(fontWeight: FontWeight.w600),
-      ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(height: 4),
-          Text(report['description']),
-          SizedBox(height: 8),
-          Container(
-            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.blue.shade100,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              'Document Report',
-              style: TextStyle(
-                fontSize: 11,
-                color: Colors.blue.shade800,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-        ],
-      ),
-      onTap: () {
-        setState(() {
-          selectedReportType = report['id'];
-        });
-      },
-      trailing: Icon(Icons.arrow_forward_ios, size: 16),
-    );
-  }
-
-  Widget _buildSelectedReportView() {
-    final report = _getReportById(selectedReportType);
-    if (report == null) return Center(child: Text('Report not found'));
-
-    return SingleChildScrollView(
-      padding: EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Card(
-            elevation: 4,
-            child: Padding(
-              padding: EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: (report['color'] as Color).withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Icon(
-                          report['icon'],
-                          color: report['color'],
-                          size: 32,
-                        ),
-                      ),
-                      SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              report['title'],
-                              style: TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.blue.shade800,
-                              ),
-                            ),
-                            SizedBox(height: 4),
-                            Text(
-                              report['description'],
-                              style: TextStyle(
-                                fontSize: 16,
-                                color: Colors.grey.shade600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 16),
-                  if (selectedDateRange != null)
-                    Container(
-                      padding: EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.blue.shade200),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.date_range, color: Colors.blue.shade800),
-                          SizedBox(width: 8),
-                          Text(
-                            'Date Range: ${DateFormat('MMM dd, yyyy').format(selectedDateRange!.start)} - ${DateFormat('MMM dd, yyyy').format(selectedDateRange!.end)}',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              color: Colors.blue.shade800,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-          SizedBox(height: 16),
-          _buildDetailedReportPreview(report),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDetailedReportPreview(Map<String, dynamic> report) {
-    return Card(
-      elevation: 4,
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Report Preview (First 10 Records)',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            SizedBox(height: 16),
-            _buildReportDataTable(report['id']),
-            SizedBox(height: 16),
-            Container(
-              padding: EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.amber.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.amber.shade200),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.info, color: Colors.amber.shade700),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'This is a preview showing the first 10 records. Click "Export PDF" to generate the complete report with all data.',
-                      style: TextStyle(
-                        color: Colors.amber.shade800,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildReportDataTable(String reportId) {
     switch (reportId) {
       case 'sales_report':
@@ -1597,74 +1311,6 @@ class _FinancialReportsScreenState extends State<FinancialReportsScreen> {
     }
   }
 
-  Future<void> _showDetailedReportDialog() async {
-    final report = _getReportById(selectedReportType);
-    if (report == null) return;
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        return Dialog(
-          child: Container(
-            width: MediaQuery.of(context).size.width * 0.9,
-            height: MediaQuery.of(context).size.height * 0.8,
-            padding: EdgeInsets.all(16),
-            child: Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      report['title'],
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Row(
-                      children: [
-                        TextButton.icon(
-                          onPressed: () {
-                            Navigator.of(context).pop();
-                            _generatePDFReport();
-                          },
-                          icon: Icon(Icons.download),
-                          label: Text('Export PDF'),
-                        ),
-                        IconButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          icon: Icon(Icons.close),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                Divider(),
-                if (selectedDateRange != null)
-                  Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8),
-                    child: Text(
-                      'Period: ${DateFormat('MMM dd, yyyy').format(selectedDateRange!.start)} - ${DateFormat('MMM dd, yyyy').format(selectedDateRange!.end)}',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w500,
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                  ),
-                Expanded(
-                  child: SingleChildScrollView(
-                    child: _buildFullReportData(selectedReportType),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   Widget _buildFullReportData(String reportId) {
     switch (reportId) {
       case 'sales_report':
@@ -2421,6 +2067,1863 @@ class _FinancialReportsScreenState extends State<FinancialReportsScreen> {
         return _buildPDFCourseSales();
       default:
         return pw.Text('Report content will be displayed here');
+    }
+  }
+
+  Widget _buildReportCategoriesView() {
+    final isTablet = MediaQuery.of(context).size.width > 600;
+
+    return ListView.builder(
+      padding: EdgeInsets.all(16),
+      itemCount: reportCategories.length,
+      itemBuilder: (context, index) {
+        final category = reportCategories.keys.elementAt(index);
+        final reports = reportCategories[category]!;
+
+        return Card(
+          margin: EdgeInsets.only(bottom: 16),
+          elevation: 4,
+          child: ExpansionTile(
+            title: Text(
+              category,
+              style: TextStyle(
+                fontSize: isTablet ? 18 : 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.blue.shade800,
+              ),
+            ),
+            leading: Icon(
+              Icons.folder,
+              color: Colors.blue.shade800,
+              size: isTablet ? 28 : 24,
+            ),
+            children:
+                reports.map((report) => _buildReportTile(report)).toList(),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildReportTile(Map<String, dynamic> report) {
+    final isMobile = MediaQuery.of(context).size.width < 600;
+
+    return ListTile(
+      leading: Container(
+        padding: EdgeInsets.all(isMobile ? 6 : 8),
+        decoration: BoxDecoration(
+          color: (report['color'] as Color).withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(
+          report['icon'],
+          color: report['color'],
+          size: isMobile ? 20 : 24,
+        ),
+      ),
+      title: Text(
+        report['title'],
+        style: TextStyle(
+          fontWeight: FontWeight.w600,
+          fontSize: isMobile ? 14 : 16,
+        ),
+      ),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(height: 4),
+          Text(
+            report['description'],
+            style: TextStyle(fontSize: isMobile ? 12 : 14),
+          ),
+          SizedBox(height: 8),
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.blue.shade100,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              'Document Report',
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.blue.shade800,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+      onTap: () {
+        setState(() {
+          selectedReportType = report['id'];
+        });
+      },
+      trailing: Icon(Icons.arrow_forward_ios, size: 16),
+    );
+  }
+
+  Widget _buildSelectedReportView() {
+    final report = _getReportById(selectedReportType);
+    if (report == null) return Center(child: Text('Report not found'));
+
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildReportHeaderCard(report),
+          SizedBox(height: 16),
+          _buildDetailedReportPreview(report),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReportHeaderCard(Map<String, dynamic> report) {
+    final isMobile = MediaQuery.of(context).size.width < 600;
+
+    return Card(
+      elevation: 4,
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (isMobile)
+              _buildMobileReportHeader(report)
+            else
+              _buildDesktopReportHeader(report),
+            if (selectedDateRange != null) ...[
+              SizedBox(height: 16),
+              _buildDateRangeDisplay(),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileReportHeader(Map<String, dynamic> report) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              padding: EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: (report['color'] as Color).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                report['icon'],
+                color: report['color'],
+                size: 28,
+              ),
+            ),
+            SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    report['title'],
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue.shade800,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: 12),
+        Text(
+          report['description'],
+          style: TextStyle(
+            fontSize: 14,
+            color: Colors.grey.shade600,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDesktopReportHeader(Map<String, dynamic> report) {
+    return Row(
+      children: [
+        Container(
+          padding: EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: (report['color'] as Color).withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(
+            report['icon'],
+            color: report['color'],
+            size: 32,
+          ),
+        ),
+        SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                report['title'],
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blue.shade800,
+                ),
+              ),
+              SizedBox(height: 4),
+              Text(
+                report['description'],
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDateRangeDisplay() {
+    return Container(
+      padding: EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.blue.shade200),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.date_range, color: Colors.blue.shade800),
+          SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Date Range: ${DateFormat('MMM dd, yyyy').format(selectedDateRange!.start)} - ${DateFormat('MMM dd, yyyy').format(selectedDateRange!.end)}',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: Colors.blue.shade800,
+                fontSize: 14,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMobileDataView(String reportId) {
+    switch (reportId) {
+      case 'sales_report':
+        return _buildMobileSalesView();
+      case 'payment_register':
+        return _buildMobilePaymentView();
+      case 'outstanding_payments':
+        return _buildMobileOutstandingView();
+      case 'customer_statements':
+        return _buildMobileCustomerView();
+      case 'daily_sales':
+        return _buildMobileDailySalesView();
+      case 'course_sales':
+        return _buildMobileCourseSalesView();
+      default:
+        return Text('Mobile view for this report is being prepared...');
+    }
+  }
+
+  Widget _buildPreviewNotice() {
+    return Container(
+      padding: EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.amber.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.amber.shade200),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.info, color: Colors.amber.shade700),
+          SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'This is a preview showing the first 10 records. Click "Export PDF" to generate the complete report with all data.',
+              style: TextStyle(
+                color: Colors.amber.shade800,
+                fontWeight: FontWeight.w500,
+                fontSize: 12,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showDetailedReportDialog() async {
+    final report = _getReportById(selectedReportType);
+    if (report == null) return;
+
+    final isMobile = MediaQuery.of(context).size.width < 600;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return Dialog(
+          child: Container(
+            width: isMobile
+                ? MediaQuery.of(context).size.width * 0.95
+                : MediaQuery.of(context).size.width * 0.9,
+            height: MediaQuery.of(context).size.height * 0.8,
+            padding: EdgeInsets.all(16),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        report['title'],
+                        style: TextStyle(
+                          fontSize: isMobile ? 16 : 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (!isMobile)
+                          TextButton.icon(
+                            onPressed: () {
+                              Navigator.of(context).pop();
+                              _generatePDFReport();
+                            },
+                            icon: Icon(Icons.download),
+                            label: Text('Export PDF'),
+                          ),
+                        IconButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          icon: Icon(Icons.close),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                if (isMobile) ...[
+                  SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        _generatePDFReport();
+                      },
+                      icon: Icon(Icons.download),
+                      label: Text('Export PDF'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue.shade800,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+                Divider(),
+                if (selectedDateRange != null)
+                  Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: Text(
+                      'Period: ${DateFormat('MMM dd, yyyy').format(selectedDateRange!.start)} - ${DateFormat('MMM dd, yyyy').format(selectedDateRange!.end)}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w500,
+                        color: Colors.grey.shade600,
+                        fontSize: isMobile ? 12 : 14,
+                      ),
+                    ),
+                  ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: _buildFullReportData(selectedReportType),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildReportSelector() {
+    final isDesktop = MediaQuery.of(context).size.width > 800;
+
+    return Container(
+      padding: EdgeInsets.all(16),
+      color: Colors.grey.shade50,
+      child: isDesktop
+          ? _buildDesktopReportSelector()
+          : _buildMobileReportSelector(),
+    );
+  }
+
+  Widget _buildDesktopReportSelector() {
+    return Row(
+      children: [
+        Expanded(
+          flex: 3,
+          child: DropdownButtonFormField<String>(
+            value: selectedReportType.isEmpty ? null : selectedReportType,
+            hint: Text('Select Report Type'),
+            decoration: InputDecoration(
+              border:
+                  OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            ),
+            isExpanded: true, // Fix dropdown overflow
+            items: _getAllReports().map((report) {
+              return DropdownMenuItem<String>(
+                value: report['id'],
+                child: Text(
+                  report['title'],
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+              );
+            }).toList(),
+            onChanged: (value) {
+              setState(() {
+                selectedReportType = value ?? '';
+              });
+            },
+          ),
+        ),
+        SizedBox(width: 16),
+        if (selectedReportType.isNotEmpty)
+          Expanded(
+            flex: 2,
+            child: _buildActionButtons(),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildMobileReportSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        DropdownButtonFormField<String>(
+          value: selectedReportType.isEmpty ? null : selectedReportType,
+          hint: Text('Select Report Type'),
+          decoration: InputDecoration(
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          ),
+          isExpanded: true, // Fix dropdown overflow
+          items: _getAllReports().map((report) {
+            return DropdownMenuItem<String>(
+              value: report['id'],
+              child: Container(
+                width: double.infinity,
+                child: Text(
+                  report['title'],
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 2,
+                ),
+              ),
+            );
+          }).toList(),
+          onChanged: (value) {
+            setState(() {
+              selectedReportType = value ?? '';
+            });
+          },
+        ),
+        if (selectedReportType.isNotEmpty) ...[
+          SizedBox(height: 12),
+          _buildActionButtons(),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildActionButtons() {
+    final isDesktop = MediaQuery.of(context).size.width > 800;
+    final isMobile = MediaQuery.of(context).size.width < 600;
+
+    if (isDesktop) {
+      return Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          ElevatedButton.icon(
+            onPressed: isGenerating ? null : () => _generateReport('view'),
+            icon: Icon(Icons.visibility, size: 16),
+            label: Text('Preview'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green.shade600,
+              foregroundColor: Colors.white,
+              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            ),
+          ),
+          ElevatedButton.icon(
+            onPressed: isGenerating ? null : () => _generateReport('pdf'),
+            icon: isGenerating
+                ? SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white),
+                  )
+                : Icon(Icons.file_download, size: 16),
+            label: Text(isGenerating ? 'Generating...' : 'Export PDF'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue.shade800,
+              foregroundColor: Colors.white,
+              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            ),
+          ),
+        ],
+      );
+    }
+
+    // Mobile view - only show Export PDF button
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Remove the Preview button for mobile
+        ElevatedButton.icon(
+          onPressed: isGenerating ? null : () => _generateReport('pdf'),
+          icon: isGenerating
+              ? SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.white),
+                )
+              : Icon(Icons.file_download),
+          label: Text(isGenerating ? 'Generating PDF...' : 'Export PDF'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.blue.shade800,
+            foregroundColor: Colors.white,
+            padding: EdgeInsets.symmetric(vertical: 12),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMobileSalesView() {
+    final salesData = _getSalesReportData().take(10).toList();
+
+    if (salesData.isEmpty) {
+      return _buildEmptyStateCard(
+          'No sales data found for the selected period.');
+    }
+
+    return Column(
+      children: salesData
+          .map((sale) => Card(
+                margin: EdgeInsets.only(bottom: 8),
+                elevation: 2,
+                child: Padding(
+                  padding: EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              sale['invoiceNumber'],
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Container(
+                            padding: EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.green.shade100,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              '\$${sale['amount'].toStringAsFixed(2)}',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.green.shade800,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 6),
+                      Text(
+                        sale['customerName'],
+                        style: TextStyle(
+                          color: Colors.grey.shade700,
+                          fontSize: 13,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              sale['courseName'],
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade600,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Text(
+                            DateFormat('MM/dd/yyyy').format(sale['date']),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 6),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Container(
+                            padding: EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade100,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              sale['paymentMethod'],
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.blue.shade800,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          if (sale['reference'] != '-')
+                            Text(
+                              'Ref: ${sale['reference']}',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.grey.shade500,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ))
+          .toList(),
+    );
+  }
+
+  Widget _buildMobilePaymentView() {
+    final payments = _getFilteredPayments().take(10).toList();
+
+    if (payments.isEmpty) {
+      return _buildEmptyStateCard('No payments found for the selected period.');
+    }
+
+    return Column(
+      children: payments.map((payment) {
+        final invoice = billingController.invoices
+            .firstWhere((inv) => inv.id == payment.invoiceId);
+        final student = userController.users
+            .firstWhere((user) => user.id == invoice.studentId);
+
+        return Card(
+          margin: EdgeInsets.only(bottom: 8),
+          elevation: 2,
+          child: Padding(
+            padding: EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        payment.receiptNumber ?? 'N/A',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade100,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '\$${payment.amount.toStringAsFixed(2)}',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.green.shade800,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 6),
+                Text(
+                  '${student.fname} ${student.lname}',
+                  style: TextStyle(
+                    color: Colors.grey.shade700,
+                    fontSize: 13,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                SizedBox(height: 4),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade100,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        payment.displayMethod,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.blue.shade800,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      DateFormat('MM/dd/yyyy').format(payment.paymentDate),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+                if (payment.reference != null &&
+                    payment.reference!.isNotEmpty) ...[
+                  SizedBox(height: 4),
+                  Text(
+                    'Ref: ${payment.reference}',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: Colors.grey.shade500,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildMobileOutstandingView() {
+    final outstandingInvoices = _getOutstandingInvoices().take(10).toList();
+
+    if (outstandingInvoices.isEmpty) {
+      return _buildEmptyStateCard('No outstanding payments found.');
+    }
+
+    return Column(
+      children: outstandingInvoices.map((invoice) {
+        final student = userController.users
+            .firstWhere((user) => user.id == invoice.studentId);
+        final daysOverdue =
+            invoice.dueDate != null && invoice.dueDate!.isBefore(DateTime.now())
+                ? DateTime.now().difference(invoice.dueDate!).inDays
+                : 0;
+
+        return Card(
+          margin: EdgeInsets.only(bottom: 8),
+          elevation: 2,
+          child: Padding(
+            padding: EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        invoice.invoiceNumber,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade100,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '\$${invoice.balance.toStringAsFixed(2)}',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.red.shade800,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 6),
+                Text(
+                  '${student.fname} ${student.lname}',
+                  style: TextStyle(
+                    color: Colors.grey.shade700,
+                    fontSize: 13,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                SizedBox(height: 4),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Total: \$${invoice.totalAmountCalculated.toStringAsFixed(2)}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Text(
+                      'Paid: \$${invoice.amountPaid.toStringAsFixed(2)}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+                if (daysOverdue > 0) ...[
+                  SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Container(
+                        padding:
+                            EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade100,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '$daysOverdue days overdue',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.red.shade800,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildMobileCustomerView() {
+    final customerData = _getCustomerStatementsData().take(10).toList();
+
+    if (customerData.isEmpty) {
+      return _buildEmptyStateCard('No customer data found.');
+    }
+
+    return Column(
+      children: customerData
+          .map((customer) => Card(
+                margin: EdgeInsets.only(bottom: 8),
+                elevation: 2,
+                child: Padding(
+                  padding: EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              customer['name'],
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Container(
+                            padding: EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: customer['status'] == 'Current'
+                                  ? Colors.green.shade100
+                                  : Colors.red.shade100,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              customer['status'],
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: customer['status'] == 'Current'
+                                    ? Colors.green.shade800
+                                    : Colors.red.shade800,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 6),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Invoiced: \$${customer['totalInvoiced'].toStringAsFixed(2)}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade600,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Text(
+                            'Paid: \$${customer['totalPaid'].toStringAsFixed(2)}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Balance: \$${customer['balance'].toStringAsFixed(2)}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: customer['balance'] > 0
+                                  ? Colors.red
+                                  : Colors.green,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          if (customer['lastPayment'] != null)
+                            Expanded(
+                              child: Text(
+                                'Last: ${customer['lastPayment']}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade600,
+                                ),
+                                textAlign: TextAlign.end,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ))
+          .toList(),
+    );
+  }
+
+  Widget _buildMobileDailySalesView() {
+    final dailySales = _getDailySalesData().take(10).toList();
+
+    if (dailySales.isEmpty) {
+      return _buildEmptyStateCard(
+          'No daily sales data found for the selected period.');
+    }
+
+    return Column(
+      children: dailySales
+          .map((day) => Card(
+                margin: EdgeInsets.only(bottom: 8),
+                elevation: 2,
+                child: Padding(
+                  padding: EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              DateFormat('MMM dd, yyyy').format(day['date']),
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Container(
+                            padding: EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.green.shade100,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              '\$${day['totalSales'].toStringAsFixed(2)}',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.green.shade800,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 6),
+                      Text(
+                        '${day['transactions']} transactions',
+                        style: TextStyle(
+                          color: Colors.grey.shade700,
+                          fontSize: 13,
+                        ),
+                      ),
+                      SizedBox(height: 4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Cash: \$${day['cash'].toStringAsFixed(2)}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade600,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Text(
+                            'Mobile: \$${day['mobile'].toStringAsFixed(2)}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ))
+          .toList(),
+    );
+  }
+
+  Widget _buildMobileCourseSalesView() {
+    final courseSales = _getCourseSalesData().take(10).toList();
+
+    if (courseSales.isEmpty) {
+      return _buildEmptyStateCard('No course sales data found.');
+    }
+
+    return Column(
+      children: courseSales
+          .map((course) => Card(
+                margin: EdgeInsets.only(bottom: 8),
+                elevation: 2,
+                child: Padding(
+                  padding: EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              course['courseName'],
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Container(
+                            padding: EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.green.shade100,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              '\$${course['totalSales'].toStringAsFixed(2)}',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.green.shade800,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 6),
+                      Text(
+                        '${course['studentCount']} students',
+                        style: TextStyle(
+                          color: Colors.grey.shade700,
+                          fontSize: 13,
+                        ),
+                      ),
+                      SizedBox(height: 4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Avg: \$${course['avgPerStudent'].toStringAsFixed(2)}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade600,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Text(
+                            'Outstanding: \$${course['outstanding'].toStringAsFixed(2)}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: course['outstanding'] > 0
+                                  ? Colors.red
+                                  : Colors.green,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ))
+          .toList(),
+    );
+  }
+
+  Widget _buildEmptyStateCard(String message) {
+    return Card(
+      elevation: 2,
+      child: Container(
+        width: double.infinity,
+        padding: EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.info_outline,
+              size: 48,
+              color: Colors.grey.shade400,
+            ),
+            SizedBox(height: 16),
+            Text(
+              message,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey.shade600,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetailedReportPreview(Map<String, dynamic> report) {
+    return Card(
+      elevation: 4,
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Report Preview (First 10 Records)',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            SizedBox(height: 16),
+            // Use the new responsive preview container instead
+            _buildResponsivePreviewContainer(report['id']),
+            SizedBox(height: 16),
+            _buildPreviewNotice(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResponsivePreviewContainer(String reportId) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+    final isTablet = screenWidth >= 600 && screenWidth < 1000;
+
+    // Always use mobile view for mobile devices
+    if (isMobile) {
+      return _buildMobileDataView(reportId);
+    }
+
+    // For tablet and desktop, use constrained scrollable table
+    return Container(
+      width: double.infinity,
+      constraints: BoxConstraints(
+        maxWidth: screenWidth - 64, // Account for card padding
+        maxHeight: 400, // Set maximum height for preview
+      ),
+      child: isTablet
+          ? _buildTabletPreviewTable(reportId)
+          : _buildDesktopPreviewTable(reportId),
+    );
+  }
+
+  Widget _buildTabletPreviewTable(String reportId) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.vertical,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            minWidth: MediaQuery.of(context).size.width - 64,
+          ),
+          child: _buildCompactDataTable(reportId),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDesktopPreviewTable(String reportId) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.vertical,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            minWidth: MediaQuery.of(context).size.width - 64,
+          ),
+          child: _buildReportDataTable(reportId),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCompactDataTable(String reportId) {
+    // Compact version of data tables for tablet view
+    switch (reportId) {
+      case 'sales_report':
+        return _buildCompactSalesTable();
+      case 'payment_register':
+        return _buildCompactPaymentTable();
+      case 'outstanding_payments':
+        return _buildCompactOutstandingTable();
+      case 'customer_statements':
+        return _buildCompactCustomerTable();
+      case 'daily_sales':
+        return _buildCompactDailySalesTable();
+      case 'course_sales':
+        return _buildCompactCourseSalesTable();
+      default:
+        return Text('Preview data will be displayed here');
+    }
+  }
+
+  Widget _buildCompactSalesTable() {
+    final salesData = _getSalesReportData().take(10).toList();
+
+    if (salesData.isEmpty) {
+      return _buildEmptyStateCard(
+          'No sales data found for the selected period.');
+    }
+
+    return DataTable(
+      columnSpacing: 8,
+      headingRowHeight: 40,
+      dataRowHeight: 36,
+      columns: [
+        DataColumn(
+          label: Expanded(
+            child: Text('Date',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
+        ),
+        DataColumn(
+          label: Expanded(
+            child: Text('Invoice',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
+        ),
+        DataColumn(
+          label: Expanded(
+            child: Text('Customer',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
+        ),
+        DataColumn(
+          label: Expanded(
+            child: Text('Amount',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
+        ),
+      ],
+      rows: salesData
+          .map((sale) => DataRow(
+                cells: [
+                  DataCell(
+                    Container(
+                      constraints: BoxConstraints(maxWidth: 80),
+                      child: Text(
+                        DateFormat('MM/dd').format(sale['date']),
+                        style: TextStyle(fontSize: 11),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                  DataCell(
+                    Container(
+                      constraints: BoxConstraints(maxWidth: 80),
+                      child: Text(
+                        sale['invoiceNumber'],
+                        style: TextStyle(fontSize: 11),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                  DataCell(
+                    Container(
+                      constraints: BoxConstraints(maxWidth: 100),
+                      child: Text(
+                        sale['customerName'],
+                        style: TextStyle(fontSize: 11),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                  DataCell(
+                    Text(
+                      '\$${sale['amount'].toStringAsFixed(2)}',
+                      style:
+                          TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                ],
+              ))
+          .toList(),
+    );
+  }
+
+  Widget _buildCompactPaymentTable() {
+    final payments = _getFilteredPayments().take(10).toList();
+
+    if (payments.isEmpty) {
+      return _buildEmptyStateCard('No payments found for the selected period.');
+    }
+
+    return DataTable(
+      columnSpacing: 8,
+      headingRowHeight: 40,
+      dataRowHeight: 36,
+      columns: [
+        DataColumn(
+          label: Expanded(
+            child: Text('Date',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
+        ),
+        DataColumn(
+          label: Expanded(
+            child: Text('Receipt',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
+        ),
+        DataColumn(
+          label: Expanded(
+            child: Text('Customer',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
+        ),
+        DataColumn(
+          label: Expanded(
+            child: Text('Amount',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
+        ),
+      ],
+      rows: payments.map((payment) {
+        final invoice = billingController.invoices
+            .firstWhere((inv) => inv.id == payment.invoiceId);
+        final student = userController.users
+            .firstWhere((user) => user.id == invoice.studentId);
+
+        return DataRow(
+          cells: [
+            DataCell(
+              Container(
+                constraints: BoxConstraints(maxWidth: 80),
+                child: Text(
+                  DateFormat('MM/dd').format(payment.paymentDate),
+                  style: TextStyle(fontSize: 11),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+            DataCell(
+              Container(
+                constraints: BoxConstraints(maxWidth: 80),
+                child: Text(
+                  payment.receiptNumber ?? 'N/A',
+                  style: TextStyle(fontSize: 11),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+            DataCell(
+              Container(
+                constraints: BoxConstraints(maxWidth: 100),
+                child: Text(
+                  '${student.fname} ${student.lname}',
+                  style: TextStyle(fontSize: 11),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+            DataCell(
+              Text(
+                '\$${payment.amount.toStringAsFixed(2)}',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+              ),
+            ),
+          ],
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildCompactOutstandingTable() {
+    final outstandingInvoices = _getOutstandingInvoices().take(10).toList();
+
+    if (outstandingInvoices.isEmpty) {
+      return _buildEmptyStateCard('No outstanding payments found.');
+    }
+
+    return DataTable(
+      columnSpacing: 8,
+      headingRowHeight: 40,
+      dataRowHeight: 36,
+      columns: [
+        DataColumn(
+          label: Expanded(
+            child: Text('Invoice',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
+        ),
+        DataColumn(
+          label: Expanded(
+            child: Text('Customer',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
+        ),
+        DataColumn(
+          label: Expanded(
+            child: Text('Balance',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
+        ),
+        DataColumn(
+          label: Expanded(
+            child: Text('Status',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
+        ),
+      ],
+      rows: outstandingInvoices.map((invoice) {
+        final student = userController.users
+            .firstWhere((user) => user.id == invoice.studentId);
+        final daysOverdue =
+            invoice.dueDate != null && invoice.dueDate!.isBefore(DateTime.now())
+                ? DateTime.now().difference(invoice.dueDate!).inDays
+                : 0;
+
+        return DataRow(
+          cells: [
+            DataCell(
+              Container(
+                constraints: BoxConstraints(maxWidth: 80),
+                child: Text(
+                  invoice.invoiceNumber,
+                  style: TextStyle(fontSize: 11),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+            DataCell(
+              Container(
+                constraints: BoxConstraints(maxWidth: 100),
+                child: Text(
+                  '${student.fname} ${student.lname}',
+                  style: TextStyle(fontSize: 11),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+            DataCell(
+              Text(
+                '\$${invoice.balance.toStringAsFixed(2)}',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.red.shade700,
+                ),
+              ),
+            ),
+            DataCell(
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                decoration: BoxDecoration(
+                  color: daysOverdue > 0
+                      ? Colors.red.shade100
+                      : Colors.orange.shade100,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  daysOverdue > 0 ? 'OVERDUE' : 'DUE',
+                  style: TextStyle(
+                    fontSize: 8,
+                    fontWeight: FontWeight.bold,
+                    color: daysOverdue > 0
+                        ? Colors.red.shade800
+                        : Colors.orange.shade800,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildCompactCustomerTable() {
+    final customerData = _getCustomerStatementsData().take(10).toList();
+
+    if (customerData.isEmpty) {
+      return _buildEmptyStateCard('No customer data found.');
+    }
+
+    return DataTable(
+      columnSpacing: 8,
+      headingRowHeight: 40,
+      dataRowHeight: 36,
+      columns: [
+        DataColumn(
+          label: Expanded(
+            child: Text('Customer',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
+        ),
+        DataColumn(
+          label: Expanded(
+            child: Text('Invoiced',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
+        ),
+        DataColumn(
+          label: Expanded(
+            child: Text('Balance',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
+        ),
+        DataColumn(
+          label: Expanded(
+            child: Text('Status',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
+        ),
+      ],
+      rows: customerData
+          .map((customer) => DataRow(
+                cells: [
+                  DataCell(
+                    Container(
+                      constraints: BoxConstraints(maxWidth: 100),
+                      child: Text(
+                        customer['name'],
+                        style: TextStyle(fontSize: 11),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                  DataCell(
+                    Text(
+                      '\$${customer['totalInvoiced'].toStringAsFixed(0)}',
+                      style: TextStyle(fontSize: 11),
+                    ),
+                  ),
+                  DataCell(
+                    Text(
+                      '\$${customer['balance'].toStringAsFixed(2)}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                        color:
+                            customer['balance'] > 0 ? Colors.red : Colors.green,
+                      ),
+                    ),
+                  ),
+                  DataCell(
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: customer['status'] == 'Current'
+                            ? Colors.green.shade100
+                            : Colors.red.shade100,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        customer['status'],
+                        style: TextStyle(
+                          fontSize: 8,
+                          fontWeight: FontWeight.bold,
+                          color: customer['status'] == 'Current'
+                              ? Colors.green.shade800
+                              : Colors.red.shade800,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ))
+          .toList(),
+    );
+  }
+
+  Widget _buildCompactDailySalesTable() {
+    final dailySales = _getDailySalesData().take(10).toList();
+
+    if (dailySales.isEmpty) {
+      return _buildEmptyStateCard(
+          'No daily sales data found for the selected period.');
+    }
+
+    return DataTable(
+      columnSpacing: 8,
+      headingRowHeight: 40,
+      dataRowHeight: 36,
+      columns: [
+        DataColumn(
+          label: Expanded(
+            child: Text('Date',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
+        ),
+        DataColumn(
+          label: Expanded(
+            child: Text('Sales',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
+        ),
+        DataColumn(
+          label: Expanded(
+            child: Text('Trans.',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
+        ),
+        DataColumn(
+          label: Expanded(
+            child: Text('Cash',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
+        ),
+      ],
+      rows: dailySales
+          .map((day) => DataRow(
+                cells: [
+                  DataCell(
+                    Container(
+                      constraints: BoxConstraints(maxWidth: 80),
+                      child: Text(
+                        DateFormat('MM/dd').format(day['date']),
+                        style: TextStyle(fontSize: 11),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                  DataCell(
+                    Text(
+                      '\$${day['totalSales'].toStringAsFixed(0)}',
+                      style:
+                          TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                  DataCell(
+                    Text(
+                      day['transactions'].toString(),
+                      style: TextStyle(fontSize: 11),
+                    ),
+                  ),
+                  DataCell(
+                    Text(
+                      '\$${day['cash'].toStringAsFixed(0)}',
+                      style: TextStyle(fontSize: 11),
+                    ),
+                  ),
+                ],
+              ))
+          .toList(),
+    );
+  }
+
+  Widget _buildCompactCourseSalesTable() {
+    final courseSales = _getCourseSalesData().take(10).toList();
+
+    if (courseSales.isEmpty) {
+      return _buildEmptyStateCard('No course sales data found.');
+    }
+
+    return DataTable(
+      columnSpacing: 8,
+      headingRowHeight: 40,
+      dataRowHeight: 36,
+      columns: [
+        DataColumn(
+          label: Expanded(
+            child: Text('Course',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
+        ),
+        DataColumn(
+          label: Expanded(
+            child: Text('Students',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
+        ),
+        DataColumn(
+          label: Expanded(
+            child: Text('Sales',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
+        ),
+        DataColumn(
+          label: Expanded(
+            child: Text('Outstanding',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
+        ),
+      ],
+      rows: courseSales
+          .map((course) => DataRow(
+                cells: [
+                  DataCell(
+                    Container(
+                      constraints: BoxConstraints(maxWidth: 100),
+                      child: Text(
+                        course['courseName'],
+                        style: TextStyle(fontSize: 11),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                  DataCell(
+                    Text(
+                      course['studentCount'].toString(),
+                      style: TextStyle(fontSize: 11),
+                    ),
+                  ),
+                  DataCell(
+                    Text(
+                      '\$${course['totalSales'].toStringAsFixed(0)}',
+                      style:
+                          TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                  DataCell(
+                    Text(
+                      '\$${course['outstanding'].toStringAsFixed(0)}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: course['outstanding'] > 0
+                            ? Colors.red
+                            : Colors.green,
+                      ),
+                    ),
+                  ),
+                ],
+              ))
+          .toList(),
+    );
+  }
+
+  // Update the existing _buildResponsiveDataTable method to only be used in dialog view
+  Widget _buildResponsiveDataTable(String reportId) {
+    // This method is now only used in the detailed dialog view
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+
+    if (isMobile) {
+      return _buildMobileDataView(reportId);
+    } else {
+      return SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: SingleChildScrollView(
+          scrollDirection: Axis.vertical,
+          child: _buildReportDataTable(reportId),
+        ),
+      );
     }
   }
 }

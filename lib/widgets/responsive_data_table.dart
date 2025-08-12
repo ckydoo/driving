@@ -50,6 +50,7 @@ class ResponsiveDataTable extends StatelessWidget {
                       SizedBox(
                         width: 100,
                         child: ResponsiveText(
+                          style: TextStyle(),
                           headers[i],
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
@@ -58,6 +59,7 @@ class ResponsiveDataTable extends StatelessWidget {
                       ),
                       Expanded(
                         child: ResponsiveText(
+                          style: TextStyle(),
                           row[i],
                           fontSize: 14,
                           fontWeight: FontWeight.w500,
@@ -84,6 +86,7 @@ class ResponsiveDataTable extends StatelessWidget {
         columns: headers.map((header) {
           return DataColumn(
             label: ResponsiveText(
+              style: TextStyle(),
               header,
               fontSize: 14,
               fontWeight: FontWeight.bold,
@@ -96,7 +99,8 @@ class ResponsiveDataTable extends StatelessWidget {
             onSelectChanged:
                 rowCallbacks != null ? (_) => rowCallbacks![index]() : null,
             cells: row.map((cell) {
-              return DataCell(ResponsiveText(cell, fontSize: 13));
+              return DataCell(
+                  ResponsiveText(style: TextStyle(), cell, fontSize: 13));
             }).toList(),
           );
         }),

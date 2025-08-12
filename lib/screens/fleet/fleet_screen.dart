@@ -334,7 +334,11 @@ class _FleetScreenState extends State<FleetScreen>
                     itemBuilder: (context, index) {
                       final stat = _quickStats[index];
                       return Container(
-                        width: 200,
+                        width: MediaQuery.of(context).size.width > 1200
+                            ? 200
+                            : MediaQuery.of(context).size.width > 800
+                                ? 180
+                                : 160,
                         margin: EdgeInsets.only(right: 16),
                         child: _buildStatCard(stat),
                       );
@@ -343,100 +347,17 @@ class _FleetScreenState extends State<FleetScreen>
                 ),
                 SizedBox(height: 16),
 
-                // Search and filters
-                Row(
-                  children: [
-                    Expanded(
-                      flex: 3,
-                      child: TextField(
-                        controller: _searchController,
-                        decoration: InputDecoration(
-                          hintText: 'Search vehicles, plates, instructors...',
-                          prefixIcon: Icon(Icons.search),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          contentPadding: EdgeInsets.symmetric(vertical: 12),
-                        ),
-                        onChanged: _searchVehicles,
-                      ),
-                    ),
-                    SizedBox(width: 16),
-
-                    // Assignment filter
-                    Container(
-                      padding: EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey[300]!),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: DropdownButton<String>(
-                        value: _filterStatus,
-                        underline: Container(),
-                        items: [
-                          DropdownMenuItem(
-                              value: 'all', child: Text('All Vehicles')),
-                          DropdownMenuItem(
-                              value: 'assigned', child: Text('Assigned')),
-                          DropdownMenuItem(
-                              value: 'unassigned', child: Text('Available')),
-                        ],
-                        onChanged: (value) {
-                          setState(() {
-                            _filterStatus = value!;
-                            _filterVehicles();
-                            _currentPage = 1;
-                          });
-                        },
-                      ),
-                    ),
-                    SizedBox(width: 16),
-
-                    // Sort dropdown
-                    Container(
-                      padding: EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey[300]!),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: DropdownButton<String>(
-                        value: _sortBy,
-                        underline: Container(),
-                        items: [
-                          DropdownMenuItem(
-                              value: 'make', child: Text('Sort by Make')),
-                          DropdownMenuItem(
-                              value: 'year', child: Text('Sort by Year')),
-                          DropdownMenuItem(
-                              value: 'plate', child: Text('Sort by Plate')),
-                          DropdownMenuItem(
-                              value: 'instructor',
-                              child: Text('Sort by Instructor')),
-                        ],
-                        onChanged: (value) {
-                          setState(() {
-                            _sortBy = value!;
-                            _sortVehicles();
-                          });
-                        },
-                      ),
-                    ),
-                    SizedBox(width: 8),
-                    IconButton(
-                      icon: Icon(_sortAscending
-                          ? Icons.arrow_upward
-                          : Icons.arrow_downward),
-                      onPressed: () {
-                        setState(() {
-                          _sortAscending = !_sortAscending;
-                          _sortVehicles();
-                        });
-                      },
-                    ),
-
-                    Spacer(),
-                    Text('${_searchResults.length} vehicles found'),
-                  ],
+                // Search and filters - Make responsive
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    if (constraints.maxWidth > 1200) {
+                      return _buildWideScreenFilters();
+                    } else if (constraints.maxWidth > 800) {
+                      return _buildMediumScreenFilters();
+                    } else {
+                      return _buildNarrowScreenFilters();
+                    }
+                  },
                 ),
               ],
             ),
@@ -450,6 +371,7 @@ class _FleetScreenState extends State<FleetScreen>
               labelColor: Colors.blue[600],
               unselectedLabelColor: Colors.grey[600],
               indicatorColor: Colors.blue[600],
+              isScrollable: MediaQuery.of(context).size.width < 600,
               tabs: [
                 Tab(icon: Icon(Icons.grid_view), text: 'Grid View'),
                 Tab(icon: Icon(Icons.list), text: 'List View'),
@@ -463,31 +385,35 @@ class _FleetScreenState extends State<FleetScreen>
             Container(
               padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               color: Colors.blue[50],
-              child: Row(
-                children: [
-                  Checkbox(
-                    value: _isAllSelected,
-                    onChanged: _toggleSelectAll,
-                  ),
-                  Text('${_selectedVehicles.length} selected'),
-                  Spacer(),
-                  TextButton.icon(
-                    icon: Icon(Icons.assignment_ind, color: Colors.blue),
-                    label: Text('Assign Instructors',
-                        style: TextStyle(color: Colors.blue)),
-                    onPressed: _selectedVehicles.isNotEmpty
-                        ? () => _bulkAssignInstructors()
-                        : null,
-                  ),
-                  TextButton.icon(
-                    icon: Icon(Icons.delete, color: Colors.red),
-                    label: Text('Delete Selected',
-                        style: TextStyle(color: Colors.red)),
-                    onPressed: _selectedVehicles.isNotEmpty
-                        ? () => _deleteSelectedVehicles()
-                        : null,
-                  ),
-                ],
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Checkbox(
+                      value: _isAllSelected,
+                      onChanged: _toggleSelectAll,
+                    ),
+                    Text('${_selectedVehicles.length} selected'),
+                    SizedBox(width: 16),
+                    TextButton.icon(
+                      icon: Icon(Icons.assignment_ind, color: Colors.blue),
+                      label: Text('Assign Instructors',
+                          style: TextStyle(color: Colors.blue)),
+                      onPressed: _selectedVehicles.isNotEmpty
+                          ? () => _bulkAssignInstructors()
+                          : null,
+                    ),
+                    TextButton.icon(
+                      icon: Icon(Icons.delete, color: Colors.red),
+                      label: Text('Delete Selected',
+                          style: TextStyle(color: Colors.red)),
+                      onPressed: _selectedVehicles.isNotEmpty
+                          ? () => _deleteSelectedVehicles()
+                          : null,
+                    ),
+                  ],
+                ),
               ),
             ),
 
@@ -515,53 +441,215 @@ class _FleetScreenState extends State<FleetScreen>
             _loadVehicles();
           }
         },
-        label: Text('Add Vehicle'),
+        label: MediaQuery.of(context).size.width > 600
+            ? Text('Add Vehicle')
+            : Text('Add'),
         icon: Icon(Icons.add),
         backgroundColor: Colors.blue[600],
       ),
     );
   }
 
-  Widget _buildStatCard(Map<String, dynamic> stat) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(stat['icon'], color: stat['color'], size: 24),
-                Spacer(),
-                Text(
-                  stat['value'],
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey[800],
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 8),
-            Text(
-              stat['title'],
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: Colors.grey[700],
+  // Wide screen filters (desktop)
+  Widget _buildWideScreenFilters() {
+    return Row(
+      children: [
+        Expanded(
+          flex: 3,
+          child: TextField(
+            controller: _searchController,
+            decoration: InputDecoration(
+              hintText: 'Search vehicles, plates, instructors...',
+              prefixIcon: Icon(Icons.search),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
               ),
+              contentPadding: EdgeInsets.symmetric(vertical: 12),
             ),
-            Text(
-              stat['subtitle'],
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[500],
+            onChanged: _searchVehicles,
+          ),
+        ),
+        SizedBox(width: 16),
+        _buildFilterDropdown(),
+        SizedBox(width: 16),
+        _buildSortDropdown(),
+        SizedBox(width: 8),
+        IconButton(
+          icon:
+              Icon(_sortAscending ? Icons.arrow_upward : Icons.arrow_downward),
+          onPressed: () {
+            setState(() {
+              _sortAscending = !_sortAscending;
+              _sortVehicles();
+            });
+          },
+        ),
+        Spacer(),
+        Flexible(
+          child: Text(
+            '${_searchResults.length} vehicles found',
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Medium screen filters (tablet)
+  Widget _buildMediumScreenFilters() {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  hintText: 'Search vehicles, plates, instructors...',
+                  prefixIcon: Icon(Icons.search),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  contentPadding: EdgeInsets.symmetric(vertical: 12),
+                ),
+                onChanged: _searchVehicles,
               ),
             ),
           ],
+        ),
+        SizedBox(height: 12),
+        Row(
+          children: [
+            _buildFilterDropdown(),
+            SizedBox(width: 16),
+            _buildSortDropdown(),
+            SizedBox(width: 8),
+            IconButton(
+              icon: Icon(
+                  _sortAscending ? Icons.arrow_upward : Icons.arrow_downward),
+              onPressed: () {
+                setState(() {
+                  _sortAscending = !_sortAscending;
+                  _sortVehicles();
+                });
+              },
+            ),
+            Spacer(),
+            Flexible(
+              child: Text(
+                '${_searchResults.length} found',
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  // Narrow screen filters (mobile)
+  Widget _buildNarrowScreenFilters() {
+    return Column(
+      children: [
+        TextField(
+          controller: _searchController,
+          decoration: InputDecoration(
+            hintText: 'Search vehicles...',
+            prefixIcon: Icon(Icons.search),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            contentPadding: EdgeInsets.symmetric(vertical: 12),
+          ),
+          onChanged: _searchVehicles,
+        ),
+        SizedBox(height: 12),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              _buildFilterDropdown(),
+              SizedBox(width: 16),
+              _buildSortDropdown(),
+              SizedBox(width: 8),
+              IconButton(
+                icon: Icon(
+                    _sortAscending ? Icons.arrow_upward : Icons.arrow_downward),
+                onPressed: () {
+                  setState(() {
+                    _sortAscending = !_sortAscending;
+                    _sortVehicles();
+                  });
+                },
+              ),
+              SizedBox(width: 16),
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Text('${_searchResults.length} found'),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFilterDropdown() {
+    return SizedBox(
+      width: 150, // Fixed width to prevent overflow
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey[300]!),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: DropdownButton<String>(
+          value: _filterStatus,
+          underline: Container(),
+          isExpanded: true,
+          items: [
+            DropdownMenuItem(value: 'all', child: Text('All Vehicles')),
+            DropdownMenuItem(value: 'assigned', child: Text('Assigned')),
+            DropdownMenuItem(value: 'unassigned', child: Text('Available')),
+          ],
+          onChanged: (value) {
+            setState(() {
+              _filterStatus = value!;
+              _filterVehicles();
+              _currentPage = 1;
+            });
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSortDropdown() {
+    return SizedBox(
+      width: 160, // Fixed width to prevent overflow
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey[300]!),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: DropdownButton<String>(
+          value: _sortBy,
+          underline: Container(),
+          isExpanded: true,
+          items: [
+            DropdownMenuItem(value: 'make', child: Text('Sort by Make')),
+            DropdownMenuItem(value: 'year', child: Text('Sort by Year')),
+            DropdownMenuItem(value: 'plate', child: Text('Sort by Plate')),
+            DropdownMenuItem(
+                value: 'instructor', child: Text('Sort by Instructor')),
+          ],
+          onChanged: (value) {
+            setState(() {
+              _sortBy = value!;
+              _sortVehicles();
+            });
+          },
         ),
       ),
     );
@@ -575,17 +663,32 @@ class _FleetScreenState extends State<FleetScreen>
         Expanded(
           child: Container(
             padding: EdgeInsets.all(16),
-            child: GridView.builder(
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
-                childAspectRatio: 1.1,
-              ),
-              itemCount: vehicles.length,
-              itemBuilder: (context, index) {
-                final vehicle = vehicles[index];
-                return _buildVehicleGridCard(vehicle);
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                int crossAxisCount;
+                if (constraints.maxWidth > 1400) {
+                  crossAxisCount = 4;
+                } else if (constraints.maxWidth > 1000) {
+                  crossAxisCount = 3;
+                } else if (constraints.maxWidth > 600) {
+                  crossAxisCount = 2;
+                } else {
+                  crossAxisCount = 1;
+                }
+
+                return GridView.builder(
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: crossAxisCount,
+                    crossAxisSpacing: 16,
+                    mainAxisSpacing: 16,
+                    childAspectRatio: 1.1,
+                  ),
+                  itemCount: vehicles.length,
+                  itemBuilder: (context, index) {
+                    final vehicle = vehicles[index];
+                    return _buildVehicleGridCard(vehicle);
+                  },
+                );
               },
             ),
           ),
@@ -634,20 +737,24 @@ class _FleetScreenState extends State<FleetScreen>
                           _toggleVehicleSelection(vehicle.id!),
                     ),
                   Spacer(),
-                  Container(
-                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color:
-                          isAssigned ? Colors.green[100] : Colors.orange[100],
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      isAssigned ? 'Assigned' : 'Available',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w500,
+                  Flexible(
+                    child: Container(
+                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
                         color:
-                            isAssigned ? Colors.green[800] : Colors.orange[800],
+                            isAssigned ? Colors.green[100] : Colors.orange[100],
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        isAssigned ? 'Assigned' : 'Available',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                          color: isAssigned
+                              ? Colors.green[800]
+                              : Colors.orange[800],
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ),
@@ -660,15 +767,17 @@ class _FleetScreenState extends State<FleetScreen>
                 color: isAssigned ? Colors.blue[400] : Colors.grey[400],
               ),
               SizedBox(height: 12),
-              Text(
-                '${vehicle.make} ${vehicle.model}',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey[800],
+              Flexible(
+                child: Text(
+                  '${vehicle.make} ${vehicle.model}',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey[800],
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
               ),
               SizedBox(height: 4),
               Text(
@@ -678,17 +787,21 @@ class _FleetScreenState extends State<FleetScreen>
                   fontWeight: FontWeight.w500,
                   color: Colors.blue[600],
                 ),
+                overflow: TextOverflow.ellipsis,
               ),
               SizedBox(height: 8),
               Row(
                 children: [
                   Icon(Icons.calendar_today, size: 12, color: Colors.grey[500]),
                   SizedBox(width: 4),
-                  Text(
-                    vehicle.modelYear,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.grey[600],
+                  Flexible(
+                    child: Text(
+                      vehicle.modelYear,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey[600],
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   if (vehicleAge > 5) ...[
@@ -759,33 +872,37 @@ class _FleetScreenState extends State<FleetScreen>
 
   Widget _buildVehicleListTile(Fleet vehicle) {
     final isSelected = _selectedVehicles.contains(vehicle.id);
-    _getInstructorName(vehicle.instructor);
+    final instructorName = _getInstructorName(vehicle.instructor);
     final isAssigned = vehicle.instructor != 0;
     final currentYear = DateTime.now().year;
     final vehicleAge = currentYear - int.parse(vehicle.modelYear);
 
     return ListTile(
-      leading: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (_isMultiSelectionActive)
-            Checkbox(
-              value: isSelected,
-              onChanged: (value) => _toggleVehicleSelection(vehicle.id!),
-            ),
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: isAssigned ? Colors.blue[100] : Colors.grey[100],
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(
-              Icons.directions_car,
-              color: isAssigned ? Colors.blue[600] : Colors.grey[600],
-            ),
-          ),
-        ],
+      leading: LayoutBuilder(
+        builder: (context, constraints) {
+          return Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_isMultiSelectionActive)
+                Checkbox(
+                  value: isSelected,
+                  onChanged: (value) => _toggleVehicleSelection(vehicle.id!),
+                ),
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: isAssigned ? Colors.blue[100] : Colors.grey[100],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.directions_car,
+                  color: isAssigned ? Colors.blue[600] : Colors.grey[600],
+                ),
+              ),
+            ],
+          );
+        },
       ),
       title: Text(
         '${vehicle.make} ${vehicle.model}',
@@ -796,61 +913,76 @@ class _FleetScreenState extends State<FleetScreen>
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Plate: ${vehicle.carPlate} • Year: ${vehicle.modelYear}'),
+          Text(
+            'Plate: ${vehicle.carPlate} • Year: ${vehicle.modelYear}',
+            overflow: TextOverflow.ellipsis,
+          ),
           SizedBox(height: 4),
-          Row(
-            children: [
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: isAssigned ? Colors.green[100] : Colors.orange[100],
-                  borderRadius: BorderRadius.circular(12),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: isAssigned ? Colors.green[100] : Colors.orange[100],
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    isAssigned ? 'Assigned' : 'Available',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color:
+                          isAssigned ? Colors.green[800] : Colors.orange[800],
+                    ),
+                  ),
                 ),
-                child: Text(
-                  isAssigned ? 'Assigned' : 'Available',
+                if (vehicleAge > 10) ...[
+                  SizedBox(width: 8),
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.red[100],
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      'Old',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.red[800],
+                      ),
+                    ),
+                  ),
+                ] else if (vehicleAge > 5) ...[
+                  SizedBox(width: 8),
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.orange[100],
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      'Aging',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.orange[800],
+                      ),
+                    ),
+                  ),
+                ],
+                SizedBox(width: 8),
+                Text(
+                  'Instructor: $instructorName',
                   style: TextStyle(
                     fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: isAssigned ? Colors.green[800] : Colors.orange[800],
-                  ),
-                ),
-              ),
-              if (vehicleAge > 10) ...[
-                SizedBox(width: 8),
-                Container(
-                  padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: Colors.red[100],
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    'Old',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.red[800],
-                    ),
-                  ),
-                ),
-              ] else if (vehicleAge > 5) ...[
-                SizedBox(width: 8),
-                Container(
-                  padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: Colors.orange[100],
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    'Aging',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.orange[800],
-                    ),
+                    color: Colors.grey[600],
                   ),
                 ),
               ],
-            ],
+            ),
           ),
         ],
       ),
@@ -890,7 +1022,12 @@ class _FleetScreenState extends State<FleetScreen>
               children: [
                 Icon(Icons.assignment_ind, size: 20),
                 SizedBox(width: 8),
-                Text(isAssigned ? 'Reassign' : 'Assign Instructor'),
+                Flexible(
+                  child: Text(
+                    isAssigned ? 'Reassign' : 'Assign Instructor',
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ],
             ),
           ),
@@ -926,14 +1063,17 @@ class _FleetScreenState extends State<FleetScreen>
           Text(
             'Smart Recommendations',
             style: TextStyle(
-              fontSize: 24,
+              fontSize: MediaQuery.of(context).size.width > 600 ? 24 : 20,
               fontWeight: FontWeight.bold,
               color: Colors.grey[800],
             ),
           ),
           Text(
             'AI-powered insights to optimize your vehicle fleet',
-            style: TextStyle(color: Colors.grey[600]),
+            style: TextStyle(
+              color: Colors.grey[600],
+              fontSize: MediaQuery.of(context).size.width > 600 ? 14 : 12,
+            ),
           ),
           SizedBox(height: 24),
           Expanded(
@@ -951,10 +1091,12 @@ class _FleetScreenState extends State<FleetScreen>
                             fontSize: 18,
                             color: Colors.grey[600],
                           ),
+                          textAlign: TextAlign.center,
                         ),
                         Text(
                           'Your fleet management is optimized!',
                           style: TextStyle(color: Colors.grey[500]),
+                          textAlign: TextAlign.center,
                         ),
                       ],
                     ),
@@ -1001,47 +1143,99 @@ class _FleetScreenState extends State<FleetScreen>
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: recommendation['color'].withOpacity(0.3)),
           ),
-          child: Row(
-            children: [
-              Icon(
-                recommendation['icon'],
-                size: 32,
-                color: recommendation['color'],
-              ),
-              SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth > 600) {
+                return Row(
                   children: [
-                    Text(
-                      recommendation['title'],
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey[800],
+                    Icon(
+                      recommendation['icon'],
+                      size: 32,
+                      color: recommendation['color'],
+                    ),
+                    SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            recommendation['title'],
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.grey[800],
+                            ),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            recommendation['description'],
+                            style: TextStyle(color: Colors.grey[600]),
+                          ),
+                        ],
                       ),
                     ),
-                    SizedBox(height: 4),
+                    SizedBox(width: 16),
+                    ElevatedButton(
+                      onPressed: recommendation['onTap'],
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: recommendation['color'],
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: Text(recommendation['action']),
+                    ),
+                  ],
+                );
+              } else {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          recommendation['icon'],
+                          size: 32,
+                          color: recommendation['color'],
+                        ),
+                        SizedBox(width: 16),
+                        Expanded(
+                          child: Text(
+                            recommendation['title'],
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.grey[800],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 8),
                     Text(
                       recommendation['description'],
                       style: TextStyle(color: Colors.grey[600]),
                     ),
+                    SizedBox(height: 12),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: ElevatedButton(
+                        onPressed: recommendation['onTap'],
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: recommendation['color'],
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: Text(recommendation['action']),
+                      ),
+                    ),
                   ],
-                ),
-              ),
-              SizedBox(width: 16),
-              ElevatedButton(
-                onPressed: recommendation['onTap'],
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: recommendation['color'],
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                child: Text(recommendation['action']),
-              ),
-            ],
+                );
+              }
+            },
           ),
         ),
       ),
@@ -1057,39 +1251,134 @@ class _FleetScreenState extends State<FleetScreen>
         color: Colors.white,
         border: Border(top: BorderSide(color: Colors.grey[300]!)),
       ),
-      child: Row(
-        children: [
-          Text(
-            'Showing ${((_currentPage - 1) * _rowsPerPage) + 1}-${(_currentPage * _rowsPerPage).clamp(0, _searchResults.length)} of ${_searchResults.length}',
-            style: TextStyle(color: Colors.grey[600]),
-          ),
-          Spacer(),
-          IconButton(
-            icon: Icon(Icons.chevron_left),
-            onPressed: _currentPage > 1 ? _goToPreviousPage : null,
-          ),
-          Text('$_currentPage of $totalPages'),
-          IconButton(
-            icon: Icon(Icons.chevron_right),
-            onPressed: _currentPage < totalPages ? _goToNextPage : null,
-          ),
-          SizedBox(width: 16),
-          DropdownButton<int>(
-            value: _rowsPerPage,
-            items: [6, 12, 24, 48].map((int value) {
-              return DropdownMenuItem<int>(
-                value: value,
-                child: Text('$value per page'),
-              );
-            }).toList(),
-            onChanged: (int? value) {
-              setState(() {
-                _rowsPerPage = value!;
-                _currentPage = 1;
-              });
-            },
-          ),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth > 600) {
+            return Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    'Showing ${((_currentPage - 1) * _rowsPerPage) + 1}-${(_currentPage * _rowsPerPage).clamp(0, _searchResults.length)} of ${_searchResults.length}',
+                    style: TextStyle(color: Colors.grey[600]),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Spacer(),
+                IconButton(
+                  icon: Icon(Icons.chevron_left),
+                  onPressed: _currentPage > 1 ? _goToPreviousPage : null,
+                ),
+                Text('$_currentPage of $totalPages'),
+                IconButton(
+                  icon: Icon(Icons.chevron_right),
+                  onPressed: _currentPage < totalPages ? _goToNextPage : null,
+                ),
+                SizedBox(width: 16),
+                DropdownButton<int>(
+                  value: _rowsPerPage,
+                  items: [6, 12, 24, 48].map((int value) {
+                    return DropdownMenuItem<int>(
+                      value: value,
+                      child: Text('$value per page'),
+                    );
+                  }).toList(),
+                  onChanged: (int? value) {
+                    setState(() {
+                      _rowsPerPage = value!;
+                      _currentPage = 1;
+                    });
+                  },
+                ),
+              ],
+            );
+          } else {
+            return Column(
+              children: [
+                Text(
+                  'Page $_currentPage of $totalPages',
+                  style: TextStyle(color: Colors.grey[600]),
+                ),
+                SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    IconButton(
+                      icon: Icon(Icons.chevron_left),
+                      onPressed: _currentPage > 1 ? _goToPreviousPage : null,
+                    ),
+                    Text('$_currentPage of $totalPages'),
+                    IconButton(
+                      icon: Icon(Icons.chevron_right),
+                      onPressed:
+                          _currentPage < totalPages ? _goToNextPage : null,
+                    ),
+                  ],
+                ),
+                SizedBox(height: 8),
+                DropdownButton<int>(
+                  value: _rowsPerPage,
+                  items: [6, 12, 24, 48].map((int value) {
+                    return DropdownMenuItem<int>(
+                      value: value,
+                      child: Text('$value per page'),
+                    );
+                  }).toList(),
+                  onChanged: (int? value) {
+                    setState(() {
+                      _rowsPerPage = value!;
+                      _currentPage = 1;
+                    });
+                  },
+                ),
+              ],
+            );
+          }
+        },
+      ),
+    );
+  }
+
+  Widget _buildStatCard(Map<String, dynamic> stat) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(stat['icon'], color: stat['color'], size: 24),
+                Spacer(),
+                Text(
+                  stat['value'],
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey[800],
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 8),
+            Text(
+              stat['title'],
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: Colors.grey[700],
+              ),
+            ),
+            Text(
+              stat['subtitle'],
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[500],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

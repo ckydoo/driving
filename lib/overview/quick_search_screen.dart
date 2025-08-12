@@ -12,6 +12,7 @@ import '../../models/course.dart';
 import '../../models/invoice.dart';
 import '../../models/schedule.dart';
 import '../../services/lesson_counting_service.dart';
+import '../../widgets/responsive_text.dart';
 
 class QuickSearchScreen extends StatefulWidget {
   const QuickSearchScreen({Key? key}) : super(key: key);
@@ -188,7 +189,9 @@ class _QuickSearchScreenState extends State<QuickSearchScreen> {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: Text(
+        title: ResponsiveText(
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           'Quick Search',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
@@ -267,7 +270,9 @@ class _QuickSearchScreenState extends State<QuickSearchScreen> {
                 size: 24,
               ),
               SizedBox(width: 10),
-              Text(
+              ResponsiveText(
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 'Student Schedules',
                 style: TextStyle(
                   fontSize: 18,
@@ -326,7 +331,9 @@ class _QuickSearchScreenState extends State<QuickSearchScreen> {
                 children: [
                   Icon(Icons.info_outline, color: Colors.grey[600]),
                   SizedBox(width: 10),
-                  Text(
+                  ResponsiveText(
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     'No schedules found for this student',
                     style: TextStyle(
                       color: Colors.grey[600],
@@ -355,7 +362,9 @@ class _QuickSearchScreenState extends State<QuickSearchScreen> {
           children: [
             Icon(icon, color: color, size: 18),
             SizedBox(width: 8),
-            Text(
+            ResponsiveText(
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               title,
               style: TextStyle(
                 fontSize: 16,
@@ -370,7 +379,9 @@ class _QuickSearchScreenState extends State<QuickSearchScreen> {
                 color: color.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Text(
+              child: ResponsiveText(
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 '${schedules.length}',
                 style: TextStyle(
                   color: color,
@@ -430,7 +441,9 @@ class _QuickSearchScreenState extends State<QuickSearchScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Course and Type
-                Text(
+                ResponsiveText(
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   '$courseName • ${schedule.classType}',
                   style: TextStyle(
                     fontSize: 14,
@@ -441,7 +454,9 @@ class _QuickSearchScreenState extends State<QuickSearchScreen> {
                 SizedBox(height: 2),
 
                 // Instructor
-                Text(
+                ResponsiveText(
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   'with $instructorName',
                   style: TextStyle(
                     fontSize: 12,
@@ -451,7 +466,9 @@ class _QuickSearchScreenState extends State<QuickSearchScreen> {
                 SizedBox(height: 2),
 
                 // Date and Time
-                Text(
+                ResponsiveText(
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   '${dateFormat.format(schedule.start)} • ${timeFormat.format(schedule.start)} - ${timeFormat.format(schedule.end)}',
                   style: TextStyle(
                     fontSize: 12,
@@ -473,7 +490,9 @@ class _QuickSearchScreenState extends State<QuickSearchScreen> {
                   color: Colors.blue[100],
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Text(
+                child: ResponsiveText(
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   '${schedule.lessonsDeducted} lesson${schedule.lessonsDeducted != 1 ? 's' : ''}',
                   style: TextStyle(
                     fontSize: 10,
@@ -485,7 +504,9 @@ class _QuickSearchScreenState extends State<QuickSearchScreen> {
               SizedBox(height: 4),
 
               // Status
-              Text(
+              ResponsiveText(
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 schedule.statusDisplay,
                 style: TextStyle(
                   fontSize: 11,
@@ -517,7 +538,9 @@ class _QuickSearchScreenState extends State<QuickSearchScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
+          ResponsiveText(
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             'Select Student',
             style: TextStyle(
               fontSize: 18,
@@ -569,7 +592,9 @@ class _QuickSearchScreenState extends State<QuickSearchScreen> {
                   return ListTile(
                     leading: CircleAvatar(
                       backgroundColor: Colors.blue[100],
-                      child: Text(
+                      child: ResponsiveText(
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         '${student.fname[0]}${student.lname[0]}',
                         style: TextStyle(
                           color: Colors.blue[800],
@@ -577,10 +602,22 @@ class _QuickSearchScreenState extends State<QuickSearchScreen> {
                         ),
                       ),
                     ),
-                    title: Text('${student.fname} ${student.lname}'),
-                    subtitle: Text(student.email),
+                    title: ResponsiveText(
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      '${student.fname} ${student.lname}',
+                      style: TextStyle(),
+                    ),
+                    subtitle: ResponsiveText(
+                      maxLines: 12,
+                      overflow: TextOverflow.ellipsis,
+                      student.email,
+                      style: TextStyle(),
+                    ),
                     trailing: student.idnumber != null
-                        ? Text(
+                        ? ResponsiveText(
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             'ID: ${student.idnumber}',
                             style: TextStyle(
                               color: Colors.grey[600],
@@ -620,7 +657,9 @@ class _QuickSearchScreenState extends State<QuickSearchScreen> {
           CircleAvatar(
             radius: 30,
             backgroundColor: Colors.blue[100],
-            child: Text(
+            child: ResponsiveText(
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               '${student.fname[0]}${student.lname[0]}',
               style: TextStyle(
                 color: Colors.blue[800],
@@ -634,7 +673,9 @@ class _QuickSearchScreenState extends State<QuickSearchScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                ResponsiveText(
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   '${student.fname} ${student.lname}',
                   style: TextStyle(
                     fontSize: 24,
@@ -643,7 +684,9 @@ class _QuickSearchScreenState extends State<QuickSearchScreen> {
                   ),
                 ),
                 SizedBox(height: 5),
-                Text(
+                ResponsiveText(
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   student.email,
                   style: TextStyle(
                     color: Colors.grey[600],
@@ -652,7 +695,9 @@ class _QuickSearchScreenState extends State<QuickSearchScreen> {
                 ),
                 if (student.idnumber != null) ...[
                   SizedBox(height: 5),
-                  Text(
+                  ResponsiveText(
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     'ID: ${student.idnumber}',
                     style: TextStyle(
                       color: Colors.grey[600],
@@ -700,7 +745,9 @@ class _QuickSearchScreenState extends State<QuickSearchScreen> {
                 size: 24,
               ),
               SizedBox(width: 10),
-              Text(
+              ResponsiveText(
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 'Account Balance',
                 style: TextStyle(
                   fontSize: 18,
@@ -735,14 +782,18 @@ class _QuickSearchScreenState extends State<QuickSearchScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
+                      ResponsiveText(
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         balance > 0 ? 'Outstanding Balance' : 'Account Paid Up',
                         style: TextStyle(
                           fontSize: 14,
                           color: Colors.grey[600],
                         ),
                       ),
-                      Text(
+                      ResponsiveText(
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         '\$${balance.toStringAsFixed(2)}',
                         style: TextStyle(
                           fontSize: 28,
@@ -765,7 +816,9 @@ class _QuickSearchScreenState extends State<QuickSearchScreen> {
               children: [
                 Icon(Icons.info_outline, color: Colors.blue[600], size: 16),
                 SizedBox(width: 5),
-                Text(
+                ResponsiveText(
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   '${invoices.length} invoice(s) total',
                   style: TextStyle(color: Colors.grey[600]),
                 ),
@@ -777,7 +830,9 @@ class _QuickSearchScreenState extends State<QuickSearchScreen> {
                       color: Colors.red[100],
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Text(
+                    child: ResponsiveText(
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       '$overdueCount overdue',
                       style: TextStyle(
                         color: Colors.red[800],
@@ -823,7 +878,9 @@ class _QuickSearchScreenState extends State<QuickSearchScreen> {
                 size: 24,
               ),
               SizedBox(width: 10),
-              Text(
+              ResponsiveText(
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 'Lessons Remaining',
                 style: TextStyle(
                   fontSize: 18,
@@ -846,7 +903,9 @@ class _QuickSearchScreenState extends State<QuickSearchScreen> {
                 children: [
                   Icon(Icons.info_outline, color: Colors.grey[600]),
                   SizedBox(width: 10),
-                  Text(
+                  ResponsiveText(
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     'No remaining lessons found',
                     style: TextStyle(
                       color: Colors.grey[600],
@@ -898,7 +957,9 @@ class _QuickSearchScreenState extends State<QuickSearchScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
+                          ResponsiveText(
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             course.name,
                             style: TextStyle(
                               fontSize: 16,
@@ -907,7 +968,9 @@ class _QuickSearchScreenState extends State<QuickSearchScreen> {
                             ),
                           ),
                           SizedBox(height: 4),
-                          Text(
+                          ResponsiveText(
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             '\$${course.price.toStringAsFixed(2)} per lesson',
                             style: TextStyle(
                               color: Colors.grey[600],
@@ -920,7 +983,9 @@ class _QuickSearchScreenState extends State<QuickSearchScreen> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        Text(
+                        ResponsiveText(
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           '$lessonsLeft',
                           style: TextStyle(
                             fontSize: 24,
@@ -928,7 +993,9 @@ class _QuickSearchScreenState extends State<QuickSearchScreen> {
                             color: statusColor,
                           ),
                         ),
-                        Text(
+                        ResponsiveText(
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           lessonsLeft == 1 ? 'lesson left' : 'lessons left',
                           style: TextStyle(
                             color: Colors.grey[600],
@@ -972,7 +1039,9 @@ class _QuickSearchScreenState extends State<QuickSearchScreen> {
             color: Colors.grey[400],
           ),
           SizedBox(height: 20),
-          Text(
+          ResponsiveText(
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             'No Student Selected',
             style: TextStyle(
               fontSize: 24,
@@ -981,7 +1050,9 @@ class _QuickSearchScreenState extends State<QuickSearchScreen> {
             ),
           ),
           SizedBox(height: 10),
-          Text(
+          ResponsiveText(
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             'Search and select a student above to view their\nbalance and remaining lessons',
             textAlign: TextAlign.center,
             style: TextStyle(

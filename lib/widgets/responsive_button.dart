@@ -37,7 +37,7 @@ class ResponsiveButton extends StatelessWidget {
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
             : Icon(icon, size: context.responsiveIconSize(18)),
-        label: ResponsiveText(text, fontSize: 16),
+        label: ResponsiveText(text, fontSize: 16, style: TextStyle()),
         style: _getButtonStyle(context),
       );
     } else {
@@ -50,7 +50,7 @@ class ResponsiveButton extends StatelessWidget {
                 height: 20,
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
-            : ResponsiveText(text, fontSize: 16),
+            : ResponsiveText(text, fontSize: 16, style: TextStyle()),
       );
     }
 

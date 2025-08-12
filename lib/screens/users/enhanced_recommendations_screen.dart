@@ -326,107 +326,155 @@ class _EnhancedRecommendationsScreenState
         .length;
   }
 
+  // Helper method to determine number of columns based on screen width
+  int _getGridCrossAxisCount(double screenWidth) {
+    if (screenWidth < 600) return 2; // Mobile
+    if (screenWidth < 900) return 3; // Tablet
+    if (screenWidth < 1200) return 4; // Small desktop
+    return 5; // Large desktop
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.all(16),
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildInsightsSection(),
-            SizedBox(height: 24),
-            _buildSmartRecommendationsSection(),
-          ],
-        ),
+    return SafeArea(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: constraints.maxWidth < 600 ? 12 : 16,
+              vertical: 16,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildInsightsSection(constraints),
+                  SizedBox(height: 24),
+                  _buildSmartRecommendationsSection(constraints),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }
 
-  Widget _buildInsightsSection() {
+  Widget _buildInsightsSection(BoxConstraints constraints) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          '${widget.role.capitalize} Insights',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: Colors.grey[800],
+        Padding(
+          padding: EdgeInsets.only(bottom: 16),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              '${widget.role.capitalize} Insights',
+              style: TextStyle(
+                fontSize: constraints.maxWidth < 600 ? 18 : 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[800],
+              ),
+            ),
           ),
         ),
-        SizedBox(height: 16),
-        GridView.builder(
-          shrinkWrap: true,
-          physics: NeverScrollableScrollPhysics(),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 4,
-            childAspectRatio: 1.2,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
-          ),
-          itemCount: _insights.length,
-          itemBuilder: (context, index) {
-            final insight = _insights[index];
-            return _buildInsightCard(insight);
+        LayoutBuilder(
+          builder: (context, gridConstraints) {
+            final crossAxisCount =
+                _getGridCrossAxisCount(gridConstraints.maxWidth);
+            final aspectRatio = gridConstraints.maxWidth < 600 ? 1.1 : 1.2;
+
+            return GridView.builder(
+              shrinkWrap: true,
+              physics: NeverScrollableScrollPhysics(),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: crossAxisCount,
+                childAspectRatio: aspectRatio,
+                crossAxisSpacing: constraints.maxWidth < 600 ? 8 : 12,
+                mainAxisSpacing: constraints.maxWidth < 600 ? 8 : 12,
+              ),
+              itemCount: _insights.length,
+              itemBuilder: (context, index) {
+                final insight = _insights[index];
+                return _buildInsightCard(insight, constraints);
+              },
+            );
           },
         ),
       ],
     );
   }
 
-  Widget _buildInsightCard(Map<String, dynamic> insight) {
+  Widget _buildInsightCard(
+      Map<String, dynamic> insight, BoxConstraints constraints) {
+    final isSmallScreen = constraints.maxWidth < 600;
+
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: EdgeInsets.all(16),
+      child: Container(
+        padding: EdgeInsets.all(isSmallScreen ? 12 : 16),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              insight['icon'],
-              size: 24,
-              color: insight['color'],
-            ),
-            SizedBox(height: 8),
-            Text(
-              insight['value'],
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
+            Flexible(
+              child: Icon(
+                insight['icon'],
+                size: isSmallScreen ? 20 : 24,
                 color: insight['color'],
               ),
             ),
-            SizedBox(height: 4),
-            Text(
-              insight['title'],
-              style: TextStyle(
-                fontSize: 11,
-                color: Colors.grey[600],
+            SizedBox(height: isSmallScreen ? 6 : 8),
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  insight['value'],
+                  style: TextStyle(
+                    fontSize: isSmallScreen ? 18 : 20,
+                    fontWeight: FontWeight.bold,
+                    color: insight['color'],
+                  ),
+                ),
               ),
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+            ),
+            SizedBox(height: 4),
+            Flexible(
+              flex: 2,
+              child: Text(
+                insight['title'],
+                style: TextStyle(
+                  fontSize: isSmallScreen ? 10 : 11,
+                  color: Colors.grey[600],
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
             if (insight['trend'] != null) ...[
               SizedBox(height: 4),
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: insight['trend'].startsWith('+')
-                      ? Colors.green[100]
-                      : Colors.red[100],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  insight['trend'],
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
+              Flexible(
+                child: Container(
+                  padding: EdgeInsets.symmetric(
+                      horizontal: isSmallScreen ? 4 : 6, vertical: 2),
+                  decoration: BoxDecoration(
                     color: insight['trend'].startsWith('+')
-                        ? Colors.green[800]
-                        : Colors.red[800],
+                        ? Colors.green[100]
+                        : Colors.red[100],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    insight['trend'],
+                    style: TextStyle(
+                      fontSize: isSmallScreen ? 9 : 10,
+                      fontWeight: FontWeight.bold,
+                      color: insight['trend'].startsWith('+')
+                          ? Colors.green[800]
+                          : Colors.red[800],
+                    ),
                   ),
                 ),
               ),
@@ -437,7 +485,7 @@ class _EnhancedRecommendationsScreenState
     );
   }
 
-  Widget _buildSmartRecommendationsSection() {
+  Widget _buildSmartRecommendationsSection(BoxConstraints constraints) {
     if (_smartRecommendations.isEmpty) {
       return SizedBox.shrink();
     }
@@ -445,29 +493,36 @@ class _EnhancedRecommendationsScreenState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Smart Recommendations',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: Colors.grey[800],
+        Padding(
+          padding: EdgeInsets.only(bottom: 16),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Smart Recommendations',
+              style: TextStyle(
+                fontSize: constraints.maxWidth < 600 ? 18 : 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[800],
+              ),
+            ),
           ),
         ),
-        SizedBox(height: 16),
         ListView.builder(
           shrinkWrap: true,
           physics: NeverScrollableScrollPhysics(),
           itemCount: _smartRecommendations.length,
           itemBuilder: (context, index) {
             final recommendation = _smartRecommendations[index];
-            return _buildRecommendationCard(recommendation);
+            return _buildRecommendationCard(recommendation, constraints);
           },
         ),
       ],
     );
   }
 
-  Widget _buildRecommendationCard(Map<String, dynamic> recommendation) {
+  Widget _buildRecommendationCard(
+      Map<String, dynamic> recommendation, BoxConstraints constraints) {
     Color borderColor;
     Color backgroundColor;
 
@@ -493,6 +548,9 @@ class _EnhancedRecommendationsScreenState
         backgroundColor = Colors.grey[50]!;
     }
 
+    final isSmallScreen = constraints.maxWidth < 600;
+    final isTablet = constraints.maxWidth >= 600 && constraints.maxWidth < 900;
+
     return Card(
       margin: EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(
@@ -504,58 +562,173 @@ class _EnhancedRecommendationsScreenState
           color: backgroundColor,
           borderRadius: BorderRadius.circular(12),
         ),
-        child: ListTile(
-          contentPadding: EdgeInsets.all(16),
-          leading: Container(
-            padding: EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: recommendation['color'].withOpacity(0.2),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              recommendation['icon'],
-              color: recommendation['color'],
-              size: 24,
-            ),
-          ),
-          title: Text(
-            recommendation['title'],
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-            ),
-          ),
-          subtitle: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        child: isSmallScreen
+            ? _buildMobileRecommendationLayout(recommendation, borderColor)
+            : _buildDesktopRecommendationLayout(recommendation, isTablet),
+      ),
+    );
+  }
+
+  Widget _buildMobileRecommendationLayout(
+      Map<String, dynamic> recommendation, Color borderColor) {
+    return Padding(
+      padding: EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              SizedBox(height: 4),
-              Text(recommendation['description']),
-              SizedBox(height: 8),
+              Container(
+                padding: EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: recommendation['color'].withOpacity(0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  recommendation['icon'],
+                  color: recommendation['color'],
+                  size: 20,
+                ),
+              ),
+              SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      recommendation['title'],
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    SizedBox(height: 4),
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: recommendation['color'].withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        recommendation['priority'].toUpperCase(),
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                          color: recommendation['color'],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 12),
+          Text(
+            recommendation['description'],
+            style: TextStyle(fontSize: 13),
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+          ),
+          SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: recommendation['onTap'],
+              style: ElevatedButton.styleFrom(
+                backgroundColor: recommendation['color'],
+                foregroundColor: Colors.white,
+                padding: EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  recommendation['action'],
+                  style: TextStyle(fontSize: 13),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDesktopRecommendationLayout(
+      Map<String, dynamic> recommendation, bool isTablet) {
+    return ListTile(
+      contentPadding: EdgeInsets.all(16),
+      leading: Container(
+        padding: EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: recommendation['color'].withOpacity(0.2),
+          shape: BoxShape.circle,
+        ),
+        child: Icon(
+          recommendation['icon'],
+          color: recommendation['color'],
+          size: 24,
+        ),
+      ),
+      title: Text(
+        recommendation['title'],
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: isTablet ? 15 : 16,
+        ),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      ),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(height: 4),
+          Text(
+            recommendation['description'],
+            style: TextStyle(fontSize: isTablet ? 13 : 14),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          SizedBox(height: 8),
+          Wrap(
+            children: [
               ElevatedButton(
                 onPressed: recommendation['onTap'],
                 style: ElevatedButton.styleFrom(
                   backgroundColor: recommendation['color'],
                   foregroundColor: Colors.white,
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: EdgeInsets.symmetric(
+                      horizontal: isTablet ? 12 : 16, vertical: 8),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
-                child: Text(recommendation['action']),
+                child: Text(
+                  recommendation['action'],
+                  style: TextStyle(fontSize: isTablet ? 12 : 13),
+                ),
               ),
             ],
           ),
-          trailing: Container(
-            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: recommendation['color'].withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              recommendation['priority'].toUpperCase(),
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                color: recommendation['color'],
-              ),
-            ),
+        ],
+      ),
+      trailing: Container(
+        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: recommendation['color'].withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(
+          recommendation['priority'].toUpperCase(),
+          style: TextStyle(
+            fontSize: isTablet ? 9 : 10,
+            fontWeight: FontWeight.bold,
+            color: recommendation['color'],
           ),
         ),
       ),

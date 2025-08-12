@@ -722,7 +722,7 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
   Widget _getCurrentPageWidget(String pageKey) {
     switch (pageKey) {
       case 'dashboard':
-        return const DashboardContent();
+        return const FixedDashboardContent();
       case 'students':
         return const EnhancedUsersScreen(
           key: ValueKey('student_screen'),
@@ -759,7 +759,7 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
       case 'settings':
         return SettingsScreen();
       default:
-        return const DashboardContent();
+        return const FixedDashboardContent();
     }
   }
 }

@@ -640,10 +640,17 @@ class _PaymentDialogState extends State<PaymentDialog>
 
   @override
   Widget build(BuildContext context) {
+    final screenSize = MediaQuery.of(context).size;
+    final isSmallScreen = screenSize.width < 600;
+    final isVerySmallScreen = screenSize.width < 400;
+
     if ((!_payAllMode && _selectedInvoice == null) ||
         _selectableInvoices.isEmpty) {
       return Dialog(
         child: Container(
+          constraints: BoxConstraints(
+            maxWidth: isSmallScreen ? screenSize.width * 0.9 : 400,
+          ),
           padding: const EdgeInsets.all(20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -679,14 +686,18 @@ class _PaymentDialogState extends State<PaymentDialog>
         scale: _scaleAnimation.value,
         child: Dialog(
           backgroundColor: Colors.transparent,
+          insetPadding: EdgeInsets.symmetric(
+            horizontal: isSmallScreen ? 16 : 40,
+            vertical: isSmallScreen ? 24 : 40,
+          ),
           child: Container(
             constraints: BoxConstraints(
-              maxWidth: 500,
-              maxHeight: MediaQuery.of(context).size.height * 0.9,
+              maxWidth: isSmallScreen ? double.infinity : 600,
+              maxHeight: screenSize.height * (isSmallScreen ? 0.95 : 0.9),
             ),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(isSmallScreen ? 16 : 20),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withOpacity(0.3),
@@ -695,80 +706,91 @@ class _PaymentDialogState extends State<PaymentDialog>
                 ),
               ],
             ),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Header
-                  Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: _payAllMode
-                            ? [Colors.green.shade600, Colors.green.shade800]
-                            : [Colors.blue.shade600, Colors.blue.shade800],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(20),
-                        topRight: Radius.circular(20),
-                      ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header - Fixed
+                Container(
+                  padding: EdgeInsets.all(isSmallScreen ? 16 : 24),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: _payAllMode
+                          ? [Colors.green.shade600, Colors.green.shade800]
+                          : [Colors.blue.shade600, Colors.blue.shade800],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          _payAllMode ? Icons.payment : Icons.receipt_long,
-                          color: Colors.white,
-                          size: 28,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _payAllMode
-                                    ? 'Pay All Outstanding'
-                                    : 'Record Payment',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                ),
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(isSmallScreen ? 16 : 20),
+                      topRight: Radius.circular(isSmallScreen ? 16 : 20),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _payAllMode ? Icons.payment : Icons.receipt_long,
+                        color: Colors.white,
+                        size: isSmallScreen ? 24 : 28,
+                      ),
+                      SizedBox(width: isSmallScreen ? 8 : 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _payAllMode
+                                  ? (isVerySmallScreen
+                                      ? 'Pay All'
+                                      : 'Pay All Outstanding')
+                                  : 'Record Payment',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: isSmallScreen ? 18 : 20,
+                                fontWeight: FontWeight.bold,
                               ),
+                            ),
+                            if (!isVerySmallScreen) ...[
                               Text(
                                 'For ${widget.studentName}',
                                 style: TextStyle(
                                   color: Colors.white.withOpacity(0.9),
-                                  fontSize: 14,
+                                  fontSize: isSmallScreen ? 12 : 14,
                                 ),
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ],
-                          ),
+                          ],
                         ),
-                        IconButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          icon: const Icon(Icons.close, color: Colors.white),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: Icon(
+                          Icons.close,
+                          color: Colors.white,
+                          size: isSmallScreen ? 20 : 24,
                         ),
-                      ],
-                    ),
+                        padding: EdgeInsets.all(isSmallScreen ? 4 : 8),
+                      ),
+                    ],
                   ),
+                ),
 
-                  // Content
-                  Padding(
-                    padding: const EdgeInsets.all(24),
+                // Scrollable Content
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: EdgeInsets.all(isSmallScreen ? 16 : 24),
                     child: Form(
                       key: _formKey,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           // Invoice Selector (if multiple invoices)
-                          _buildInvoiceSelector(),
+                          _buildResponsiveInvoiceSelector(
+                              isSmallScreen, isVerySmallScreen),
 
                           // Payment Summary
                           Container(
-                            padding: const EdgeInsets.all(16),
+                            padding: EdgeInsets.all(isSmallScreen ? 12 : 16),
                             decoration: BoxDecoration(
                               color: _payAllMode
                                   ? Colors.green.shade50
@@ -791,190 +813,125 @@ class _PaymentDialogState extends State<PaymentDialog>
                                       color: _payAllMode
                                           ? Colors.green.shade600
                                           : Colors.blue.shade600,
+                                      size: isSmallScreen ? 20 : 24,
                                     ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      displayTitle,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 16,
+                                    SizedBox(width: isSmallScreen ? 6 : 8),
+                                    Expanded(
+                                      child: Text(
+                                        displayTitle,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: isSmallScreen ? 14 : 16,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
                                   ],
                                 ),
                                 if (_payAllMode) ...[
-                                  const SizedBox(height: 12),
-                                  Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      _buildSummaryItem('Invoices',
-                                          '${_selectableInvoices.length}'),
-                                      _buildSummaryItem('Total Due',
-                                          '\$${_totalAmountDue.toStringAsFixed(2)}',
-                                          color: Colors.green.shade600),
-                                    ],
-                                  ),
+                                  SizedBox(height: isSmallScreen ? 8 : 12),
+                                  isVerySmallScreen
+                                      ? Column(
+                                          children: [
+                                            _buildSummaryItem('Invoices',
+                                                '${_selectableInvoices.length}',
+                                                isSmall: true),
+                                            const SizedBox(height: 8),
+                                            _buildSummaryItem('Total Due',
+                                                '\$${_totalAmountDue.toStringAsFixed(2)}',
+                                                color: Colors.green.shade600,
+                                                isSmall: true),
+                                          ],
+                                        )
+                                      : Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            _buildSummaryItem('Invoices',
+                                                '${_selectableInvoices.length}',
+                                                isSmall: isSmallScreen),
+                                            _buildSummaryItem('Total Due',
+                                                '\$${_totalAmountDue.toStringAsFixed(2)}',
+                                                color: Colors.green.shade600,
+                                                isSmall: isSmallScreen),
+                                          ],
+                                        ),
                                 ] else if (_selectedInvoice != null) ...[
-                                  const SizedBox(height: 12),
-                                  Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      _buildSummaryItem('Total',
-                                          '\$${_selectedInvoice!.totalAmountCalculated.toStringAsFixed(2)}'),
-                                      _buildSummaryItem('Paid',
-                                          '\$${_selectedInvoice!.amountPaid.toStringAsFixed(2)}'),
-                                      _buildSummaryItem(
-                                        'Balance',
-                                        '\$${_selectedInvoice!.balance.toStringAsFixed(2)}',
-                                        color: _selectedInvoice!.balance > 0
-                                            ? Colors.red.shade600
-                                            : Colors.green.shade600,
-                                      ),
-                                    ],
-                                  ),
+                                  SizedBox(height: isSmallScreen ? 8 : 12),
+                                  isVerySmallScreen
+                                      ? Column(
+                                          children: [
+                                            _buildSummaryItem('Total',
+                                                '\$${_selectedInvoice!.totalAmountCalculated.toStringAsFixed(2)}',
+                                                isSmall: true),
+                                            const SizedBox(height: 8),
+                                            _buildSummaryItem('Paid',
+                                                '\$${_selectedInvoice!.amountPaid.toStringAsFixed(2)}',
+                                                isSmall: true),
+                                            const SizedBox(height: 8),
+                                            _buildSummaryItem(
+                                              'Balance',
+                                              '\$${_selectedInvoice!.balance.toStringAsFixed(2)}',
+                                              color:
+                                                  _selectedInvoice!.balance > 0
+                                                      ? Colors.red.shade600
+                                                      : Colors.green.shade600,
+                                              isSmall: true,
+                                            ),
+                                          ],
+                                        )
+                                      : Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            _buildSummaryItem('Total',
+                                                '\$${_selectedInvoice!.totalAmountCalculated.toStringAsFixed(2)}',
+                                                isSmall: isSmallScreen),
+                                            _buildSummaryItem('Paid',
+                                                '\$${_selectedInvoice!.amountPaid.toStringAsFixed(2)}',
+                                                isSmall: isSmallScreen),
+                                            _buildSummaryItem(
+                                              'Balance',
+                                              '\$${_selectedInvoice!.balance.toStringAsFixed(2)}',
+                                              color:
+                                                  _selectedInvoice!.balance > 0
+                                                      ? Colors.red.shade600
+                                                      : Colors.green.shade600,
+                                              isSmall: isSmallScreen,
+                                            ),
+                                          ],
+                                        ),
                                 ],
                               ],
                             ),
                           ),
 
-                          const SizedBox(height: 20),
+                          SizedBox(height: isSmallScreen ? 16 : 20),
 
                           // Payment Amount
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Payment Amount',
-                                style: TextStyle(
-                                    fontWeight: FontWeight.w600, fontSize: 16),
-                              ),
-                              const SizedBox(height: 8),
-                              TextFormField(
-                                controller: _amountController,
-                                keyboardType: TextInputType.number,
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.allow(
-                                      RegExp(r'^\d*\.?\d{0,2}')),
-                                ],
-                                decoration: InputDecoration(
-                                  prefixText: '\$',
-                                  hintText: '0.00',
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  focusedBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                    borderSide: BorderSide(
-                                      color: _payAllMode
-                                          ? Colors.green.shade600
-                                          : Colors.blue.shade600,
-                                      width: 2,
-                                    ),
-                                  ),
-                                ),
-                                validator: (value) {
-                                  if (value == null || value.isEmpty) {
-                                    return 'Please enter payment amount';
-                                  }
-                                  final amount = double.tryParse(value);
-                                  if (amount == null || amount <= 0) {
-                                    return 'Please enter a valid amount';
-                                  }
-                                  if (amount > currentBalance) {
-                                    return 'Amount cannot exceed balance (\$${currentBalance.toStringAsFixed(2)})';
-                                  }
-                                  return null;
-                                },
-                                onChanged: _onAmountChanged,
-                              ),
-                              const SizedBox(height: 12),
+                          _buildPaymentAmountSection(
+                              isSmallScreen, isVerySmallScreen, currentBalance),
 
-                              // Quick amount buttons
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: OutlinedButton(
-                                      onPressed: () =>
-                                          _setQuickAmount(currentBalance / 2),
-                                      child: Text(
-                                          'Half (\$${(currentBalance / 2).toStringAsFixed(2)})'),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: ElevatedButton(
-                                      onPressed: () =>
-                                          _setQuickAmount(currentBalance),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: _payAllMode
-                                            ? Colors.green.shade600
-                                            : Colors.blue.shade600,
-                                      ),
-                                      child: Text(
-                                        'Full (\$${currentBalance.toStringAsFixed(2)})',
-                                        style: const TextStyle(
-                                            color: Colors.white),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-
-                          const SizedBox(height: 20),
+                          SizedBox(height: isSmallScreen ? 16 : 20),
 
                           // Payment Method
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Payment Method',
-                                style: TextStyle(
-                                    fontWeight: FontWeight.w600, fontSize: 16),
-                              ),
-                              const SizedBox(height: 8),
-                              Container(
-                                decoration: BoxDecoration(
-                                  border:
-                                      Border.all(color: Colors.grey.shade300),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Column(
-                                  children: _paymentMethods.map((method) {
-                                    return RadioListTile<String>(
-                                      value: method['value'],
-                                      groupValue: _paymentMethod,
-                                      onChanged: (value) => setState(
-                                          () => _paymentMethod = value!),
-                                      title: Text(method['label']),
-                                      secondary: Icon(method['icon'],
-                                          color: _payAllMode
-                                              ? Colors.green.shade600
-                                              : Colors.blue.shade600),
-                                      activeColor: _payAllMode
-                                          ? Colors.green.shade600
-                                          : Colors.blue.shade600,
-                                    );
-                                  }).toList(),
-                                ),
-                              ),
-                            ],
-                          ),
+                          _buildPaymentMethodSection(isSmallScreen),
 
-                          const SizedBox(height: 20),
+                          SizedBox(height: isSmallScreen ? 16 : 20),
 
                           // Notes
                           TextFormField(
                             controller: _notesController,
-                            maxLines: 2,
+                            maxLines: isSmallScreen ? 2 : 3,
                             decoration: InputDecoration(
                               labelText: 'Notes (Optional)',
+                              labelStyle:
+                                  TextStyle(fontSize: isSmallScreen ? 14 : 16),
                               hintText: _payAllMode
                                   ? 'Payment for all outstanding invoices...'
                                   : 'Add payment notes...',
+                              hintStyle:
+                                  TextStyle(fontSize: isSmallScreen ? 12 : 14),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(10),
                               ),
@@ -987,145 +944,149 @@ class _PaymentDialogState extends State<PaymentDialog>
                                   width: 2,
                                 ),
                               ),
+                              contentPadding:
+                                  EdgeInsets.all(isSmallScreen ? 12 : 16),
                             ),
                           ),
 
-                          const SizedBox(height: 20),
+                          SizedBox(height: isSmallScreen ? 16 : 20),
 
                           // Receipt Options
-                          Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Colors.green.shade50,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: Colors.green.shade200),
-                            ),
-                            child: Column(
-                              children: [
-                                CheckboxListTile(
-                                  value: _generateReceipt,
-                                  onChanged: (value) =>
-                                      setState(() => _generateReceipt = value!),
-                                  title: Text(_payAllMode
-                                      ? 'Generate Receipts'
-                                      : 'Generate Receipt'),
-                                  subtitle: Text(_payAllMode
-                                      ? 'Create PDF receipts for each invoice payment'
-                                      : 'Create a PDF receipt for this payment'),
-                                  activeColor: Colors.green.shade600,
-                                ),
-                                if (_generateReceipt && !_payAllMode) ...[
-                                  const SizedBox(height: 8),
-                                  TextFormField(
-                                    controller: _referenceController,
-                                    decoration: InputDecoration(
-                                      labelText: 'Receipt Reference',
-                                      hintText: 'REF-001',
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      suffixIcon: IconButton(
-                                        onPressed: () {
-                                          _referenceController.text =
-                                              ReceiptService
-                                                  .generateReference();
-                                        },
-                                        icon: const Icon(Icons.refresh),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                                if (_generateReceipt && _payAllMode) ...[
-                                  const SizedBox(height: 8),
-                                  Container(
-                                    padding: const EdgeInsets.all(12),
-                                    decoration: BoxDecoration(
-                                      color: Colors.blue.shade50,
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(
-                                          color: Colors.blue.shade200),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.info_outline,
-                                            color: Colors.blue.shade600,
-                                            size: 20),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: Text(
-                                            'Individual receipts will be generated with unique references for each invoice',
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              color: Colors.blue.shade700,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
+                          _buildReceiptOptionsSection(isSmallScreen),
 
-                          const SizedBox(height: 24),
+                          SizedBox(height: isSmallScreen ? 20 : 24),
 
                           // Action Buttons
-                          Row(
-                            children: [
-                              Expanded(
-                                child: OutlinedButton(
-                                  onPressed: _isRecording
-                                      ? null
-                                      : () => Navigator.of(context).pop(),
-                                  style: OutlinedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(
-                                        vertical: 16),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                  ),
-                                  child: const Text('Cancel'),
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: ElevatedButton(
-                                  onPressed:
-                                      _isRecording ? null : _submitPayment,
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: _payAllMode
-                                        ? Colors.green.shade600
-                                        : Colors.blue.shade600,
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(
-                                        vertical: 16),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                  ),
-                                  child: _isRecording
-                                      ? const SizedBox(
-                                          width: 20,
-                                          height: 20,
-                                          child: CircularProgressIndicator(
-                                            color: Colors.white,
-                                            strokeWidth: 2,
+                          isVerySmallScreen
+                              ? Column(
+                                  children: [
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: OutlinedButton(
+                                        onPressed: _isRecording
+                                            ? null
+                                            : () => Navigator.of(context).pop(),
+                                        style: OutlinedButton.styleFrom(
+                                          padding: const EdgeInsets.symmetric(
+                                              vertical: 16),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(10),
                                           ),
-                                        )
-                                      : Text(_payAllMode
-                                          ? 'Pay All Invoices'
-                                          : 'Record Payment'),
+                                        ),
+                                        child: const Text('Cancel'),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: ElevatedButton(
+                                        onPressed: _isRecording
+                                            ? null
+                                            : _submitPayment,
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: _payAllMode
+                                              ? Colors.green.shade600
+                                              : Colors.blue.shade600,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(
+                                              vertical: 16),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(10),
+                                          ),
+                                        ),
+                                        child: _isRecording
+                                            ? const SizedBox(
+                                                width: 20,
+                                                height: 20,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                  color: Colors.white,
+                                                  strokeWidth: 2,
+                                                ),
+                                              )
+                                            : Text(_payAllMode
+                                                ? 'Pay All Invoices'
+                                                : 'Record Payment'),
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : Row(
+                                  children: [
+                                    Expanded(
+                                      child: OutlinedButton(
+                                        onPressed: _isRecording
+                                            ? null
+                                            : () => Navigator.of(context).pop(),
+                                        style: OutlinedButton.styleFrom(
+                                          padding: EdgeInsets.symmetric(
+                                              vertical:
+                                                  isSmallScreen ? 14 : 16),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(10),
+                                          ),
+                                        ),
+                                        child: Text(
+                                          'Cancel',
+                                          style: TextStyle(
+                                              fontSize:
+                                                  isSmallScreen ? 14 : 16),
+                                        ),
+                                      ),
+                                    ),
+                                    SizedBox(width: isSmallScreen ? 12 : 16),
+                                    Expanded(
+                                      child: ElevatedButton(
+                                        onPressed: _isRecording
+                                            ? null
+                                            : _submitPayment,
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: _payAllMode
+                                              ? Colors.green.shade600
+                                              : Colors.blue.shade600,
+                                          foregroundColor: Colors.white,
+                                          padding: EdgeInsets.symmetric(
+                                              vertical:
+                                                  isSmallScreen ? 14 : 16),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(10),
+                                          ),
+                                        ),
+                                        child: _isRecording
+                                            ? SizedBox(
+                                                width: isSmallScreen ? 18 : 20,
+                                                height: isSmallScreen ? 18 : 20,
+                                                child:
+                                                    const CircularProgressIndicator(
+                                                  color: Colors.white,
+                                                  strokeWidth: 2,
+                                                ),
+                                              )
+                                            : Text(
+                                                _payAllMode
+                                                    ? (isSmallScreen
+                                                        ? 'Pay All'
+                                                        : 'Pay All Invoices')
+                                                    : 'Record Payment',
+                                                style: TextStyle(
+                                                    fontSize: isSmallScreen
+                                                        ? 14
+                                                        : 16),
+                                              ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ),
-                            ],
-                          ),
                         ],
                       ),
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),
@@ -1133,22 +1094,337 @@ class _PaymentDialogState extends State<PaymentDialog>
     );
   }
 
-  Widget _buildSummaryItem(String label, String value, {Color? color}) {
+  Widget _buildResponsiveInvoiceSelector(
+      bool isSmallScreen, bool isVerySmallScreen) {
+    if (_selectableInvoices.length <= 1) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      margin: EdgeInsets.only(bottom: isSmallScreen ? 16 : 20),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.blue.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: EdgeInsets.all(isSmallScreen ? 12 : 16),
+            child: Row(
+              children: [
+                Icon(Icons.receipt_long,
+                    color: Colors.blue.shade600, size: isSmallScreen ? 18 : 20),
+                SizedBox(width: isSmallScreen ? 6 : 8),
+                Expanded(
+                  child: Text(
+                    isVerySmallScreen
+                        ? 'Payment Option'
+                        : 'Select Payment Option',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: Colors.blue.shade800,
+                      fontSize: isSmallScreen ? 14 : 16,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1, color: Colors.blue),
+
+          // Scrollable invoice list for small screens
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: isSmallScreen ? 200 : 300,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  _buildPayAllOption(),
+                  ..._selectableInvoices
+                      .map((invoice) => _buildInvoiceOption(invoice)),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPaymentAmountSection(
+      bool isSmallScreen, bool isVerySmallScreen, double currentBalance) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Payment Amount',
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: isSmallScreen ? 14 : 16,
+          ),
+        ),
+        SizedBox(height: isSmallScreen ? 6 : 8),
+        TextFormField(
+          controller: _amountController,
+          keyboardType: TextInputType.number,
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+          ],
+          decoration: InputDecoration(
+            prefixText: '\$',
+            hintText: '0.00',
+            hintStyle: TextStyle(fontSize: isSmallScreen ? 14 : 16),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(
+                color:
+                    _payAllMode ? Colors.green.shade600 : Colors.blue.shade600,
+                width: 2,
+              ),
+            ),
+            contentPadding: EdgeInsets.all(isSmallScreen ? 12 : 16),
+          ),
+          style: TextStyle(fontSize: isSmallScreen ? 16 : 18),
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return 'Please enter payment amount';
+            }
+            final amount = double.tryParse(value);
+            if (amount == null || amount <= 0) {
+              return 'Please enter a valid amount';
+            }
+            if (amount > currentBalance) {
+              return 'Amount cannot exceed balance (\$${currentBalance.toStringAsFixed(2)})';
+            }
+            return null;
+          },
+          onChanged: _onAmountChanged,
+        ),
+        SizedBox(height: isSmallScreen ? 8 : 12),
+
+        // Quick amount buttons
+        isVerySmallScreen
+            ? Column(
+                children: [
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: () => _setQuickAmount(currentBalance / 2),
+                      child: Text(
+                          'Half (\$${(currentBalance / 2).toStringAsFixed(2)})'),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => _setQuickAmount(currentBalance),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _payAllMode
+                            ? Colors.green.shade600
+                            : Colors.blue.shade600,
+                      ),
+                      child: Text(
+                        'Full (\$${currentBalance.toStringAsFixed(2)})',
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            : Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => _setQuickAmount(currentBalance / 2),
+                      child: FittedBox(
+                        child: Text(
+                          'Half (\$${(currentBalance / 2).toStringAsFixed(2)})',
+                          style: TextStyle(fontSize: isSmallScreen ? 12 : 14),
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: isSmallScreen ? 6 : 8),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => _setQuickAmount(currentBalance),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _payAllMode
+                            ? Colors.green.shade600
+                            : Colors.blue.shade600,
+                      ),
+                      child: FittedBox(
+                        child: Text(
+                          'Full (\$${currentBalance.toStringAsFixed(2)})',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: isSmallScreen ? 12 : 14,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+      ],
+    );
+  }
+
+  Widget _buildPaymentMethodSection(bool isSmallScreen) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Payment Method',
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: isSmallScreen ? 14 : 16,
+          ),
+        ),
+        SizedBox(height: isSmallScreen ? 6 : 8),
+        Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey.shade300),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Column(
+            children: _paymentMethods.map((method) {
+              return RadioListTile<String>(
+                value: method['value'],
+                groupValue: _paymentMethod,
+                onChanged: (value) => setState(() => _paymentMethod = value!),
+                title: Text(
+                  method['label'],
+                  style: TextStyle(fontSize: isSmallScreen ? 14 : 16),
+                ),
+                secondary: Icon(
+                  method['icon'],
+                  color: _payAllMode
+                      ? Colors.green.shade600
+                      : Colors.blue.shade600,
+                  size: isSmallScreen ? 20 : 24,
+                ),
+                activeColor:
+                    _payAllMode ? Colors.green.shade600 : Colors.blue.shade600,
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: isSmallScreen ? 8 : 16,
+                  vertical: isSmallScreen ? 4 : 8,
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildReceiptOptionsSection(bool isSmallScreen) {
+    return Container(
+      padding: EdgeInsets.all(isSmallScreen ? 12 : 16),
+      decoration: BoxDecoration(
+        color: Colors.green.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.green.shade200),
+      ),
+      child: Column(
+        children: [
+          CheckboxListTile(
+            value: _generateReceipt,
+            onChanged: (value) => setState(() => _generateReceipt = value!),
+            title: Text(
+              _payAllMode ? 'Generate Receipts' : 'Generate Receipt',
+              style: TextStyle(fontSize: isSmallScreen ? 14 : 16),
+            ),
+            subtitle: Text(
+              _payAllMode
+                  ? 'Create PDF receipts for each invoice payment'
+                  : 'Create a PDF receipt for this payment',
+              style: TextStyle(fontSize: isSmallScreen ? 12 : 14),
+            ),
+            activeColor: Colors.green.shade600,
+            contentPadding: EdgeInsets.zero,
+          ),
+          if (_generateReceipt && !_payAllMode) ...[
+            SizedBox(height: isSmallScreen ? 6 : 8),
+            TextFormField(
+              controller: _referenceController,
+              decoration: InputDecoration(
+                labelText: 'Receipt Reference',
+                labelStyle: TextStyle(fontSize: isSmallScreen ? 14 : 16),
+                hintText: 'REF-001',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                suffixIcon: IconButton(
+                  onPressed: () {
+                    _referenceController.text =
+                        ReceiptService.generateReference();
+                  },
+                  icon: Icon(Icons.refresh, size: isSmallScreen ? 20 : 24),
+                ),
+                contentPadding: EdgeInsets.all(isSmallScreen ? 12 : 16),
+              ),
+            ),
+          ],
+          if (_generateReceipt && _payAllMode) ...[
+            SizedBox(height: isSmallScreen ? 6 : 8),
+            Container(
+              padding: EdgeInsets.all(isSmallScreen ? 10 : 12),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    color: Colors.blue.shade600,
+                    size: isSmallScreen ? 18 : 20,
+                  ),
+                  SizedBox(width: isSmallScreen ? 6 : 8),
+                  Expanded(
+                    child: Text(
+                      'Individual receipts will be generated with unique references for each invoice',
+                      style: TextStyle(
+                        fontSize: isSmallScreen ? 11 : 12,
+                        color: Colors.blue.shade700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryItem(String label, String value,
+      {Color? color, bool isSmall = false}) {
     return Column(
       children: [
         Text(
           value,
           style: TextStyle(
             fontWeight: FontWeight.bold,
-            fontSize: 16,
+            fontSize: isSmall ? 14 : 16,
             color: color ?? Colors.black87,
           ),
         ),
-        const SizedBox(height: 4),
+        SizedBox(height: isSmall ? 2 : 4),
         Text(
           label,
           style: TextStyle(
-            fontSize: 12,
+            fontSize: isSmall ? 10 : 12,
             color: Colors.grey.shade600,
           ),
         ),

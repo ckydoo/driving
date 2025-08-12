@@ -5,6 +5,7 @@ import '../controllers/course_controller.dart';
 import '../controllers/user_controller.dart';
 import '../models/course.dart';
 import '../models/user.dart';
+import '../widgets/responsive_text.dart';
 
 class CreateInvoiceDialog extends StatefulWidget {
   const CreateInvoiceDialog({Key? key}) : super(key: key);
@@ -716,17 +717,25 @@ class _CreateInvoiceDialogState extends State<CreateInvoiceDialog>
 
   @override
   Widget build(BuildContext context) {
+    final screenSize = MediaQuery.of(context).size;
+    final isSmallScreen = screenSize.width < 600;
+    final isMobile = screenSize.width < 480;
+
     return Dialog(
       backgroundColor: Colors.transparent,
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: isMobile ? 16 : 32,
+        vertical: 24,
+      ),
       child: Container(
-        width: 500,
+        width: isMobile ? double.infinity : (isSmallScreen ? 450 : 500),
         constraints: BoxConstraints(
-          maxHeight:
-              MediaQuery.of(context).size.height * 0.9, // Limit dialog height
+          maxHeight: screenSize.height * 0.9,
+          maxWidth: screenSize.width * 0.95,
         ),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(isMobile ? 16 : 20),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.1),
@@ -738,9 +747,9 @@ class _CreateInvoiceDialogState extends State<CreateInvoiceDialog>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Header
+            // Header - responsive padding
             Container(
-              padding: EdgeInsets.all(24),
+              padding: EdgeInsets.all(isMobile ? 16 : 24),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [Colors.blue.shade600, Colors.blue.shade700],
@@ -748,8 +757,8 @@ class _CreateInvoiceDialogState extends State<CreateInvoiceDialog>
                   end: Alignment.bottomRight,
                 ),
                 borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(20),
-                  topRight: Radius.circular(20),
+                  topLeft: Radius.circular(isMobile ? 16 : 20),
+                  topRight: Radius.circular(isMobile ? 16 : 20),
                 ),
               ),
               child: Row(
@@ -763,10 +772,10 @@ class _CreateInvoiceDialogState extends State<CreateInvoiceDialog>
                     child: Icon(
                       Icons.receipt_long,
                       color: Colors.white,
-                      size: 24,
+                      size: isMobile ? 20 : 24,
                     ),
                   ),
-                  SizedBox(width: 16),
+                  SizedBox(width: isMobile ? 12 : 16),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -774,18 +783,19 @@ class _CreateInvoiceDialogState extends State<CreateInvoiceDialog>
                         Text(
                           'Create New Invoice',
                           style: TextStyle(
-                            fontSize: 22,
+                            fontSize: isMobile ? 18 : 22,
                             fontWeight: FontWeight.bold,
                             color: Colors.white,
                           ),
                         ),
-                        Text(
-                          'Generate invoice for student lessons',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.white.withOpacity(0.8),
+                        if (!isMobile)
+                          Text(
+                            'Generate invoice for student lessons',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.white.withOpacity(0.8),
+                            ),
                           ),
-                        ),
                       ],
                     ),
                   ),
@@ -797,144 +807,246 @@ class _CreateInvoiceDialogState extends State<CreateInvoiceDialog>
               ),
             ),
 
-            // Content - Wrap in Flexible and SingleChildScrollView
+            // Content - improved scrolling and responsiveness
             Flexible(
-              child: SingleChildScrollView(
-                child: Column(
-                  children: [
-                    if (_errorMessage != null)
-                      Padding(
-                        padding: EdgeInsets.all(24),
-                        child: _buildErrorState(),
-                      )
-                    else if (_isLoading)
-                      Padding(
-                        padding: EdgeInsets.all(24),
-                        child: _buildLoadingState(),
-                      )
-                    else
-                      AnimatedBuilder(
-                        animation: _fadeAnimation,
-                        builder: (context, child) {
-                          return Opacity(
-                            opacity: _fadeAnimation.value,
-                            child: Transform.translate(
-                              offset:
-                                  Offset(0, 20 * (1 - _slideAnimation.value)),
-                              child: Padding(
-                                padding: EdgeInsets.all(24),
-                                child: Form(
-                                  key: _formKey,
-                                  child: Column(
-                                    children: [
-                                      _buildStudentAutocomplete(),
-                                      SizedBox(height: 20),
-                                      _buildCourseAutocomplete(),
-                                      SizedBox(height: 20),
-                                      _buildLessonsField(),
-                                      SizedBox(height: 24),
-                                      _buildPricingSummary(),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        },
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return SingleChildScrollView(
+                    padding: EdgeInsets.zero,
+                    physics: BouncingScrollPhysics(),
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        minHeight: constraints.minHeight,
                       ),
-                  ],
-                ),
+                      child: IntrinsicHeight(
+                        child: Column(
+                          children: [
+                            if (_errorMessage != null)
+                              Padding(
+                                padding: EdgeInsets.all(isMobile ? 16 : 24),
+                                child: _buildErrorState(),
+                              )
+                            else if (_isLoading)
+                              Padding(
+                                padding: EdgeInsets.all(isMobile ? 16 : 24),
+                                child: _buildLoadingState(),
+                              )
+                            else
+                              AnimatedBuilder(
+                                animation: _fadeAnimation,
+                                builder: (context, child) {
+                                  return Opacity(
+                                    opacity: _fadeAnimation.value,
+                                    child: Transform.translate(
+                                      offset: Offset(
+                                          0, 20 * (1 - _slideAnimation.value)),
+                                      child: Padding(
+                                        padding:
+                                            EdgeInsets.all(isMobile ? 16 : 24),
+                                        child: Form(
+                                          key: _formKey,
+                                          child: Column(
+                                            children: [
+                                              _buildStudentAutocomplete(),
+                                              SizedBox(
+                                                  height: isMobile ? 16 : 20),
+                                              _buildCourseAutocomplete(),
+                                              SizedBox(
+                                                  height: isMobile ? 16 : 20),
+                                              _buildLessonsField(),
+                                              SizedBox(
+                                                  height: isMobile ? 20 : 24),
+                                              _buildPricingSummary(),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
 
-            // Actions
+            // Actions - responsive layout
             if (!_isLoading && _errorMessage == null)
               Container(
-                padding: EdgeInsets.all(24),
+                padding: EdgeInsets.all(isMobile ? 16 : 24),
                 decoration: BoxDecoration(
                   color: Colors.grey.shade50,
                   borderRadius: BorderRadius.only(
-                    bottomLeft: Radius.circular(20),
-                    bottomRight: Radius.circular(20),
+                    bottomLeft: Radius.circular(isMobile ? 16 : 20),
+                    bottomRight: Radius.circular(isMobile ? 16 : 20),
                   ),
                 ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: Get.back,
-                        style: OutlinedButton.styleFrom(
-                          padding: EdgeInsets.symmetric(vertical: 16),
-                          side: BorderSide(color: Colors.grey.shade400),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: Text(
-                          'Cancel',
-                          style: TextStyle(
-                            color: Colors.grey.shade700,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ),
-                    SizedBox(width: 16),
-                    Expanded(
-                      flex: 2,
-                      child: ElevatedButton(
-                        onPressed: _isCreating
-                            ? null
-                            : () async {
-                                if (_formKey.currentState!.validate() &&
-                                    _selectedStudentId != null &&
-                                    _selectedCourseId != null) {
-                                  _showConfirmationDialog();
-                                }
-                              },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue.shade600,
-                          foregroundColor: Colors.white,
-                          padding: EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          elevation: 2,
-                        ),
-                        child: _isCreating
-                            ? Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      color: Colors.white,
-                                      strokeWidth: 2,
-                                    ),
-                                  ),
-                                  SizedBox(width: 12),
-                                  Text('Creating...'),
-                                ],
-                              )
-                            : Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.add_circle_outline, size: 20),
-                                  SizedBox(width: 8),
-                                  Text(
-                                    'Create Invoice',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16,
-                                    ),
-                                  ),
-                                ],
+                child: isMobile
+                    ? Column(
+                        children: [
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              onPressed: _isCreating
+                                  ? null
+                                  : () async {
+                                      if (_formKey.currentState!.validate() &&
+                                          _selectedStudentId != null &&
+                                          _selectedCourseId != null) {
+                                        _showConfirmationDialog();
+                                      }
+                                    },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blue.shade600,
+                                foregroundColor: Colors.white,
+                                padding: EdgeInsets.symmetric(vertical: 16),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                elevation: 2,
                               ),
+                              child: _isCreating
+                                  ? Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                            color: Colors.white,
+                                            strokeWidth: 2,
+                                          ),
+                                        ),
+                                        SizedBox(width: 12),
+                                        Text('Creating...'),
+                                      ],
+                                    )
+                                  : Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.add_circle_outline,
+                                            size: 20),
+                                        SizedBox(width: 8),
+                                        Text(
+                                          'Create Invoice',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                            ),
+                          ),
+                          SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton(
+                              onPressed: Get.back,
+                              style: OutlinedButton.styleFrom(
+                                padding: EdgeInsets.symmetric(vertical: 16),
+                                side: BorderSide(color: Colors.grey.shade400),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              child: Text(
+                                'Cancel',
+                                style: TextStyle(
+                                  color: Colors.grey.shade700,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      )
+                    : Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: Get.back,
+                              style: OutlinedButton.styleFrom(
+                                padding: EdgeInsets.symmetric(vertical: 16),
+                                side: BorderSide(color: Colors.grey.shade400),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              child: Text(
+                                'Cancel',
+                                style: TextStyle(
+                                  color: Colors.grey.shade700,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ),
+                          SizedBox(width: 16),
+                          Expanded(
+                            flex: 2,
+                            child: ElevatedButton(
+                              onPressed: _isCreating
+                                  ? null
+                                  : () async {
+                                      if (_formKey.currentState!.validate() &&
+                                          _selectedStudentId != null &&
+                                          _selectedCourseId != null) {
+                                        _showConfirmationDialog();
+                                      }
+                                    },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blue.shade600,
+                                foregroundColor: Colors.white,
+                                padding: EdgeInsets.symmetric(vertical: 16),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                elevation: 2,
+                              ),
+                              child: _isCreating
+                                  ? Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                            color: Colors.white,
+                                            strokeWidth: 2,
+                                          ),
+                                        ),
+                                        SizedBox(width: 12),
+                                        Text('Creating...'),
+                                      ],
+                                    )
+                                  : Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.add_circle_outline,
+                                            size: 20),
+                                        SizedBox(width: 8),
+                                        Text(
+                                          'Create Invoice',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                  ],
-                ),
               ),
           ],
         ),
@@ -955,7 +1067,7 @@ class _CreateInvoiceDialogState extends State<CreateInvoiceDialog>
             children: [
               Icon(Icons.help_outline, color: Colors.orange.shade600),
               SizedBox(width: 12),
-              Text('Confirm Invoice Creation'),
+              ResponsiveText('Confirm', style: TextStyle()),
             ],
           ),
           content: Column(

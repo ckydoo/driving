@@ -19,6 +19,7 @@ class ResponsiveText extends StatelessWidget {
     this.textAlign,
     this.maxLines,
     this.overflow,
+    required TextStyle style,
   }) : super(key: key);
 
   @override

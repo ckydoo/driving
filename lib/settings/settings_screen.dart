@@ -74,20 +74,46 @@ class _SettingsScreenState extends State<SettingsScreen>
               children: [
                 Padding(
                   padding: EdgeInsets.all(16),
-                  child: Row(
+                  child: Column(
                     children: [
-                      Icon(Icons.settings, size: 28, color: Colors.blue[700]),
-                      SizedBox(width: 12),
-                      Text(
-                        'Application Settings',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.grey[800],
-                        ),
+                      // Main header row
+                      Row(
+                        children: [
+                          Icon(Icons.settings,
+                              size: 28, color: Colors.blue[700]),
+                          SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Application Settings',
+                              style: TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey[800],
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                            ),
+                          ),
+                        ],
                       ),
-                      Spacer(),
-                      _buildQuickActions(),
+                      // Quick actions row (responsive)
+                      SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          Expanded(
+                            child: SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  _buildQuickActions(),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -136,7 +162,9 @@ class _SettingsScreenState extends State<SettingsScreen>
   }
 
   Widget _buildQuickActions() {
-    return Row(
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
       children: [
         if (authController.hasAnyRole(['admin', 'instructor']))
           _buildQuickActionButton(
@@ -144,14 +172,12 @@ class _SettingsScreenState extends State<SettingsScreen>
             label: 'Export',
             onTap: _showExportDialog,
           ),
-        SizedBox(width: 8),
         if (authController.hasAnyRole(['admin', 'instructor']))
           _buildQuickActionButton(
             icon: Icons.upload,
             label: 'Import',
             onTap: _showImportDialog,
           ),
-        SizedBox(width: 8),
         if (authController.hasAnyRole(['admin', 'instructor']))
           _buildQuickActionButton(
             icon: Icons.refresh,

@@ -20,7 +20,7 @@ class AppRoutes {
   static final routes = [
     GetPage(
       name: dashboard,
-      page: () => UpdatedDashboardScreen(),
+      page: () => FixedDashboardScreen(),
     ),
     GetPage(
       name: students,

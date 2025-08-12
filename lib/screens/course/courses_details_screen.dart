@@ -169,6 +169,11 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+    final isTablet = screenWidth > 768;
+    final isMobile = screenWidth < 600;
+
     return Scaffold(
       backgroundColor: Colors.grey[50],
       body: _isLoading
@@ -177,12 +182,12 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
               ? Center(child: Text('Course not found'))
               : CustomScrollView(
                   slivers: [
-                    _buildSliverAppBar(),
+                    _buildSliverAppBar(isMobile, isTablet),
                     SliverToBoxAdapter(
                       child: Column(
                         children: [
-                          _buildQuickStats(),
-                          _buildTabBarSection(),
+                          _buildQuickStats(isMobile, isTablet),
+                          _buildTabBarSection(screenHeight, isMobile, isTablet),
                         ],
                       ),
                     ),
@@ -191,17 +196,21 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
     );
   }
 
-  Widget _buildSliverAppBar() {
+  Widget _buildSliverAppBar(bool isMobile, bool isTablet) {
     return SliverAppBar(
-      expandedHeight: 200,
+      expandedHeight: isMobile ? 160 : 200,
       pinned: true,
       backgroundColor: Colors.blue[600],
       flexibleSpace: FlexibleSpaceBar(
-        title: Text(
-          course!.name,
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
+        title: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            course!.name,
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: isMobile ? 16 : 20,
+            ),
           ),
         ),
         background: Container(
@@ -218,23 +227,24 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
           child: Stack(
             children: [
               Positioned(
-                right: 20,
-                top: 80,
+                right: isMobile ? 10 : 20,
+                top: isMobile ? 60 : 80,
                 child: Icon(
                   Icons.school,
-                  size: 120,
+                  size: isMobile ? 80 : 120,
                   color: Colors.white.withOpacity(0.1),
                 ),
               ),
               Positioned(
-                left: 20,
-                bottom: 60,
+                left: isMobile ? 10 : 20,
+                bottom: isMobile ? 40 : 60,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Container(
-                      padding:
-                          EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: EdgeInsets.symmetric(
+                          horizontal: isMobile ? 8 : 12,
+                          vertical: isMobile ? 4 : 6),
                       decoration: BoxDecoration(
                         color: course!.status.toLowerCase() == 'active'
                             ? Colors.green[400]
@@ -245,25 +255,27 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
                         course!.status.toUpperCase(),
                         style: TextStyle(
                           color: Colors.white,
-                          fontSize: 12,
+                          fontSize: isMobile ? 10 : 12,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                     ),
                     SizedBox(height: 8),
-                    Text(
-                      '\$${course!.price}',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
+                    FittedBox(
+                      child: Text(
+                        '\$${course!.price}',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: isMobile ? 20 : 24,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                     Text(
                       'Course Price',
                       style: TextStyle(
                         color: Colors.white70,
-                        fontSize: 12,
+                        fontSize: isMobile ? 10 : 12,
                       ),
                     ),
                   ],
@@ -275,7 +287,7 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
       ),
       actions: [
         IconButton(
-          icon: Icon(Icons.edit, color: Colors.white),
+          icon: Icon(Icons.edit, color: Colors.white, size: isMobile ? 20 : 24),
           onPressed: () async {
             final result = await Get.dialog<bool>(
               CourseFormDialog(course: course),
@@ -303,7 +315,7 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
                 children: [
                   Icon(Icons.copy, size: 20),
                   SizedBox(width: 8),
-                  Text('Duplicate Course'),
+                  Expanded(child: Text('Duplicate Course')),
                 ],
               ),
             ),
@@ -313,7 +325,7 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
                 children: [
                   Icon(Icons.download, size: 20),
                   SizedBox(width: 8),
-                  Text('Export Data'),
+                  Expanded(child: Text('Export Data')),
                 ],
               ),
             ),
@@ -323,7 +335,9 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
                 children: [
                   Icon(Icons.delete, size: 20, color: Colors.red),
                   SizedBox(width: 8),
-                  Text('Delete Course', style: TextStyle(color: Colors.red)),
+                  Expanded(
+                      child: Text('Delete Course',
+                          style: TextStyle(color: Colors.red))),
                 ],
               ),
             ),
@@ -333,61 +347,128 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
     );
   }
 
-  Widget _buildQuickStats() {
+  Widget _buildQuickStats(bool isMobile, bool isTablet) {
     return Container(
-      margin: EdgeInsets.all(16),
-      child: Row(
-        children: [
-          Expanded(
-              child: _buildStatCard('Total Enrollments',
-                  _totalEnrollments.toString(), Icons.people, Colors.blue)),
-          SizedBox(width: 12),
-          Expanded(
-              child: _buildStatCard('Active Students',
-                  _activeStudents.toString(), Icons.person_pin, Colors.green)),
-          SizedBox(width: 12),
-          Expanded(
-              child: _buildStatCard(
-                  'Total Revenue',
-                  '\$${_totalRevenue.toStringAsFixed(2)}',
-                  Icons.attach_money,
-                  Colors.orange)),
-          SizedBox(width: 12),
-          Expanded(
-              child: _buildStatCard(
-                  'Completed Lessons',
-                  _completedLessons.toString(),
-                  Icons.check_circle,
-                  Colors.purple)),
-        ],
+      margin: EdgeInsets.all(isMobile ? 8 : 16),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (isMobile) {
+            return Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                        child: _buildStatCard(
+                            'Total\nEnrollments',
+                            _totalEnrollments.toString(),
+                            Icons.people,
+                            Colors.blue,
+                            isMobile)),
+                    SizedBox(width: 8),
+                    Expanded(
+                        child: _buildStatCard(
+                            'Active\nStudents',
+                            _activeStudents.toString(),
+                            Icons.person_pin,
+                            Colors.green,
+                            isMobile)),
+                  ],
+                ),
+                SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                        child: _buildStatCard(
+                            'Total\nRevenue',
+                            '\$${_totalRevenue.toStringAsFixed(2)}',
+                            Icons.attach_money,
+                            Colors.orange,
+                            isMobile)),
+                    SizedBox(width: 8),
+                    Expanded(
+                        child: _buildStatCard(
+                            'Completed\nLessons',
+                            _completedLessons.toString(),
+                            Icons.check_circle,
+                            Colors.purple,
+                            isMobile)),
+                  ],
+                ),
+              ],
+            );
+          } else {
+            return Row(
+              children: [
+                Expanded(
+                    child: _buildStatCard(
+                        'Total Enrollments',
+                        _totalEnrollments.toString(),
+                        Icons.people,
+                        Colors.blue,
+                        isMobile)),
+                SizedBox(width: 12),
+                Expanded(
+                    child: _buildStatCard(
+                        'Active Students',
+                        _activeStudents.toString(),
+                        Icons.person_pin,
+                        Colors.green,
+                        isMobile)),
+                SizedBox(width: 12),
+                Expanded(
+                    child: _buildStatCard(
+                        'Total Revenue',
+                        '\$${_totalRevenue.toStringAsFixed(2)}',
+                        Icons.attach_money,
+                        Colors.orange,
+                        isMobile)),
+                SizedBox(width: 12),
+                Expanded(
+                    child: _buildStatCard(
+                        'Completed Lessons',
+                        _completedLessons.toString(),
+                        Icons.check_circle,
+                        Colors.purple,
+                        isMobile)),
+              ],
+            );
+          }
+        },
       ),
     );
   }
 
   Widget _buildStatCard(
-      String title, String value, IconData icon, Color color) {
+      String title, String value, IconData icon, Color color, bool isMobile) {
     return Card(
       elevation: 3,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
-        padding: EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+        padding: EdgeInsets.symmetric(
+            vertical: isMobile ? 12 : 20, horizontal: isMobile ? 8 : 16),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: color, size: 32),
-            SizedBox(height: 8),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey[800],
+            Icon(icon, color: color, size: isMobile ? 24 : 32),
+            SizedBox(height: isMobile ? 4 : 8),
+            FittedBox(
+              child: Text(
+                value,
+                style: TextStyle(
+                  fontSize: isMobile ? 16 : 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey[800],
+                ),
               ),
             ),
+            SizedBox(height: 2),
             Text(
               title,
               textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: isMobile ? 10 : 12,
                 color: Colors.grey[600],
               ),
             ),
@@ -397,9 +478,10 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
     );
   }
 
-  Widget _buildTabBarSection() {
+  Widget _buildTabBarSection(
+      double screenHeight, bool isMobile, bool isTablet) {
     return Container(
-      margin: EdgeInsets.symmetric(horizontal: 16),
+      margin: EdgeInsets.symmetric(horizontal: isMobile ? 8 : 16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -419,22 +501,31 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
             labelColor: Colors.blue[600],
             unselectedLabelColor: Colors.grey[600],
             indicatorColor: Colors.blue[600],
+            isScrollable: isMobile,
             tabs: [
-              Tab(icon: Icon(Icons.info), text: 'Overview'),
-              Tab(icon: Icon(Icons.people), text: 'Students'),
-              Tab(icon: Icon(Icons.analytics), text: 'Analytics'),
-              Tab(icon: Icon(Icons.settings), text: 'Settings'),
+              Tab(
+                  icon: Icon(Icons.info, size: isMobile ? 20 : 24),
+                  text: 'Overview'),
+              Tab(
+                  icon: Icon(Icons.people, size: isMobile ? 20 : 24),
+                  text: 'Students'),
+              Tab(
+                  icon: Icon(Icons.analytics, size: isMobile ? 20 : 24),
+                  text: 'Analytics'),
+              Tab(
+                  icon: Icon(Icons.settings, size: isMobile ? 20 : 24),
+                  text: 'Settings'),
             ],
           ),
           Container(
-            height: 400,
+            height: isMobile ? 350 : (isTablet ? 450 : 400),
             child: TabBarView(
               controller: _tabController,
               children: [
-                _buildOverviewTab(),
-                _buildStudentsTab(),
-                _buildAnalyticsTab(),
-                _buildSettingsTab(),
+                _buildOverviewTab(isMobile),
+                _buildStudentsTab(isMobile),
+                _buildAnalyticsTab(isMobile),
+                _buildSettingsTab(isMobile),
               ],
             ),
           ),
@@ -443,91 +534,106 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
     );
   }
 
-  Widget _buildOverviewTab() {
-    return Padding(
-      padding: EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Course Information',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey[800],
+  Widget _buildOverviewTab(bool isMobile) {
+    return SingleChildScrollView(
+      child: Padding(
+        padding: EdgeInsets.all(isMobile ? 12 : 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Course Information',
+              style: TextStyle(
+                fontSize: isMobile ? 16 : 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[800],
+              ),
             ),
-          ),
-          SizedBox(height: 16),
-          _buildInfoRow(Icons.school, 'Course Name', course!.name),
-          _buildInfoRow(Icons.attach_money, 'Price', '\$${course!.price}'),
-          _buildInfoRow(Icons.circle, 'Status', course!.status),
-          _buildInfoRow(Icons.calendar_today, 'Created',
-              DateFormat('MMM dd, yyyy').format(course!.createdAt)),
-          SizedBox(height: 24),
-          Text(
-            'Performance Summary',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey[800],
+            SizedBox(height: 16),
+            _buildInfoRow(Icons.school, 'Course Name', course!.name, isMobile),
+            _buildInfoRow(
+                Icons.attach_money, 'Price', '\$${course!.price}', isMobile),
+            _buildInfoRow(Icons.circle, 'Status', course!.status, isMobile),
+            _buildInfoRow(Icons.calendar_today, 'Created',
+                DateFormat('MMM dd, yyyy').format(course!.createdAt), isMobile),
+            SizedBox(height: 24),
+            Text(
+              'Performance Summary',
+              style: TextStyle(
+                fontSize: isMobile ? 16 : 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[800],
+              ),
             ),
-          ),
-          SizedBox(height: 16),
-          Container(
-            padding: EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.blue[50],
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.blue[200]!),
+            SizedBox(height: 16),
+            Container(
+              padding: EdgeInsets.all(isMobile ? 12 : 16),
+              decoration: BoxDecoration(
+                color: Colors.blue[50],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue[200]!),
+              ),
+              child: Column(
+                children: [
+                  _buildPerformanceRow('Enrollment Rate',
+                      '${_totalEnrollments} students', isMobile),
+                  SizedBox(height: 8),
+                  _buildPerformanceRow(
+                      'Completion Rate',
+                      '${_totalEnrollments > 0 ? ((_completedLessons / _totalEnrollments) * 100).toStringAsFixed(1) : 0}%',
+                      isMobile),
+                  SizedBox(height: 8),
+                  _buildPerformanceRow(
+                      'Revenue per Student',
+                      '\$${_activeStudents > 0 ? (_totalRevenue / _activeStudents).toStringAsFixed(2) : 0}',
+                      isMobile),
+                ],
+              ),
             ),
-            child: Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('Enrollment Rate'),
-                    Text('${_totalEnrollments} students',
-                        style: TextStyle(fontWeight: FontWeight.bold)),
-                  ],
-                ),
-                SizedBox(height: 5),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('Completion Rate'),
-                    Text(
-                        '${_totalEnrollments > 0 ? ((_completedLessons / _totalEnrollments) * 100).toStringAsFixed(1) : 0}%',
-                        style: TextStyle(fontWeight: FontWeight.bold)),
-                  ],
-                ),
-                SizedBox(height: 5),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('Revenue per Student'),
-                    Text(
-                        '\$${_activeStudents > 0 ? (_totalRevenue / _activeStudents).toStringAsFixed(2) : 0}',
-                        style: TextStyle(fontWeight: FontWeight.bold)),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildStudentsTab() {
+  Widget _buildPerformanceRow(String label, String value, bool isMobile) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Expanded(
+          flex: 2,
+          child: Text(
+            label,
+            style: TextStyle(fontSize: isMobile ? 12 : 14),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        Expanded(
+          flex: 1,
+          child: Text(
+            value,
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: isMobile ? 12 : 14,
+            ),
+            textAlign: TextAlign.end,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStudentsTab(bool isMobile) {
     return Padding(
-      padding: EdgeInsets.all(20),
+      padding: EdgeInsets.all(isMobile ? 12 : 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             'Recent Enrollments',
             style: TextStyle(
-              fontSize: 18,
+              fontSize: isMobile ? 16 : 18,
               fontWeight: FontWeight.bold,
               color: Colors.grey[800],
             ),
@@ -540,11 +646,14 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(Icons.people_outline,
-                            size: 64, color: Colors.grey[400]),
+                            size: isMobile ? 48 : 64, color: Colors.grey[400]),
                         SizedBox(height: 16),
                         Text(
                           'No enrollments yet',
-                          style: TextStyle(color: Colors.grey[600]),
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: isMobile ? 14 : 16,
+                          ),
                         ),
                       ],
                     ),
@@ -559,19 +668,26 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
                           leading: CircleAvatar(
                             backgroundColor:
                                 _getStatusColor(enrollment['status']),
+                            radius: isMobile ? 16 : 20,
                             child: Icon(
                               Icons.person,
                               color: Colors.white,
-                              size: 20,
+                              size: isMobile ? 16 : 20,
                             ),
                           ),
-                          title: Text(enrollment['studentName']),
+                          title: Text(
+                            enrollment['studentName'],
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: isMobile ? 14 : 16),
+                          ),
                           subtitle: Text(
                             'Enrolled: ${DateFormat('MMM dd, yyyy').format(enrollment['enrollmentDate'])}',
+                            style: TextStyle(fontSize: isMobile ? 12 : 14),
                           ),
                           trailing: Container(
                             padding: EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 4),
+                                horizontal: isMobile ? 6 : 8,
+                                vertical: isMobile ? 2 : 4),
                             decoration: BoxDecoration(
                               color: _getStatusColor(enrollment['status'])
                                   .withOpacity(0.1),
@@ -580,7 +696,7 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
                             child: Text(
                               enrollment['status'],
                               style: TextStyle(
-                                fontSize: 12,
+                                fontSize: isMobile ? 10 : 12,
                                 color: _getStatusColor(enrollment['status']),
                                 fontWeight: FontWeight.w500,
                               ),
@@ -600,29 +716,34 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
     );
   }
 
-  Widget _buildAnalyticsTab() {
+  Widget _buildAnalyticsTab(bool isMobile) {
     return SingleChildScrollView(
       child: Padding(
-        padding: EdgeInsets.all(20),
+        padding: EdgeInsets.all(isMobile ? 12 : 20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               'Enrollment Trends',
               style: TextStyle(
-                fontSize: 18,
+                fontSize: isMobile ? 16 : 18,
                 fontWeight: FontWeight.bold,
                 color: Colors.grey[800],
               ),
             ),
             SizedBox(height: 10),
             Container(
-              height: 250,
+              height: isMobile ? 200 : 250,
               child: Card(
                 child: Padding(
-                  padding: EdgeInsets.all(16),
+                  padding: EdgeInsets.all(isMobile ? 8 : 16),
                   child: _monthlyStats.isEmpty
-                      ? Center(child: Text('No data available'))
+                      ? Center(
+                          child: Text(
+                            'No data available',
+                            style: TextStyle(fontSize: isMobile ? 14 : 16),
+                          ),
+                        )
                       : BarChart(
                           BarChartData(
                             alignment: BarChartAlignment.spaceAround,
@@ -639,8 +760,11 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
                                   showTitles: true,
                                   getTitlesWidget: (value, meta) {
                                     if (value.toInt() < _monthlyStats.length) {
-                                      return Text(_monthlyStats[value.toInt()]
-                                          ['month']);
+                                      return Text(
+                                        _monthlyStats[value.toInt()]['month'],
+                                        style: TextStyle(
+                                            fontSize: isMobile ? 10 : 12),
+                                      );
                                     }
                                     return Text('');
                                   },
@@ -665,7 +789,7 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
                                   BarChartRodData(
                                     toY: entry.value['enrollments'].toDouble(),
                                     color: Colors.blue[400],
-                                    width: 20,
+                                    width: isMobile ? 16 : 20,
                                     borderRadius: BorderRadius.circular(4),
                                   ),
                                 ],
@@ -676,34 +800,62 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
                 ),
               ),
             ),
-            SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildAnalyticsCard(
-                    'Avg. Monthly Enrollments',
-                    _monthlyStats.isEmpty
-                        ? '0'
-                        : (_monthlyStats
-                                    .map((m) => m['enrollments'] as int)
-                                    .reduce((a, b) => a + b) /
-                                _monthlyStats.length)
-                            .toStringAsFixed(1),
-                    Icons.trending_up,
-                    Colors.green,
+            SizedBox(height: 16),
+            isMobile
+                ? Column(
+                    children: [
+                      _buildAnalyticsCard(
+                        'Avg. Monthly\nEnrollments',
+                        _monthlyStats.isEmpty
+                            ? '0'
+                            : (_monthlyStats
+                                        .map((m) => m['enrollments'] as int)
+                                        .reduce((a, b) => a + b) /
+                                    _monthlyStats.length)
+                                .toStringAsFixed(1),
+                        Icons.trending_up,
+                        Colors.green,
+                        isMobile,
+                      ),
+                      SizedBox(height: 8),
+                      _buildAnalyticsCard(
+                        'Success Rate',
+                        '${_totalEnrollments > 0 ? ((_completedLessons / _totalEnrollments) * 100).toStringAsFixed(1) : 0}%',
+                        Icons.check_circle,
+                        Colors.blue,
+                        isMobile,
+                      ),
+                    ],
+                  )
+                : Row(
+                    children: [
+                      Expanded(
+                        child: _buildAnalyticsCard(
+                          'Avg. Monthly Enrollments',
+                          _monthlyStats.isEmpty
+                              ? '0'
+                              : (_monthlyStats
+                                          .map((m) => m['enrollments'] as int)
+                                          .reduce((a, b) => a + b) /
+                                      _monthlyStats.length)
+                                  .toStringAsFixed(1),
+                          Icons.trending_up,
+                          Colors.green,
+                          isMobile,
+                        ),
+                      ),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: _buildAnalyticsCard(
+                          'Success Rate',
+                          '${_totalEnrollments > 0 ? ((_completedLessons / _totalEnrollments) * 100).toStringAsFixed(1) : 0}%',
+                          Icons.check_circle,
+                          Colors.blue,
+                          isMobile,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                SizedBox(width: 5),
-                Expanded(
-                  child: _buildAnalyticsCard(
-                    'Success Rate',
-                    '${_totalEnrollments > 0 ? ((_completedLessons / _totalEnrollments) * 100).toStringAsFixed(1) : 0}%',
-                    Icons.check_circle,
-                    Colors.blue,
-                  ),
-                ),
-              ],
-            ),
           ],
         ),
       ),
@@ -711,27 +863,32 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
   }
 
   Widget _buildAnalyticsCard(
-      String title, String value, IconData icon, Color color) {
+      String title, String value, IconData icon, Color color, bool isMobile) {
     return Card(
       child: Padding(
-        padding: EdgeInsets.all(16),
+        padding: EdgeInsets.all(isMobile ? 12 : 16),
         child: Column(
           children: [
-            Icon(icon, color: color, size: 32),
+            Icon(icon, color: color, size: isMobile ? 24 : 32),
             SizedBox(height: 8),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey[800],
+            FittedBox(
+              child: Text(
+                value,
+                style: TextStyle(
+                  fontSize: isMobile ? 16 : 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey[800],
+                ),
               ),
             ),
+            SizedBox(height: 4),
             Text(
               title,
               textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: isMobile ? 10 : 12,
                 color: Colors.grey[600],
               ),
             ),
@@ -741,79 +898,119 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
     );
   }
 
-  Widget _buildSettingsTab() {
-    return Padding(
-      padding: EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Course Settings',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey[800],
+  Widget _buildSettingsTab(bool isMobile) {
+    return SingleChildScrollView(
+      child: Padding(
+        padding: EdgeInsets.all(isMobile ? 12 : 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Course Settings',
+              style: TextStyle(
+                fontSize: isMobile ? 16 : 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[800],
+              ),
             ),
-          ),
-          SizedBox(height: 16),
-          Card(
-            child: Column(
-              children: [
-                ListTile(
-                  leading: Icon(Icons.edit, color: Colors.blue),
-                  title: Text('Edit Course Details'),
-                  subtitle: Text('Update name, price, and status'),
-                  trailing: Icon(Icons.arrow_forward_ios),
-                  onTap: () async {
-                    final result = await Get.dialog<bool>(
-                      CourseFormDialog(course: course),
-                    );
-                    if (result == true) {
-                      _loadCourseData();
-                    }
-                  },
-                ),
-                Divider(height: 1),
-                ListTile(
-                  leading: Icon(Icons.copy, color: Colors.green),
-                  title: Text('Duplicate Course'),
-                  subtitle: Text('Create a copy of this course'),
-                  trailing: Icon(Icons.arrow_forward_ios),
-                  onTap: _duplicateCourse,
-                ),
-                Divider(height: 1),
-                ListTile(
-                  leading: Icon(Icons.delete, color: Colors.red),
-                  title: Text('Delete Course'),
-                  subtitle: Text('Permanently remove this course'),
-                  trailing: Icon(Icons.arrow_forward_ios),
-                  onTap: _deleteCourse,
-                ),
-              ],
+            SizedBox(height: 16),
+            Card(
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: Icon(Icons.edit,
+                        color: Colors.blue, size: isMobile ? 20 : 24),
+                    title: Text(
+                      'Edit Course Details',
+                      style: TextStyle(fontSize: isMobile ? 14 : 16),
+                    ),
+                    subtitle: Text(
+                      'Update name, price, and status',
+                      style: TextStyle(fontSize: isMobile ? 12 : 14),
+                    ),
+                    trailing:
+                        Icon(Icons.arrow_forward_ios, size: isMobile ? 16 : 20),
+                    onTap: () async {
+                      final result = await Get.dialog<bool>(
+                        CourseFormDialog(course: course),
+                      );
+                      if (result == true) {
+                        _loadCourseData();
+                      }
+                    },
+                  ),
+                  Divider(height: 1),
+                  ListTile(
+                    leading: Icon(Icons.copy,
+                        color: Colors.green, size: isMobile ? 20 : 24),
+                    title: Text(
+                      'Duplicate Course',
+                      style: TextStyle(fontSize: isMobile ? 14 : 16),
+                    ),
+                    subtitle: Text(
+                      'Create a copy of this course',
+                      style: TextStyle(fontSize: isMobile ? 12 : 14),
+                    ),
+                    trailing:
+                        Icon(Icons.arrow_forward_ios, size: isMobile ? 16 : 20),
+                    onTap: _duplicateCourse,
+                  ),
+                  Divider(height: 1),
+                  ListTile(
+                    leading: Icon(Icons.delete,
+                        color: Colors.red, size: isMobile ? 20 : 24),
+                    title: Text(
+                      'Delete Course',
+                      style: TextStyle(fontSize: isMobile ? 14 : 16),
+                    ),
+                    subtitle: Text(
+                      'Permanently remove this course',
+                      style: TextStyle(fontSize: isMobile ? 12 : 14),
+                    ),
+                    trailing:
+                        Icon(Icons.arrow_forward_ios, size: isMobile ? 16 : 20),
+                    onTap: _deleteCourse,
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildInfoRow(IconData icon, String label, String value) {
+  Widget _buildInfoRow(
+      IconData icon, String label, String value, bool isMobile) {
     return Padding(
-      padding: EdgeInsets.symmetric(vertical: 8),
+      padding: EdgeInsets.symmetric(vertical: isMobile ? 6 : 8),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 20, color: Colors.grey[600]),
+          Icon(icon, size: isMobile ? 18 : 20, color: Colors.grey[600]),
           SizedBox(width: 12),
-          Text(
-            label,
-            style: TextStyle(color: Colors.grey[600]),
+          Expanded(
+            flex: 2,
+            child: Text(
+              label,
+              style: TextStyle(
+                color: Colors.grey[600],
+                fontSize: isMobile ? 12 : 14,
+              ),
+            ),
           ),
-          Spacer(),
-          Text(
-            value,
-            style: TextStyle(
-              fontWeight: FontWeight.w500,
-              color: Colors.grey[800],
+          Expanded(
+            flex: 3,
+            child: Text(
+              value,
+              style: TextStyle(
+                fontWeight: FontWeight.w500,
+                color: Colors.grey[800],
+                fontSize: isMobile ? 12 : 14,
+              ),
+              textAlign: TextAlign.end,
+              overflow: TextOverflow.ellipsis,
+              maxLines: 2,
             ),
           ),
         ],

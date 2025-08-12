@@ -241,7 +241,16 @@ class _BillingScreenState extends State<BillingScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
-      body: _isLoading ? _buildLoadingState() : _buildMainContent(),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final isTablet = constraints.maxWidth > 768;
+          final isMobile = constraints.maxWidth < 600;
+
+          return _isLoading
+              ? _buildLoadingState()
+              : _buildMainContent(constraints, isTablet, isMobile);
+        },
+      ),
     );
   }
 
@@ -258,24 +267,36 @@ class _BillingScreenState extends State<BillingScreen>
     );
   }
 
-  Widget _buildMainContent() {
+  Widget _buildMainContent(
+      BoxConstraints constraints, bool isTablet, bool isMobile) {
     return FadeTransition(
       opacity: _fadeAnimation,
-      child: Column(
-        children: [
-          _buildHeader(),
-          _buildSummaryCards(),
-          _buildFiltersAndSearch(),
-          Expanded(child: _buildDataTable()),
-          if (_isMultiSelectionActive) _buildBulkActions(),
-        ],
+      child: SingleChildScrollView(
+        child: Column(
+          children: [
+            _buildHeader(isMobile),
+            _buildSummaryCards(isTablet, isMobile),
+            _buildFiltersAndSearch(isMobile),
+            // Replace Expanded with a Container with calculated height
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: constraints.maxHeight -
+                    400, // Adjust based on header + cards height
+              ),
+              child: isMobile
+                  ? _buildMobileView()
+                  : _buildDataTableAlternative(constraints),
+            ),
+            if (_isMultiSelectionActive) _buildBulkActions(isMobile),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(bool isMobile) {
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(isMobile ? 16 : 24),
       decoration: BoxDecoration(
         color: Colors.white,
         boxShadow: [
@@ -286,26 +307,85 @@ class _BillingScreenState extends State<BillingScreen>
           ),
         ],
       ),
-      child: Row(
-        children: [
-          Icon(Icons.receipt_long, size: 32, color: Colors.blue.shade700),
-          const SizedBox(width: 16),
-          const Text(
-            'Billing Management',
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
+      child: isMobile
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.receipt_long,
+                        size: 24, color: Colors.blue.shade700),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Billing Management',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                _buildHeaderActions(isMobile),
+              ],
+            )
+          : Row(
+              children: [
+                Icon(Icons.receipt_long, size: 32, color: Colors.blue.shade700),
+                const SizedBox(width: 16),
+                const Text(
+                  'Billing Management',
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+                const Spacer(),
+                _buildHeaderActions(isMobile),
+              ],
             ),
-          ),
-          const Spacer(),
-          _buildHeaderActions(),
-        ],
-      ),
     );
   }
 
-  Widget _buildHeaderActions() {
+  Widget _buildHeaderActions(bool isMobile) {
+    if (isMobile) {
+      return Row(
+        children: [
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: _loadBillingData,
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('Refresh'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.grey.shade100,
+                foregroundColor: Colors.grey.shade700,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(vertical: 8),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: () => _showCreateInvoiceDialog(),
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Create'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue.shade600,
+                foregroundColor: Colors.white,
+                elevation: 2,
+                padding: const EdgeInsets.symmetric(vertical: 8),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
     return Row(
       children: [
         ElevatedButton.icon(
@@ -333,7 +413,7 @@ class _BillingScreenState extends State<BillingScreen>
     );
   }
 
-  Widget _buildSummaryCards() {
+  Widget _buildSummaryCards(bool isTablet, bool isMobile) {
     double totalOutstanding = 0;
     double totalPaid = 0;
     int studentsWithBalance = 0;
@@ -352,54 +432,85 @@ class _BillingScreenState extends State<BillingScreen>
       }
     }
 
-    return Container(
-      padding: const EdgeInsets.all(24),
-      child: Row(
-        children: [
-          Expanded(
-            child: _buildSummaryCard(
-              'Total Outstanding',
-              '\$${totalOutstanding.toStringAsFixed(2)}',
-              Icons.trending_up,
-              Colors.red.shade600,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: _buildSummaryCard(
-              'Total Collected',
-              '\$${totalPaid.toStringAsFixed(2)}',
-              Icons.attach_money,
-              Colors.green.shade600,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: _buildSummaryCard(
-              'Students with Balance',
-              '$studentsWithBalance',
-              Icons.people,
-              Colors.orange.shade600,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: _buildSummaryCard(
-              'Total Students',
-              '${_students.length}',
-              Icons.school,
-              Colors.blue.shade600,
-            ),
-          ),
-        ],
+    final cards = [
+      _buildSummaryCard(
+        'Total Outstanding',
+        '\$${totalOutstanding.toStringAsFixed(2)}',
+        Icons.trending_up,
+        Colors.red.shade600,
+        isMobile,
       ),
+      _buildSummaryCard(
+        'Total Collected',
+        '\$${totalPaid.toStringAsFixed(2)}',
+        Icons.attach_money,
+        Colors.green.shade600,
+        isMobile,
+      ),
+      _buildSummaryCard(
+        'Students with Balance',
+        '$studentsWithBalance',
+        Icons.people,
+        Colors.orange.shade600,
+        isMobile,
+      ),
+      _buildSummaryCard(
+        'Total Students',
+        '${_students.length}',
+        Icons.school,
+        Colors.blue.shade600,
+        isMobile,
+      ),
+    ];
+
+    return Container(
+      padding: EdgeInsets.all(isMobile ? 16 : 24),
+      child: isMobile
+          ? Column(
+              children: [
+                IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(child: cards[0]),
+                      const SizedBox(width: 8),
+                      Expanded(child: cards[1]),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(child: cards[2]),
+                      const SizedBox(width: 8),
+                      Expanded(child: cards[3]),
+                    ],
+                  ),
+                ),
+              ],
+            )
+          : IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  ...cards
+                      .map((card) => [
+                            Expanded(child: card),
+                            if (card != cards.last) const SizedBox(width: 16),
+                          ])
+                      .expand((x) => x),
+                ],
+              ),
+            ),
     );
   }
 
   Widget _buildSummaryCard(
-      String title, String value, IconData icon, Color color) {
+      String title, String value, IconData icon, Color color, bool isMobile) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(isMobile ? 12 : 20),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -417,7 +528,7 @@ class _BillingScreenState extends State<BillingScreen>
         children: [
           Row(
             children: [
-              Icon(icon, color: color, size: 24),
+              Icon(icon, color: color, size: isMobile ? 20 : 24),
               const Spacer(),
               Container(
                 padding: const EdgeInsets.all(8),
@@ -425,44 +536,69 @@ class _BillingScreenState extends State<BillingScreen>
                   color: color.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(icon, color: color, size: 16),
+                child: Icon(icon, color: color, size: isMobile ? 12 : 16),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
+          SizedBox(height: isMobile ? 8 : 12),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: isMobile ? 18 : 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
             ),
           ),
           const SizedBox(height: 4),
           Text(
             title,
             style: TextStyle(
-              fontSize: 14,
+              fontSize: isMobile ? 11 : 14,
               color: Colors.grey.shade600,
             ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
     );
   }
 
-  Widget _buildFiltersAndSearch() {
+  Widget _buildFiltersAndSearch(bool isMobile) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-      child: Row(
-        children: [
-          Expanded(child: _buildSearchBar()),
-          const SizedBox(width: 16),
-          _buildFilterDropdown(),
-          const SizedBox(width: 16),
-          _buildSortDropdown(),
-        ],
+      padding: EdgeInsets.symmetric(
+        horizontal: isMobile ? 16 : 24,
+        vertical: 16,
       ),
+      child: isMobile
+          ? Column(
+              children: [
+                // Search bar takes full width on mobile
+                _buildSearchBar(),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(child: _buildFilterDropdown()),
+                    const SizedBox(width: 12),
+                    Expanded(child: _buildSortDropdown()),
+                  ],
+                ),
+              ],
+            )
+          : Row(
+              children: [
+                // Constrain search bar width on larger screens
+                Expanded(flex: 3, child: _buildSearchBar()),
+                const SizedBox(width: 16),
+                // Fixed width for dropdowns
+                SizedBox(width: 180, child: _buildFilterDropdown()),
+                const SizedBox(width: 16),
+                SizedBox(width: 180, child: _buildSortDropdown()),
+              ],
+            ),
     );
   }
 
@@ -513,6 +649,7 @@ class _BillingScreenState extends State<BillingScreen>
               _applyFiltersAndSort();
             });
           },
+          isExpanded: true,
           items: const [
             DropdownMenuItem(value: 'all', child: Text('All Students')),
             DropdownMenuItem(
@@ -535,20 +672,23 @@ class _BillingScreenState extends State<BillingScreen>
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: _sortBy,
-              onChanged: (String? newValue) {
-                setState(() {
-                  _sortBy = newValue!;
-                  _applyFiltersAndSort();
-                });
-              },
-              items: const [
-                DropdownMenuItem(value: 'name', child: Text('Name')),
-                DropdownMenuItem(value: 'balance', child: Text('Balance')),
-                DropdownMenuItem(value: 'invoices', child: Text('Invoices')),
-              ],
+          Expanded(
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: _sortBy,
+                onChanged: (String? newValue) {
+                  setState(() {
+                    _sortBy = newValue!;
+                    _applyFiltersAndSort();
+                  });
+                },
+                isExpanded: true,
+                items: const [
+                  DropdownMenuItem(value: 'name', child: Text('Name')),
+                  DropdownMenuItem(value: 'balance', child: Text('Balance')),
+                  DropdownMenuItem(value: 'invoices', child: Text('Invoices')),
+                ],
+              ),
             ),
           ),
           IconButton(
@@ -568,7 +708,252 @@ class _BillingScreenState extends State<BillingScreen>
     );
   }
 
-  Widget _buildDataTable() {
+  Widget _buildMobileView() {
+    final paginatedStudents = _getPaginatedStudents();
+
+    if (paginatedStudents.isEmpty) {
+      return _buildEmptyState();
+    }
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        children: [
+          ...paginatedStudents
+              .map((student) => _buildMobileStudentCard(student)),
+          _buildPagination(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMobileStudentCard(User student) {
+    final studentInvoices = billingController.invoices
+        .where((invoice) => invoice.studentId == student.id)
+        .toList();
+
+    double totalAmount = 0;
+    double totalPaid = 0;
+
+    for (var invoice in studentInvoices) {
+      totalAmount += invoice.totalAmountCalculated;
+      totalPaid += invoice.amountPaid;
+    }
+
+    final totalBalance = totalAmount - totalPaid;
+    final isSelected = _selectedStudents.contains(student.id);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: isSelected ? Colors.blue.shade50 : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isSelected ? Colors.blue.shade200 : Colors.grey.shade200,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.shade100,
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: InkWell(
+        onTap: () => Get.to(() => StudentInvoiceScreen(student: student)),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Checkbox(
+                    value: isSelected,
+                    onChanged: (bool? value) =>
+                        _toggleStudentSelection(student.id!),
+                  ),
+                  CircleAvatar(
+                    radius: 20,
+                    backgroundColor: Colors.blue.shade100,
+                    child: Text(
+                      '${student.fname[0]}${student.lname[0]}',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.blue.shade700,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${student.fname} ${student.lname}',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 16,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          student.email,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: _buildMobileInfoItem(
+                        'Invoices',
+                        '${studentInvoices.length}',
+                        Colors.blue.shade600,
+                      ),
+                    ),
+                    Expanded(
+                      child: _buildMobileInfoItem(
+                        'Total',
+                        '\$${totalAmount.toStringAsFixed(2)}',
+                        Colors.grey.shade700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: _buildMobileInfoItem(
+                        'Paid',
+                        '\$${totalPaid.toStringAsFixed(2)}',
+                        Colors.green.shade600,
+                      ),
+                    ),
+                    Expanded(
+                      child: _buildMobileInfoItem(
+                        'Balance',
+                        '\$${totalBalance.toStringAsFixed(2)}',
+                        totalBalance > 0
+                            ? Colors.red.shade600
+                            : Colors.green.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              // Fix button layout with proper constraints
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  if (totalBalance > 0) {
+                    return Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () => _showPaymentDialog(
+                                context, studentInvoices, student),
+                            icon: const Icon(Icons.payment, size: 18),
+                            label: const Text('Pay'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue.shade600,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () => Get.to(
+                                () => StudentInvoiceScreen(student: student)),
+                            icon: const Icon(Icons.visibility, size: 18),
+                            label: const Text('View'),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  } else {
+                    return SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () => Get.to(
+                            () => StudentInvoiceScreen(student: student)),
+                        icon: const Icon(Icons.visibility, size: 18),
+                        label: const Text('View Details'),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                    );
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileInfoItem(String label, String value, Color color) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.grey.shade600,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 4),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            value,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDataTable(BoxConstraints constraints) {
     final paginatedStudents = _getPaginatedStudents();
 
     if (paginatedStudents.isEmpty) {
@@ -584,13 +969,21 @@ class _BillingScreenState extends State<BillingScreen>
       ),
       child: Column(
         children: [
-          _buildTableHeader(),
+          _buildTableHeader(constraints),
           Expanded(
-            child: ListView.builder(
-              itemCount: paginatedStudents.length,
-              itemBuilder: (context, index) {
-                return _buildDataRow(paginatedStudents[index], index);
-              },
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: ConstrainedBox(
+                constraints:
+                    BoxConstraints(minWidth: constraints.maxWidth - 48),
+                child: ListView.builder(
+                  itemCount: paginatedStudents.length,
+                  itemBuilder: (context, index) {
+                    return _buildDataRow(
+                        paginatedStudents[index], index, constraints);
+                  },
+                ),
+              ),
             ),
           ),
           _buildPagination(),
@@ -599,29 +992,12 @@ class _BillingScreenState extends State<BillingScreen>
     );
   }
 
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.inbox, size: 64, color: Colors.grey.shade400),
-          const SizedBox(height: 16),
-          Text(
-            'No students found',
-            style: TextStyle(fontSize: 18, color: Colors.grey.shade600),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Try adjusting your search or filters',
-            style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _buildTableHeader(BoxConstraints constraints) {
+    final minWidth =
+        constraints.maxWidth > 1200 ? constraints.maxWidth - 48 : 1200.0;
 
-  Widget _buildTableHeader() {
     return Container(
+      width: minWidth,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: Colors.grey.shade50,
@@ -629,9 +1005,12 @@ class _BillingScreenState extends State<BillingScreen>
       ),
       child: Row(
         children: [
-          Checkbox(
-            value: _isAllSelected,
-            onChanged: (bool? value) => _toggleSelectAll(value!),
+          SizedBox(
+            width: 48,
+            child: Checkbox(
+              value: _isAllSelected,
+              onChanged: (bool? value) => _toggleSelectAll(value!),
+            ),
           ),
           const Expanded(
             flex: 3,
@@ -680,7 +1059,7 @@ class _BillingScreenState extends State<BillingScreen>
     );
   }
 
-  Widget _buildDataRow(User student, int index) {
+  Widget _buildDataRow(User student, int index, BoxConstraints constraints) {
     final studentInvoices = billingController.invoices
         .where((invoice) => invoice.studentId == student.id)
         .toList();
@@ -695,12 +1074,15 @@ class _BillingScreenState extends State<BillingScreen>
 
     final totalBalance = totalAmount - totalPaid;
     final isSelected = _selectedStudents.contains(student.id);
+    final minWidth =
+        constraints.maxWidth > 1200 ? constraints.maxWidth - 48 : 1200.0;
 
     return Container(
+      width: minWidth,
       decoration: BoxDecoration(
         color: isSelected
             ? Colors.blue.shade50
-            : (index % 2 == 0 ? Colors.grey.shade400 : Colors.white),
+            : (index % 2 == 0 ? Colors.grey.shade50 : Colors.white),
         border: Border(
           bottom: BorderSide(color: Colors.grey.shade100, width: 1),
         ),
@@ -711,10 +1093,13 @@ class _BillingScreenState extends State<BillingScreen>
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Row(
             children: [
-              Checkbox(
-                value: isSelected,
-                onChanged: (bool? value) =>
-                    _toggleStudentSelection(student.id!),
+              SizedBox(
+                width: 48,
+                child: Checkbox(
+                  value: isSelected,
+                  onChanged: (bool? value) =>
+                      _toggleStudentSelection(student.id!),
+                ),
               ),
               Expanded(
                 flex: 3,
@@ -743,6 +1128,7 @@ class _BillingScreenState extends State<BillingScreen>
                               fontWeight: FontWeight.w500,
                               fontSize: 14,
                             ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                           Text(
                             student.email,
@@ -750,6 +1136,7 @@ class _BillingScreenState extends State<BillingScreen>
                               fontSize: 12,
                               color: Colors.grey.shade600,
                             ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ],
                       ),
@@ -785,6 +1172,7 @@ class _BillingScreenState extends State<BillingScreen>
                           fontSize: 10,
                           color: Colors.grey.shade600,
                         ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                   ],
                 ),
@@ -794,6 +1182,7 @@ class _BillingScreenState extends State<BillingScreen>
                 child: Text(
                   '\$${totalAmount.toStringAsFixed(2)}',
                   style: const TextStyle(fontWeight: FontWeight.w500),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               Expanded(
@@ -804,6 +1193,7 @@ class _BillingScreenState extends State<BillingScreen>
                     fontWeight: FontWeight.w500,
                     color: Colors.green.shade600,
                   ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               Expanded(
@@ -826,45 +1216,61 @@ class _BillingScreenState extends State<BillingScreen>
                           ? Colors.red.shade600
                           : Colors.green.shade600,
                     ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ),
               Expanded(
                 flex: 2,
-                child: Row(
-                  children: [
-                    if (totalBalance > 0)
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: () => _showPaymentDialog(
-                              context, studentInvoices, student),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue.shade600,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(6),
+                child: LayoutBuilder(
+                  builder: (context, actionConstraints) {
+                    return Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (totalBalance > 0)
+                          Flexible(
+                            child: SizedBox(
+                              height: 32,
+                              child: ElevatedButton(
+                                onPressed: () => _showPaymentDialog(
+                                    context, studentInvoices, student),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.blue.shade600,
+                                  foregroundColor: Colors.white,
+                                  padding:
+                                      const EdgeInsets.symmetric(horizontal: 8),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  elevation: 0,
+                                  minimumSize: const Size(50, 32),
+                                ),
+                                child: const Text(
+                                  'Pay',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w500),
+                                ),
+                              ),
                             ),
-                            elevation: 0,
                           ),
-                          child: const Text(
-                            'Pay',
-                            style: TextStyle(
-                                fontSize: 12, fontWeight: FontWeight.w500),
+                        if (totalBalance > 0) const SizedBox(width: 4),
+                        SizedBox(
+                          width: 36,
+                          height: 32,
+                          child: IconButton(
+                            onPressed: () => Get.to(
+                                () => StudentInvoiceScreen(student: student)),
+                            icon: const Icon(Icons.visibility, size: 16),
+                            style: IconButton.styleFrom(
+                              backgroundColor: Colors.grey.shade100,
+                              padding: const EdgeInsets.all(4),
+                            ),
                           ),
                         ),
-                      ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      onPressed: () =>
-                          Get.to(() => StudentInvoiceScreen(student: student)),
-                      icon: const Icon(Icons.visibility, size: 18),
-                      style: IconButton.styleFrom(
-                        backgroundColor: Colors.grey.shade100,
-                        padding: const EdgeInsets.all(8),
-                      ),
-                    ),
-                  ],
+                      ],
+                    );
+                  },
                 ),
               ),
             ],
@@ -874,42 +1280,9 @@ class _BillingScreenState extends State<BillingScreen>
     );
   }
 
-  Widget _buildPagination() {
-    final totalPages = _getTotalPages();
-    if (totalPages <= 1) return const SizedBox.shrink();
-
+  Widget _buildBulkActions(bool isMobile) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade50,
-        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(12)),
-      ),
-      child: Row(
-        children: [
-          Text(
-            'Page $_currentPage of $totalPages',
-            style: TextStyle(color: Colors.grey.shade600),
-          ),
-          const Spacer(),
-          IconButton(
-            onPressed:
-                _currentPage > 1 ? () => setState(() => _currentPage--) : null,
-            icon: const Icon(Icons.chevron_left),
-          ),
-          IconButton(
-            onPressed: _currentPage < totalPages
-                ? () => setState(() => _currentPage++)
-                : null,
-            icon: const Icon(Icons.chevron_right),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBulkActions() {
-    return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(isMobile ? 12 : 16),
       decoration: BoxDecoration(
         color: Colors.white,
         boxShadow: [
@@ -920,32 +1293,74 @@ class _BillingScreenState extends State<BillingScreen>
           ),
         ],
       ),
-      child: Row(
-        children: [
-          Text(
-            '${_selectedStudents.length} students selected',
-            style: const TextStyle(fontWeight: FontWeight.w500),
-          ),
-          const Spacer(),
-          TextButton(
-            onPressed: () => setState(() {
-              _selectedStudents.clear();
-              _isMultiSelectionActive = false;
-              _isAllSelected = false;
-            }),
-            child: const Text('Clear Selection'),
-          ),
-          const SizedBox(width: 16),
-          ElevatedButton.icon(
-            onPressed: () => _handleBulkPayment(),
-            icon: const Icon(Icons.payment),
-            label: const Text('Bulk Payment'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green.shade600,
-              foregroundColor: Colors.white,
-            ),
-          ),
-        ],
+      child: SafeArea(
+        child: isMobile
+            ? Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '${_selectedStudents.length} students selected',
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 12),
+                  IntrinsicHeight(
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextButton(
+                            onPressed: () => setState(() {
+                              _selectedStudents.clear();
+                              _isMultiSelectionActive = false;
+                              _isAllSelected = false;
+                            }),
+                            child: const Text('Clear Selection'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () => _handleBulkPayment(),
+                            icon: const Icon(Icons.payment, size: 18),
+                            label: const Text('Bulk Payment'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green.shade600,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              )
+            : Row(
+                children: [
+                  Text(
+                    '${_selectedStudents.length} students selected',
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () => setState(() {
+                      _selectedStudents.clear();
+                      _isMultiSelectionActive = false;
+                      _isAllSelected = false;
+                    }),
+                    child: const Text('Clear Selection'),
+                  ),
+                  const SizedBox(width: 16),
+                  ElevatedButton.icon(
+                    onPressed: () => _handleBulkPayment(),
+                    icon: const Icon(Icons.payment),
+                    label: const Text('Bulk Payment'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green.shade600,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
       ),
     );
   }
@@ -1050,6 +1465,126 @@ class _BillingScreenState extends State<BillingScreen>
           },
         );
       },
+    );
+  }
+
+  Widget _buildPagination() {
+    final totalPages = _getTotalPages();
+    if (totalPages <= 1) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: Colors.grey.shade200)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          IconButton(
+            onPressed:
+                _currentPage > 1 ? () => setState(() => _currentPage--) : null,
+            icon: const Icon(Icons.chevron_left),
+            constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              'Page $_currentPage of $totalPages',
+              style: const TextStyle(fontWeight: FontWeight.w500),
+            ),
+          ),
+          IconButton(
+            onPressed: _currentPage < totalPages
+                ? () => setState(() => _currentPage++)
+                : null,
+            icon: const Icon(Icons.chevron_right),
+            constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.receipt_long_outlined,
+            size: 80,
+            color: Colors.grey.shade400,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'No Students Found',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'There are no students with billing records to display.',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey.shade500,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: _loadBillingData,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Refresh'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue.shade600,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDataTableAlternative(BoxConstraints constraints) {
+    final paginatedStudents = _getPaginatedStudents();
+
+    if (paginatedStudents.isEmpty) {
+      return _buildEmptyState();
+    }
+
+    final tableWidth =
+        constraints.maxWidth > 1200 ? constraints.maxWidth - 48 : 1200.0;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        children: [
+          _buildTableHeader(constraints),
+          // Remove Expanded and ListView, use Column directly
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Container(
+              width: tableWidth,
+              child: Column(
+                children: paginatedStudents.asMap().entries.map((entry) {
+                  return _buildDataRow(entry.value, entry.key, constraints);
+                }).toList(),
+              ),
+            ),
+          ),
+          _buildPagination(),
+        ],
+      ),
     );
   }
 }

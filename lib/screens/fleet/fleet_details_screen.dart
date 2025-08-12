@@ -9,6 +9,7 @@ import 'package:get/get.dart';
 import '../../controllers/user_controller.dart';
 import '../../widgets/fleet_form_dialog.dart';
 import 'package:intl/intl.dart';
+import '../../widgets/responsive_text.dart';
 
 class FleetDetailsScreen extends StatefulWidget {
   final int fleetId;
@@ -69,6 +70,36 @@ class _FleetDetailsScreenState extends State<FleetDetailsScreen>
         : '${instructor.fname} ${instructor.lname}';
   }
 
+  String _getStudentName(int studentId) {
+    if (studentId == 0) return 'Unknown Student';
+
+    if (userController.isLoading.value) {
+      return 'Loading...';
+    }
+
+    final student = userController.users.firstWhere(
+      (user) => user.id == studentId && user.role.toLowerCase() == 'student',
+      orElse: () => User(
+        id: -1,
+        fname: 'Unknown',
+        lname: 'Student',
+        email: '',
+        date_of_birth: DateTime.now(),
+        password: '',
+        role: '',
+        status: '',
+        created_at: DateTime.now(),
+        gender: '',
+        phone: '',
+        address: '',
+        idnumber: '',
+      ),
+    );
+    return student.id == -1
+        ? 'Unknown Student'
+        : '${student.fname} ${student.lname}';
+  }
+
   User? _getInstructor(int instructorId) {
     if (instructorId == 0) return null;
 
@@ -94,7 +125,7 @@ class _FleetDetailsScreenState extends State<FleetDetailsScreen>
     return Colors.green;
   }
 
-  String _getStatusText(Fleet fleet) {
+  String _getStatusResponsiveText(Fleet fleet) {
     if (fleet.instructor == 0) return 'Available';
     final age = _getVehicleAge(fleet.modelYear);
     if (age > 10) return 'Assigned (Old)';
@@ -241,7 +272,12 @@ class _FleetDetailsScreenState extends State<FleetDetailsScreen>
       if (userController.isLoading.value) {
         return Scaffold(
           appBar: AppBar(
-            title: const Text('Vehicle Details'),
+            title: const ResponsiveText(
+              'Vehicle Details',
+              style: TextStyle(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
             backgroundColor: Colors.blue.shade800,
           ),
           body: const Center(
@@ -265,11 +301,21 @@ class _FleetDetailsScreenState extends State<FleetDetailsScreen>
       if (fleet.id == -1) {
         return Scaffold(
           appBar: AppBar(
-            title: const Text('Vehicle Not Found'),
+            title: const ResponsiveText(
+              'Vehicle Not Found',
+              style: TextStyle(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
             backgroundColor: Colors.blue.shade800,
           ),
           body: const Center(
-            child: Text('Vehicle not found'),
+            child: ResponsiveText(
+              'Vehicle not found',
+              style: TextStyle(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         );
       }
@@ -277,29 +323,62 @@ class _FleetDetailsScreenState extends State<FleetDetailsScreen>
       final instructor = _getInstructor(fleet.instructor);
       final vehicleAge = _getVehicleAge(fleet.modelYear);
       final statusColor = _getStatusColor(fleet);
-      final statusText = _getStatusText(fleet);
+      final statusText = _getStatusResponsiveText(fleet);
 
       return Scaffold(
         appBar: AppBar(
-          title: Text(
+          title: ResponsiveText(
             '${fleet.make} ${fleet.model}',
             style: const TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.bold,
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           backgroundColor: Colors.blue.shade800,
           elevation: 0,
           actions: [
-            IconButton(
-              icon: const Icon(Icons.edit, color: Colors.white),
-              tooltip: 'Edit Vehicle',
-              onPressed: () => Get.dialog(FleetFormDialog(vehicle: fleet)),
-            ),
-            IconButton(
-              icon: const Icon(Icons.delete, color: Colors.white),
-              tooltip: 'Delete Vehicle',
-              onPressed: () => _showDeleteConfirmationDialog(fleet),
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert, color: Colors.white),
+              onSelected: (value) {
+                switch (value) {
+                  case 'edit':
+                    Get.dialog(FleetFormDialog(vehicle: fleet));
+                    break;
+                  case 'delete':
+                    _showDeleteConfirmationDialog(fleet);
+                    break;
+                }
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'edit',
+                  child: Row(
+                    children: [
+                      Icon(Icons.edit, size: 20),
+                      SizedBox(width: 8),
+                      ResponsiveText(
+                        'Edit Vehicle',
+                        style: TextStyle(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'delete',
+                  child: Row(
+                    children: [
+                      Icon(Icons.delete, size: 20, color: Colors.red),
+                      SizedBox(width: 8),
+                      ResponsiveText('Delete Vehicle',
+                          style: TextStyle(color: Colors.red)),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ],
           bottom: TabBar(
@@ -307,6 +386,7 @@ class _FleetDetailsScreenState extends State<FleetDetailsScreen>
             labelColor: Colors.white,
             unselectedLabelColor: Colors.white70,
             indicatorColor: Colors.white,
+            isScrollable: MediaQuery.of(context).size.width < 400,
             tabs: const [
               Tab(text: 'Overview', icon: Icon(Icons.info_outline)),
               Tab(text: 'Schedule', icon: Icon(Icons.schedule)),
@@ -329,406 +409,388 @@ class _FleetDetailsScreenState extends State<FleetDetailsScreen>
 
   Widget _buildOverviewTab(Fleet fleet, User? instructor, int vehicleAge,
       Color statusColor, String statusText) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        children: [
-          // Vehicle Header Card
-
-          const SizedBox(height: 16),
-
-          // Vehicle Details
-          Card(
-            elevation: 2,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Vehicle Information',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  _buildDetailRow(Icons.confirmation_number, 'License Plate',
-                      fleet.carPlate),
-                  _buildDetailRow(
-                      Icons.calendar_today, 'Model Year', fleet.modelYear),
-                  _buildDetailRow(
-                      Icons.access_time, 'Vehicle Age', '$vehicleAge years'),
-                  _buildDetailRow(Icons.build, 'Make', fleet.make),
-                  _buildDetailRow(Icons.car_rental, 'Model', fleet.model),
-                ],
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          // Instructor Information
-          Card(
-            elevation: 2,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Assignment Information',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  if (instructor != null) ...[
-                    _buildDetailRow(Icons.person, 'Assigned Instructor',
-                        '${instructor.fname} ${instructor.lname}'),
-                    _buildDetailRow(Icons.email, 'Email', instructor.email),
-                    _buildDetailRow(
-                        Icons.phone,
-                        'Phone',
-                        instructor.phone.isNotEmpty
-                            ? instructor.phone
-                            : 'Not provided'),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          // Navigate to instructor details
-                          Get.to(() => InstructorDetailsScreen(
-                              instructorId: instructor.id!));
-                        },
-                        icon: const Icon(Icons.person_outline),
-                        label: const Text('View Instructor Details'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue.shade600,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ] else ...[
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.orange.shade200),
-                      ),
-                      child: Column(
-                        children: [
-                          Icon(
-                            Icons.warning_amber,
-                            color: Colors.orange.shade600,
-                            size: 32,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Vehicle Not Assigned',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.orange.shade800,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'This vehicle is currently available for assignment',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.orange.shade700,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 12),
-                          ElevatedButton.icon(
-                            onPressed: () {
-                              Get.dialog(FleetFormDialog(vehicle: fleet));
-                            },
-                            icon: const Icon(Icons.assignment_ind),
-                            label: const Text('Assign Instructor'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.orange.shade600,
-                              foregroundColor: Colors.white,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          // Vehicle Condition & Recommendations
-          if (vehicleAge > 5)
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Recommendations',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: vehicleAge > 10
-                            ? Colors.red.shade50
-                            : Colors.amber.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: vehicleAge > 10
-                              ? Colors.red.shade200
-                              : Colors.amber.shade200,
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            vehicleAge > 10
-                                ? Icons.error_outline
-                                : Icons.warning_amber,
-                            color: vehicleAge > 10
-                                ? Colors.red.shade600
-                                : Colors.amber.shade600,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  vehicleAge > 10
-                                      ? 'Consider Replacement'
-                                      : 'Monitor Vehicle Age',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: vehicleAge > 10
-                                        ? Colors.red.shade800
-                                        : Colors.amber.shade800,
-                                  ),
-                                ),
-                                Text(
-                                  vehicleAge > 10
-                                      ? 'This vehicle is over 10 years old and may require frequent maintenance.'
-                                      : 'This vehicle is aging and should be monitored for maintenance needs.',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: vehicleAge > 10
-                                        ? Colors.red.shade700
-                                        : Colors.amber.shade700,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildScheduleTab(Fleet fleet) {
-    final todaysSchedules = _getTodaysSchedules(fleet);
-
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          padding: EdgeInsets.all(constraints.maxWidth > 600 ? 16.0 : 12.0),
+          child: Column(
             children: [
-              const Text(
-                'Today\'s Schedule',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
+              // Vehicle Header Card - Responsive
+              Card(
+                elevation: 4,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
                 ),
-              ),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade100,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  '${todaysSchedules.length} lesson${todaysSchedules.length != 1 ? 's' : ''}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.blue.shade800,
+                child: Container(
+                  padding: EdgeInsets.all(constraints.maxWidth > 600 ? 24 : 16),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.blue.shade600,
+                        Colors.blue.shade700,
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: LayoutBuilder(
+                    builder: (context, cardConstraints) {
+                      if (cardConstraints.maxWidth > 400) {
+                        return Row(
+                          children: [
+                            Container(
+                              width: 80,
+                              height: 80,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: const Icon(
+                                Icons.directions_car,
+                                size: 40,
+                                color: Colors.white,
+                              ),
+                            ),
+                            const SizedBox(width: 20),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  ResponsiveText(
+                                    '${fleet.make} ${fleet.model}',
+                                    style: const TextStyle(
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  ResponsiveText(
+                                    fleet.carPlate,
+                                    style: const TextStyle(
+                                      fontSize: 18,
+                                      color: Colors.white70,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: statusColor.withOpacity(0.9),
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: ResponsiveText(
+                                      statusText,
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        );
+                      } else {
+                        return Column(
+                          children: [
+                            Container(
+                              width: 80,
+                              height: 80,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: const Icon(
+                                Icons.directions_car,
+                                size: 40,
+                                color: Colors.white,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            ResponsiveText(
+                              '${fleet.make} ${fleet.model}',
+                              style: const TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                              textAlign: TextAlign.center,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 8),
+                            ResponsiveText(
+                              fleet.carPlate,
+                              style: const TextStyle(
+                                fontSize: 18,
+                                color: Colors.white70,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 12),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: statusColor.withOpacity(0.9),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: ResponsiveText(
+                                statusText,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      }
+                    },
                   ),
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          if (todaysSchedules.isEmpty)
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Column(
-                  children: [
-                    Icon(
-                      Icons.free_breakfast,
-                      size: 48,
-                      color: Colors.grey.shade400,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'No lessons scheduled today',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.grey.shade600,
+
+              const SizedBox(height: 16),
+
+              // Vehicle Details
+              Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+                child: Padding(
+                  padding: EdgeInsets.all(constraints.maxWidth > 600 ? 20 : 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ResponsiveText(
+                        'Vehicle Information',
+                        style: TextStyle(
+                          fontSize: constraints.maxWidth > 600 ? 20 : 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'This vehicle is available for booking',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey.shade500,
-                      ),
-                    ),
-                  ],
+                      const SizedBox(height: 16),
+                      _buildDetailRow(Icons.confirmation_number,
+                          'License Plate', fleet.carPlate),
+                      _buildDetailRow(
+                          Icons.calendar_today, 'Model Year', fleet.modelYear),
+                      _buildDetailRow(Icons.access_time, 'Vehicle Age',
+                          '$vehicleAge years'),
+                      _buildDetailRow(Icons.build, 'Make', fleet.make),
+                      _buildDetailRow(Icons.car_rental, 'Model', fleet.model),
+                    ],
+                  ),
                 ),
               ),
-            )
-          else
-            Expanded(
-              child: ListView.builder(
-                itemCount: todaysSchedules.length,
-                itemBuilder: (context, index) {
-                  final schedule = todaysSchedules[index];
-                  final studentName = _getStudentName(schedule.studentId);
-                  final instructorName =
-                      _getInstructorName(schedule.instructorId);
-                  final isCompleted = schedule.attended;
-                  final isPast = DateTime.now().isAfter(schedule.end);
-                  final isCurrent = DateTime.now().isAfter(schedule.start) &&
-                      DateTime.now().isBefore(schedule.end);
 
-                  Color statusColor;
-                  String statusText;
-                  IconData statusIcon;
+              const SizedBox(height: 16),
 
-                  if (isCompleted) {
-                    statusColor = Colors.green;
-                    statusText = 'Completed';
-                    statusIcon = Icons.check_circle;
-                  } else if (isCurrent) {
-                    statusColor = Colors.blue;
-                    statusText = 'In Progress';
-                    statusIcon = Icons.play_circle;
-                  } else if (isPast) {
-                    statusColor = Colors.orange;
-                    statusText = 'Missed';
-                    statusIcon = Icons.warning;
-                  } else {
-                    statusColor = Colors.grey;
-                    statusText = 'Scheduled';
-                    statusIcon = Icons.schedule;
-                  }
-
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    elevation: 2,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              // Instructor Information
+              Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+                child: Padding(
+                  padding: EdgeInsets.all(constraints.maxWidth > 600 ? 20 : 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ResponsiveText(
+                        'Assignment Information',
+                        style: TextStyle(
+                          fontSize: constraints.maxWidth > 600 ? 20 : 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      if (instructor != null) ...[
+                        _buildDetailRow(
+                          Icons.person,
+                          'Assigned Instructor',
+                          '${instructor.fname} ${instructor.lname}',
+                        ),
+                        _buildDetailRow(Icons.email, 'Email', instructor.email),
+                        _buildDetailRow(
+                          Icons.phone,
+                          'Phone',
+                          instructor.phone.isNotEmpty
+                              ? instructor.phone
+                              : 'Not provided',
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              Get.to(() => InstructorDetailsScreen(
+                                  instructorId: instructor.id!));
+                            },
+                            icon: const Icon(Icons.person_outline),
+                            label: const ResponsiveText(
+                              'View Instructor Details',
+                              style: TextStyle(),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue.shade600,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ] else ...[
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.orange.shade200),
+                          ),
+                          child: Column(
                             children: [
+                              Icon(
+                                Icons.warning_amber,
+                                color: Colors.orange.shade600,
+                                size: 32,
+                              ),
+                              const SizedBox(height: 8),
+                              ResponsiveText(
+                                'Vehicle Not Assigned',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.orange.shade800,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              ResponsiveText(
+                                'This vehicle is currently available for assignment',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.orange.shade700,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 12),
+                              ElevatedButton.icon(
+                                onPressed: () {
+                                  Get.dialog(FleetFormDialog(vehicle: fleet));
+                                },
+                                icon: const Icon(Icons.assignment_ind),
+                                label: const ResponsiveText(
+                                  'Assign Instructor',
+                                  style: TextStyle(),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.orange.shade600,
+                                  foregroundColor: Colors.white,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Vehicle Condition & Recommendations
+              if (vehicleAge > 5)
+                Card(
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  child: Padding(
+                    padding:
+                        EdgeInsets.all(constraints.maxWidth > 600 ? 20 : 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ResponsiveText(
+                          'Recommendations',
+                          style: TextStyle(
+                            fontSize: constraints.maxWidth > 600 ? 20 : 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: vehicleAge > 10
+                                ? Colors.red.shade50
+                                : Colors.amber.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: vehicleAge > 10
+                                  ? Colors.red.shade200
+                                  : Colors.amber.shade200,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                vehicleAge > 10
+                                    ? Icons.error_outline
+                                    : Icons.warning_amber,
+                                color: vehicleAge > 10
+                                    ? Colors.red.shade600
+                                    : Colors.amber.shade600,
+                              ),
+                              const SizedBox(width: 12),
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
-                                      studentName,
-                                      style: const TextStyle(
-                                        fontSize: 16,
+                                    ResponsiveText(
+                                      vehicleAge > 10
+                                          ? 'Consider Replacement'
+                                          : 'Monitor Vehicle Age',
+                                      style: TextStyle(
                                         fontWeight: FontWeight.bold,
-                                        color: Colors.black87,
+                                        color: vehicleAge > 10
+                                            ? Colors.red.shade800
+                                            : Colors.amber.shade800,
                                       ),
                                     ),
                                     const SizedBox(height: 4),
-                                    Text(
-                                      'with $instructorName',
+                                    ResponsiveText(
+                                      vehicleAge > 10
+                                          ? 'This vehicle is over 10 years old and may require frequent maintenance.'
+                                          : 'This vehicle is aging and should be monitored for maintenance needs.',
                                       style: TextStyle(
-                                        fontSize: 14,
-                                        color: Colors.grey.shade600,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 6,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: statusColor.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      statusIcon,
-                                      size: 14,
-                                      color: statusColor,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      statusText,
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                        color: statusColor,
+                                        fontSize: 13,
+                                        color: vehicleAge > 10
+                                            ? Colors.red.shade700
+                                            : Colors.amber.shade700,
                                       ),
                                     ),
                                   ],
@@ -736,115 +798,391 @@ class _FleetDetailsScreenState extends State<FleetDetailsScreen>
                               ),
                             ],
                           ),
-                          const SizedBox(height: 12),
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade50,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.access_time,
-                                  size: 18,
-                                  color: Colors.grey.shade600,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  '${DateFormat('HH:mm').format(schedule.start)} - ${DateFormat('HH:mm').format(schedule.end)}',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
-                                    color: Colors.grey.shade800,
-                                  ),
-                                ),
-                                const SizedBox(width: 16),
-                                Icon(
-                                  Icons.timer,
-                                  size: 18,
-                                  color: Colors.grey.shade600,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  schedule.duration,
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.grey.shade700,
-                                  ),
-                                ),
-                                const Spacer(),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.blue.shade100,
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Text(
-                                    schedule.classType,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.blue.shade800,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          if (schedule.status == 'Canceled') ...[
-                            const SizedBox(height: 8),
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors.red.shade50,
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(color: Colors.red.shade200),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.cancel,
-                                    size: 16,
-                                    color: Colors.red.shade600,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    'This lesson has been canceled',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.red.shade700,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                  );
-                },
-              ),
-            ),
-        ],
-      ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 
-  String _getStudentName(int studentId) {
-    try {
-      final student = userController.users.firstWhere(
-        (user) => user.id == studentId && user.role.toLowerCase() == 'student',
-      );
-      return '${student.fname} ${student.lname}';
-    } catch (e) {
-      return 'Unknown Student';
-    }
+  Widget _buildScheduleTab(Fleet fleet) {
+    final todaysSchedules = _getTodaysSchedules(fleet);
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return Padding(
+          padding: EdgeInsets.all(constraints.maxWidth > 600 ? 16.0 : 12.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: ResponsiveText(
+                      'Today\'s Schedule',
+                      style: TextStyle(
+                        fontSize: constraints.maxWidth > 600 ? 22 : 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade100,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: ResponsiveText(
+                      '${todaysSchedules.length} lesson${todaysSchedules.length != 1 ? 's' : ''}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue.shade800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              if (todaysSchedules.isEmpty)
+                Expanded(
+                  child: Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.free_breakfast,
+                            size: 48,
+                            color: Colors.grey.shade400,
+                          ),
+                          const SizedBox(height: 16),
+                          ResponsiveText(
+                            'No lessons scheduled today',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.grey.shade600,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 8),
+                          ResponsiveText(
+                            'This vehicle is available for booking',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey.shade500,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                )
+              else
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: todaysSchedules.length,
+                    itemBuilder: (context, index) {
+                      final schedule = todaysSchedules[index];
+                      final studentName = _getStudentName(schedule.studentId);
+                      final instructorName =
+                          _getInstructorName(schedule.instructorId);
+                      final isCompleted = schedule.attended;
+                      final isPast = DateTime.now().isAfter(schedule.end);
+                      final isCurrent =
+                          DateTime.now().isAfter(schedule.start) &&
+                              DateTime.now().isBefore(schedule.end);
+
+                      Color statusColor;
+                      String statusText;
+                      IconData statusIcon;
+
+                      if (isCompleted) {
+                        statusColor = Colors.green;
+                        statusText = 'Completed';
+                        statusIcon = Icons.check_circle;
+                      } else if (isCurrent) {
+                        statusColor = Colors.blue;
+                        statusText = 'In Progress';
+                        statusIcon = Icons.play_circle;
+                      } else if (isPast) {
+                        statusColor = Colors.orange;
+                        statusText = 'Missed';
+                        statusIcon = Icons.warning;
+                      } else {
+                        statusColor = Colors.grey;
+                        statusText = 'Scheduled';
+                        statusIcon = Icons.schedule;
+                      }
+
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        elevation: 2,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              LayoutBuilder(
+                                builder: (context, cardConstraints) {
+                                  if (cardConstraints.maxWidth > 400) {
+                                    return Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              ResponsiveText(
+                                                studentName,
+                                                style: const TextStyle(
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Colors.black87,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                              const SizedBox(height: 4),
+                                              ResponsiveText(
+                                                'with $instructorName',
+                                                style: TextStyle(
+                                                  fontSize: 14,
+                                                  color: Colors.grey.shade600,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 6,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: statusColor.withOpacity(0.1),
+                                            borderRadius:
+                                                BorderRadius.circular(16),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                statusIcon,
+                                                size: 14,
+                                                color: statusColor,
+                                              ),
+                                              const SizedBox(width: 4),
+                                              ResponsiveText(
+                                                statusText,
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: statusColor,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    );
+                                  } else {
+                                    return Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        ResponsiveText(
+                                          studentName,
+                                          style: const TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.black87,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Expanded(
+                                              child: ResponsiveText(
+                                                'with $instructorName',
+                                                style: TextStyle(
+                                                  fontSize: 14,
+                                                  color: Colors.grey.shade600,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 10,
+                                                vertical: 6,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: statusColor
+                                                    .withOpacity(0.1),
+                                                borderRadius:
+                                                    BorderRadius.circular(16),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    statusIcon,
+                                                    size: 14,
+                                                    color: statusColor,
+                                                  ),
+                                                  const SizedBox(width: 4),
+                                                  ResponsiveText(
+                                                    statusText,
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      color: statusColor,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    );
+                                  }
+                                },
+                              ),
+                              const SizedBox(height: 12),
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade50,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: SingleChildScrollView(
+                                  scrollDirection: Axis.horizontal,
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.access_time,
+                                        size: 18,
+                                        color: Colors.grey.shade600,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      ResponsiveText(
+                                        '${DateFormat('HH:mm').format(schedule.start)} - ${DateFormat('HH:mm').format(schedule.end)}',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w500,
+                                          color: Colors.grey.shade800,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 16),
+                                      Icon(
+                                        Icons.timer,
+                                        size: 18,
+                                        color: Colors.grey.shade600,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      ResponsiveText(
+                                        schedule.duration,
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: Colors.grey.shade700,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 16),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.blue.shade100,
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                        ),
+                                        child: ResponsiveText(
+                                          schedule.classType,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.blue.shade800,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              if (schedule.status == 'Canceled') ...[
+                                const SizedBox(height: 8),
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red.shade50,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border:
+                                        Border.all(color: Colors.red.shade200),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.cancel,
+                                        size: 16,
+                                        color: Colors.red.shade600,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: ResponsiveText(
+                                          'This lesson has been canceled',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.red.shade700,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   Widget _buildHistoryTab(Fleet fleet) {
@@ -852,399 +1190,566 @@ class _FleetDetailsScreenState extends State<FleetDetailsScreen>
     final stats = _getVehicleStatistics(fleet);
     final recommendations = _getMaintenanceRecommendations(fleet);
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Usage Statistics
-          const Text(
-            'Usage Statistics',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Stats Grid
-          GridView.count(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisCount: 2,
-            childAspectRatio: 1.5,
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          padding: EdgeInsets.all(constraints.maxWidth > 600 ? 16.0 : 12.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildStatCard({
-                'title': 'Total Lessons',
-                'value': stats['totalLessons'].toString(),
-                'subtitle': 'Completed',
-                'icon': Icons.check_circle,
-                'color': Colors.green,
-              }),
-              _buildStatCard({
-                'title': 'This Month',
-                'value': stats['thisMonth'].toString(),
-                'subtitle': 'Scheduled',
-                'icon': Icons.calendar_month,
-                'color': Colors.blue,
-              }),
-              _buildStatCard({
-                'title': 'Driving Hours',
-                'value': stats['totalHours'].toStringAsFixed(1),
-                'subtitle': 'Total hours',
-                'icon': Icons.access_time,
-                'color': Colors.purple,
-              }),
-              _buildStatCard({
-                'title': 'Students Taught',
-                'value': stats['uniqueStudents'].toString(),
-                'subtitle': 'Different students',
-                'icon': Icons.people,
-                'color': Colors.orange,
-              }),
-            ],
-          ),
+              // Usage Statistics
+              ResponsiveText(
+                'Usage Statistics',
+                style: TextStyle(
+                  fontSize: constraints.maxWidth > 600 ? 22 : 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 16),
 
-          const SizedBox(height: 24),
+              // Stats Grid - Responsive with fixed height
+              SizedBox(
+                height: constraints.maxWidth > 600
+                    ? 200
+                    : 180, // Fixed height to prevent overflow
+                child: LayoutBuilder(
+                  builder: (context, gridConstraints) {
+                    int crossAxisCount;
+                    double childAspectRatio;
+                    if (gridConstraints.maxWidth > 800) {
+                      crossAxisCount = 4;
+                      childAspectRatio = 1.1;
+                    } else if (gridConstraints.maxWidth > 600) {
+                      crossAxisCount = 2;
+                      childAspectRatio = 1.3;
+                    } else {
+                      crossAxisCount = 2;
+                      childAspectRatio = 1.0;
+                    }
 
-          // Utilization Rate
-          Card(
-            elevation: 2,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Vehicle Performance',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    return GridView.count(
+                      physics: const NeverScrollableScrollPhysics(),
+                      crossAxisCount: crossAxisCount,
+                      childAspectRatio: childAspectRatio,
+                      mainAxisSpacing: 8,
+                      crossAxisSpacing: 8,
+                      children: [
+                        _buildStatCard({
+                          'title': 'Total Lessons',
+                          'value': stats['totalLessons'].toString(),
+                          'subtitle': 'Completed',
+                          'icon': Icons.check_circle,
+                          'color': Colors.green,
+                        }),
+                        _buildStatCard({
+                          'title': 'This Month',
+                          'value': stats['thisMonth'].toString(),
+                          'subtitle': 'Scheduled',
+                          'icon': Icons.calendar_month,
+                          'color': Colors.blue,
+                        }),
+                        _buildStatCard({
+                          'title': 'Driving Hours',
+                          'value': stats['totalHours'].toStringAsFixed(1),
+                          'subtitle': 'Total hours',
+                          'icon': Icons.access_time,
+                          'color': Colors.purple,
+                        }),
+                        _buildStatCard({
+                          'title': 'Students Taught',
+                          'value': stats['uniqueStudents'].toString(),
+                          'subtitle': 'Different students',
+                          'icon': Icons.people,
+                          'color': Colors.orange,
+                        }),
+                      ],
+                    );
+                  },
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
+              // Utilization Rate
+              Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize:
+                        MainAxisSize.min, // Important: minimize column size
                     children: [
-                      const Text(
-                        'Utilization Rate',
-                        style: TextStyle(fontSize: 14, color: Colors.black54),
-                      ),
-                      Text(
-                        '${stats['utilizationRate'].toStringAsFixed(1)}%',
+                      ResponsiveText(
+                        'Vehicle Performance',
                         style: TextStyle(
-                          fontSize: 14,
+                          fontSize: constraints.maxWidth > 600 ? 18 : 16,
                           fontWeight: FontWeight.bold,
-                          color: stats['utilizationRate'] > 80
+                          color: Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Flexible(
+                            child: ResponsiveText(
+                              'Utilization Rate',
+                              style: TextStyle(
+                                  fontSize: 14, color: Colors.black54),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          ResponsiveText(
+                            '${stats['utilizationRate'].toStringAsFixed(1)}%',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: stats['utilizationRate'] > 80
+                                  ? Colors.green
+                                  : stats['utilizationRate'] > 60
+                                      ? Colors.orange
+                                      : Colors.red,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      LinearProgressIndicator(
+                        value: stats['utilizationRate'] / 100,
+                        backgroundColor: Colors.grey.shade300,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          stats['utilizationRate'] > 80
                               ? Colors.green
                               : stats['utilizationRate'] > 60
                                   ? Colors.orange
                                   : Colors.red,
                         ),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  LinearProgressIndicator(
-                    value: stats['utilizationRate'] / 100,
-                    backgroundColor: Colors.grey.shade300,
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      stats['utilizationRate'] > 80
-                          ? Colors.green
-                          : stats['utilizationRate'] > 60
-                              ? Colors.orange
-                              : Colors.red,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Monthly Average',
-                        style: TextStyle(fontSize: 14, color: Colors.black54),
-                      ),
-                      Text(
-                        '${stats['monthlyAverage'].toStringAsFixed(1)} lessons',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 24),
-
-          // Maintenance & Recommendations
-          const Text(
-            'Maintenance & Recommendations',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          ...recommendations
-              .map((rec) => Card(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    elevation: 1,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8)),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Row(
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Container(
-                            width: 32,
-                            height: 32,
-                            decoration: BoxDecoration(
-                              color: rec['color'].withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Icon(
-                              rec['icon'],
-                              size: 18,
-                              color: rec['color'],
+                          const Flexible(
+                            child: ResponsiveText(
+                              'Monthly Average',
+                              style: TextStyle(
+                                  fontSize: 14, color: Colors.black54),
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
+                          ResponsiveText(
+                            '${stats['monthlyAverage'].toStringAsFixed(1)} lessons',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
+              // Maintenance & Recommendations
+              ResponsiveText(
+                'Maintenance & Recommendations',
+                style: TextStyle(
+                  fontSize: constraints.maxWidth > 600 ? 22 : 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Recommendations list with constrained height
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: recommendations
+                    .map((rec) => Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          child: Card(
+                            elevation: 1,
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8)),
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    width: 32,
+                                    height: 32,
+                                    decoration: BoxDecoration(
+                                      color: rec['color'].withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Icon(
+                                      rec['icon'],
+                                      size: 18,
+                                      color: rec['color'],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Expanded(
+                                              child: ResponsiveText(
+                                                rec['title'],
+                                                style: const TextStyle(
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Colors.black87,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 6,
+                                                      vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: rec['color']
+                                                    .withOpacity(0.1),
+                                                borderRadius:
+                                                    BorderRadius.circular(10),
+                                              ),
+                                              child: ResponsiveText(
+                                                rec['priority'],
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: rec['color'],
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 4),
+                                        ResponsiveText(
+                                          rec['description'],
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.grey.shade600,
+                                          ),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ))
+                    .toList(),
+              ),
+
+              const SizedBox(height: 24),
+
+              // Recent Activity
+              ResponsiveText(
+                'Recent Activity',
+                style: TextStyle(
+                  fontSize: constraints.maxWidth > 600 ? 22 : 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              if (vehicleHistory.isEmpty)
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.history,
+                          size: 48,
+                          color: Colors.grey.shade400,
+                        ),
+                        const SizedBox(height: 16),
+                        ResponsiveText(
+                          'No lesson history found',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.grey.shade600,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 8),
+                        ResponsiveText(
+                          'This vehicle hasn\'t been used for any lessons yet',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey.shade500,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: vehicleHistory.take(10).map((schedule) {
+                    final studentName = _getStudentName(schedule.studentId);
+                    final instructorName =
+                        _getInstructorName(schedule.instructorId);
+                    final isCompleted = schedule.attended;
+                    final daysDiff =
+                        DateTime.now().difference(schedule.start).inDays;
+
+                    String timeAgo;
+                    if (daysDiff == 0) {
+                      timeAgo = 'Today';
+                    } else if (daysDiff == 1) {
+                      timeAgo = 'Yesterday';
+                    } else if (daysDiff < 7) {
+                      timeAgo = '$daysDiff days ago';
+                    } else if (daysDiff < 30) {
+                      timeAgo = '${(daysDiff / 7).floor()} weeks ago';
+                    } else {
+                      timeAgo =
+                          DateFormat('MMM dd, yyyy').format(schedule.start);
+                    }
+
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: Card(
+                        elevation: 1,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: LayoutBuilder(
+                            builder: (context, cardConstraints) {
+                              if (cardConstraints.maxWidth > 400) {
+                                return Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
-                                      rec['title'],
-                                      style: const TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.black87,
+                                    Container(
+                                      width: 40,
+                                      height: 40,
+                                      decoration: BoxDecoration(
+                                        color: isCompleted
+                                            ? Colors.green.shade100
+                                            : Colors.grey.shade100,
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Icon(
+                                        isCompleted
+                                            ? Icons.check_circle
+                                            : schedule.status == 'Canceled'
+                                                ? Icons.cancel
+                                                : Icons.schedule,
+                                        color: isCompleted
+                                            ? Colors.green.shade600
+                                            : schedule.status == 'Canceled'
+                                                ? Colors.red.shade600
+                                                : Colors.grey.shade600,
+                                        size: 20,
                                       ),
                                     ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: rec['color'].withOpacity(0.1),
-                                        borderRadius: BorderRadius.circular(10),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          ResponsiveText(
+                                            studentName,
+                                            style: const TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.black87,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          const SizedBox(height: 2),
+                                          ResponsiveText(
+                                            'with $instructorName • ${schedule.classType}',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey.shade600,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ],
                                       ),
-                                      child: Text(
-                                        rec['priority'],
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.bold,
-                                          color: rec['color'],
+                                    ),
+                                    Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.end,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        ResponsiveText(
+                                          timeAgo,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w500,
+                                            color: Colors.grey.shade700,
+                                          ),
                                         ),
-                                      ),
+                                        const SizedBox(height: 2),
+                                        ResponsiveText(
+                                          schedule.duration,
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.grey.shade500,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ],
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  rec['description'],
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey.shade600,
-                                  ),
-                                ),
-                              ],
-                            ),
+                                );
+                              } else {
+                                return Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Container(
+                                          width: 40,
+                                          height: 40,
+                                          decoration: BoxDecoration(
+                                            color: isCompleted
+                                                ? Colors.green.shade100
+                                                : Colors.grey.shade100,
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                          ),
+                                          child: Icon(
+                                            isCompleted
+                                                ? Icons.check_circle
+                                                : schedule.status == 'Canceled'
+                                                    ? Icons.cancel
+                                                    : Icons.schedule,
+                                            color: isCompleted
+                                                ? Colors.green.shade600
+                                                : schedule.status == 'Canceled'
+                                                    ? Colors.red.shade600
+                                                    : Colors.grey.shade600,
+                                            size: 20,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: ResponsiveText(
+                                            studentName,
+                                            style: const TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.black87,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        ResponsiveText(
+                                          timeAgo,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w500,
+                                            color: Colors.grey.shade700,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Expanded(
+                                          child: ResponsiveText(
+                                            'with $instructorName • ${schedule.classType}',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey.shade600,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        ResponsiveText(
+                                          schedule.duration,
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.grey.shade500,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                );
+                              }
+                            },
                           ),
-                        ],
-                      ),
-                    ),
-                  ))
-              .toList(),
-
-          const SizedBox(height: 24),
-
-          // Recent Activity
-          const Text(
-            'Recent Activity',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          if (vehicleHistory.isEmpty)
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Column(
-                  children: [
-                    Icon(
-                      Icons.history,
-                      size: 48,
-                      color: Colors.grey.shade400,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'No lesson history found',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'This vehicle hasn\'t been used for any lessons yet',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey.shade500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            )
-          else
-            ...vehicleHistory.take(10).map((schedule) {
-              final studentName = _getStudentName(schedule.studentId);
-              final instructorName = _getInstructorName(schedule.instructorId);
-              final isCompleted = schedule.attended;
-              final daysDiff = DateTime.now().difference(schedule.start).inDays;
-
-              String timeAgo;
-              if (daysDiff == 0) {
-                timeAgo = 'Today';
-              } else if (daysDiff == 1) {
-                timeAgo = 'Yesterday';
-              } else if (daysDiff < 7) {
-                timeAgo = '$daysDiff days ago';
-              } else if (daysDiff < 30) {
-                timeAgo = '${(daysDiff / 7).floor()} weeks ago';
-              } else {
-                timeAgo = DateFormat('MMM dd, yyyy').format(schedule.start);
-              }
-
-              return Card(
-                margin: const EdgeInsets.only(bottom: 8),
-                elevation: 1,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8)),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: isCompleted
-                              ? Colors.green.shade100
-                              : Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Icon(
-                          isCompleted
-                              ? Icons.check_circle
-                              : schedule.status == 'Canceled'
-                                  ? Icons.cancel
-                                  : Icons.schedule,
-                          color: isCompleted
-                              ? Colors.green.shade600
-                              : schedule.status == 'Canceled'
-                                  ? Colors.red.shade600
-                                  : Colors.grey.shade600,
-                          size: 20,
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              studentName,
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black87,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'with $instructorName • ${schedule.classType}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey.shade600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            timeAgo,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.grey.shade700,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            schedule.duration,
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.grey.shade500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }).toList(),
-
-          if (vehicleHistory.length > 10)
-            Padding(
-              padding: const EdgeInsets.only(top: 16),
-              child: Center(
-                child: TextButton.icon(
-                  onPressed: () {
-                    // Show full history
-                    Get.snackbar(
-                      'Feature Coming Soon',
-                      'Full history view will be available in the next update',
-                      backgroundColor: Colors.blue,
-                      colorText: Colors.white,
                     );
-                  },
-                  icon: const Icon(Icons.history),
-                  label: Text('View All ${vehicleHistory.length} Records'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.blue.shade600,
+                  }).toList(),
+                ),
+
+              if (vehicleHistory.length > 10)
+                Padding(
+                  padding: const EdgeInsets.only(top: 16),
+                  child: Center(
+                    child: TextButton.icon(
+                      onPressed: () {
+                        Get.snackbar(
+                          'Feature Coming Soon',
+                          'Full history view will be available in the next update',
+                          backgroundColor: Colors.blue,
+                          colorText: Colors.white,
+                        );
+                      },
+                      icon: const Icon(Icons.history),
+                      label: ResponsiveText(
+                        'View All ${vehicleHistory.length} Records',
+                        style: const TextStyle(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.blue.shade600,
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            ),
-        ],
-      ),
+
+              // Add extra padding at the bottom for safety
+              const SizedBox(height: 32),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -1253,51 +1758,58 @@ class _FleetDetailsScreenState extends State<FleetDetailsScreen>
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(8), // Reduced padding
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min, // Important: minimize size
           children: [
             Container(
-              width: 32,
-              height: 32,
+              width: 28, // Slightly smaller
+              height: 28,
               decoration: BoxDecoration(
                 color: stat['color'].withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(
                 stat['icon'],
-                size: 18,
+                size: 16, // Smaller icon
                 color: stat['color'],
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              stat['value'],
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.black87,
+            const SizedBox(height: 6), // Reduced spacing
+            FittedBox(
+              child: ResponsiveText(
+                stat['value'],
+                style: const TextStyle(
+                  fontSize: 16, // Slightly smaller
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
               ),
             ),
             const SizedBox(height: 2),
-            Text(
+            ResponsiveText(
               stat['title'],
               style: const TextStyle(
-                fontSize: 12,
+                fontSize: 11, // Smaller
                 fontWeight: FontWeight.w500,
                 color: Colors.black54,
               ),
               textAlign: TextAlign.center,
+              maxLines: 2, // Allow 2 lines for title
+              overflow: TextOverflow.ellipsis,
             ),
             if (stat['subtitle'] != null) ...[
               const SizedBox(height: 2),
-              Text(
+              ResponsiveText(
                 stat['subtitle'],
                 style: TextStyle(
-                  fontSize: 10,
+                  fontSize: 9, // Very small
                   color: Colors.grey.shade500,
                 ),
                 textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ],
@@ -1329,20 +1841,28 @@ class _FleetDetailsScreenState extends State<FleetDetailsScreen>
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  label,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.black54,
+                Flexible(
+                  child: ResponsiveText(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.black54,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                Text(
-                  value,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
+                const SizedBox(width: 8),
+                Flexible(
+                  child: ResponsiveText(
+                    value,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                    textAlign: TextAlign.end,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
@@ -1368,7 +1888,7 @@ class _FleetDetailsScreenState extends State<FleetDetailsScreen>
             size: 48,
           ),
           const SizedBox(height: 16),
-          Text(
+          ResponsiveText(
             'Are you sure you want to delete this vehicle?',
             textAlign: TextAlign.center,
             style: TextStyle(
@@ -1377,7 +1897,7 @@ class _FleetDetailsScreenState extends State<FleetDetailsScreen>
             ),
           ),
           const SizedBox(height: 8),
-          Text(
+          ResponsiveText(
             '${fleet.make} ${fleet.model} (${fleet.carPlate})',
             textAlign: TextAlign.center,
             style: const TextStyle(
@@ -1403,7 +1923,7 @@ class _FleetDetailsScreenState extends State<FleetDetailsScreen>
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(
+                  child: ResponsiveText(
                     'This action cannot be undone.',
                     style: TextStyle(
                       fontSize: 13,
@@ -1435,11 +1955,21 @@ class _FleetDetailsScreenState extends State<FleetDetailsScreen>
             borderRadius: BorderRadius.circular(8),
           ),
         ),
-        child: const Text('Delete'),
+        child: const ResponsiveText(
+          'Delete',
+          style: TextStyle(),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
       ),
       cancel: TextButton(
         onPressed: () => Get.back(),
-        child: const Text('Cancel'),
+        child: const ResponsiveText(
+          'Cancel',
+          style: TextStyle(),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
       ),
     );
   }

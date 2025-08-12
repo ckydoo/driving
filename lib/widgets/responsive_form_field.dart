@@ -30,6 +30,7 @@ class ResponsiveFormField extends StatelessWidget {
     this.enabled = true,
     this.onTap,
     this.onChanged,
+    required InputDecoration decoration,
   }) : super(key: key);
 
   @override

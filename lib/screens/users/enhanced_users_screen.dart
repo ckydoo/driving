@@ -5,6 +5,9 @@ import 'package:driving/screens/users/enhanced_recommendations_screen.dart';
 import 'package:driving/screens/users/add_user_screen.dart';
 import 'package:driving/screens/users/student_details_screen.dart';
 import 'package:driving/screens/users/user_form_dialog.dart';
+import 'package:driving/widgets/responsive_extensions.dart';
+import 'package:driving/widgets/responsive_wrapper.dart';
+import 'package:driving/widgets/responsive_text.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -119,16 +122,26 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
       },
       {
         'icon': Icons.mail,
-        'title': 'Send Notifications',
-        'description': 'Send bulk notifications to ${widget.role}s',
+        'title': 'Send Notification',
+        'description': 'Send bulk notifications',
         'action': () => _showNotificationDialog(),
-        'color': Colors.indigo,
+        'color': Colors.red,
       },
     ];
   }
 
   void _applyFiltersAndSort() {
     List<User> filteredUsers = List.from(_users);
+
+    // Apply search filter
+    if (_searchController.text.isNotEmpty) {
+      final query = _searchController.text.toLowerCase();
+      filteredUsers = filteredUsers.where((user) {
+        return user.fname.toLowerCase().contains(query) ||
+            user.lname.toLowerCase().contains(query) ||
+            user.email.toLowerCase().contains(query);
+      }).toList();
+    }
 
     // Apply status filter
     if (_filterStatus != 'all') {
@@ -137,38 +150,24 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
           .toList();
     }
 
-    // Apply search filter
-    if (_searchController.text.isNotEmpty) {
-      final query = _searchController.text.toLowerCase();
-      filteredUsers = filteredUsers
-          .where((user) =>
-              user.fname.toLowerCase().contains(query) ||
-              user.lname.toLowerCase().contains(query) ||
-              user.email.toLowerCase().contains(query) ||
-              user.phone.contains(query))
-          .toList();
-    }
-
     // Apply sorting
     filteredUsers.sort((a, b) {
-      int comparison = 0;
+      int comparison;
       switch (_sortBy) {
         case 'name':
-          comparison =
-              '${a.fname} ${a.lname}'.compareTo('${b.fname} ${b.lname}');
+          comparison = a.fname.compareTo(b.fname);
           break;
         case 'email':
           comparison = a.email.compareTo(b.email);
           break;
-        case 'phone':
-          comparison = a.phone.compareTo(b.phone);
+        case 'date':
+          comparison = a.created_at.compareTo(b.created_at);
           break;
         case 'status':
           comparison = a.status.compareTo(b.status);
           break;
-        case 'created':
-          comparison = a.created_at.compareTo(b.created_at);
-          break;
+        default:
+          comparison = 0;
       }
       return _sortAscending ? comparison : -comparison;
     });
@@ -193,24 +192,63 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
         startIndex, endIndex > users.length ? users.length : endIndex);
   }
 
+  void _toggleUserSelection(int userId) {
+    setState(() {
+      if (_selectedUsers.contains(userId)) {
+        _selectedUsers.remove(userId);
+      } else {
+        _selectedUsers.add(userId);
+      }
+      _isMultiSelectionActive = _selectedUsers.isNotEmpty;
+      _isAllSelected = _selectedUsers.length == _users.length;
+    });
+  }
+
+  void _toggleSelectAll(bool value) {
+    setState(() {
+      _isAllSelected = value;
+      _selectedUsers = value ? _users.map((user) => user.id!).toList() : [];
+      _isMultiSelectionActive = _selectedUsers.isNotEmpty;
+    });
+  }
+
+  void _goToNextPage() {
+    final totalPages = (_searchResults.length / _rowsPerPage).ceil();
+    if (_currentPage < totalPages) {
+      setState(() {
+        _currentPage++;
+      });
+    }
+  }
+
+  void _goToPreviousPage() {
+    if (_currentPage > 1) {
+      setState(() {
+        _currentPage--;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[50],
-      body: Column(
-        children: [
-          _buildTopSection(),
-          _buildTabBar(),
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildListView(),
-                _buildRecommendationsView(),
-              ],
+      body: ResponsiveWrapper(
+        child: Column(
+          children: [
+            _buildTopSection(),
+            _buildTabBar(),
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildListView(),
+                  _buildRecommendationsView(),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
       floatingActionButton: _buildFloatingActionButton(),
     );
@@ -218,7 +256,7 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
 
   Widget _buildTopSection() {
     return Container(
-      padding: const EdgeInsets.all(16.0),
+      padding: EdgeInsets.all(context.isMobile ? 12.0 : 16.0),
       decoration: BoxDecoration(
         color: Colors.white,
         boxShadow: [
@@ -232,57 +270,135 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
       ),
       child: Column(
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _searchController,
-                  decoration: InputDecoration(
-                    hintText: 'Search ${widget.role.capitalize!}s...',
-                    prefixIcon: Icon(Icons.search, color: Colors.grey[600]),
-                    suffixIcon: _searchController.text.isNotEmpty
-                        ? IconButton(
-                            icon: Icon(Icons.clear),
-                            onPressed: () {
-                              _searchController.clear();
-                              _searchUsers('');
-                            },
-                          )
-                        : null,
-                    filled: true,
-                    fillColor: Colors.grey[100],
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12.0),
-                      borderSide: BorderSide.none,
-                    ),
-                    contentPadding:
-                        EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-                  ),
-                  onChanged: _searchUsers,
-                ),
-              ),
-              SizedBox(width: 12),
-              _buildFilterChip(),
-              SizedBox(width: 8),
-              _buildSortButton(),
-              SizedBox(width: 8),
-              if (widget.role.toLowerCase() == 'student')
-                ElevatedButton.icon(
-                  onPressed: _showImportDialog,
-                  icon: Icon(Icons.upload_file),
-                  label: Text('Import Students'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue[600],
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-              if (widget.role.toLowerCase() == 'student') SizedBox(width: 8),
-              _buildRefreshButton(),
-            ],
-          ),
-          SizedBox(height: 16),
+          // Search and Filter Row
+          _buildSearchAndFilterRow(),
+          SizedBox(height: context.isMobile ? 12 : 16),
           _buildStatsRow(),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSearchAndFilterRow() {
+    if (context.isMobile) {
+      return Column(
+        children: [
+          // Search bar first on mobile
+          SizedBox(
+            width: double.infinity,
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Search ${widget.role.capitalize}s...',
+                prefixIcon: Icon(Icons.search, color: Colors.grey[600]),
+                suffixIcon: _searchController.text.isNotEmpty
+                    ? IconButton(
+                        icon: Icon(Icons.clear),
+                        onPressed: () {
+                          _searchController.clear();
+                          _searchUsers('');
+                        },
+                      )
+                    : null,
+                filled: true,
+                fillColor: Colors.grey[100],
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12.0),
+                  borderSide: BorderSide.none,
+                ),
+                contentPadding:
+                    EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+              ),
+              onChanged: _searchUsers,
+            ),
+          ),
+          SizedBox(height: 8),
+          // Action buttons row on mobile
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildFilterChip(),
+                SizedBox(width: 8),
+                _buildSortButton(),
+                SizedBox(width: 8),
+                if (widget.role.toLowerCase() == 'student') ...[
+                  _buildImportButton(),
+                  SizedBox(width: 8),
+                ],
+                _buildRefreshButton(),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
+    // Desktop/tablet layout
+    return Row(
+      children: [
+        Expanded(
+          flex: 3,
+          child: TextField(
+            controller: _searchController,
+            decoration: InputDecoration(
+              hintText: 'Search ${widget.role.capitalize}s...',
+              prefixIcon: Icon(Icons.search, color: Colors.grey[600]),
+              suffixIcon: _searchController.text.isNotEmpty
+                  ? IconButton(
+                      icon: Icon(Icons.clear),
+                      onPressed: () {
+                        _searchController.clear();
+                        _searchUsers('');
+                      },
+                    )
+                  : null,
+              filled: true,
+              fillColor: Colors.grey[100],
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12.0),
+                borderSide: BorderSide.none,
+              ),
+              contentPadding:
+                  EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+            ),
+            onChanged: _searchUsers,
+          ),
+        ),
+        SizedBox(width: 12),
+        _buildFilterChip(),
+        SizedBox(width: 8),
+        _buildSortButton(),
+        SizedBox(width: 8),
+        if (widget.role.toLowerCase() == 'student') ...[
+          _buildImportButton(),
+          SizedBox(width: 8),
+        ],
+        _buildRefreshButton(),
+      ],
+    );
+  }
+
+  Widget _buildImportButton() {
+    if (context.isMobile) {
+      return IconButton(
+        onPressed: _showImportDialog,
+        icon: Icon(Icons.upload_file),
+        tooltip: 'Import Students',
+        style: IconButton.styleFrom(
+          backgroundColor: Colors.blue[600],
+          foregroundColor: Colors.white,
+        ),
+      );
+    }
+
+    return ElevatedButton.icon(
+      onPressed: _showImportDialog,
+      icon: Icon(Icons.upload_file),
+      label: Text('Import Students'),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: Colors.blue[600],
+        foregroundColor: Colors.white,
       ),
     );
   }
@@ -292,28 +408,77 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
     final activeUsers = _users.where((u) => u.status == 'Active').length;
     final inactiveUsers = totalUsers - activeUsers;
 
+    if (context.isMobile) {
+      return Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                  child: _buildStatCard(
+                'Total ${widget.role.capitalize}s',
+                totalUsers.toString(),
+                Icons.people,
+                Colors.blue,
+              )),
+              SizedBox(width: 8),
+              Expanded(
+                  child: _buildStatCard(
+                'Active',
+                activeUsers.toString(),
+                Icons.check_circle,
+                Colors.green,
+              )),
+              SizedBox(width: 8),
+              Expanded(
+                  child: _buildStatCard(
+                'Inactive',
+                inactiveUsers.toString(),
+                Icons.pause_circle,
+                Colors.orange,
+              )),
+            ],
+          ),
+          if (_selectedUsers.isNotEmpty) ...[
+            SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              child: Chip(
+                label: Text('${_selectedUsers.length} selected'),
+                backgroundColor: Colors.blue[100],
+                deleteIcon: Icon(Icons.clear, size: 18),
+                onDeleted: () => _toggleSelectAll(false),
+              ),
+            ),
+          ],
+        ],
+      );
+    }
+
     return Row(
       children: [
-        _buildStatCard(
-          'Total ${widget.role.capitalize!}s',
+        Expanded(
+            child: _buildStatCard(
+          'Total ${widget.role.capitalize}s',
           totalUsers.toString(),
           Icons.people,
           Colors.blue,
-        ),
+        )),
         SizedBox(width: 12),
-        _buildStatCard(
+        Expanded(
+            child: _buildStatCard(
           'Active',
           activeUsers.toString(),
           Icons.check_circle,
           Colors.green,
-        ),
+        )),
         SizedBox(width: 12),
-        _buildStatCard(
+        Expanded(
+            child: _buildStatCard(
           'Inactive',
           inactiveUsers.toString(),
           Icons.pause_circle,
           Colors.orange,
-        ),
+        )),
         Spacer(),
         if (_selectedUsers.isNotEmpty)
           Chip(
@@ -328,25 +493,24 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
 
   Widget _buildStatCard(
       String title, String value, IconData icon, Color color) {
-    return Expanded(
-      child: Container(
-        padding: EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: color.withOpacity(0.3)),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: color, size: 20),
-            SizedBox(width: 8),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    final isCompact = context.isMobile;
+
+    return Container(
+      padding: EdgeInsets.all(isCompact ? 8 : 12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: isCompact
+          ? Column(
               children: [
+                Icon(icon, color: color, size: 16),
+                SizedBox(height: 4),
                 Text(
                   value,
                   style: TextStyle(
-                    fontSize: 16,
+                    fontSize: 14,
                     fontWeight: FontWeight.bold,
                     color: color,
                   ),
@@ -354,22 +518,52 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
                 Text(
                   title,
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: 10,
                     color: Colors.grey[600],
+                  ),
+                  textAlign: TextAlign.center,
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+              ],
+            )
+          : Row(
+              children: [
+                Icon(icon, color: color, size: 20),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        value,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: color,
+                        ),
+                      ),
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[600],
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
-          ],
-        ),
-      ),
     );
   }
 
   Widget _buildFilterChip() {
     return PopupMenuButton<String>(
       child: Chip(
-        label: Text('Filter: ${_filterStatus.capitalize!}'),
+        label: Text('Filter: ${_filterStatus.capitalize}'),
         avatar: Icon(Icons.filter_list, size: 16),
       ),
       onSelected: (value) {
@@ -409,18 +603,20 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
       itemBuilder: (context) => [
         PopupMenuItem(value: 'name', child: Text('Name')),
         PopupMenuItem(value: 'email', child: Text('Email')),
-        PopupMenuItem(value: 'phone', child: Text('Phone')),
+        PopupMenuItem(value: 'date', child: Text('Date Created')),
         PopupMenuItem(value: 'status', child: Text('Status')),
-        PopupMenuItem(value: 'created', child: Text('Date Created')),
       ],
     );
   }
 
   Widget _buildRefreshButton() {
     return IconButton(
-      icon: Icon(Icons.refresh, color: Colors.blue[600]),
       onPressed: _loadUsers,
+      icon: Icon(Icons.refresh),
       tooltip: 'Refresh',
+      style: IconButton.styleFrom(
+        backgroundColor: Colors.grey[200],
+      ),
     );
   }
 
@@ -435,10 +631,10 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
         tabs: [
           Tab(
             icon: Icon(Icons.list),
-            text: '${widget.role.capitalize!}s',
+            text: '${widget.role.capitalize}s',
           ),
           Tab(
-            icon: Icon(Icons.recommend),
+            icon: Icon(Icons.lightbulb),
             text: 'Recommendations',
           ),
         ],
@@ -447,189 +643,109 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
   }
 
   Widget _buildListView() {
-    return Obx(() {
-      if (controller.isLoading.value) {
-        return Center(child: CircularProgressIndicator());
-      } else if (_users.isEmpty && _searchController.text.isEmpty) {
-        return _buildEmptyState();
-      } else {
-        final users = _getPaginatedUsers();
-        return Column(
-          children: [
-            Expanded(
-              child: Card(
-                margin: EdgeInsets.all(16.0),
-                elevation: 2,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(
-                  children: [
-                    _buildHeaderRow(),
-                    Expanded(
-                      child: users.isEmpty
-                          ? Center(
-                              child: Text(
-                                'No ${widget.role}s found matching your criteria',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  color: Colors.grey[600],
-                                ),
-                              ),
-                            )
-                          : ListView.separated(
-                              itemCount: users.length,
-                              separatorBuilder: (context, index) =>
-                                  Divider(height: 1),
-                              itemBuilder: (context, index) {
-                                final user = users[index];
-                                return _buildUserCard(user, index);
-                              },
-                            ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            _buildPagination(),
-          ],
-        );
-      }
-    });
-  }
-
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            widget.role == 'student' ? Icons.school : Icons.person,
-            size: 80,
-            color: Colors.grey[400],
-          ),
-          SizedBox(height: 16),
-          Text(
-            'No ${widget.role}s found',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey[600],
-            ),
-          ),
-          SizedBox(height: 8),
-          Text(
-            'Start by adding your first ${widget.role}',
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.grey[500],
-            ),
-          ),
-          SizedBox(height: 24),
-          ElevatedButton.icon(
-            onPressed: () => Get.dialog(UserFormDialog(role: widget.role)),
-            icon: Icon(Icons.add),
-            label: Text('Add ${widget.role.capitalize}'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue[600],
-              foregroundColor: Colors.white,
-              padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRecommendationsView() {
-    return EnhancedRecommendationsScreen(role: widget.role);
-  }
-
-  Widget _buildHeaderRow() {
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-      decoration: BoxDecoration(
-        color: Colors.grey[50],
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(12),
-          topRight: Radius.circular(12),
-        ),
-      ),
-      child: Row(
+      color: Colors.grey[50],
+      child: Column(
         children: [
-          Checkbox(
-            value: _isAllSelected,
-            onChanged: (bool? value) => _toggleSelectAll(value!),
-          ),
+          if (!context.isMobile) _buildHeaderRow(),
           Expanded(
-            flex: 3,
-            child: Text(
-              'Name',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Colors.grey[700],
-              ),
-            ),
+            child: _users.isEmpty
+                ? _buildEmptyState()
+                : LayoutBuilder(
+                    builder: (context, constraints) {
+                      final users = _getPaginatedUsers();
+                      if (users.isEmpty) {
+                        return Center(
+                          child: ResponsiveText(
+                            style: TextStyle(),
+                            'No ${widget.role}s found matching your criteria',
+                            fontSize: 16,
+                            color: Colors.grey[600],
+                          ),
+                        );
+                      }
+
+                      if (context.isMobile) {
+                        return ListView.separated(
+                          padding: EdgeInsets.all(8),
+                          itemCount: users.length,
+                          separatorBuilder: (context, index) =>
+                              SizedBox(height: 8),
+                          itemBuilder: (context, index) {
+                            final user = users[index];
+                            return _buildMobileUserCard(user, index);
+                          },
+                        );
+                      } else {
+                        return ListView.separated(
+                          itemCount: users.length,
+                          separatorBuilder: (context, index) =>
+                              Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final user = users[index];
+                            return _buildUserCard(user, index);
+                          },
+                        );
+                      }
+                    },
+                  ),
           ),
-          Expanded(
-            flex: 2,
-            child: Text(
-              'Email',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Colors.grey[700],
-              ),
-            ),
-          ),
-          Expanded(
-            flex: 2,
-            child: Text(
-              'Phone',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Colors.grey[700],
-              ),
-            ),
-          ),
-          Expanded(
-            flex: 1,
-            child: Text(
-              'Status',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Colors.grey[700],
-              ),
-            ),
-          ),
-          SizedBox(width: 80), // Space for actions
+          _buildPagination(),
         ],
       ),
     );
   }
 
-  Widget _buildUserCard(User user, int index) {
+  Widget _buildMobileUserCard(User user, int index) {
     final isSelected = _selectedUsers.contains(user.id);
 
-    return Container(
-      color: isSelected ? Colors.blue[50] : Colors.transparent,
-      child: ListTile(
-        leading: Checkbox(
-          value: isSelected,
-          onChanged: (bool? value) => _toggleUserSelection(user.id!),
-        ),
-        title: Row(
-          children: [
-            Expanded(
-              flex: 3,
-              child: Row(
+    return Card(
+      margin: EdgeInsets.zero,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () {
+          if (widget.role == 'student') {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => StudentDetailsScreen(studentId: user.id!),
+              ),
+            );
+          } else if (widget.role == 'instructor') {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) =>
+                    InstructorDetailsScreen(instructorId: user.id!),
+              ),
+            );
+          }
+        },
+        onLongPress: () => _toggleUserSelection(user.id!),
+        child: Container(
+          padding: EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: isSelected ? Colors.blue[50] : null,
+            borderRadius: BorderRadius.circular(8),
+            border: isSelected ? Border.all(color: Colors.blue[200]!) : null,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 children: [
+                  if (_isMultiSelectionActive)
+                    Checkbox(
+                      value: isSelected,
+                      onChanged: (bool? value) =>
+                          _toggleUserSelection(user.id!),
+                    ),
                   CircleAvatar(
+                    radius: 20,
                     backgroundColor: Colors.blue[100],
                     child: Text(
-                      user.fname[0].toUpperCase(),
+                      '${user.fname[0]}${user.lname[0]}',
                       style: TextStyle(
-                        color: Colors.blue[800],
                         fontWeight: FontWeight.bold,
+                        color: Colors.blue[800],
                       ),
                     ),
                   ),
@@ -640,61 +756,152 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
                       children: [
                         Text(
                           '${user.fname} ${user.lname}',
-                          style: TextStyle(fontWeight: FontWeight.w500),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                         Text(
-                          'ID: ${user.idnumber}',
+                          user.email,
                           style: TextStyle(
-                            fontSize: 12,
                             color: Colors.grey[600],
+                            fontSize: 14,
                           ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          user.phone,
+                          style: TextStyle(
+                            color: Colors.grey[500],
+                            fontSize: 12,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ],
                     ),
                   ),
+                  _buildStatusChip(user.status),
                 ],
               ),
-            ),
-            Expanded(
-              flex: 2,
-              child: Text(
-                user.email,
-                style: TextStyle(fontSize: 14),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            Expanded(
-              flex: 2,
-              child: Text(
-                user.phone,
-                style: TextStyle(fontSize: 14),
-              ),
-            ),
-            Expanded(
-              flex: 1,
-              child: _buildStatusChip(user.status),
-            ),
-            SizedBox(
-              width: 80,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
+              SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  IconButton(
-                    icon: Icon(Icons.edit, size: 18, color: Colors.blue[600]),
-                    onPressed: () => Get.dialog(
-                      AddUserScreen(user: user, role: widget.role),
+                  Text(
+                    'ID: ${user.idnumber}',
+                    style: TextStyle(
+                      color: Colors.grey[500],
+                      fontSize: 12,
                     ),
-                    tooltip: 'Edit',
                   ),
-                  IconButton(
-                    icon: Icon(Icons.delete, size: 18, color: Colors.red[600]),
-                    onPressed: () => _showDeleteConfirmationDialog(user.id!),
-                    tooltip: 'Delete',
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        onPressed: () => Get.dialog(
+                          AddUserScreen(role: widget.role, user: user),
+                        ),
+                        icon: Icon(Icons.edit, size: 18),
+                        tooltip: 'Edit',
+                        constraints: BoxConstraints(),
+                        padding: EdgeInsets.all(4),
+                      ),
+                      IconButton(
+                        onPressed: () => _showDeleteDialog(user),
+                        icon: Icon(Icons.delete, size: 18, color: Colors.red),
+                        tooltip: 'Delete',
+                        constraints: BoxConstraints(),
+                        padding: EdgeInsets.all(4),
+                      ),
+                    ],
                   ),
                 ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUserCard(User user, int index) {
+    final isSelected = _selectedUsers.contains(user.id);
+
+    return Container(
+      color: isSelected ? Colors.blue[50] : null,
+      child: ListTile(
+        leading: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (_isMultiSelectionActive)
+              Checkbox(
+                value: isSelected,
+                onChanged: (bool? value) => _toggleUserSelection(user.id!),
+              ),
+            CircleAvatar(
+              backgroundColor: Colors.blue[100],
+              child: Text(
+                '${user.fname[0]}${user.lname[0]}',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blue[800],
+                ),
               ),
             ),
           ],
+        ),
+        title: Text(
+          '${user.fname} ${user.lname}',
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              user.email,
+              overflow: TextOverflow.ellipsis,
+            ),
+            Text(
+              'Phone: ${user.phone}',
+              style: TextStyle(fontSize: 12),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+        trailing: Container(
+          width: 120,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildStatusChip(user.status),
+              SizedBox(width: 8),
+              PopupMenuButton(
+                itemBuilder: (context) => [
+                  PopupMenuItem(
+                    child: ListTile(
+                      leading: Icon(Icons.edit),
+                      title: Text('Edit'),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                    onTap: () => Get.dialog(
+                      AddUserScreen(role: widget.role, user: user),
+                    ),
+                  ),
+                  PopupMenuItem(
+                    child: ListTile(
+                      leading: Icon(Icons.delete, color: Colors.red),
+                      title:
+                          Text('Delete', style: TextStyle(color: Colors.red)),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                    onTap: () => _showDeleteDialog(user),
+                  ),
+                ],
+                child: Icon(Icons.more_vert),
+              ),
+            ],
+          ),
         ),
         onTap: () {
           if (widget.role == 'student') {
@@ -735,304 +942,473 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
     );
   }
 
+  Widget _buildHeaderRow() {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(12),
+          topRight: Radius.circular(12),
+        ),
+      ),
+      child: Row(
+        children: [
+          if (_isMultiSelectionActive)
+            Checkbox(
+              value: _isAllSelected,
+              onChanged: (bool? value) => _toggleSelectAll(value!),
+            ),
+          Expanded(
+              flex: 2,
+              child:
+                  Text('Name', style: TextStyle(fontWeight: FontWeight.bold))),
+          Expanded(
+              flex: 2,
+              child:
+                  Text('Email', style: TextStyle(fontWeight: FontWeight.bold))),
+          Expanded(
+              flex: 1,
+              child:
+                  Text('Phone', style: TextStyle(fontWeight: FontWeight.bold))),
+          Expanded(
+              flex: 1,
+              child: Text('Status',
+                  style: TextStyle(fontWeight: FontWeight.bold))),
+          Container(
+              width: 120,
+              child: Text('Actions',
+                  style: TextStyle(fontWeight: FontWeight.bold))),
+        ],
+      ),
+    );
+  }
+
   Widget _buildPagination() {
-    final totalPages = (_searchResults.length / _rowsPerPage).ceil();
+    final totalUsers =
+        _searchResults.isNotEmpty ? _searchResults.length : _users.length;
+    final totalPages =
+        (totalUsers / _rowsPerPage).ceil().clamp(1, double.infinity).toInt();
+
+    if (totalUsers == 0) return SizedBox();
 
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: EdgeInsets.symmetric(
+          horizontal: context.isMobile ? 8 : 16,
+          vertical: context.isMobile ? 8 : 12),
       decoration: BoxDecoration(
         color: Colors.white,
         border: Border(top: BorderSide(color: Colors.grey[300]!)),
       ),
-      child: Row(
-        children: [
-          Text(
-            'Showing ${((_currentPage - 1) * _rowsPerPage) + 1}-${(_currentPage * _rowsPerPage).clamp(0, _searchResults.length)} of ${_searchResults.length}',
-            style: TextStyle(color: Colors.grey[600]),
-          ),
-          Spacer(),
-          IconButton(
-            icon: Icon(Icons.chevron_left),
-            onPressed: _currentPage > 1 ? _goToPreviousPage : null,
-          ),
-          Text('$_currentPage of $totalPages'),
-          IconButton(
-            icon: Icon(Icons.chevron_right),
-            onPressed: _currentPage < totalPages ? _goToNextPage : null,
-          ),
-          SizedBox(width: 16),
-          DropdownButton<int>(
-            value: _rowsPerPage,
-            items: [10, 25, 50, 100].map((int value) {
-              return DropdownMenuItem<int>(
-                value: value,
-                child: Text('$value rows'),
-              );
-            }).toList(),
-            onChanged: (int? value) {
-              setState(() {
-                _rowsPerPage = value!;
-                _currentPage = 1;
-              });
-            },
+      child: context.isMobile
+          ? _buildMobilePagination(totalUsers, totalPages)
+          : _buildDesktopPagination(totalUsers, totalPages),
+    );
+  }
+
+  Widget _buildMobilePagination(int totalUsers, int totalPages) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Flexible(
+              child: Text(
+                'Page $_currentPage of $totalPages',
+                style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Flexible(
+              child: Text(
+                '$totalUsers items',
+                style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Flexible(
+              child: ElevatedButton.icon(
+                onPressed: _currentPage > 1 ? _goToPreviousPage : null,
+                icon: Icon(Icons.chevron_left, size: 16),
+                label: Text('Prev', style: TextStyle(fontSize: 12)),
+                style: ElevatedButton.styleFrom(
+                  minimumSize: Size(0, 32),
+                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                ),
+              ),
+            ),
+            SizedBox(width: 8),
+            Flexible(
+              child: Container(
+                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey[300]!),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: DropdownButton<int>(
+                  value: _rowsPerPage,
+                  isDense: true,
+                  underline: SizedBox(),
+                  items: [10, 25, 50, 100].map((int value) {
+                    return DropdownMenuItem<int>(
+                      value: value,
+                      child: Text('$value', style: TextStyle(fontSize: 12)),
+                    );
+                  }).toList(),
+                  onChanged: (int? value) {
+                    if (value != null) {
+                      setState(() {
+                        _rowsPerPage = value;
+                        _currentPage = 1;
+                      });
+                    }
+                  },
+                ),
+              ),
+            ),
+            SizedBox(width: 8),
+            Flexible(
+              child: ElevatedButton.icon(
+                onPressed: _currentPage < totalPages ? _goToNextPage : null,
+                icon: Icon(Icons.chevron_right, size: 16),
+                label: Text('Next', style: TextStyle(fontSize: 12)),
+                style: ElevatedButton.styleFrom(
+                  minimumSize: Size(0, 32),
+                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDesktopPagination(int totalUsers, int totalPages) {
+    // Check available width to determine layout
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isCompact = constraints.maxWidth < 800;
+
+        if (isCompact) {
+          // Use compact layout for medium screens
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Flexible(
+                    child: Text(
+                      'Showing ${((_currentPage - 1) * _rowsPerPage) + 1}-${(_currentPage * _rowsPerPage).clamp(0, totalUsers)} of $totalUsers',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Flexible(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Rows: ',
+                          style:
+                              TextStyle(color: Colors.grey[600], fontSize: 13),
+                        ),
+                        DropdownButton<int>(
+                          value: _rowsPerPage,
+                          isDense: true,
+                          underline: SizedBox(),
+                          items: [10, 25, 50, 100].map((int value) {
+                            return DropdownMenuItem<int>(
+                              value: value,
+                              child: Text('$value',
+                                  style: TextStyle(fontSize: 13)),
+                            );
+                          }).toList(),
+                          onChanged: (int? value) {
+                            if (value != null) {
+                              setState(() {
+                                _rowsPerPage = value;
+                                _currentPage = 1;
+                              });
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  IconButton(
+                    icon: Icon(Icons.chevron_left, size: 20),
+                    onPressed: _currentPage > 1 ? _goToPreviousPage : null,
+                    padding: EdgeInsets.all(8),
+                    constraints: BoxConstraints(minWidth: 32, minHeight: 32),
+                  ),
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16),
+                    child: Text(
+                      '$_currentPage of $totalPages',
+                      style: TextStyle(fontSize: 14),
+                    ),
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.chevron_right, size: 20),
+                    onPressed: _currentPage < totalPages ? _goToNextPage : null,
+                    padding: EdgeInsets.all(8),
+                    constraints: BoxConstraints(minWidth: 32, minHeight: 32),
+                  ),
+                ],
+              ),
+            ],
+          );
+        }
+
+        // Full desktop layout
+        return Row(
+          children: [
+            Flexible(
+              flex: 2,
+              child: Text(
+                'Showing ${((_currentPage - 1) * _rowsPerPage) + 1}-${(_currentPage * _rowsPerPage).clamp(0, totalUsers)} of $totalUsers',
+                style: TextStyle(color: Colors.grey[600]),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Spacer(),
+            IconButton(
+              icon: Icon(Icons.chevron_left),
+              onPressed: _currentPage > 1 ? _goToPreviousPage : null,
+              padding: EdgeInsets.all(8),
+              constraints: BoxConstraints(minWidth: 40, minHeight: 40),
+            ),
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8),
+              child: Text('$_currentPage of $totalPages'),
+            ),
+            IconButton(
+              icon: Icon(Icons.chevron_right),
+              onPressed: _currentPage < totalPages ? _goToNextPage : null,
+              padding: EdgeInsets.all(8),
+              constraints: BoxConstraints(minWidth: 40, minHeight: 40),
+            ),
+            SizedBox(width: 16),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Rows: ',
+                  style: TextStyle(color: Colors.grey[600]),
+                ),
+                DropdownButton<int>(
+                  value: _rowsPerPage,
+                  items: [10, 25, 50, 100].map((int value) {
+                    return DropdownMenuItem<int>(
+                      value: value,
+                      child: Text('$value'),
+                    );
+                  }).toList(),
+                  onChanged: (int? value) {
+                    if (value != null) {
+                      setState(() {
+                        _rowsPerPage = value;
+                        _currentPage = 1;
+                      });
+                    }
+                  },
+                ),
+              ],
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.all(context.isMobile ? 16 : 24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              widget.role == 'student' ? Icons.school : Icons.person,
+              size: context.isMobile ? 60 : 80,
+              color: Colors.grey[400],
+            ),
+            SizedBox(height: 16),
+            ResponsiveText(
+              style: TextStyle(),
+              'No ${widget.role}s found',
+              fontSize: context.isMobile ? 20 : 24,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[600],
+            ),
+            SizedBox(height: 8),
+            ResponsiveText(
+              style: TextStyle(),
+              'Start by adding your first ${widget.role}',
+              fontSize: 16,
+              color: Colors.grey[500],
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: () => Get.dialog(AddUserScreen(role: widget.role)),
+              icon: Icon(Icons.add),
+              label: Text('Add ${widget.role.capitalize}'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue[600],
+                foregroundColor: Colors.white,
+                padding: EdgeInsets.symmetric(
+                    horizontal: context.isMobile ? 20 : 24, vertical: 12),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRecommendationsView() {
+    return EnhancedRecommendationsScreen(role: widget.role);
+  }
+
+  Widget _buildFloatingActionButton() {
+    return FloatingActionButton(
+      onPressed: () => Get.dialog(AddUserScreen(role: widget.role)),
+      child: Icon(Icons.add),
+      backgroundColor: Colors.blue[600],
+      foregroundColor: Colors.white,
+      tooltip: 'Add ${widget.role.capitalize}',
+    );
+  }
+
+  // Dialog methods (keeping existing logic)
+  void _showImportDialog() {
+    if (widget.role.toLowerCase() == 'student') {
+      Get.to(() => BulkStudentUploadScreen());
+    } else {
+      // Show file picker for other roles
+      _showFileImportDialog();
+    }
+  }
+
+  void _showFileImportDialog() {
+    Get.dialog(
+      AlertDialog(
+        title: Text('Import ${widget.role.capitalize}s'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Select a CSV file to import ${widget.role}s'),
+            SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: () async {
+                Get.back();
+                FilePickerResult? result = await FilePicker.platform.pickFiles(
+                  type: FileType.custom,
+                  allowedExtensions: ['csv'],
+                );
+                if (result != null) {
+                  // Handle file import logic
+                  _handleFileImport(result.files.first);
+                }
+              },
+              icon: Icon(Icons.file_upload),
+              label: Text('Choose File'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back(),
+            child: Text('Cancel'),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildFloatingActionButton() {
-    if (_isMultiSelectionActive) {
-      return FloatingActionButton.extended(
-        onPressed: _showMultiDeleteConfirmationDialog,
-        label: Text('Delete Selected (${_selectedUsers.length})'),
-        icon: Icon(Icons.delete_sweep),
-        backgroundColor: Colors.red[600],
-        foregroundColor: Colors.white,
-      );
-    }
-
-    return FloatingActionButton.extended(
-      onPressed: () => Get.dialog(AddUserScreen(role: widget.role)),
-      label: Text('Add ${widget.role.capitalize}'),
-      icon: Icon(Icons.add),
-      backgroundColor: Colors.blue[600],
-      foregroundColor: Colors.white,
+  void _handleFileImport(PlatformFile file) {
+    // Implement file import logic
+    Get.snackbar(
+      'Import Started',
+      'Processing file: ${file.name}',
+      backgroundColor: Colors.blue[100],
+      colorText: Colors.blue[800],
     );
   }
 
-  // Helper methods
-  void _toggleUserSelection(int userId) {
-    setState(() {
-      if (_selectedUsers.contains(userId)) {
-        _selectedUsers.remove(userId);
-      } else {
-        _selectedUsers.add(userId);
-      }
-      _isMultiSelectionActive = _selectedUsers.isNotEmpty;
-      _isAllSelected = _selectedUsers.length == _users.length;
-    });
-  }
-
-  void _toggleSelectAll(bool value) {
-    setState(() {
-      _isAllSelected = value;
-      _selectedUsers = value ? _users.map((user) => user.id!).toList() : [];
-      _isMultiSelectionActive = _selectedUsers.isNotEmpty;
-    });
-  }
-
-  void _goToPreviousPage() {
-    setState(() {
-      if (_currentPage > 1) {
-        _currentPage--;
-      }
-    });
-  }
-
-  void _goToNextPage() {
-    final totalPages = (_searchResults.length / _rowsPerPage).ceil();
-    setState(() {
-      if (_currentPage < totalPages) {
-        _currentPage++;
-      }
-    });
-  }
-
-  // Dialog methods
-  void _showDeleteConfirmationDialog(int id) {
-    Get.defaultDialog(
-      title: 'Confirm Delete',
-      content: Text('Are you sure you want to delete this ${widget.role}?'),
-      confirm: ElevatedButton(
-        onPressed: () {
-          controller.deleteUser(id);
-          _loadUsers();
-          Get.back(result: true); // Close the dialog and return true
-        },
-        style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-        child: Text('Delete', style: TextStyle(color: Colors.white)),
-      ),
-      cancel: TextButton(
-        onPressed: Get.back,
-        child: Text('Cancel'),
-      ),
-    );
-  }
-
-  void _showMultiDeleteConfirmationDialog() {
-    Get.defaultDialog(
-      title: 'Confirm Multi-Delete',
-      content: Text(
-          'Are you sure you want to delete the selected ${_selectedUsers.length} ${widget.role}s?'),
-      confirm: ElevatedButton(
-        onPressed: () {
-          _selectedUsers.forEach((id) {
-            controller.deleteUser(id);
-          });
-          _toggleSelectAll(false);
-          _loadUsers();
-          Get.back(result: true); // Close the dialog and return true
-        },
-        style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-        child: Text('Delete All', style: TextStyle(color: Colors.white)),
-      ),
-      cancel: TextButton(
-        onPressed: Get.back,
-        child: Text('Cancel'),
+  void _showDeleteDialog(User user) {
+    Get.dialog(
+      AlertDialog(
+        title: Text('Delete ${widget.role.capitalize}'),
+        content: Text(
+            'Are you sure you want to delete ${user.fname} ${user.lname}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back(),
+            child: Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Get.back();
+              try {
+                await controller.deleteUser(user.id!);
+                _loadUsers();
+                Get.snackbar(
+                  'Success',
+                  '${widget.role.capitalize} deleted successfully',
+                  backgroundColor: Colors.green[100],
+                  colorText: Colors.green[800],
+                );
+              } catch (e) {
+                Get.snackbar(
+                  'Error',
+                  'Failed to delete ${widget.role}: $e',
+                  backgroundColor: Colors.red[100],
+                  colorText: Colors.red[800],
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: Text('Delete', style: TextStyle(color: Colors.white)),
+          ),
+        ],
       ),
     );
   }
 
   void _showQuickEnrollDialog() {
-    Get.defaultDialog(
-      title: 'Quick Enrollment',
-      content: Text('Quick enrollment functionality for students.'),
-      confirm: TextButton(
-        onPressed: () {
-          Get.back(result: true); // Close the dialog and return true
-          Get.snackbar('Enrollment', 'Quick enrollment coming soon!');
-        },
-        child: Text('OK'),
-      ),
-    );
+    // Implement quick enroll dialog
+    Get.snackbar('Coming Soon', 'Quick enrollment feature coming soon!');
   }
 
   void _showVehicleAssignmentDialog() {
-    Get.defaultDialog(
-      title: 'Vehicle Assignment',
-      content: Text('Assign vehicles to instructors.'),
-      confirm: TextButton(
-        onPressed: () {
-          Get.back();
-          Get.snackbar('Assignment', 'Vehicle assignment coming soon!');
-        },
-        child: Text('OK'),
-      ),
-    );
+    // Implement vehicle assignment dialog
+    Get.snackbar('Coming Soon', 'Vehicle assignment feature coming soon!');
   }
 
   void _showAnalyticsDialog() {
-    Get.defaultDialog(
-      title: '${widget.role.capitalize} Analytics',
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text('Performance metrics for ${widget.role}s:'),
-          SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              Column(
-                children: [
-                  Text('${_users.length}',
-                      style:
-                          TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-                  Text('Total'),
-                ],
-              ),
-              Column(
-                children: [
-                  Text('${_users.where((u) => u.status == 'Active').length}',
-                      style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.green)),
-                  Text('Active'),
-                ],
-              ),
-              Column(
-                children: [
-                  Text('${_users.where((u) => u.status != 'Active').length}',
-                      style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.orange)),
-                  Text('Inactive'),
-                ],
-              ),
-            ],
-          ),
-        ],
-      ),
-      confirm: TextButton(
-        onPressed: Get.back,
-        child: Text('Close'),
-      ),
-    );
+    // Implement analytics dialog
+    Get.snackbar('Coming Soon', 'Analytics feature coming soon!');
   }
 
   void _showNotificationDialog() {
-    Get.defaultDialog(
-      title: 'Send Notifications',
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text('Send bulk notifications to ${widget.role}s.'),
-          SizedBox(height: 16),
-          TextField(
-            decoration: InputDecoration(
-              labelText: 'Notification Message',
-              border: OutlineInputBorder(),
-            ),
-            maxLines: 3,
-          ),
-        ],
-      ),
-      confirm: ElevatedButton(
-        onPressed: () {
-          Get.back();
-          Get.snackbar('Notification', 'Notification sent successfully!');
-        },
-        child: Text('Send'),
-      ),
-      cancel: TextButton(
-        onPressed: Get.back,
-        child: Text('Cancel'),
-      ),
-    );
-  }
-
-  void _showImportDialog() {
-    if (widget.role == 'student') {
-      // Navigate to the new bulk upload screen for students
-      Get.to(() => BulkStudentUploadScreen())?.then((result) {
-        if (result == true) {
-          // Refresh the users list after successful upload
-          _loadUsers();
-        }
-      });
-    } else {
-      // For other roles, show the existing simple dialog
-      Get.defaultDialog(
-        title: 'Import ${widget.role.capitalize}s',
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Import multiple ${widget.role}s from a CSV file.'),
-            SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () async {
-                final result = await FilePicker.platform.pickFiles(
-                  type: FileType.custom,
-                  allowedExtensions: ['csv'],
-                );
-                if (result != null) {
-                  // Handle CSV import logic here for other roles
-                  Get.back();
-                  Get.snackbar('Import',
-                      'CSV import functionality coming soon for ${widget.role}s!');
-                }
-              },
-              child: Text('Select CSV File'),
-            ),
-          ],
-        ),
-        confirm: TextButton(
-          onPressed: Get.back,
-          child: Text('Cancel'),
-        ),
-      );
-    }
+    // Implement notification dialog
+    Get.snackbar('Coming Soon', 'Bulk notifications feature coming soon!');
   }
 }

@@ -57,44 +57,59 @@ class _CourseFormDialogState extends State<CourseFormDialog>
 
   @override
   Widget build(BuildContext context) {
+    final screenSize = MediaQuery.of(context).size;
+    final isLargeScreen = screenSize.width > 600;
+    final isMobile = screenSize.width < 480;
+
     return ScaleTransition(
       scale: _scaleAnimation,
       child: Dialog(
+        insetPadding: EdgeInsets.all(isMobile ? 16.0 : 24.0),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
         ),
         elevation: 10,
-        child: Container(
-          width: MediaQuery.of(context).size.width * 0.9,
-          constraints: BoxConstraints(maxWidth: 500),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Colors.blue.shade50,
-                Colors.white,
-                Colors.blue.shade50,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: isLargeScreen ? 600 : double.infinity,
+            maxHeight: screenSize.height * 0.9,
+          ),
+          child: Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Colors.blue.shade50,
+                  Colors.white,
+                  Colors.blue.shade50,
+                ],
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildHeader(isMobile),
+                Flexible(
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    child: _buildForm(isMobile),
+                  ),
+                ),
+                _buildActions(isMobile),
               ],
             ),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildHeader(),
-              _buildForm(),
-              _buildActions(),
-            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(bool isMobile) {
     return Container(
-      padding: EdgeInsets.all(24),
+      padding: EdgeInsets.all(isMobile ? 16 : 24),
       decoration: BoxDecoration(
         color: Colors.blue.shade800,
         borderRadius: BorderRadius.only(
@@ -105,7 +120,7 @@ class _CourseFormDialogState extends State<CourseFormDialog>
       child: Row(
         children: [
           Container(
-            padding: EdgeInsets.all(8),
+            padding: EdgeInsets.all(isMobile ? 6 : 8),
             decoration: BoxDecoration(
               color: Colors.white.withOpacity(0.2),
               borderRadius: BorderRadius.circular(12),
@@ -113,10 +128,10 @@ class _CourseFormDialogState extends State<CourseFormDialog>
             child: Icon(
               widget.course == null ? Icons.add_circle : Icons.edit,
               color: Colors.white,
-              size: 24,
+              size: isMobile ? 20 : 24,
             ),
           ),
-          SizedBox(width: 16),
+          SizedBox(width: isMobile ? 12 : 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -124,29 +139,37 @@ class _CourseFormDialogState extends State<CourseFormDialog>
                 Text(
                   widget.course == null ? 'Add New Course' : 'Edit Course',
                   style: TextStyle(
-                    fontSize: 22,
+                    fontSize: isMobile ? 18 : 22,
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                   ),
+                  overflow: TextOverflow.ellipsis,
                 ),
+                SizedBox(height: 2),
                 Text(
                   widget.course == null
                       ? 'Create a new course offering'
                       : 'Update course information',
                   style: TextStyle(
-                    fontSize: 14,
+                    fontSize: isMobile ? 12 : 14,
                     color: Colors.white.withOpacity(0.8),
                   ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
           ),
           IconButton(
             onPressed: () => Get.back(),
-            icon: Icon(Icons.close, color: Colors.white),
+            icon: Icon(
+              Icons.close,
+              color: Colors.white,
+              size: isMobile ? 20 : 24,
+            ),
             style: IconButton.styleFrom(
               backgroundColor: Colors.white.withOpacity(0.2),
               shape: CircleBorder(),
+              padding: EdgeInsets.all(isMobile ? 6 : 8),
             ),
           ),
         ],
@@ -154,18 +177,20 @@ class _CourseFormDialogState extends State<CourseFormDialog>
     );
   }
 
-  Widget _buildForm() {
+  Widget _buildForm(bool isMobile) {
     return Padding(
-      padding: EdgeInsets.all(24),
+      padding: EdgeInsets.all(isMobile ? 16 : 24),
       child: Form(
         key: _formKey,
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
             _buildTextField(
               controller: nameController,
               label: 'Course Name',
               hint: 'e.g., Theory, Practical Driving',
               icon: Icons.book,
+              isMobile: isMobile,
               validator: (value) {
                 if (value == null || value.isEmpty) {
                   return 'Course name is required';
@@ -176,12 +201,13 @@ class _CourseFormDialogState extends State<CourseFormDialog>
                 return null;
               },
             ),
-            SizedBox(height: 20),
+            SizedBox(height: isMobile ? 16 : 20),
             _buildTextField(
               controller: priceController,
               label: 'Price per Lesson',
               hint: 'Enter amount in dollars',
               icon: Icons.attach_money,
+              isMobile: isMobile,
               keyboardType: TextInputType.number,
               inputFormatters: [
                 FilteringTextInputFormatter.digitsOnly,
@@ -204,11 +230,11 @@ class _CourseFormDialogState extends State<CourseFormDialog>
                 return null;
               },
             ),
-            SizedBox(height: 20),
-            _buildStatusDropdown(),
+            SizedBox(height: isMobile ? 16 : 20),
+            _buildStatusDropdown(isMobile),
             if (widget.course != null) ...[
-              SizedBox(height: 20),
-              _buildInfoCard(),
+              SizedBox(height: isMobile ? 16 : 20),
+              _buildInfoCard(isMobile),
             ],
           ],
         ),
@@ -221,6 +247,7 @@ class _CourseFormDialogState extends State<CourseFormDialog>
     required String label,
     required String hint,
     required IconData icon,
+    required bool isMobile,
     TextInputType? keyboardType,
     List<TextInputFormatter>? inputFormatters,
     String? Function(String?)? validator,
@@ -230,10 +257,17 @@ class _CourseFormDialogState extends State<CourseFormDialog>
       keyboardType: keyboardType,
       inputFormatters: inputFormatters,
       validator: validator,
+      style: TextStyle(fontSize: isMobile ? 14 : 16),
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
-        prefixIcon: Icon(icon, color: Colors.blue.shade600),
+        labelStyle: TextStyle(fontSize: isMobile ? 12 : 14),
+        hintStyle: TextStyle(fontSize: isMobile ? 12 : 14),
+        prefixIcon: Icon(
+          icon,
+          color: Colors.blue.shade600,
+          size: isMobile ? 20 : 24,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: Colors.grey.shade300),
@@ -256,19 +290,29 @@ class _CourseFormDialogState extends State<CourseFormDialog>
         ),
         filled: true,
         fillColor: Colors.grey.shade50,
-        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding: EdgeInsets.symmetric(
+          horizontal: isMobile ? 12 : 16,
+          vertical: isMobile ? 12 : 16,
+        ),
+        errorStyle: TextStyle(fontSize: isMobile ? 11 : 12),
       ),
     );
   }
 
-  Widget _buildStatusDropdown() {
+  Widget _buildStatusDropdown(bool isMobile) {
     return DropdownButtonFormField<String>(
       value: status,
+      style: TextStyle(
+        fontSize: isMobile ? 14 : 16,
+        color: Colors.black87,
+      ),
       decoration: InputDecoration(
         labelText: 'Status',
+        labelStyle: TextStyle(fontSize: isMobile ? 12 : 14),
         prefixIcon: Icon(
           status == 'active' ? Icons.check_circle : Icons.pause_circle,
           color: status == 'active' ? Colors.green : Colors.orange,
+          size: isMobile ? 20 : 24,
         ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -284,7 +328,10 @@ class _CourseFormDialogState extends State<CourseFormDialog>
         ),
         filled: true,
         fillColor: Colors.grey.shade50,
-        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding: EdgeInsets.symmetric(
+          horizontal: isMobile ? 12 : 16,
+          vertical: isMobile ? 12 : 16,
+        ),
       ),
       items: [
         DropdownMenuItem(
@@ -292,7 +339,10 @@ class _CourseFormDialogState extends State<CourseFormDialog>
           child: Row(
             children: [
               SizedBox(width: 8),
-              Text('Active'),
+              Text(
+                'Active',
+                style: TextStyle(fontSize: isMobile ? 14 : 16),
+              ),
             ],
           ),
         ),
@@ -301,7 +351,10 @@ class _CourseFormDialogState extends State<CourseFormDialog>
           child: Row(
             children: [
               SizedBox(width: 8),
-              Text('Inactive'),
+              Text(
+                'Inactive',
+                style: TextStyle(fontSize: isMobile ? 14 : 16),
+              ),
             ],
           ),
         ),
@@ -310,9 +363,9 @@ class _CourseFormDialogState extends State<CourseFormDialog>
     );
   }
 
-  Widget _buildInfoCard() {
+  Widget _buildInfoCard(bool isMobile) {
     return Container(
-      padding: EdgeInsets.all(16),
+      padding: EdgeInsets.all(isMobile ? 12 : 16),
       decoration: BoxDecoration(
         color: Colors.blue.shade50,
         borderRadius: BorderRadius.circular(12),
@@ -320,8 +373,12 @@ class _CourseFormDialogState extends State<CourseFormDialog>
       ),
       child: Row(
         children: [
-          Icon(Icons.info_outline, color: Colors.blue.shade600),
-          SizedBox(width: 12),
+          Icon(
+            Icons.info_outline,
+            color: Colors.blue.shade600,
+            size: isMobile ? 18 : 20,
+          ),
+          SizedBox(width: isMobile ? 8 : 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -331,15 +388,18 @@ class _CourseFormDialogState extends State<CourseFormDialog>
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     color: Colors.blue.shade800,
+                    fontSize: isMobile ? 12 : 14,
                   ),
+                  overflow: TextOverflow.ellipsis,
                 ),
                 SizedBox(height: 4),
                 Text(
                   'Created: ${_formatDate(widget.course!.createdAt)}',
                   style: TextStyle(
                     color: Colors.blue.shade700,
-                    fontSize: 12,
+                    fontSize: isMobile ? 10 : 12,
                   ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
@@ -349,64 +409,127 @@ class _CourseFormDialogState extends State<CourseFormDialog>
     );
   }
 
-  Widget _buildActions() {
+  Widget _buildActions(bool isMobile) {
     return Container(
-      padding: EdgeInsets.all(24),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextButton(
-              onPressed: _isLoading ? null : () => Get.back(),
-              style: TextButton.styleFrom(
-                padding: EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              child: Text(
-                'Cancel',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey.shade700,
-                ),
-              ),
-            ),
-          ),
-          SizedBox(width: 16),
-          Expanded(
-            flex: 2,
-            child: ElevatedButton(
-              onPressed: _isLoading ? null : _submitForm,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue.shade800,
-                padding: EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                elevation: 2,
-              ),
-              child: _isLoading
-                  ? SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+      padding: EdgeInsets.all(isMobile ? 16 : 24),
+      child: isMobile
+          ? Column(
+              children: [
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _isLoading ? null : _submitForm,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue.shade800,
+                      padding: EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                    )
-                  : Text(
-                      widget.course == null ? 'Create Course' : 'Update Course',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                      elevation: 2,
+                    ),
+                    child: _isLoading
+                        ? SizedBox(
+                            height: 18,
+                            width: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor:
+                                  AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : Text(
+                            widget.course == null
+                                ? 'Create Course'
+                                : 'Update Course',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                  ),
+                ),
+                SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: TextButton(
+                    onPressed: _isLoading ? null : () => Get.back(),
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
                     ),
+                    child: Text(
+                      'Cancel',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            )
+          : Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: _isLoading ? null : () => Get.back(),
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: Text(
+                      'Cancel',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                  ),
+                ),
+                SizedBox(width: 16),
+                Expanded(
+                  flex: 2,
+                  child: ElevatedButton(
+                    onPressed: _isLoading ? null : _submitForm,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue.shade800,
+                      padding: EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 2,
+                    ),
+                    child: _isLoading
+                        ? SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor:
+                                  AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : Text(
+                            widget.course == null
+                                ? 'Create Course'
+                                : 'Update Course',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                  ),
+                ),
+              ],
             ),
-          ),
-        ],
-      ),
     );
   }
 

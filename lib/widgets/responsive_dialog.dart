@@ -23,7 +23,11 @@ class ResponsiveDialog extends StatelessWidget {
       return Dialog.fullscreen(
         child: Scaffold(
           appBar: AppBar(
-            title: ResponsiveText(title, fontSize: 18),
+            title: ResponsiveText(
+              title,
+              fontSize: 18,
+              style: TextStyle(),
+            ),
             backgroundColor: Colors.transparent,
             elevation: 0,
             actions: actions?.map((action) {
@@ -45,7 +49,8 @@ class ResponsiveDialog extends StatelessWidget {
     } else {
       // Regular dialog for tablet/desktop
       return AlertDialog(
-        title: ResponsiveText(title, fontSize: 18, fontWeight: FontWeight.bold),
+        title: ResponsiveText(title,
+            fontSize: 18, style: TextStyle(), fontWeight: FontWeight.bold),
         content: Container(
           width: context.responsiveDialogWidth,
           child: scrollable ? SingleChildScrollView(child: content) : content,

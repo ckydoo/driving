@@ -1,4 +1,5 @@
 import 'package:driving/controllers/user_controller.dart';
+import 'package:driving/widgets/responsive_form_field.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
@@ -104,6 +105,10 @@ class _FleetFormDialogState extends State<FleetFormDialog>
 
   @override
   Widget build(BuildContext context) {
+    final screenSize = MediaQuery.of(context).size;
+    final isSmallScreen = screenSize.width < 600;
+    final isVerySmallScreen = screenSize.width < 400;
+
     return SlideTransition(
       position: Tween<Offset>(
         begin: const Offset(0, 0.3),
@@ -113,65 +118,78 @@ class _FleetFormDialogState extends State<FleetFormDialog>
         opacity: _slideAnimation,
         child: Dialog(
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(isVerySmallScreen ? 12 : 20),
           ),
           elevation: 10,
-          child: Container(
-            width: MediaQuery.of(context).size.width * 0.9,
-            constraints: BoxConstraints(
-                maxWidth: 500,
-                maxHeight: MediaQuery.of(context).size.height * 0.8),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Colors.green.shade50,
-                  Colors.white,
-                  Colors.green.shade50,
-                ],
-              ),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _buildHeader(),
-                Flexible(child: _buildForm()),
-                _buildActions(),
-              ],
-            ),
+          insetPadding: EdgeInsets.symmetric(
+            horizontal: isVerySmallScreen ? 8 : 16,
+            vertical: isVerySmallScreen ? 12 : 24,
+          ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return Container(
+                width: double.infinity,
+                constraints: BoxConstraints(
+                  maxWidth: isSmallScreen ? double.infinity : 500,
+                  maxHeight:
+                      screenSize.height * (isVerySmallScreen ? 0.95 : 0.9),
+                  minHeight: isVerySmallScreen ? 300 : 400,
+                ),
+                decoration: BoxDecoration(
+                  borderRadius:
+                      BorderRadius.circular(isVerySmallScreen ? 12 : 20),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Colors.green.shade50,
+                      Colors.white,
+                      Colors.green.shade50,
+                    ],
+                  ),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildHeader(isVerySmallScreen),
+                    Expanded(
+                        child: _buildForm(isSmallScreen, isVerySmallScreen)),
+                    _buildActions(isSmallScreen, isVerySmallScreen),
+                  ],
+                ),
+              );
+            },
           ),
         ),
       ),
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader([bool isVerySmallScreen = false]) {
     return Container(
-      padding: EdgeInsets.all(24),
+      padding: EdgeInsets.all(isVerySmallScreen ? 16 : 24),
       decoration: BoxDecoration(
         color: Colors.green.shade700,
         borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(20),
-          topRight: Radius.circular(20),
+          topLeft: Radius.circular(isVerySmallScreen ? 12 : 20),
+          topRight: Radius.circular(isVerySmallScreen ? 12 : 20),
         ),
       ),
       child: Row(
         children: [
           Container(
-            padding: EdgeInsets.all(8),
+            padding: EdgeInsets.all(isVerySmallScreen ? 6 : 8),
             decoration: BoxDecoration(
               color: Colors.white.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(isVerySmallScreen ? 8 : 12),
             ),
             child: Icon(
               widget.vehicle == null ? Icons.add_road : Icons.edit_road,
               color: Colors.white,
-              size: 24,
+              size: isVerySmallScreen ? 20 : 24,
             ),
           ),
-          SizedBox(width: 16),
+          SizedBox(width: isVerySmallScreen ? 12 : 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -179,29 +197,35 @@ class _FleetFormDialogState extends State<FleetFormDialog>
                 Text(
                   widget.vehicle == null ? 'Add New Vehicle' : 'Edit Vehicle',
                   style: TextStyle(
-                    fontSize: 22,
+                    fontSize: isVerySmallScreen ? 18 : 22,
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                   ),
                 ),
-                Text(
-                  widget.vehicle == null
-                      ? 'Register a new vehicle to your fleet'
-                      : 'Update vehicle information',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.white.withOpacity(0.8),
+                if (!isVerySmallScreen) ...[
+                  SizedBox(height: 2),
+                  Text(
+                    widget.vehicle == null
+                        ? 'Register a new vehicle to your fleet'
+                        : 'Update vehicle information',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.white.withOpacity(0.8),
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
-                ),
+                ],
               ],
             ),
           ),
           IconButton(
             onPressed: () => Get.back(),
-            icon: Icon(Icons.close, color: Colors.white),
+            icon: Icon(Icons.close,
+                color: Colors.white, size: isVerySmallScreen ? 20 : 24),
             style: IconButton.styleFrom(
               backgroundColor: Colors.white.withOpacity(0.2),
               shape: CircleBorder(),
+              padding: EdgeInsets.all(isVerySmallScreen ? 6 : 8),
             ),
           ),
         ],
@@ -209,37 +233,44 @@ class _FleetFormDialogState extends State<FleetFormDialog>
     );
   }
 
-  Widget _buildForm() {
-    return Padding(
-      padding: EdgeInsets.all(24),
+  Widget _buildForm(
+      [bool isSmallScreen = false, bool isVerySmallScreen = false]) {
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(isVerySmallScreen ? 16 : 24),
       child: Form(
         key: _formKey,
-        child: SingleChildScrollView(
-          child: Column(
-            children: [
-              _buildLicensePlateField(),
-              SizedBox(height: 20),
+        child: Column(
+          children: [
+            _buildLicensePlateField(isVerySmallScreen),
+            SizedBox(height: isVerySmallScreen ? 16 : 20),
+            if (isSmallScreen) ...[
+              // Stack fields vertically on small screens
+              _buildMakeField(isVerySmallScreen),
+              SizedBox(height: isVerySmallScreen ? 16 : 20),
+              _buildModelField(isVerySmallScreen),
+            ] else ...[
+              // Keep side-by-side on larger screens
               Row(
                 children: [
-                  Expanded(child: _buildMakeField()),
+                  Expanded(child: _buildMakeField(isVerySmallScreen)),
                   SizedBox(width: 16),
-                  Expanded(child: _buildModelField()),
+                  Expanded(child: _buildModelField(isVerySmallScreen)),
                 ],
               ),
-              SizedBox(height: 20),
-              _buildYearField(),
-              SizedBox(height: 20),
-              _buildInstructorField(),
-              if (_availableInstructors.isEmpty && !_isLoadingInstructors)
-                _buildNoInstructorsWarning(),
             ],
-          ),
+            SizedBox(height: isVerySmallScreen ? 16 : 20),
+            _buildYearField(isVerySmallScreen),
+            SizedBox(height: isVerySmallScreen ? 16 : 20),
+            _buildInstructorField(isVerySmallScreen),
+            if (_availableInstructors.isEmpty && !_isLoadingInstructors)
+              _buildNoInstructorsWarning(isVerySmallScreen),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildLicensePlateField() {
+  Widget _buildLicensePlateField([bool isVerySmallScreen = false]) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -248,23 +279,24 @@ class _FleetFormDialogState extends State<FleetFormDialog>
           style: TextStyle(
             fontWeight: FontWeight.bold,
             color: Colors.grey.shade800,
-            fontSize: 16,
+            fontSize: isVerySmallScreen ? 14 : 16,
           ),
         ),
-        SizedBox(height: 8),
+        SizedBox(height: isVerySmallScreen ? 6 : 8),
         TextFormField(
           controller: _carPlateController,
           decoration: InputDecoration(
             hintText: 'ABC1234',
             prefixIcon: Container(
-              margin: EdgeInsets.all(8),
-              padding: EdgeInsets.all(8),
+              margin: EdgeInsets.all(isVerySmallScreen ? 6 : 8),
+              padding: EdgeInsets.all(isVerySmallScreen ? 6 : 8),
               decoration: BoxDecoration(
                 color: Colors.green.shade100,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(Icons.confirmation_number,
-                  color: Colors.green.shade700, size: 20),
+                  color: Colors.green.shade700,
+                  size: isVerySmallScreen ? 18 : 20),
             ),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
@@ -284,16 +316,19 @@ class _FleetFormDialogState extends State<FleetFormDialog>
             ),
             filled: true,
             fillColor: Colors.grey.shade50,
-            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            contentPadding: EdgeInsets.symmetric(
+                horizontal: isVerySmallScreen ? 12 : 16,
+                vertical: isVerySmallScreen ? 12 : 16),
             counterText: '${_carPlateController.text.length}/7',
+            counterStyle: TextStyle(fontSize: isVerySmallScreen ? 11 : 12),
           ),
           maxLength: 7,
           textCapitalization: TextCapitalization.characters,
           style: TextStyle(
             fontFamily: 'monospace',
-            fontSize: 18,
+            fontSize: isVerySmallScreen ? 16 : 18,
             fontWeight: FontWeight.bold,
-            letterSpacing: 2,
+            letterSpacing: isVerySmallScreen ? 1.5 : 2,
           ),
           inputFormatters: [
             FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9]')),
@@ -318,20 +353,23 @@ class _FleetFormDialogState extends State<FleetFormDialog>
         Text(
           'Format: 3 letters followed by 4 numbers (e.g., ABC1234)',
           style: TextStyle(
-            fontSize: 12,
+            fontSize: isVerySmallScreen ? 11 : 12,
             color: Colors.grey.shade600,
           ),
+          overflow: TextOverflow.visible,
+          softWrap: true,
         ),
       ],
     );
   }
 
-  Widget _buildMakeField() {
+  Widget _buildMakeField([bool isVerySmallScreen = false]) {
     return _buildTextField(
       controller: _makeController,
       label: 'Make',
       hint: 'Toyota, Honda, etc.',
       icon: Icons.branding_watermark,
+      isVerySmallScreen: isVerySmallScreen,
       validator: (value) {
         if (value == null || value.isEmpty) {
           return 'Make is required';
@@ -344,12 +382,13 @@ class _FleetFormDialogState extends State<FleetFormDialog>
     );
   }
 
-  Widget _buildModelField() {
+  Widget _buildModelField([bool isVerySmallScreen = false]) {
     return _buildTextField(
       controller: _modelController,
       label: 'Model',
       hint: 'Corolla, Civic, etc.',
       icon: Icons.directions_car,
+      isVerySmallScreen: isVerySmallScreen,
       validator: (value) {
         if (value == null || value.isEmpty) {
           return 'Model is required';
@@ -367,6 +406,7 @@ class _FleetFormDialogState extends State<FleetFormDialog>
     required String label,
     required String hint,
     required IconData icon,
+    bool isVerySmallScreen = false,
     String? Function(String?)? validator,
   }) {
     return Column(
@@ -377,15 +417,18 @@ class _FleetFormDialogState extends State<FleetFormDialog>
           style: TextStyle(
             fontWeight: FontWeight.bold,
             color: Colors.grey.shade800,
-            fontSize: 14,
+            fontSize: isVerySmallScreen ? 13 : 14,
           ),
         ),
-        SizedBox(height: 8),
+        SizedBox(height: isVerySmallScreen ? 6 : 8),
         TextFormField(
           controller: controller,
           decoration: InputDecoration(
             hintText: hint,
-            prefixIcon: Icon(icon, color: Colors.green.shade600),
+            hintStyle: TextStyle(fontSize: isVerySmallScreen ? 13 : 14),
+            prefixIcon: Icon(icon,
+                color: Colors.green.shade600,
+                size: isVerySmallScreen ? 18 : 20),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(color: Colors.grey.shade300),
@@ -404,8 +447,11 @@ class _FleetFormDialogState extends State<FleetFormDialog>
             ),
             filled: true,
             fillColor: Colors.grey.shade50,
-            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            contentPadding: EdgeInsets.symmetric(
+                horizontal: isVerySmallScreen ? 12 : 16,
+                vertical: isVerySmallScreen ? 12 : 16),
           ),
+          style: TextStyle(fontSize: isVerySmallScreen ? 14 : 16),
           validator: validator,
           textCapitalization: TextCapitalization.words,
         ),
@@ -413,7 +459,7 @@ class _FleetFormDialogState extends State<FleetFormDialog>
     );
   }
 
-  Widget _buildYearField() {
+  Widget _buildYearField([bool isVerySmallScreen = false]) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -422,15 +468,16 @@ class _FleetFormDialogState extends State<FleetFormDialog>
           style: TextStyle(
             fontWeight: FontWeight.bold,
             color: Colors.grey.shade800,
-            fontSize: 16,
+            fontSize: isVerySmallScreen ? 14 : 16,
           ),
         ),
-        SizedBox(height: 8),
+        SizedBox(height: isVerySmallScreen ? 6 : 8),
         DropdownButtonFormField<int>(
           value: int.tryParse(_modelYear),
           decoration: InputDecoration(
-            prefixIcon:
-                Icon(Icons.calendar_today, color: Colors.green.shade600),
+            prefixIcon: Icon(Icons.calendar_today,
+                color: Colors.green.shade600,
+                size: isVerySmallScreen ? 18 : 20),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(color: Colors.grey.shade300),
@@ -445,8 +492,12 @@ class _FleetFormDialogState extends State<FleetFormDialog>
             ),
             filled: true,
             fillColor: Colors.grey.shade50,
-            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            contentPadding: EdgeInsets.symmetric(
+                horizontal: isVerySmallScreen ? 12 : 16,
+                vertical: isVerySmallScreen ? 12 : 16),
           ),
+          style: TextStyle(
+              fontSize: isVerySmallScreen ? 14 : 16, color: Colors.black87),
           items: _years.reversed.map((year) {
             return DropdownMenuItem<int>(
               value: year,
@@ -461,7 +512,7 @@ class _FleetFormDialogState extends State<FleetFormDialog>
     );
   }
 
-  Widget _buildInstructorField() {
+  Widget _buildInstructorField([bool isVerySmallScreen = false]) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -470,13 +521,13 @@ class _FleetFormDialogState extends State<FleetFormDialog>
           style: TextStyle(
             fontWeight: FontWeight.bold,
             color: Colors.grey.shade800,
-            fontSize: 16,
+            fontSize: isVerySmallScreen ? 14 : 16,
           ),
         ),
-        SizedBox(height: 8),
+        SizedBox(height: isVerySmallScreen ? 6 : 8),
         if (_isLoadingInstructors)
           Container(
-            padding: EdgeInsets.all(16),
+            padding: EdgeInsets.all(isVerySmallScreen ? 12 : 16),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: Colors.grey.shade300),
@@ -485,8 +536,8 @@ class _FleetFormDialogState extends State<FleetFormDialog>
             child: Row(
               children: [
                 SizedBox(
-                  width: 20,
-                  height: 20,
+                  width: isVerySmallScreen ? 16 : 20,
+                  height: isVerySmallScreen ? 16 : 20,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
                     valueColor:
@@ -494,21 +545,27 @@ class _FleetFormDialogState extends State<FleetFormDialog>
                   ),
                 ),
                 SizedBox(width: 12),
-                Text('Loading instructors...'),
+                Expanded(
+                  child: Text(
+                    'Loading instructors...',
+                    style: TextStyle(fontSize: isVerySmallScreen ? 13 : 14),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ],
             ),
           )
         else if (_availableInstructors.isEmpty)
-          _buildEmptyInstructorField()
+          _buildEmptyInstructorField(isVerySmallScreen)
         else
-          _buildSearchableInstructorDropdown(),
+          _buildSearchableInstructorDropdown(isVerySmallScreen),
       ],
     );
   }
 
-  Widget _buildEmptyInstructorField() {
+  Widget _buildEmptyInstructorField([bool isVerySmallScreen = false]) {
     return Container(
-      padding: EdgeInsets.all(16),
+      padding: EdgeInsets.all(isVerySmallScreen ? 12 : 16),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.grey.shade300),
@@ -516,18 +573,25 @@ class _FleetFormDialogState extends State<FleetFormDialog>
       ),
       child: Row(
         children: [
-          Icon(Icons.person_off, color: Colors.grey.shade400),
+          Icon(Icons.person_off,
+              color: Colors.grey.shade400, size: isVerySmallScreen ? 18 : 20),
           SizedBox(width: 12),
-          Text(
-            'No available instructors',
-            style: TextStyle(color: Colors.grey.shade600),
+          Expanded(
+            child: Text(
+              'No available instructors',
+              style: TextStyle(
+                color: Colors.grey.shade600,
+                fontSize: isVerySmallScreen ? 13 : 14,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildSearchableInstructorDropdown() {
+  Widget _buildSearchableInstructorDropdown([bool isVerySmallScreen = false]) {
     final selectedInstructor = _selectedInstructorId != null
         ? _availableInstructors.firstWhere(
             (instructor) => instructor.id == _selectedInstructorId,
@@ -565,12 +629,18 @@ class _FleetFormDialogState extends State<FleetFormDialog>
         return TextFormField(
           controller: fieldTextEditingController,
           focusNode: fieldFocusNode,
+          style: TextStyle(fontSize: isVerySmallScreen ? 14 : 16),
           decoration: InputDecoration(
             hintText: 'Search for an instructor...',
-            prefixIcon: Icon(Icons.person_search, color: Colors.green.shade600),
+            hintStyle: TextStyle(fontSize: isVerySmallScreen ? 13 : 14),
+            prefixIcon: Icon(Icons.person_search,
+                color: Colors.green.shade600,
+                size: isVerySmallScreen ? 18 : 20),
             suffixIcon: fieldTextEditingController.text.isNotEmpty
                 ? IconButton(
-                    icon: Icon(Icons.clear, color: Colors.grey.shade600),
+                    icon: Icon(Icons.clear,
+                        color: Colors.grey.shade600,
+                        size: isVerySmallScreen ? 18 : 20),
                     onPressed: () {
                       fieldTextEditingController.clear();
                       setState(() {
@@ -578,7 +648,9 @@ class _FleetFormDialogState extends State<FleetFormDialog>
                       });
                     },
                   )
-                : Icon(Icons.arrow_drop_down, color: Colors.grey.shade600),
+                : Icon(Icons.arrow_drop_down,
+                    color: Colors.grey.shade600,
+                    size: isVerySmallScreen ? 18 : 20),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(color: Colors.grey.shade300),
@@ -597,7 +669,9 @@ class _FleetFormDialogState extends State<FleetFormDialog>
             ),
             filled: true,
             fillColor: Colors.grey.shade50,
-            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            contentPadding: EdgeInsets.symmetric(
+                horizontal: isVerySmallScreen ? 12 : 16,
+                vertical: isVerySmallScreen ? 12 : 16),
           ),
           validator: (value) {
             if (_selectedInstructorId == null) {
@@ -626,8 +700,11 @@ class _FleetFormDialogState extends State<FleetFormDialog>
             elevation: 8,
             borderRadius: BorderRadius.circular(12),
             child: Container(
-              width: MediaQuery.of(context).size.width * 0.8,
-              constraints: BoxConstraints(maxHeight: 200, maxWidth: 400),
+              width: MediaQuery.of(context).size.width *
+                  (isVerySmallScreen ? 0.9 : 0.8),
+              constraints: BoxConstraints(
+                  maxHeight: 200,
+                  maxWidth: isVerySmallScreen ? double.infinity : 400),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(12),
                 color: Colors.white,
@@ -646,8 +723,9 @@ class _FleetFormDialogState extends State<FleetFormDialog>
                     onTap: () => onSelected(instructor),
                     borderRadius: BorderRadius.circular(8),
                     child: Container(
-                      padding:
-                          EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      padding: EdgeInsets.symmetric(
+                          horizontal: isVerySmallScreen ? 12 : 16,
+                          vertical: isVerySmallScreen ? 10 : 12),
                       decoration: BoxDecoration(
                         color: isSelected ? Colors.green.shade50 : null,
                         borderRadius: BorderRadius.circular(8),
@@ -655,7 +733,7 @@ class _FleetFormDialogState extends State<FleetFormDialog>
                       child: Row(
                         children: [
                           CircleAvatar(
-                            radius: 18,
+                            radius: isVerySmallScreen ? 16 : 18,
                             backgroundColor: isSelected
                                 ? Colors.green.shade200
                                 : Colors.green.shade100,
@@ -664,7 +742,7 @@ class _FleetFormDialogState extends State<FleetFormDialog>
                               style: TextStyle(
                                 color: Colors.green.shade700,
                                 fontWeight: FontWeight.bold,
-                                fontSize: 16,
+                                fontSize: isVerySmallScreen ? 14 : 16,
                               ),
                             ),
                           ),
@@ -682,15 +760,19 @@ class _FleetFormDialogState extends State<FleetFormDialog>
                                     color: isSelected
                                         ? Colors.green.shade800
                                         : Colors.black87,
+                                    fontSize: isVerySmallScreen ? 13 : 14,
                                   ),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                if (instructor.email.isNotEmpty)
+                                if (instructor.email.isNotEmpty &&
+                                    !isVerySmallScreen)
                                   Text(
                                     instructor.email,
                                     style: TextStyle(
                                       fontSize: 12,
                                       color: Colors.grey.shade600,
                                     ),
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                               ],
                             ),
@@ -699,7 +781,7 @@ class _FleetFormDialogState extends State<FleetFormDialog>
                             Icon(
                               Icons.check_circle,
                               color: Colors.green.shade600,
-                              size: 20,
+                              size: isVerySmallScreen ? 18 : 20,
                             ),
                         ],
                       ),
@@ -719,10 +801,10 @@ class _FleetFormDialogState extends State<FleetFormDialog>
     );
   }
 
-  Widget _buildNoInstructorsWarning() {
+  Widget _buildNoInstructorsWarning([bool isVerySmallScreen = false]) {
     return Container(
-      margin: EdgeInsets.only(top: 16),
-      padding: EdgeInsets.all(16),
+      margin: EdgeInsets.only(top: isVerySmallScreen ? 12 : 16),
+      padding: EdgeInsets.all(isVerySmallScreen ? 12 : 16),
       decoration: BoxDecoration(
         color: Colors.orange.shade50,
         borderRadius: BorderRadius.circular(12),
@@ -730,7 +812,8 @@ class _FleetFormDialogState extends State<FleetFormDialog>
       ),
       child: Row(
         children: [
-          Icon(Icons.warning_amber, color: Colors.orange.shade600),
+          Icon(Icons.warning_amber,
+              color: Colors.orange.shade600, size: isVerySmallScreen ? 18 : 20),
           SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -741,6 +824,7 @@ class _FleetFormDialogState extends State<FleetFormDialog>
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     color: Colors.orange.shade800,
+                    fontSize: isVerySmallScreen ? 13 : 14,
                   ),
                 ),
                 SizedBox(height: 4),
@@ -748,8 +832,10 @@ class _FleetFormDialogState extends State<FleetFormDialog>
                   'All instructors are already assigned to vehicles. Add new instructors or unassign existing ones.',
                   style: TextStyle(
                     color: Colors.orange.shade700,
-                    fontSize: 12,
+                    fontSize: isVerySmallScreen ? 11 : 12,
                   ),
+                  overflow: TextOverflow.visible,
+                  softWrap: true,
                 ),
               ],
             ),
@@ -759,65 +845,134 @@ class _FleetFormDialogState extends State<FleetFormDialog>
     );
   }
 
-  Widget _buildActions() {
+  Widget _buildActions(
+      [bool isSmallScreen = false, bool isVerySmallScreen = false]) {
     return Container(
-      padding: EdgeInsets.all(24),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextButton(
-              onPressed: _isLoading ? null : () => Get.back(),
-              style: TextButton.styleFrom(
-                padding: EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              child: Text(
-                'Cancel',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey.shade700,
-                ),
-              ),
-            ),
-          ),
-          SizedBox(width: 16),
-          Expanded(
-            flex: 2,
-            child: ElevatedButton(
-              onPressed:
-                  _isLoading || _availableInstructors.isEmpty ? null : _submit,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green.shade700,
-                padding: EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                elevation: 2,
-              ),
-              child: _isLoading
-                  ? SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+      padding: EdgeInsets.all(isVerySmallScreen ? 16 : 24),
+      child: isVerySmallScreen
+          ? Column(
+              children: [
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _isLoading || _availableInstructors.isEmpty
+                        ? null
+                        : _submit,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green.shade700,
+                      padding: EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                    )
-                  : Text(
-                      widget.vehicle == null ? 'Add Vehicle' : 'Update Vehicle',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                      elevation: 2,
+                    ),
+                    child: _isLoading
+                        ? SizedBox(
+                            height: 18,
+                            width: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor:
+                                  AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : Text(
+                            widget.vehicle == null
+                                ? 'Add Vehicle'
+                                : 'Update Vehicle',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                  ),
+                ),
+                SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: TextButton(
+                    onPressed: _isLoading ? null : () => Get.back(),
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
                     ),
+                    child: Text(
+                      'Cancel',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            )
+          : Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: _isLoading ? null : () => Get.back(),
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.symmetric(
+                          vertical: isSmallScreen ? 14 : 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: Text(
+                      'Cancel',
+                      style: TextStyle(
+                        fontSize: isSmallScreen ? 15 : 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                  ),
+                ),
+                SizedBox(width: 16),
+                Expanded(
+                  flex: 2,
+                  child: ElevatedButton(
+                    onPressed: _isLoading || _availableInstructors.isEmpty
+                        ? null
+                        : _submit,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green.shade700,
+                      padding: EdgeInsets.symmetric(
+                          vertical: isSmallScreen ? 14 : 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 2,
+                    ),
+                    child: _isLoading
+                        ? SizedBox(
+                            height: isSmallScreen ? 18 : 20,
+                            width: isSmallScreen ? 18 : 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor:
+                                  AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : Text(
+                            widget.vehicle == null
+                                ? 'Add Vehicle'
+                                : 'Update Vehicle',
+                            style: TextStyle(
+                              fontSize: isSmallScreen ? 15 : 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                  ),
+                ),
+              ],
             ),
-          ),
-        ],
-      ),
     );
   }
 

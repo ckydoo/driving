@@ -366,198 +366,6 @@ class _UsersReportsScreenState extends State<UsersReportsScreen> {
     );
   }
 
-  Widget _buildReportSelector() {
-    return Container(
-      padding: EdgeInsets.all(16),
-      color: Colors.grey.shade50,
-      child: Row(
-        children: [
-          Expanded(
-            child: DropdownButtonFormField<String>(
-              value: selectedReportType.isEmpty ? null : selectedReportType,
-              hint: Text('Select Report Type'),
-              decoration: InputDecoration(
-                border:
-                    OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                contentPadding:
-                    EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              ),
-              items: _getAllReports().map((report) {
-                return DropdownMenuItem<String>(
-                  value: report['id'],
-                  child: Text(report['title']),
-                );
-              }).toList(),
-              onChanged: (value) {
-                setState(() {
-                  selectedReportType = value ?? '';
-                });
-              },
-            ),
-          ),
-          SizedBox(width: 16),
-          if (selectedReportType.isNotEmpty)
-            Row(
-              children: [
-                ElevatedButton.icon(
-                  onPressed: isGenerating ? null : () => _printReport(),
-                  icon: isGenerating
-                      ? SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Icon(Icons.print),
-                  label: Text(isGenerating ? 'Preparing...' : 'Print'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green.shade600,
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-                SizedBox(width: 8),
-                ElevatedButton.icon(
-                  onPressed: isGenerating ? null : () => _generateReport('pdf'),
-                  icon: isGenerating
-                      ? SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Icon(Icons.file_download),
-                  label: Text(isGenerating ? 'Generating...' : 'Export PDF'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue.shade800,
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-              ],
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildReportCategoriesView() {
-    return ListView.builder(
-      padding: EdgeInsets.all(16),
-      itemCount: reportCategories.length,
-      itemBuilder: (context, index) {
-        final category = reportCategories.keys.elementAt(index);
-        final reports = reportCategories[category]!;
-
-        return Card(
-          margin: EdgeInsets.only(bottom: 16),
-          child: ExpansionTile(
-            title: Text(
-              category,
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.blue.shade800,
-              ),
-            ),
-            children: reports.map((report) {
-              return ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: report['color'],
-                  child: Icon(report['icon'], color: Colors.white),
-                ),
-                title: Text(
-                  report['title'],
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-                subtitle: Text(report['description']),
-                trailing: Icon(Icons.arrow_forward_ios, size: 16),
-                onTap: () {
-                  setState(() {
-                    selectedReportType = report['id'];
-                  });
-                },
-              );
-            }).toList(),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildSelectedReportView() {
-    final report = _getReportById(selectedReportType);
-    if (report == null) return SizedBox.shrink();
-
-    return SingleChildScrollView(
-      padding: EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Card(
-            child: Padding(
-              padding: EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        backgroundColor: report['color'],
-                        child: Icon(report['icon'], color: Colors.white),
-                      ),
-                      SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              report['title'],
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            Text(
-                              report['description'],
-                              style: TextStyle(color: Colors.grey[600]),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (selectedDateRange != null) ...[
-                    SizedBox(height: 16),
-                    Container(
-                      padding: EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.blue.shade200),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.date_range, color: Colors.blue.shade600),
-                          SizedBox(width: 8),
-                          Text(
-                            'Date Range: ${DateFormat('MMM d, yyyy').format(selectedDateRange!.start)} - ${DateFormat('MMM d, yyyy').format(selectedDateRange!.end)}',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              color: Colors.blue.shade800,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-          SizedBox(height: 16),
-          _buildDetailedReportPreview(report),
-        ],
-      ),
-    );
-  }
-
   Widget _buildDetailedReportPreview(Map<String, dynamic> report) {
     return Card(
       elevation: 4,
@@ -603,39 +411,6 @@ class _UsersReportsScreenState extends State<UsersReportsScreen> {
         ),
       ),
     );
-  }
-
-  Widget _buildReportDataTable(String reportId) {
-    switch (reportId) {
-      case 'all_users_report':
-        return _buildAllUsersTable();
-      case 'user_summary':
-        return _buildUserSummaryTable();
-      case 'student_directory':
-        return _buildStudentDirectoryTable();
-      case 'student_status_report':
-        return _buildStudentStatusTable();
-      case 'instructor_directory':
-        return _buildInstructorDirectoryTable();
-      case 'instructor_workload':
-        return _buildInstructorWorkloadTable();
-      case 'access_permissions':
-        return _buildAccessPermissionsTable();
-      case 'inactive_students':
-        return _buildInactiveStudentsTable();
-      case 'registration_trends':
-        return _buildRegistrationTrendsTable();
-      case 'student_progress_report':
-        return _buildStudentProgressTable();
-      case 'instructor_performance':
-        return _buildInstructorPerformanceTable();
-      case 'user_activity':
-        return _buildUserActivityTable();
-      case 'data_quality':
-        return _buildDataQualityTable();
-      default:
-        return Text('Report data will be displayed here');
-    }
   }
 
   Widget _buildAllUsersTable() {
@@ -1001,68 +776,6 @@ class _UsersReportsScreenState extends State<UsersReportsScreen> {
                         color: data['growth'] >= 0 ? Colors.green : Colors.red,
                         fontWeight: FontWeight.bold,
                       ))),
-                ]))
-            .toList(),
-      ),
-    );
-  }
-
-  Widget _buildStudentProgressTable() {
-    final progressData = _getStudentProgressData();
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: DataTable(
-        columns: [
-          DataColumn(label: Text('Student')),
-          DataColumn(label: Text('Course')),
-          DataColumn(label: Text('Lessons Progress')),
-          DataColumn(label: Text('Progress %')),
-          DataColumn(label: Text('Next Lesson')),
-          DataColumn(label: Text('Status')),
-        ],
-        rows: progressData
-            .map((data) => DataRow(cells: [
-                  DataCell(Text(data['student'])),
-                  DataCell(Text(data['course'])),
-                  DataCell(Text('${data['completed']}/${data['total']}')),
-                  DataCell(Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text('${data['progress'].toStringAsFixed(1)}%'),
-                      SizedBox(width: 8),
-                      SizedBox(
-                        width: 100,
-                        child: LinearProgressIndicator(
-                          value: (data['progress'] / 100).clamp(0.0, 1.0),
-                          backgroundColor: Colors.grey.shade300,
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                              data['progress'] >= 100
-                                  ? Colors.blue
-                                  : data['progress'] >= 80
-                                      ? Colors.green
-                                      : data['progress'] >= 50
-                                          ? Colors.orange
-                                          : Colors.red),
-                        ),
-                      ),
-                    ],
-                  )),
-                  DataCell(Text(data['nextLesson'])),
-                  DataCell(Container(
-                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: _getStatusColor(data['status']),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      data['status'],
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    ),
-                  )),
                 ]))
             .toList(),
       ),
@@ -2202,6 +1915,658 @@ class _UsersReportsScreenState extends State<UsersReportsScreen> {
           fontWeight: isHeader ? pw.FontWeight.bold : pw.FontWeight.normal,
         ),
       ),
+    );
+  }
+
+  Widget _buildReportSelector() {
+    return Container(
+      padding: EdgeInsets.all(16),
+      color: Colors.grey.shade50,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // Responsive layout based on screen width
+          if (constraints.maxWidth < 600) {
+            // Mobile layout - stack vertically
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                DropdownButtonFormField<String>(
+                  value: selectedReportType.isEmpty ? null : selectedReportType,
+                  hint: Text('Select Report Type'),
+                  decoration: InputDecoration(
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                  items: _getAllReports().map((report) {
+                    return DropdownMenuItem<String>(
+                      value: report['id'],
+                      child: Text(
+                        report['title'],
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    setState(() {
+                      selectedReportType = value ?? '';
+                    });
+                  },
+                ),
+                if (selectedReportType.isNotEmpty) ...[
+                  SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: isGenerating ? null : () => _printReport(),
+                          icon: isGenerating
+                              ? SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : Icon(Icons.print),
+                          label: Text(isGenerating ? 'Preparing...' : 'Print'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green.shade600,
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                      ),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: isGenerating
+                              ? null
+                              : () => _generateReport('pdf'),
+                          icon: isGenerating
+                              ? SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : Icon(Icons.file_download),
+                          label: Text(
+                              isGenerating ? 'Generating...' : 'Export PDF'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue.shade800,
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            );
+          } else {
+            // Desktop/tablet layout - horizontal
+            return Row(
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: DropdownButtonFormField<String>(
+                    value:
+                        selectedReportType.isEmpty ? null : selectedReportType,
+                    hint: Text('Select Report Type'),
+                    decoration: InputDecoration(
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                    items: _getAllReports().map((report) {
+                      return DropdownMenuItem<String>(
+                        value: report['id'],
+                        child: Text(
+                          report['title'],
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (value) {
+                      setState(() {
+                        selectedReportType = value ?? '';
+                      });
+                    },
+                  ),
+                ),
+                SizedBox(width: 16),
+                if (selectedReportType.isNotEmpty) ...[
+                  ElevatedButton.icon(
+                    onPressed: isGenerating ? null : () => _printReport(),
+                    icon: isGenerating
+                        ? SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Icon(Icons.print),
+                    label: Text(isGenerating ? 'Preparing...' : 'Print'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green.shade600,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                  SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    onPressed:
+                        isGenerating ? null : () => _generateReport('pdf'),
+                    icon: isGenerating
+                        ? SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Icon(Icons.file_download),
+                    label: Text(isGenerating ? 'Generating...' : 'Export PDF'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue.shade800,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ],
+              ],
+            );
+          }
+        },
+      ),
+    );
+  }
+
+  Widget _buildReportCategoriesView() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Responsive grid layout
+        int crossAxisCount = 1;
+        if (constraints.maxWidth > 1200) {
+          crossAxisCount = 3;
+        } else if (constraints.maxWidth > 800) {
+          crossAxisCount = 2;
+        }
+
+        if (crossAxisCount == 1) {
+          // Mobile - use ListView
+          return ListView.builder(
+            padding: EdgeInsets.all(16),
+            itemCount: reportCategories.length,
+            itemBuilder: (context, index) {
+              final category = reportCategories.keys.elementAt(index);
+              final reports = reportCategories[category]!;
+
+              return Card(
+                margin: EdgeInsets.only(bottom: 16),
+                child: ExpansionTile(
+                  title: Text(
+                    category,
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue.shade800,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  children: reports.map((report) {
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: report['color'],
+                        child: Icon(report['icon'], color: Colors.white),
+                      ),
+                      title: Text(
+                        report['title'],
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text(
+                        report['description'],
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 2,
+                      ),
+                      trailing: Icon(Icons.arrow_forward_ios, size: 16),
+                      onTap: () {
+                        setState(() {
+                          selectedReportType = report['id'];
+                        });
+                      },
+                    );
+                  }).toList(),
+                ),
+              );
+            },
+          );
+        } else {
+          // Tablet/Desktop - use GridView
+          return GridView.builder(
+            padding: EdgeInsets.all(16),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: crossAxisCount,
+              crossAxisSpacing: 16,
+              mainAxisSpacing: 16,
+              childAspectRatio: 1.2,
+            ),
+            itemCount: reportCategories.length,
+            itemBuilder: (context, index) {
+              final category = reportCategories.keys.elementAt(index);
+              final reports = reportCategories[category]!;
+
+              return Card(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        category,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue.shade800,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 2,
+                      ),
+                      SizedBox(height: 12),
+                      Expanded(
+                        child: ListView.builder(
+                          itemCount: reports.length,
+                          itemBuilder: (context, reportIndex) {
+                            final report = reports[reportIndex];
+                            return ListTile(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              leading: CircleAvatar(
+                                radius: 16,
+                                backgroundColor: report['color'],
+                                child: Icon(
+                                  report['icon'],
+                                  color: Colors.white,
+                                  size: 16,
+                                ),
+                              ),
+                              title: Text(
+                                report['title'],
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 12,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                              subtitle: Text(
+                                report['description'],
+                                style: TextStyle(fontSize: 10),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 2,
+                              ),
+                              onTap: () {
+                                setState(() {
+                                  selectedReportType = report['id'];
+                                });
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+        }
+      },
+    );
+  }
+
+  Widget _buildSelectedReportView() {
+    final report = _getReportById(selectedReportType);
+    if (report == null) return SizedBox.shrink();
+
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Card(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      if (constraints.maxWidth < 600) {
+                        // Mobile layout - stack vertically
+                        return Column(
+                          children: [
+                            Row(
+                              children: [
+                                CircleAvatar(
+                                  backgroundColor: report['color'],
+                                  child:
+                                      Icon(report['icon'], color: Colors.white),
+                                ),
+                                SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        report['title'],
+                                        style: TextStyle(
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                        maxLines: 2,
+                                      ),
+                                      Text(
+                                        report['description'],
+                                        style:
+                                            TextStyle(color: Colors.grey[600]),
+                                        overflow: TextOverflow.ellipsis,
+                                        maxLines: 3,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (selectedDateRange != null) ...[
+                              SizedBox(height: 16),
+                              _buildDateRangeInfo(),
+                            ],
+                          ],
+                        );
+                      } else {
+                        // Desktop layout - horizontal
+                        return Row(
+                          children: [
+                            CircleAvatar(
+                              backgroundColor: report['color'],
+                              child: Icon(report['icon'], color: Colors.white),
+                            ),
+                            SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    report['title'],
+                                    style: TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  Text(
+                                    report['description'],
+                                    style: TextStyle(color: Colors.grey[600]),
+                                  ),
+                                  if (selectedDateRange != null) ...[
+                                    SizedBox(height: 8),
+                                    _buildDateRangeInfo(),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ],
+                        );
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+          SizedBox(height: 16),
+          _buildDetailedReportPreview(report),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDateRangeInfo() {
+    return Container(
+      padding: EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.blue.shade200),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.date_range, color: Colors.blue.shade600),
+          SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              'Date Range: ${DateFormat('MMM d, yyyy').format(selectedDateRange!.start)} - ${DateFormat('MMM d, yyyy').format(selectedDateRange!.end)}',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: Colors.blue.shade800,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReportDataTable(String reportId) {
+    // Wrap all tables in responsive containers
+    Widget tableWidget;
+
+    switch (reportId) {
+      case 'all_users_report':
+        tableWidget = _buildAllUsersTable();
+        break;
+      case 'user_summary':
+        tableWidget = _buildUserSummaryTable();
+        break;
+      case 'student_directory':
+        tableWidget = _buildStudentDirectoryTable();
+        break;
+      case 'student_status_report':
+        tableWidget = _buildStudentStatusTable();
+        break;
+      case 'instructor_directory':
+        tableWidget = _buildInstructorDirectoryTable();
+        break;
+      case 'instructor_workload':
+        tableWidget = _buildInstructorWorkloadTable();
+        break;
+      case 'access_permissions':
+        tableWidget = _buildAccessPermissionsTable();
+        break;
+      case 'inactive_students':
+        tableWidget = _buildInactiveStudentsTable();
+        break;
+      case 'registration_trends':
+        tableWidget = _buildRegistrationTrendsTable();
+        break;
+      case 'student_progress_report':
+        tableWidget = _buildStudentProgressTable();
+        break;
+      case 'instructor_performance':
+        tableWidget = _buildInstructorPerformanceTable();
+        break;
+      case 'user_activity':
+        tableWidget = _buildUserActivityTable();
+        break;
+      case 'data_quality':
+        tableWidget = _buildDataQualityTable();
+        break;
+      default:
+        tableWidget = Text('Report data will be displayed here');
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return Container(
+          width: double.infinity,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minWidth: constraints.maxWidth,
+              ),
+              child: tableWidget,
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildStudentProgressTable() {
+    final progressData = _getStudentProgressData();
+    return DataTable(
+      columnSpacing: 12,
+      horizontalMargin: 12,
+      columns: [
+        DataColumn(
+          label: Expanded(
+            child: Text(
+              'Student',
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ),
+        DataColumn(
+          label: Expanded(
+            child: Text(
+              'Course',
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ),
+        DataColumn(
+          label: Expanded(
+            child: Text(
+              'Lessons Progress',
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ),
+        DataColumn(
+          label: Expanded(
+            child: Text(
+              'Progress %',
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ),
+        DataColumn(
+          label: Expanded(
+            child: Text(
+              'Next Lesson',
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ),
+        DataColumn(
+          label: Expanded(
+            child: Text(
+              'Status',
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ),
+      ],
+      rows: progressData
+          .map((data) => DataRow(cells: [
+                DataCell(
+                  Container(
+                    width: 120,
+                    child: Text(
+                      data['student'],
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+                DataCell(
+                  Container(
+                    width: 100,
+                    child: Text(
+                      data['course'],
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+                DataCell(
+                  Container(
+                    width: 80,
+                    child: Text(
+                      '${data['completed']}/${data['total']}',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+                DataCell(
+                  Container(
+                    width: 120,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '${data['progress'].toStringAsFixed(1)}%',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: LinearProgressIndicator(
+                            value: (data['progress'] / 100).clamp(0.0, 1.0),
+                            backgroundColor: Colors.grey.shade300,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                                data['progress'] >= 100
+                                    ? Colors.blue
+                                    : data['progress'] >= 80
+                                        ? Colors.green
+                                        : data['progress'] >= 50
+                                            ? Colors.orange
+                                            : Colors.red),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                DataCell(
+                  Container(
+                    width: 120,
+                    child: Text(
+                      data['nextLesson'],
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+                DataCell(Container(
+                  width: 100,
+                  child: Container(
+                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: _getStatusColor(data['status']),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      data['status'],
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                )),
+              ]))
+          .toList(),
     );
   }
 }

@@ -71,6 +71,27 @@ class _POSScreenState extends State<POSScreen> with TickerProviderStateMixin {
     _loadRecentStudents();
   }
 
+  // Helper method to get screen breakpoints
+  bool get _isMobile => MediaQuery.of(context).size.width < 768;
+  bool get _isTablet =>
+      MediaQuery.of(context).size.width >= 768 &&
+      MediaQuery.of(context).size.width < 1024;
+  bool get _isDesktop => MediaQuery.of(context).size.width >= 1024;
+
+  // Responsive padding
+  EdgeInsets get _responsivePadding {
+    if (_isMobile) return EdgeInsets.all(8);
+    if (_isTablet) return EdgeInsets.all(16);
+    return EdgeInsets.all(20);
+  }
+
+  // Responsive text scaling
+  double get _textScaleFactor {
+    if (_isMobile) return 0.85;
+    if (_isTablet) return 0.95;
+    return 1.0;
+  }
+
   void _initializeAnimations() {
     _fadeController = AnimationController(
       duration: Duration(milliseconds: 300),
@@ -88,17 +109,17 @@ class _POSScreenState extends State<POSScreen> with TickerProviderStateMixin {
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _fadeController, curve: Curves.easeInOut),
     );
-    _slideAnimation = Tween<Offset>(
-      begin: Offset(0.0, 0.5),
-      end: Offset.zero,
-    ).animate(
-        CurvedAnimation(parent: _slideController, curve: Curves.easeOutCubic));
+    _slideAnimation =
+        Tween<Offset>(begin: Offset(0, 0.5), end: Offset.zero).animate(
+      CurvedAnimation(parent: _slideController, curve: Curves.easeOutCubic),
+    );
     _scaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
       CurvedAnimation(parent: _scaleController, curve: Curves.elasticOut),
     );
 
     _fadeController.forward();
     _slideController.forward();
+    _scaleController.forward();
   }
 
   void _setupKeyboardShortcuts() {
@@ -119,8 +140,8 @@ class _POSScreenState extends State<POSScreen> with TickerProviderStateMixin {
     _searchController.dispose();
     _searchFocusNode.dispose();
     _paymentAmountController.dispose();
-    _amountFocusNode.dispose();
     _notesController.dispose();
+    _amountFocusNode.dispose();
     _lessonsController.dispose();
     super.dispose();
   }
@@ -132,13 +153,1439 @@ class _POSScreenState extends State<POSScreen> with TickerProviderStateMixin {
   }
 
   void _loadRecentStudents() {
-    // Load recently processed students (you might want to store this in SharedPreferences)
+    // Load recently processed students
     _recentStudents = userController.users
         .where((user) => user.role.toLowerCase() == 'student')
         .take(5)
         .toList();
   }
 
+  void _clearAll() {
+    setState(() {
+      _selectedStudent = null;
+      _searchController.clear();
+      _paymentAmountController.clear();
+      _notesController.clear();
+      _selectedCourse = null;
+      _lessonsController.text = '1';
+      _invoiceDueDate = DateTime.now().add(Duration(days: 30));
+      _paymentMethod = 'Cash';
+      _generateReceipt = true;
+      _showSearchResults = false;
+      _currentStep = 'search';
+    });
+    _searchFocusNode.requestFocus();
+  }
+
+  void _showEnhancedSnackbar(String message, SnackbarType type) {
+    final color = type == SnackbarType.success
+        ? Colors.green
+        : type == SnackbarType.error
+            ? Colors.red
+            : Colors.blue;
+
+    final icon = type == SnackbarType.success
+        ? Icons.check_circle
+        : type == SnackbarType.error
+            ? Icons.error
+            : Icons.info;
+
+    Get.snackbar(
+      '',
+      '',
+      titleText: Container(),
+      messageText: Row(
+        children: [
+          Icon(icon, color: Colors.white, size: 24),
+          SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+      backgroundColor: color.shade600,
+      snackPosition: SnackPosition.TOP,
+      margin: EdgeInsets.all(16),
+      borderRadius: 12,
+      duration: Duration(seconds: 3),
+      animationDuration: Duration(milliseconds: 300),
+    );
+  }
+
+  // EXACT COPY from student_details_screen.dart _buildBillingTab method
+  double _getStudentBalance(User student) {
+    final studentInvoices = billingController.invoices
+        .where((invoice) => invoice.studentId == student.id)
+        .toList();
+
+    final totalBalance = studentInvoices.fold<double>(
+        0.0, (sum, invoice) => sum + invoice.balance);
+
+    return totalBalance;
+  }
+
+  // EXACT COPY from payment_dialog.dart logic
+  List<Invoice> _getStudentInvoices(User student) {
+    return billingController.invoices
+        .where((invoice) => invoice.studentId == student.id)
+        .toList();
+  }
+
+  // EXACT COPY from payment_dialog.dart - filter unpaid invoices
+  List<Invoice> _getUnpaidInvoices(User student) {
+    return billingController.invoices
+        .where(
+            (invoice) => invoice.studentId == student.id && invoice.balance > 0)
+        .toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MediaQuery(
+      data: MediaQuery.of(context).copyWith(
+        textScaleFactor: _textScaleFactor,
+      ),
+      child: Scaffold(
+        backgroundColor: Colors.grey[50],
+        appBar: _buildEnhancedAppBar(),
+        body: SafeArea(
+          child: FadeTransition(
+            opacity: _fadeAnimation,
+            child: SlideTransition(
+              position: _slideAnimation,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  // Mobile layout - single column with tabs
+                  if (_isMobile) {
+                    return _buildMobileLayout();
+                  }
+                  // Tablet and Desktop layout - side by side panels
+                  else {
+                    return _buildDesktopTabletLayout(constraints);
+                  }
+                },
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileLayout() {
+    return Column(
+      children: [
+        // Operation Mode Tabs
+        Container(
+          color: Colors.grey[50],
+          child: Row(
+            children: [
+              Expanded(
+                child: _buildModeButton(
+                  'Payment',
+                  'Process payments quickly',
+                  Icons.payment,
+                  'payment',
+                  Colors.green,
+                ),
+              ),
+              Expanded(
+                child: _buildModeButton(
+                  'Invoice',
+                  'Create new invoices',
+                  Icons.receipt,
+                  'invoice',
+                  Colors.blue,
+                ),
+              ),
+            ],
+          ),
+        ),
+        // Main Content
+        Expanded(
+          child: SingleChildScrollView(
+            padding: _responsivePadding,
+            child: Column(
+              children: [
+                _buildStudentPanel(),
+                SizedBox(height: 16),
+                _buildOperationForm(),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDesktopTabletLayout(BoxConstraints constraints) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Left Panel - Student Search & Selection
+        Container(
+          width: _isTablet
+              ? constraints.maxWidth * 0.4
+              : constraints.maxWidth * 0.35,
+          decoration: BoxDecoration(
+            color: Colors.grey[50],
+            border: Border(right: BorderSide(color: Colors.grey.shade300)),
+          ),
+          child: Column(
+            children: [
+              // Operation Mode Selector
+              Container(
+                padding: _responsivePadding,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _buildModeButton(
+                        'Payment',
+                        'Process payments',
+                        Icons.payment,
+                        'payment',
+                        Colors.green,
+                      ),
+                    ),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: _buildModeButton(
+                        'Invoice',
+                        'Create invoices',
+                        Icons.receipt,
+                        'invoice',
+                        Colors.blue,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: _responsivePadding,
+                  child: _buildStudentPanel(),
+                ),
+              ),
+            ],
+          ),
+        ),
+        // Right Panel - Operation Form
+        Expanded(
+          child: Container(
+            padding: _responsivePadding,
+            child: _buildOperationsPanel(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  PreferredSizeWidget _buildEnhancedAppBar() {
+    return AppBar(
+      title: _isMobile
+          ? Text('POS', style: TextStyle(fontWeight: FontWeight.bold))
+          : Row(
+              children: [
+                Container(
+                  padding: EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(Icons.point_of_sale, color: Colors.white),
+                ),
+                SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Point of Sale',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 20,
+                        color: Colors.white,
+                      ),
+                    ),
+                    Text(
+                      'Process payments & create invoices',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.white.withOpacity(0.8),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+      backgroundColor: Colors.blue[700],
+      elevation: 0,
+      actions: [
+        _buildQuickAction(Icons.refresh, 'Refresh', _loadData),
+        if (!_isMobile)
+          _buildQuickAction(Icons.clear_all, 'Clear All', _clearAll),
+        SizedBox(width: 8),
+      ],
+    );
+  }
+
+  Widget _buildQuickAction(
+      IconData icon, String tooltip, VoidCallback onPressed) {
+    return Tooltip(
+      message: tooltip,
+      child: Container(
+        margin: EdgeInsets.symmetric(horizontal: 4),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: onPressed,
+            child: Container(
+              padding: EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.white.withOpacity(0.3)),
+              ),
+              child: Icon(icon, color: Colors.white, size: 20),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildModeButton(
+      String title, String subtitle, IconData icon, String mode, Color color) {
+    final isSelected = _operationMode == mode;
+    return Container(
+      margin: EdgeInsets.symmetric(vertical: 4),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => setState(() => _operationMode = mode),
+          child: Container(
+            padding: EdgeInsets.all(_isMobile ? 12 : 16),
+            decoration: BoxDecoration(
+              color: isSelected ? color.withOpacity(0.1) : Colors.transparent,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isSelected ? color : Colors.grey.shade300,
+                width: 2,
+              ),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  padding: EdgeInsets.all(_isMobile ? 8 : 12),
+                  decoration: BoxDecoration(
+                    color: isSelected ? color : Colors.grey.shade400,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    icon,
+                    color: Colors.white,
+                    size: _isMobile ? 20 : 24,
+                  ),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: _isMobile ? 14 : 16,
+                    color: isSelected ? color : Colors.grey[800],
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                if (!_isMobile) ...[
+                  SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[600],
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStudentPanel() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSearchSection(),
+        SizedBox(height: 16),
+        if (_selectedStudent != null) _buildStudentInfoCard(),
+        if (_recentStudents.isNotEmpty && _selectedStudent == null)
+          _buildRecentStudentsCard(),
+      ],
+    );
+  }
+
+  Widget _buildSearchSection() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            blurRadius: 20,
+            spreadRadius: 2,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Padding(
+            padding: _responsivePadding,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.search, color: Colors.blue.shade600),
+                    SizedBox(width: 8),
+                    Text(
+                      'Find Student',
+                      style: TextStyle(
+                        fontSize: _isMobile ? 16 : 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey[800],
+                      ),
+                    ),
+                    Spacer(),
+                    if (_selectedStudent != null)
+                      IconButton(
+                        icon: Icon(Icons.close, size: 20),
+                        onPressed: () => setState(() {
+                          _selectedStudent = null;
+                          _searchController.clear();
+                        }),
+                        constraints:
+                            BoxConstraints(minWidth: 32, minHeight: 32),
+                        padding: EdgeInsets.zero,
+                      ),
+                  ],
+                ),
+                SizedBox(height: 12),
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.grey[50],
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: TextField(
+                    controller: _searchController,
+                    focusNode: _searchFocusNode,
+                    decoration: InputDecoration(
+                      hintText: 'Search by name, email, or phone...',
+                      prefixIcon:
+                          Icon(Icons.search, color: Colors.grey.shade500),
+                      border: InputBorder.none,
+                      contentPadding: EdgeInsets.all(16),
+                      hintStyle: TextStyle(color: Colors.grey.shade500),
+                    ),
+                    onChanged: _searchStudents,
+                    textInputAction: TextInputAction.search,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_showSearchResults && _searchResults.isNotEmpty)
+            Container(
+              constraints: BoxConstraints(maxHeight: 300),
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: _searchResults.length,
+                itemBuilder: (context, index) {
+                  final student = _searchResults[index];
+                  return _buildStudentListTile(student);
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStudentListTile(User student) {
+    final balance = _getStudentBalance(student);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _selectStudent(student),
+        child: Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: _responsivePadding.horizontal,
+            vertical: 12,
+          ),
+          decoration: BoxDecoration(
+            border: Border(top: BorderSide(color: Colors.grey.shade200)),
+          ),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: _isMobile ? 20 : 24,
+                backgroundColor: Colors.blue.shade100,
+                child: Text(
+                  student.fname[0].toUpperCase(),
+                  style: TextStyle(
+                    color: Colors.blue.shade700,
+                    fontWeight: FontWeight.bold,
+                    fontSize: _isMobile ? 14 : 16,
+                  ),
+                ),
+              ),
+              SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${student.fname} ${student.lname}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: _isMobile ? 14 : 16,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (student.email.isNotEmpty)
+                      Text(
+                        student.email,
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: _isMobile ? 12 : 14,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    if (balance > 0)
+                      Text(
+                        'Balance: \$${balance.toStringAsFixed(2)}',
+                        style: TextStyle(
+                          color: Colors.red.shade600,
+                          fontSize: _isMobile ? 12 : 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              Icon(Icons.arrow_forward_ios,
+                  size: _isMobile ? 16 : 18, color: Colors.grey.shade400),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStudentInfoCard() {
+    if (_selectedStudent == null) return SizedBox.shrink();
+
+    final balance = _getStudentBalance(_selectedStudent!);
+    final invoices = _getStudentInvoices(_selectedStudent!);
+    final unpaidInvoices = _getUnpaidInvoices(_selectedStudent!);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            blurRadius: 20,
+            spreadRadius: 2,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      padding: _responsivePadding,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: _isMobile ? 25 : 30,
+                backgroundColor: Colors.blue.shade100,
+                child: Text(
+                  _selectedStudent!.fname[0].toUpperCase(),
+                  style: TextStyle(
+                    color: Colors.blue.shade700,
+                    fontWeight: FontWeight.bold,
+                    fontSize: _isMobile ? 18 : 22,
+                  ),
+                ),
+              ),
+              SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${_selectedStudent!.fname} ${_selectedStudent!.lname}',
+                      style: TextStyle(
+                        fontSize: _isMobile ? 16 : 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey[800],
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    SizedBox(height: 4),
+                    if (_selectedStudent!.email.isNotEmpty)
+                      Text(
+                        _selectedStudent!.email,
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: _isMobile ? 12 : 14,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    if (_selectedStudent!.phone.isNotEmpty)
+                      Text(
+                        _selectedStudent!.phone,
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: _isMobile ? 12 : 14,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 16),
+          // Balance and Invoice Summary
+          Container(
+            padding: EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: balance > 0 ? Colors.red.shade50 : Colors.green.shade50,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Outstanding Balance',
+                      style: TextStyle(
+                        fontSize: _isMobile ? 12 : 14,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                    Text(
+                      '\$${balance.toStringAsFixed(2)}',
+                      style: TextStyle(
+                        fontSize: _isMobile ? 18 : 20,
+                        fontWeight: FontWeight.bold,
+                        color: balance > 0
+                            ? Colors.red.shade700
+                            : Colors.green.shade700,
+                      ),
+                    ),
+                  ],
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      'Unpaid Invoices',
+                      style: TextStyle(
+                        fontSize: _isMobile ? 12 : 14,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                    Text(
+                      '${unpaidInvoices.length}',
+                      style: TextStyle(
+                        fontSize: _isMobile ? 18 : 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey.shade800,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRecentStudentsCard() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            blurRadius: 20,
+            spreadRadius: 2,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: _responsivePadding,
+            child: Row(
+              children: [
+                Icon(Icons.history, color: Colors.grey.shade600),
+                SizedBox(width: 8),
+                Text(
+                  'Recent Students',
+                  style: TextStyle(
+                    fontSize: _isMobile ? 14 : 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey[700],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            constraints: BoxConstraints(maxHeight: 200),
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: _recentStudents.take(3).length,
+              itemBuilder: (context, index) {
+                final student = _recentStudents[index];
+                return _buildStudentListTile(student);
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOperationsPanel() {
+    return Column(
+      children: [
+        Expanded(child: _buildOperationForm()),
+      ],
+    );
+  }
+
+  Widget _buildOperationForm() {
+    if (_currentStep == 'processing') {
+      return _buildProcessingScreen();
+    } else if (_currentStep == 'success') {
+      return _buildSuccessScreen();
+    } else if (_operationMode == 'payment') {
+      return SingleChildScrollView(child: _buildEnhancedPaymentForm());
+    } else {
+      return SingleChildScrollView(child: _buildEnhancedInvoiceForm());
+    }
+  }
+
+  Widget _buildProcessingScreen() {
+    return Container(
+      padding: _responsivePadding.add(EdgeInsets.all(_isMobile ? 20 : 40)),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            blurRadius: 20,
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: _isMobile ? 60 : 80,
+            height: _isMobile ? 60 : 80,
+            child: CircularProgressIndicator(
+              strokeWidth: _isMobile ? 4 : 6,
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade600),
+            ),
+          ),
+          SizedBox(height: _isMobile ? 24 : 32),
+          Text(
+            'Processing ${_operationMode == 'payment' ? 'Payment' : 'Invoice'}...',
+            style: TextStyle(
+              fontSize: _isMobile ? 20 : 24,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[800],
+            ),
+            textAlign: TextAlign.center,
+          ),
+          SizedBox(height: _isMobile ? 12 : 16),
+          Text(
+            'Please wait while we process your transaction',
+            style: TextStyle(
+              fontSize: _isMobile ? 14 : 16,
+              color: Colors.grey[600],
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSuccessScreen() {
+    return Container(
+      padding: _responsivePadding.add(EdgeInsets.all(_isMobile ? 20 : 40)),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            blurRadius: 20,
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: _isMobile ? 60 : 80,
+            height: _isMobile ? 60 : 80,
+            decoration: BoxDecoration(
+              color: Colors.green.shade100,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.check,
+              color: Colors.green.shade600,
+              size: _isMobile ? 30 : 40,
+            ),
+          ),
+          SizedBox(height: _isMobile ? 24 : 32),
+          Text(
+            '${_operationMode == 'payment' ? 'Payment' : 'Invoice'} Completed!',
+            style: TextStyle(
+              fontSize: _isMobile ? 20 : 24,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[800],
+            ),
+            textAlign: TextAlign.center,
+          ),
+          SizedBox(height: _isMobile ? 12 : 16),
+          Text(
+            _operationMode == 'payment'
+                ? 'Payment has been processed successfully'
+                : 'Invoice has been created successfully',
+            style: TextStyle(
+              fontSize: _isMobile ? 14 : 16,
+              color: Colors.grey[600],
+            ),
+            textAlign: TextAlign.center,
+          ),
+          SizedBox(height: _isMobile ? 24 : 32),
+          SizedBox(
+            width: double.infinity,
+            height: _isMobile ? 48 : 56,
+            child: ElevatedButton(
+              onPressed: () => _clearAll(),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue.shade600,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: Text(
+                'New Transaction',
+                style: TextStyle(
+                  fontSize: _isMobile ? 16 : 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEnhancedPaymentForm() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            blurRadius: 20,
+            spreadRadius: 2,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      padding: _responsivePadding,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Row(
+            children: [
+              Container(
+                padding: EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(Icons.payment, color: Colors.green.shade700),
+              ),
+              SizedBox(width: 12),
+              Text(
+                'Process Payment',
+                style: TextStyle(
+                  fontSize: _isMobile ? 18 : 22,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey[800],
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: _isMobile ? 16 : 24),
+
+          if (_selectedStudent == null)
+            Container(
+              padding: EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange.shade200),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info, color: Colors.orange.shade600),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Please select a student to process payment',
+                      style: TextStyle(
+                        color: Colors.orange.shade700,
+                        fontSize: _isMobile ? 14 : 16,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else ...[
+            // Amount Input
+            Text(
+              'Payment Amount',
+              style: TextStyle(
+                fontSize: _isMobile ? 14 : 16,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[700],
+              ),
+            ),
+            SizedBox(height: 8),
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.grey[50],
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: TextField(
+                controller: _paymentAmountController,
+                focusNode: _amountFocusNode,
+                keyboardType: TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  hintText: '0.00',
+                  prefixText: '\$ ',
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.all(16),
+                  prefixStyle: TextStyle(
+                    fontSize: _isMobile ? 16 : 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey[800],
+                  ),
+                  hintStyle: TextStyle(color: Colors.grey.shade500),
+                ),
+                style: TextStyle(
+                  fontSize: _isMobile ? 16 : 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey[800],
+                ),
+              ),
+            ),
+            SizedBox(height: _isMobile ? 12 : 16),
+
+            // Quick Amount Buttons
+            Text(
+              'Quick Amounts',
+              style: TextStyle(
+                fontSize: _isMobile ? 14 : 16,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[700],
+              ),
+            ),
+            SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ..._quickAmounts.map((amount) => _buildQuickAmountChip(amount)),
+                // Add full balance button
+                if (_getStudentBalance(_selectedStudent!) > 0)
+                  _buildQuickAmountChip(_getStudentBalance(_selectedStudent!),
+                      isBalance: true),
+              ],
+            ),
+            SizedBox(height: _isMobile ? 16 : 24),
+
+            // Payment Method
+            Text(
+              'Payment Method',
+              style: TextStyle(
+                fontSize: _isMobile ? 14 : 16,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[700],
+              ),
+            ),
+            SizedBox(height: 8),
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.grey[50],
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: DropdownButtonFormField<String>(
+                value: _paymentMethod,
+                decoration: InputDecoration(
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.all(16),
+                ),
+                items:
+                    ['Cash', 'Card', 'Bank Transfer', 'Check', 'Mobile Money']
+                        .map((method) => DropdownMenuItem(
+                              value: method,
+                              child: Text(method),
+                            ))
+                        .toList(),
+                onChanged: (value) => setState(() => _paymentMethod = value!),
+              ),
+            ),
+            SizedBox(height: _isMobile ? 16 : 24),
+
+            // Notes
+            Text(
+              'Notes (Optional)',
+              style: TextStyle(
+                fontSize: _isMobile ? 14 : 16,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[700],
+              ),
+            ),
+            SizedBox(height: 8),
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.grey[50],
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: TextField(
+                controller: _notesController,
+                maxLines: 3,
+                decoration: InputDecoration(
+                  hintText: 'Add any notes for this payment...',
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.all(16),
+                  hintStyle: TextStyle(color: Colors.grey.shade500),
+                ),
+              ),
+            ),
+            SizedBox(height: _isMobile ? 16 : 24),
+
+            // Receipt Option
+            Row(
+              children: [
+                Checkbox(
+                  value: _generateReceipt,
+                  onChanged: (value) =>
+                      setState(() => _generateReceipt = value!),
+                  activeColor: Colors.blue.shade600,
+                ),
+                Expanded(
+                  child: Text(
+                    'Generate receipt',
+                    style: TextStyle(
+                      fontSize: _isMobile ? 14 : 16,
+                      color: Colors.grey[700],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: _isMobile ? 24 : 32),
+
+            // Process Payment Button
+            SizedBox(
+              width: double.infinity,
+              height: _isMobile ? 48 : 56,
+              child: ElevatedButton(
+                onPressed: _isProcessing ? null : _processPayment,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green.shade600,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  elevation: 2,
+                ),
+                child: _isProcessing
+                    ? SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.payment,
+                              color: Colors.white, size: _isMobile ? 20 : 24),
+                          SizedBox(width: 12),
+                          Text(
+                            'Process Payment',
+                            style: TextStyle(
+                              fontSize: _isMobile ? 16 : 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickAmountChip(double amount, {bool isBalance = false}) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: () => _paymentAmountController.text = amount.toStringAsFixed(2),
+        child: Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: _isMobile ? 12 : 16,
+            vertical: _isMobile ? 6 : 8,
+          ),
+          decoration: BoxDecoration(
+            color: isBalance ? Colors.green.shade50 : Colors.blue.shade50,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isBalance ? Colors.green.shade200 : Colors.blue.shade200,
+            ),
+          ),
+          child: Text(
+            isBalance
+                ? 'Full Balance (\$${amount.toStringAsFixed(2)})'
+                : '\$${amount.toStringAsFixed(0)}',
+            style: TextStyle(
+              color: isBalance ? Colors.green.shade700 : Colors.blue.shade700,
+              fontWeight: FontWeight.w600,
+              fontSize: _isMobile ? 12 : 14,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEnhancedInvoiceForm() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            blurRadius: 20,
+            spreadRadius: 2,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      padding: _responsivePadding,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Row(
+            children: [
+              Container(
+                padding: EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(Icons.receipt, color: Colors.blue.shade700),
+              ),
+              SizedBox(width: 12),
+              Text(
+                'Create Invoice',
+                style: TextStyle(
+                  fontSize: _isMobile ? 18 : 22,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey[800],
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: _isMobile ? 16 : 24),
+
+          if (_selectedStudent == null)
+            Container(
+              padding: EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange.shade200),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info, color: Colors.orange.shade600),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Please select a student to create invoice',
+                      style: TextStyle(
+                        color: Colors.orange.shade700,
+                        fontSize: _isMobile ? 14 : 16,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else ...[
+            // Course Selection
+            Text(
+              'Course',
+              style: TextStyle(
+                fontSize: _isMobile ? 14 : 16,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[700],
+              ),
+            ),
+            SizedBox(height: 8),
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.grey[50],
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: DropdownButtonFormField<Course>(
+                value: _selectedCourse,
+                decoration: InputDecoration(
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.all(16),
+                  hintText: 'Select a course...',
+                ),
+                items: courseController.courses
+                    .map((course) => DropdownMenuItem(
+                          value: course,
+                          child: Text(
+                            course.name,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ))
+                    .toList(),
+                onChanged: (value) => setState(() => _selectedCourse = value),
+                isExpanded: true,
+              ),
+            ),
+            SizedBox(height: _isMobile ? 16 : 20),
+
+            // Lessons Count
+            Text(
+              'Number of Lessons',
+              style: TextStyle(
+                fontSize: _isMobile ? 14 : 16,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[700],
+              ),
+            ),
+            SizedBox(height: 8),
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.grey[50],
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: TextField(
+                controller: _lessonsController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.all(16),
+                  hintText: '1',
+                  hintStyle: TextStyle(color: Colors.grey.shade500),
+                ),
+                style: TextStyle(
+                  fontSize: _isMobile ? 16 : 18,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            SizedBox(height: _isMobile ? 16 : 20),
+
+            // Total Amount Preview
+            if (_selectedCourse != null)
+              Container(
+                padding: EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Total Amount',
+                      style: TextStyle(
+                        fontSize: _isMobile ? 14 : 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      '\$${(_selectedCourse!.price * (int.tryParse(_lessonsController.text) ?? 1)).toStringAsFixed(2)}',
+                      style: TextStyle(
+                        fontSize: _isMobile ? 18 : 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue.shade700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+            if (_selectedCourse != null) SizedBox(height: _isMobile ? 16 : 20),
+
+            // Due Date
+            Text(
+              'Due Date',
+              style: TextStyle(
+                fontSize: _isMobile ? 14 : 16,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[700],
+              ),
+            ),
+            SizedBox(height: 8),
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: _selectDueDate,
+                child: Container(
+                  padding: EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[50],
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.calendar_today, color: Colors.blue.shade600),
+                      SizedBox(width: 12),
+                      Text(
+                        DateFormat('MMM dd, yyyy').format(_invoiceDueDate),
+                        style: TextStyle(
+                          fontSize: _isMobile ? 14 : 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Spacer(),
+                      Icon(Icons.arrow_drop_down, color: Colors.grey.shade500),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            SizedBox(height: _isMobile ? 24 : 32),
+
+            // Create Invoice Button
+            SizedBox(
+              width: double.infinity,
+              height: _isMobile ? 48 : 56,
+              child: ElevatedButton(
+                onPressed: _isProcessing || _selectedCourse == null
+                    ? null
+                    : _createInvoice,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue.shade600,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  elevation: 2,
+                ),
+                child: _isProcessing
+                    ? SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.receipt_long,
+                              color: Colors.white, size: _isMobile ? 20 : 24),
+                          SizedBox(width: 12),
+                          Text(
+                            'Create Invoice',
+                            style: TextStyle(
+                              fontSize: _isMobile ? 16 : 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // Methods for handling user interactions
   void _searchStudents(String query) {
     if (query.isEmpty) {
       setState(() {
@@ -155,6 +1602,7 @@ class _POSScreenState extends State<POSScreen> with TickerProviderStateMixin {
                 .toLowerCase()
                 .contains(query.toLowerCase()) ||
             user.email.toLowerCase().contains(query.toLowerCase()) ||
+            (user.phone.contains(query)) ||
             (user.idnumber?.toLowerCase().contains(query.toLowerCase()) ??
                 false))
         .take(10)
@@ -166,36 +1614,7 @@ class _POSScreenState extends State<POSScreen> with TickerProviderStateMixin {
     });
   }
 
-  // Replace your POS screen balance calculation methods with these exact copies from student details screen and payment dialog:
-
-// EXACT COPY from student_details_screen.dart _buildBillingTab method
-  double _getStudentBalance(User student) {
-    final studentInvoices = billingController.invoices
-        .where((invoice) => invoice.studentId == student.id)
-        .toList();
-
-    final totalBalance = studentInvoices.fold<double>(
-        0.0, (sum, invoice) => sum + invoice.balance);
-
-    return totalBalance;
-  }
-
-// EXACT COPY from payment_dialog.dart logic
-  List<Invoice> _getStudentInvoices(User student) {
-    return billingController.invoices
-        .where((invoice) => invoice.studentId == student.id)
-        .toList();
-  }
-
-// EXACT COPY from payment_dialog.dart - filter unpaid invoices
-  List<Invoice> _getUnpaidInvoices(User student) {
-    return billingController.invoices
-        .where(
-            (invoice) => invoice.studentId == student.id && invoice.balance > 0)
-        .toList();
-  }
-
-// Updated _selectStudent method using exact same logic as student details screen
+  // Updated _selectStudent method using exact same logic as student details screen
   void _selectStudent(User student) {
     setState(() {
       _selectedStudent = student;
@@ -222,7 +1641,21 @@ class _POSScreenState extends State<POSScreen> with TickerProviderStateMixin {
     }
   }
 
-// Updated _processPayment using EXACT same logic as payment dialog
+  Future<void> _selectDueDate() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _invoiceDueDate,
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(Duration(days: 365)),
+    );
+    if (picked != null && picked != _invoiceDueDate) {
+      setState(() {
+        _invoiceDueDate = picked;
+      });
+    }
+  }
+
+  // Updated _processPayment using EXACT same logic as payment dialog
   void _processPayment() async {
     if (_selectedStudent == null || _paymentAmountController.text.isEmpty) {
       _showEnhancedSnackbar('Please select a student and enter payment amount',
@@ -302,7 +1735,7 @@ class _POSScreenState extends State<POSScreen> with TickerProviderStateMixin {
 
       // Auto-clear after success
       Future.delayed(Duration(seconds: 2), () {
-        _clearAll();
+        if (mounted) _clearAll();
       });
     } catch (e) {
       print('Payment processing error: $e');
@@ -334,6 +1767,7 @@ class _POSScreenState extends State<POSScreen> with TickerProviderStateMixin {
 
     setState(() {
       _isProcessing = true;
+      _currentStep = 'processing';
     });
 
     try {
@@ -352,1647 +1786,30 @@ class _POSScreenState extends State<POSScreen> with TickerProviderStateMixin {
 
       await billingController.createInvoice(invoice);
 
+      setState(() {
+        _currentStep = 'success';
+      });
+
       _showEnhancedSnackbar(
         'Invoice created successfully for ${lessons} lesson(s)!',
         SnackbarType.success,
       );
 
-      _clearAll();
+      // Auto-clear after success
+      Future.delayed(Duration(seconds: 2), () {
+        if (mounted) _clearAll();
+      });
     } catch (e) {
       _showEnhancedSnackbar(
           'Error creating invoice: ${e.toString()}', SnackbarType.error);
+      setState(() {
+        _currentStep = 'invoice';
+      });
     } finally {
       setState(() {
         _isProcessing = false;
       });
     }
-  }
-
-  void _clearAll() {
-    setState(() {
-      _selectedStudent = null;
-      _searchController.clear();
-      _paymentAmountController.clear();
-      _notesController.clear();
-      _selectedCourse = null;
-      _lessonsController.text = '1';
-      _invoiceDueDate = DateTime.now().add(Duration(days: 30));
-      _paymentMethod = 'Cash';
-      _generateReceipt = true;
-      _showSearchResults = false;
-      _currentStep = 'search';
-    });
-    _searchFocusNode.requestFocus();
-  }
-
-  void _showEnhancedSnackbar(String message, SnackbarType type) {
-    final color = type == SnackbarType.success
-        ? Colors.green
-        : type == SnackbarType.error
-            ? Colors.red
-            : Colors.blue;
-
-    final icon = type == SnackbarType.success
-        ? Icons.check_circle
-        : type == SnackbarType.error
-            ? Icons.error
-            : Icons.info;
-
-    Get.snackbar(
-      '',
-      '',
-      titleText: Container(),
-      messageText: Row(
-        children: [
-          Icon(icon, color: Colors.white, size: 24),
-          SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              message,
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-        ],
-      ),
-      backgroundColor: color.shade600,
-      snackPosition: SnackPosition.TOP,
-      margin: EdgeInsets.all(16),
-      borderRadius: 12,
-      duration: Duration(seconds: 3),
-      animationDuration: Duration(milliseconds: 300),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey[50],
-      appBar: _buildEnhancedAppBar(),
-      body: FadeTransition(
-        opacity: _fadeAnimation,
-        child: SlideTransition(
-          position: _slideAnimation,
-          child: Padding(
-            padding: EdgeInsets.all(20),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Left Panel - Student Search and Info
-                Expanded(
-                  flex: 2,
-                  child: _buildStudentPanel(),
-                ),
-                SizedBox(width: 20),
-                // Right Panel - Operations
-                Expanded(
-                  flex: 3,
-                  child: _buildOperationsPanel(),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  PreferredSizeWidget _buildEnhancedAppBar() {
-    return AppBar(
-      title: Row(
-        children: [
-          Container(
-            padding: EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(Icons.point_of_sale, color: Colors.white),
-          ),
-          SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Point of Sale',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 20,
-                  color: Colors.white,
-                ),
-              ),
-              Text(
-                'Process payments & create invoices',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.white.withOpacity(0.8),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-      backgroundColor: Colors.blue[700],
-      elevation: 0,
-      actions: [
-        _buildQuickAction(Icons.refresh, 'Refresh', _loadData),
-        _buildQuickAction(Icons.clear_all, 'Clear All', _clearAll),
-        SizedBox(width: 8),
-      ],
-    );
-  }
-
-  Widget _buildQuickAction(
-      IconData icon, String tooltip, VoidCallback onPressed) {
-    return Tooltip(
-      message: tooltip,
-      child: Container(
-        margin: EdgeInsets.symmetric(horizontal: 4),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(8),
-            onTap: onPressed,
-            child: Container(
-              padding: EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.white.withOpacity(0.3)),
-              ),
-              child: Icon(icon, color: Colors.white, size: 20),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStudentPanel() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSearchSection(),
-        SizedBox(height: 20),
-        if (_selectedStudent != null) _buildStudentInfoCard(),
-        if (_recentStudents.isNotEmpty && _selectedStudent == null)
-          _buildRecentStudentsCard(),
-      ],
-    );
-  }
-
-  Widget _buildSearchSection() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            blurRadius: 20,
-            spreadRadius: 2,
-            offset: Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Padding(
-            padding: EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Icon(Icons.search, color: Colors.blue.shade600),
-                    ),
-                    SizedBox(width: 12),
-                    Text(
-                      'Student Search',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey[800],
-                      ),
-                    ),
-                  ],
-                ),
-                SizedBox(height: 16),
-                Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey.shade300),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: TextFormField(
-                    controller: _searchController,
-                    focusNode: _searchFocusNode,
-                    onChanged: _searchStudents,
-                    decoration: InputDecoration(
-                      hintText: 'Search by name, email, or ID number...',
-                      hintStyle: TextStyle(color: Colors.grey.shade500),
-                      prefixIcon:
-                          Icon(Icons.search, color: Colors.grey.shade400),
-                      suffixIcon: _searchController.text.isNotEmpty
-                          ? IconButton(
-                              icon: Icon(Icons.clear,
-                                  color: Colors.grey.shade400),
-                              onPressed: () {
-                                _searchController.clear();
-                                _searchStudents('');
-                              },
-                            )
-                          : null,
-                      border: InputBorder.none,
-                      contentPadding:
-                          EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (_showSearchResults && _searchResults.isNotEmpty)
-            _buildSearchResults(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSearchResults() {
-    return Container(
-      decoration: BoxDecoration(
-        border: Border(top: BorderSide(color: Colors.grey.shade200)),
-      ),
-      child: ListView.builder(
-        shrinkWrap: true,
-        physics: NeverScrollableScrollPhysics(),
-        itemCount: _searchResults.length,
-        itemBuilder: (context, index) {
-          final student = _searchResults[index];
-          final balance = _getStudentBalance(student);
-
-          return Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () => _selectStudent(student),
-              child: Container(
-                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                child: Row(
-                  children: [
-                    // Student Avatar
-                    CircleAvatar(
-                      radius: 20,
-                      backgroundColor: Colors.blue.shade100,
-                      child: Text(
-                        '${student.fname.substring(0, 1)}${student.lname.substring(0, 1)}',
-                        style: TextStyle(
-                          color: Colors.blue.shade700,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    SizedBox(width: 12),
-                    // Student Info
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '${student.fname} ${student.lname}',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 16,
-                            ),
-                          ),
-                          Text(
-                            student.email,
-                            style: TextStyle(
-                              color: Colors.grey.shade600,
-                              fontSize: 14,
-                            ),
-                          ),
-                          if (student.idnumber != null)
-                            Text(
-                              'ID: ${student.idnumber}',
-                              style: TextStyle(
-                                color: Colors.grey.shade500,
-                                fontSize: 12,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                    // Balance Indicator
-                    Container(
-                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: balance > 0
-                            ? Colors.red.shade50
-                            : Colors.green.shade50,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: balance > 0
-                              ? Colors.red.shade200
-                              : Colors.green.shade200,
-                        ),
-                      ),
-                      child: Text(
-                        '\$${balance.toStringAsFixed(2)}',
-                        style: TextStyle(
-                          color: balance > 0
-                              ? Colors.red.shade700
-                              : Colors.green.shade700,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildStudentInfoCard() {
-    final balance = _getStudentBalance(_selectedStudent!);
-    final invoices = _getStudentInvoices(_selectedStudent!);
-    final paidInvoices = invoices.where((i) => i.status == 'paid').length;
-
-    return ScaleTransition(
-      scale: _scaleAnimation,
-      child: Container(
-        padding: EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.blue.shade200, width: 2),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.blue.withOpacity(0.1),
-              blurRadius: 20,
-              spreadRadius: 2,
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 25,
-                  backgroundColor: Colors.blue.shade100,
-                  child: Text(
-                    '${_selectedStudent!.fname.substring(0, 1)}${_selectedStudent!.lname.substring(0, 1)}',
-                    style: TextStyle(
-                      color: Colors.blue.shade700,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                    ),
-                  ),
-                ),
-                SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${_selectedStudent!.fname} ${_selectedStudent!.lname}',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        _selectedStudent!.email,
-                        style: TextStyle(
-                          color: Colors.grey.shade600,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  icon: Icon(Icons.close, color: Colors.grey.shade400),
-                  onPressed: () {
-                    setState(() {
-                      _selectedStudent = null;
-                      _searchController.clear();
-                      _currentStep = 'search';
-                    });
-                  },
-                ),
-              ],
-            ),
-            SizedBox(height: 20),
-            // Stats
-            Row(
-              children: [
-                Expanded(
-                  child: _buildStatCard(
-                    'Outstanding Balance',
-                    '\$${balance.toStringAsFixed(2)}',
-                    Icons.account_balance_wallet,
-                    balance > 0 ? Colors.red : Colors.green,
-                  ),
-                ),
-                SizedBox(width: 12),
-                Expanded(
-                  child: _buildStatCard(
-                    'Total Invoices',
-                    '${invoices.length}',
-                    Icons.receipt_long,
-                    Colors.blue,
-                  ),
-                ),
-                SizedBox(width: 12),
-                Expanded(
-                  child: _buildStatCard(
-                    'Paid Invoices',
-                    '$paidInvoices',
-                    Icons.check_circle,
-                    Colors.green,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatCard(
-      String label, String value, IconData icon, Color color) {
-    return Container(
-      padding: EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, color: color, size: 24),
-          SizedBox(height: 8),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 10,
-              color: Colors.grey.shade600,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRecentStudentsCard() {
-    return Container(
-      padding: EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            blurRadius: 20,
-            spreadRadius: 2,
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.history, color: Colors.grey.shade600),
-              SizedBox(width: 8),
-              Text(
-                'Recent Students',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey[800],
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 16),
-          ..._recentStudents
-              .map((student) => Container(
-                    margin: EdgeInsets.only(bottom: 8),
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(8),
-                        onTap: () => _selectStudent(student),
-                        child: Padding(
-                          padding: EdgeInsets.all(8),
-                          child: Row(
-                            children: [
-                              CircleAvatar(
-                                radius: 16,
-                                backgroundColor: Colors.grey.shade200,
-                                child: Text(
-                                  '${student.fname.substring(0, 1)}${student.lname.substring(0, 1)}',
-                                  style: TextStyle(
-                                    color: Colors.grey.shade700,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                              SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  '${student.fname} ${student.lname}',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ),
-                              Icon(Icons.arrow_forward_ios,
-                                  color: Colors.grey.shade400, size: 16),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ))
-              .toList(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildOperationsPanel() {
-    return Column(
-      children: [
-        _buildModeSelector(),
-        SizedBox(height: 20),
-        Expanded(
-          child: _buildOperationForm(),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildModeSelector() {
-    return Container(
-      padding: EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            blurRadius: 20,
-            spreadRadius: 2,
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Select Operation',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey[800],
-            ),
-          ),
-          SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: _buildModeButton(
-                  'Process Payment',
-                  'Accept payment for outstanding balance',
-                  Icons.payment,
-                  'payment',
-                  Colors.green,
-                ),
-              ),
-              SizedBox(width: 16),
-              Expanded(
-                child: _buildModeButton(
-                  'Create Invoice',
-                  'Generate new invoice for student',
-                  Icons.receipt_long,
-                  'invoice',
-                  Colors.blue,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildModeButton(
-      String title, String subtitle, IconData icon, String mode, Color color) {
-    final isSelected = _operationMode == mode;
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () => setState(() => _operationMode = mode),
-        child: AnimatedContainer(
-          duration: Duration(milliseconds: 200),
-          padding: EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: isSelected ? color.withOpacity(0.1) : Colors.grey[50],
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: isSelected ? color : Colors.grey.shade300,
-              width: 2,
-            ),
-            boxShadow: isSelected
-                ? [
-                    BoxShadow(
-                      color: color.withOpacity(0.2),
-                      blurRadius: 8,
-                      spreadRadius: 1,
-                    ),
-                  ]
-                : [],
-          ),
-          child: Column(
-            children: [
-              AnimatedContainer(
-                duration: Duration(milliseconds: 200),
-                padding: EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: isSelected ? color : Colors.grey.shade400,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  icon,
-                  color: Colors.white,
-                  size: 24,
-                ),
-              ),
-              SizedBox(height: 12),
-              Text(
-                title,
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                  color: isSelected ? color : Colors.grey[800],
-                ),
-                textAlign: TextAlign.center,
-              ),
-              SizedBox(height: 4),
-              Text(
-                subtitle,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildOperationForm() {
-    if (_currentStep == 'processing') {
-      return _buildProcessingScreen();
-    } else if (_currentStep == 'success') {
-      return _buildSuccessScreen();
-    } else if (_operationMode == 'payment') {
-      return SingleChildScrollView(
-          child: _buildEnhancedPaymentForm()); // Add scrolling here
-    } else {
-      return SingleChildScrollView(
-          child: _buildEnhancedInvoiceForm()); // Add scrolling here
-    }
-  }
-
-  Widget _buildProcessingScreen() {
-    return Container(
-      padding: EdgeInsets.all(40),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            blurRadius: 20,
-            spreadRadius: 2,
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          SizedBox(
-            width: 80,
-            height: 80,
-            child: CircularProgressIndicator(
-              strokeWidth: 6,
-              valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade600),
-            ),
-          ),
-          SizedBox(height: 32),
-          Text(
-            'Processing Payment...',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey[800],
-            ),
-          ),
-          SizedBox(height: 16),
-          Text(
-            'Please wait while we process your transaction',
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.grey[600],
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSuccessScreen() {
-    return SingleChildScrollView(
-      child: Container(
-        padding: EdgeInsets.all(40),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.grey.withOpacity(0.1),
-              blurRadius: 20,
-              spreadRadius: 2,
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: Colors.green.shade100,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.check_circle,
-                color: Colors.green.shade600,
-                size: 50,
-              ),
-            ),
-            SizedBox(height: 32),
-            Text(
-              'Payment Successful!',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Colors.green.shade700,
-              ),
-            ),
-            SizedBox(height: 12),
-            Text(
-              'Transaction completed successfully',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey[600],
-              ),
-              textAlign: TextAlign.center,
-            ),
-            SizedBox(height: 10),
-            ElevatedButton(
-              onPressed: _clearAll,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green.shade600,
-                padding: EdgeInsets.symmetric(horizontal: 32, vertical: 10),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.add, color: Colors.white),
-                  SizedBox(width: 5),
-                  Text(
-                    'New Transaction',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEnhancedPaymentForm() {
-    final canProcessPayment =
-        _selectedStudent != null && _getStudentBalance(_selectedStudent!) > 0;
-    final balance =
-        _selectedStudent != null ? _getStudentBalance(_selectedStudent!) : 0.0;
-
-    return Container(
-      padding: EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            blurRadius: 20,
-            spreadRadius: 2,
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header
-          Row(
-            children: [
-              Container(
-                padding: EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.green.shade100,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child:
-                    Icon(Icons.payment, color: Colors.green.shade700, size: 24),
-              ),
-              SizedBox(width: 16),
-              Expanded(
-                // Add Expanded to prevent overflow
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Process Payment',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey[800],
-                      ),
-                    ),
-                    Text(
-                      'Accept payment for outstanding balance',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[600],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 24),
-
-          if (!canProcessPayment) ...[
-            Container(
-              padding: EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.orange.shade50,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.orange.shade200),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.info_outline,
-                      color: Colors.orange.shade700, size: 24),
-                  SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _selectedStudent == null
-                              ? 'No Student Selected'
-                              : 'No Outstanding Balance',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.orange.shade800,
-                          ),
-                        ),
-                        SizedBox(height: 4),
-                        Text(
-                          _selectedStudent == null
-                              ? 'Please search and select a student to continue'
-                              : 'This student has no outstanding balance to pay',
-                          style: TextStyle(
-                            color: Colors.orange.shade700,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ] else ...[
-            // Payment Amount Section
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Payment Amount',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey[800],
-                      ),
-                    ),
-                    Text(
-                      'Outstanding: \$${balance.toStringAsFixed(2)}',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.red.shade600,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-                SizedBox(height: 12),
-                Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey.shade300),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: TextFormField(
-                    controller: _paymentAmountController,
-                    focusNode: _amountFocusNode,
-                    keyboardType:
-                        TextInputType.numberWithOptions(decimal: true),
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(
-                          RegExp(r'^\d+\.?\d{0,2}')),
-                    ],
-                    decoration: InputDecoration(
-                      hintText: '0.00',
-                      prefixIcon: Container(
-                        padding: EdgeInsets.all(16),
-                        child: Text(
-                          '\$',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.grey.shade600,
-                          ),
-                        ),
-                      ),
-                      border: InputBorder.none,
-                      contentPadding:
-                          EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                    ),
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                SizedBox(height: 12),
-                // Quick Amount Buttons
-                Row(
-                  children: [
-                    Text(
-                      'Quick amounts:',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                    SizedBox(width: 12),
-                    ..._quickAmounts
-                        .where((amount) => amount <= balance)
-                        .map(
-                          (amount) => Container(
-                            margin: EdgeInsets.only(right: 8),
-                            child: Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                borderRadius: BorderRadius.circular(20),
-                                onTap: () {
-                                  _paymentAmountController.text =
-                                      amount.toStringAsFixed(2);
-                                },
-                                child: Container(
-                                  padding: EdgeInsets.symmetric(
-                                      horizontal: 12, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: Colors.blue.shade50,
-                                    borderRadius: BorderRadius.circular(20),
-                                    border:
-                                        Border.all(color: Colors.blue.shade200),
-                                  ),
-                                  child: Text(
-                                    '\$${amount.toStringAsFixed(0)}',
-                                    style: TextStyle(
-                                      color: Colors.blue.shade700,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        )
-                        .toList(),
-                    // Full Balance Button
-                    Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(20),
-                        onTap: () {
-                          _paymentAmountController.text =
-                              balance.toStringAsFixed(2);
-                        },
-                        child: Container(
-                          padding:
-                              EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: Colors.green.shade50,
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: Colors.green.shade200),
-                          ),
-                          child: Text(
-                            'Full Balance',
-                            style: TextStyle(
-                              color: Colors.green.shade700,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            SizedBox(height: 24),
-
-            // Payment Method Section
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Payment Method',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey[800],
-                  ),
-                ),
-                SizedBox(height: 12),
-                Row(
-                  children: [
-                    _buildPaymentMethodButton(
-                        'Cash', Icons.money, Colors.green),
-                    SizedBox(width: 12),
-                    _buildPaymentMethodButton(
-                        'Ecocash', Icons.credit_card, Colors.blue),
-                  ],
-                ),
-              ],
-            ),
-            SizedBox(height: 24),
-
-            // Generate Receipt Option
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.grey.shade50,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: CheckboxListTile(
-                title: Text(
-                  'Generate Receipt',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-                subtitle: Text(
-                  'Automatically generate and print receipt',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                ),
-                value: _generateReceipt,
-                onChanged: (value) =>
-                    setState(() => _generateReceipt = value ?? true),
-                activeColor: Colors.green.shade600,
-                controlAffinity: ListTileControlAffinity.leading,
-              ),
-            ),
-            SizedBox(height: 32),
-
-            // Process Button
-            SizedBox(
-              width: double.infinity,
-              height: 56,
-              child: ElevatedButton(
-                onPressed: _isProcessing ? null : _processPayment,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green.shade600,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  elevation: 2,
-                ),
-                child: _isProcessing
-                    ? SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2,
-                        ),
-                      )
-                    : Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.payment, color: Colors.white, size: 24),
-                          SizedBox(width: 12),
-                          Text(
-                            'Process Payment',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ],
-                      ),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPaymentMethodButton(String method, IconData icon, Color color) {
-    final isSelected = _paymentMethod == method;
-
-    return Expanded(
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: () => setState(() => _paymentMethod = method),
-          child: AnimatedContainer(
-            duration: Duration(milliseconds: 200),
-            padding: EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: isSelected ? color.withOpacity(0.1) : Colors.grey.shade50,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: isSelected ? color : Colors.grey.shade300,
-                width: 2,
-              ),
-            ),
-            child: Column(
-              children: [
-                Icon(
-                  icon,
-                  color: isSelected ? color : Colors.grey.shade500,
-                  size: 24,
-                ),
-                SizedBox(height: 8),
-                Text(
-                  method,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: isSelected ? color : Colors.grey.shade700,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEnhancedInvoiceForm() {
-    final canCreateInvoice = _selectedStudent != null;
-
-    return Container(
-      padding: EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            blurRadius: 20,
-            spreadRadius: 2,
-          ),
-        ],
-      ),
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header
-            Row(
-              children: [
-                Container(
-                  padding: EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.shade100,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(Icons.receipt_long,
-                      color: Colors.blue.shade700, size: 24),
-                ),
-                SizedBox(width: 16),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Create Invoice',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey[800],
-                      ),
-                    ),
-                    Text(
-                      'Generate new invoice for student',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[600],
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            SizedBox(height: 24),
-
-            if (!canCreateInvoice) ...[
-              Container(
-                padding: EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.orange.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.orange.shade200),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.info_outline,
-                        color: Colors.orange.shade700, size: 24),
-                    SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'No Student Selected',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.orange.shade800,
-                            ),
-                          ),
-                          SizedBox(height: 4),
-                          Text(
-                            'Please search and select a student to create an invoice',
-                            style: TextStyle(
-                              color: Colors.orange.shade700,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ] else ...[
-              // Course Selection
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Select Course',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey[800],
-                    ),
-                  ),
-                  SizedBox(height: 12),
-                  Container(
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey.shade300),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: DropdownButtonFormField<Course>(
-                      value: _selectedCourse,
-                      isExpanded: true,
-                      onChanged: (Course? course) {
-                        setState(() {
-                          _selectedCourse = course;
-                        });
-                      },
-                      decoration: InputDecoration(
-                        hintText: 'Choose a course...',
-                        border: InputBorder.none,
-                        contentPadding:
-                            EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                      ),
-                      items: courseController.courses.map((Course course) {
-                        return DropdownMenuItem<Course>(
-                          value: course,
-                          child: Row(
-                            children: [
-                              Container(
-                                padding: EdgeInsets.all(6),
-                                decoration: BoxDecoration(
-                                  color: Colors.blue.shade100,
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Icon(
-                                  Icons.school,
-                                  color: Colors.blue.shade700,
-                                  size: 16,
-                                ),
-                              ),
-                              SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  '${course.name} - \$${course.price.toStringAsFixed(2)}',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 14,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                  maxLines: 1,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ),
-                ],
-              ),
-              SizedBox(height: 24),
-
-              // Number of Lessons
-              Row(
-                children: [
-                  Expanded(
-                    flex: 2,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Number of Lessons',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.grey[800],
-                          ),
-                        ),
-                        SizedBox(height: 12),
-                        Container(
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.grey.shade300),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: TextFormField(
-                            controller: _lessonsController,
-                            keyboardType: TextInputType.number,
-                            inputFormatters: [
-                              FilteringTextInputFormatter.digitsOnly
-                            ],
-                            onChanged: (value) {
-                              setState(() {});
-                            },
-                            decoration: InputDecoration(
-                              border: InputBorder.none,
-                              contentPadding: EdgeInsets.symmetric(
-                                  horizontal: 16, vertical: 16),
-                            ),
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  SizedBox(width: 20),
-                  Expanded(
-                    flex: 3,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Total Amount',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.grey[800],
-                          ),
-                        ),
-                        SizedBox(height: 12),
-                        Container(
-                          padding: EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: Colors.green.shade50,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.green.shade200),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(Icons.attach_money,
-                                  color: Colors.green.shade700),
-                              SizedBox(width: 8),
-                              Text(
-                                _selectedCourse != null
-                                    ? '\$${(_selectedCourse!.price * (int.tryParse(_lessonsController.text) ?? 1)).toStringAsFixed(2)}'
-                                    : '\$0.00',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.green.shade700,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              SizedBox(height: 24),
-
-              // Due Date
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Due Date',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey[800],
-                    ),
-                  ),
-                  SizedBox(height: 12),
-                  Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(12),
-                      onTap: () async {
-                        final selectedDate = await showDatePicker(
-                          context: context,
-                          initialDate: _invoiceDueDate,
-                          firstDate: DateTime.now(),
-                          lastDate: DateTime.now().add(Duration(days: 365)),
-                          builder: (context, child) {
-                            return Theme(
-                              data: Theme.of(context).copyWith(
-                                colorScheme:
-                                    Theme.of(context).colorScheme.copyWith(
-                                          primary: Colors.blue.shade600,
-                                        ),
-                              ),
-                              child: child!,
-                            );
-                          },
-                        );
-                        if (selectedDate != null) {
-                          setState(() {
-                            _invoiceDueDate = selectedDate;
-                          });
-                        }
-                      },
-                      child: Container(
-                        padding: EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey.shade300),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.calendar_today,
-                                color: Colors.blue.shade600),
-                            SizedBox(width: 12),
-                            Text(
-                              DateFormat('MMM dd, yyyy')
-                                  .format(_invoiceDueDate),
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            Spacer(),
-                            Icon(Icons.arrow_drop_down,
-                                color: Colors.grey.shade500),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              SizedBox(height: 32),
-
-              // Create Invoice Button
-              SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: ElevatedButton(
-                  onPressed: _isProcessing ? null : _createInvoice,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue.shade600,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    elevation: 2,
-                  ),
-                  child: _isProcessing
-                      ? SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 2,
-                          ),
-                        )
-                      : Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.receipt_long,
-                                color: Colors.white, size: 24),
-                            SizedBox(width: 12),
-                            Text(
-                              'Create Invoice',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ],
-                        ),
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
   }
 }
 

@@ -14,6 +14,7 @@ import 'dart:io';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:path_provider/path_provider.dart';
+import 'package:driving/widgets/responsive_text.dart';
 
 class StudentInvoiceScreen extends StatefulWidget {
   final User student;
@@ -289,108 +290,250 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 24,
-                backgroundColor: Colors.blue.shade100,
-                child: Text(
-                  '${widget.student.fname[0]}${widget.student.lname[0]}',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.blue.shade700,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
+          // Header row with student info
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth < 600) {
+                // Mobile layout - stack vertically
+                return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      '${widget.student.fname} ${widget.student.lname}',
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
+                    Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 24,
+                          backgroundColor: Colors.blue.shade100,
+                          child: Text(
+                            '${widget.student.fname[0]}${widget.student.lname[0]}',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.blue.shade700,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '${widget.student.fname} ${widget.student.lname}',
+                                style: const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Text(
+                                widget.student.email,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey.shade600,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (totalBalance > 0) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: overdueCount > 0
+                              ? Colors.red.shade50
+                              : Colors.orange.shade50,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: overdueCount > 0
+                                ? Colors.red.shade200
+                                : Colors.orange.shade200,
+                          ),
+                        ),
+                        child: Text(
+                          overdueCount > 0 ? 'OVERDUE' : 'OUTSTANDING',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: overdueCount > 0
+                                ? Colors.red.shade700
+                                : Colors.orange.shade700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                );
+              } else {
+                // Desktop layout - side by side
+                return Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 24,
+                      backgroundColor: Colors.blue.shade100,
+                      child: Text(
+                        '${widget.student.fname[0]}${widget.student.lname[0]}',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue.shade700,
+                        ),
                       ),
                     ),
-                    Text(
-                      widget.student.email,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey.shade600,
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${widget.student.fname} ${widget.student.lname}',
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            widget.student.email,
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey.shade600,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (totalBalance > 0)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: overdueCount > 0
+                              ? Colors.red.shade50
+                              : Colors.orange.shade50,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: overdueCount > 0
+                                ? Colors.red.shade200
+                                : Colors.orange.shade200,
+                          ),
+                        ),
+                        child: Text(
+                          overdueCount > 0 ? 'OVERDUE' : 'OUTSTANDING',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: overdueCount > 0
+                                ? Colors.red.shade700
+                                : Colors.orange.shade700,
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              }
+            },
+          ),
+          const SizedBox(height: 20),
+          // Summary items - responsive layout
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth < 500) {
+                // Mobile: 2x2 grid
+                return Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildSummaryItem(
+                            'Total Invoiced',
+                            '\$${totalAmount.toStringAsFixed(2)}',
+                            Icons.receipt,
+                            Colors.blue.shade600,
+                          ),
+                        ),
+                        Expanded(
+                          child: _buildSummaryItem(
+                            'Total Paid',
+                            '\$${totalPaid.toStringAsFixed(2)}',
+                            Icons.check_circle,
+                            Colors.green.shade600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildSummaryItem(
+                            'Outstanding',
+                            '\$${totalBalance.toStringAsFixed(2)}',
+                            Icons.pending,
+                            totalBalance > 0
+                                ? Colors.red.shade600
+                                : Colors.green.shade600,
+                          ),
+                        ),
+                        Expanded(
+                          child: _buildSummaryItem(
+                            'Total Invoices',
+                            '${_filteredInvoices.length}',
+                            Icons.description,
+                            Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                );
+              } else {
+                // Desktop: single row
+                return Row(
+                  children: [
+                    Expanded(
+                      child: _buildSummaryItem(
+                        'Total Invoiced',
+                        '\$${totalAmount.toStringAsFixed(2)}',
+                        Icons.receipt,
+                        Colors.blue.shade600,
+                      ),
+                    ),
+                    Expanded(
+                      child: _buildSummaryItem(
+                        'Total Paid',
+                        '\$${totalPaid.toStringAsFixed(2)}',
+                        Icons.check_circle,
+                        Colors.green.shade600,
+                      ),
+                    ),
+                    Expanded(
+                      child: _buildSummaryItem(
+                        'Outstanding',
+                        '\$${totalBalance.toStringAsFixed(2)}',
+                        Icons.pending,
+                        totalBalance > 0
+                            ? Colors.red.shade600
+                            : Colors.green.shade600,
+                      ),
+                    ),
+                    Expanded(
+                      child: _buildSummaryItem(
+                        'Total Invoices',
+                        '${_filteredInvoices.length}',
+                        Icons.description,
+                        Colors.grey.shade600,
                       ),
                     ),
                   ],
-                ),
-              ),
-              if (totalBalance > 0)
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: overdueCount > 0
-                        ? Colors.red.shade50
-                        : Colors.orange.shade50,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: overdueCount > 0
-                          ? Colors.red.shade200
-                          : Colors.orange.shade200,
-                    ),
-                  ),
-                  child: Text(
-                    overdueCount > 0 ? 'OVERDUE' : 'OUTSTANDING',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: overdueCount > 0
-                          ? Colors.red.shade700
-                          : Colors.orange.shade700,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              Expanded(
-                child: _buildSummaryItem(
-                  'Total Invoiced',
-                  '\$${totalAmount.toStringAsFixed(2)}',
-                  Icons.receipt,
-                  Colors.blue.shade600,
-                ),
-              ),
-              Expanded(
-                child: _buildSummaryItem(
-                  'Total Paid',
-                  '\$${totalPaid.toStringAsFixed(2)}',
-                  Icons.check_circle,
-                  Colors.green.shade600,
-                ),
-              ),
-              Expanded(
-                child: _buildSummaryItem(
-                  'Outstanding',
-                  '\$${totalBalance.toStringAsFixed(2)}',
-                  Icons.pending,
-                  totalBalance > 0
-                      ? Colors.red.shade600
-                      : Colors.green.shade600,
-                ),
-              ),
-              Expanded(
-                child: _buildSummaryItem(
-                  'Total Invoices',
-                  '${_filteredInvoices.length}',
-                  Icons.description,
-                  Colors.grey.shade600,
-                ),
-              ),
-            ],
+                );
+              }
+            },
           ),
         ],
       ),
@@ -403,12 +546,15 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
       children: [
         Icon(icon, color: color, size: 24),
         const SizedBox(height: 8),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: color,
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            value,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
           ),
         ),
         Text(
@@ -418,6 +564,8 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
             color: Colors.grey.shade600,
           ),
           textAlign: TextAlign.center,
+          overflow: TextOverflow.ellipsis,
+          maxLines: 2,
         ),
       ],
     );
@@ -426,12 +574,29 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
   Widget _buildFiltersAndSort() {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
-        children: [
-          Expanded(child: _buildFilterChips()),
-          const SizedBox(width: 16),
-          _buildSortDropdown(),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth < 600) {
+            // Mobile layout - stack vertically
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildFilterChips(),
+                const SizedBox(height: 12),
+                _buildSortDropdown(),
+              ],
+            );
+          } else {
+            // Desktop layout - side by side
+            return Row(
+              children: [
+                Expanded(child: _buildFilterChips()),
+                const SizedBox(width: 16),
+                _buildSortDropdown(),
+              ],
+            );
+          }
+        },
       ),
     );
   }
@@ -444,38 +609,43 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
       {'key': 'overdue', 'label': 'Overdue', 'icon': Icons.warning},
     ];
 
-    return Wrap(
-      spacing: 8,
-      children: filters.map((filter) {
-        final isSelected = _selectedFilter == filter['key'];
-        return FilterChip(
-          selected: isSelected,
-          label: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                filter['icon'] as IconData,
-                size: 16,
-                color: isSelected ? Colors.white : Colors.grey.shade600,
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: filters.map((filter) {
+          final isSelected = _selectedFilter == filter['key'];
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: FilterChip(
+              selected: isSelected,
+              label: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    filter['icon'] as IconData,
+                    size: 16,
+                    color: isSelected ? Colors.white : Colors.grey.shade600,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(filter['label'] as String),
+                ],
               ),
-              const SizedBox(width: 4),
-              Text(filter['label'] as String),
-            ],
-          ),
-          onSelected: (selected) {
-            setState(() {
-              _selectedFilter = filter['key'] as String;
-              _applyFiltersAndSort();
-            });
-          },
-          selectedColor: Colors.blue.shade600,
-          backgroundColor: Colors.grey.shade100,
-          labelStyle: TextStyle(
-            color: isSelected ? Colors.white : Colors.grey.shade700,
-            fontWeight: FontWeight.w500,
-          ),
-        );
-      }).toList(),
+              onSelected: (selected) {
+                setState(() {
+                  _selectedFilter = filter['key'] as String;
+                  _applyFiltersAndSort();
+                });
+              },
+              selectedColor: Colors.blue.shade600,
+              backgroundColor: Colors.grey.shade100,
+              labelStyle: TextStyle(
+                color: isSelected ? Colors.white : Colors.grey.shade700,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          );
+        }).toList(),
+      ),
     );
   }
 
@@ -691,6 +861,7 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
                       ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ],
@@ -698,58 +869,114 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
             },
           ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _buildDetailItem(
-                  'Lessons',
-                  '${invoice.lessons}',
-                  Icons.assignment,
-                ),
-              ),
-              Expanded(
-                child: _buildDetailItem(
-                  'Total Amount',
-                  '\$${invoice.totalAmountCalculated.toStringAsFixed(2)}',
-                  Icons.attach_money,
-                ),
-              ),
-              Expanded(
-                child: _buildDetailItem(
-                  'Paid',
-                  '\$${invoice.amountPaid.toStringAsFixed(2)}',
-                  Icons.payment,
-                ),
-              ),
-              Expanded(
-                child: _buildDetailItem(
-                  'Balance',
-                  '\$${invoice.balance.toStringAsFixed(2)}',
-                  Icons.account_balance,
-                  valueColor: invoice.balance > 0
-                      ? Colors.red.shade600
-                      : Colors.green.shade600,
-                ),
-              ),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth < 400) {
+                // Mobile: 2x2 grid
+                return Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildDetailItem(
+                            'Lessons',
+                            '${invoice.lessons}',
+                            Icons.assignment,
+                          ),
+                        ),
+                        Expanded(
+                          child: _buildDetailItem(
+                            'Total Amount',
+                            '\$${invoice.totalAmountCalculated.toStringAsFixed(2)}',
+                            Icons.attach_money,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildDetailItem(
+                            'Paid',
+                            '\$${invoice.amountPaid.toStringAsFixed(2)}',
+                            Icons.payment,
+                          ),
+                        ),
+                        Expanded(
+                          child: _buildDetailItem(
+                            'Balance',
+                            '\$${invoice.balance.toStringAsFixed(2)}',
+                            Icons.account_balance,
+                            valueColor: invoice.balance > 0
+                                ? Colors.red.shade600
+                                : Colors.green.shade600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                );
+              } else {
+                // Desktop: single row
+                return Row(
+                  children: [
+                    Expanded(
+                      child: _buildDetailItem(
+                        'Lessons',
+                        '${invoice.lessons}',
+                        Icons.assignment,
+                      ),
+                    ),
+                    Expanded(
+                      child: _buildDetailItem(
+                        'Total Amount',
+                        '\$${invoice.totalAmountCalculated.toStringAsFixed(2)}',
+                        Icons.attach_money,
+                      ),
+                    ),
+                    Expanded(
+                      child: _buildDetailItem(
+                        'Paid',
+                        '\$${invoice.amountPaid.toStringAsFixed(2)}',
+                        Icons.payment,
+                      ),
+                    ),
+                    Expanded(
+                      child: _buildDetailItem(
+                        'Balance',
+                        '\$${invoice.balance.toStringAsFixed(2)}',
+                        Icons.account_balance,
+                        valueColor: invoice.balance > 0
+                            ? Colors.red.shade600
+                            : Colors.green.shade600,
+                      ),
+                    ),
+                  ],
+                );
+              }
+            },
           ),
           const SizedBox(height: 12),
           Row(
             children: [
               Icon(Icons.schedule, size: 16, color: Colors.grey.shade600),
               const SizedBox(width: 8),
-              Text(
-                'Due: ${DateFormat('MMM dd, yyyy').format(invoice.dueDate)}',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: invoice.dueDate.isBefore(DateTime.now()) &&
-                          invoice.balance > 0
-                      ? Colors.red.shade600
-                      : Colors.grey.shade600,
-                  fontWeight: invoice.dueDate.isBefore(DateTime.now()) &&
-                          invoice.balance > 0
-                      ? FontWeight.w600
-                      : FontWeight.normal,
+              Expanded(
+                child: Text(
+                  'Due: ${DateFormat('MMM dd, yyyy').format(invoice.dueDate)}',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: invoice.dueDate.isBefore(DateTime.now()) &&
+                            invoice.balance > 0
+                        ? Colors.red.shade600
+                        : Colors.grey.shade600,
+                    fontWeight: invoice.dueDate.isBefore(DateTime.now()) &&
+                            invoice.balance > 0
+                        ? FontWeight.w600
+                        : FontWeight.normal,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
@@ -765,12 +992,15 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
       children: [
         Icon(icon, size: 16, color: Colors.grey.shade600),
         const SizedBox(height: 4),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-            color: valueColor ?? Colors.black87,
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            value,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: valueColor ?? Colors.black87,
+            ),
           ),
         ),
         Text(
@@ -779,6 +1009,8 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
             fontSize: 11,
             color: Colors.grey.shade600,
           ),
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
         ),
       ],
     );
@@ -814,53 +1046,121 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
             borderRadius:
                 const BorderRadius.vertical(bottom: Radius.circular(12)),
           ),
-          child: Row(
-            children: [
-              if (freshInvoice.balance > 0.01) ...[
-                // Use 0.01 instead of 0 to handle floating point precision
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () =>
-                        _showPaymentDialog(freshInvoice, widget.student),
-                    icon: const Icon(Icons.payment, size: 16),
-                    label: const Text('Record Payment'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green.shade600,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              // Responsive layout based on available width
+              if (constraints.maxWidth < 400) {
+                // Mobile layout - stack buttons vertically
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (freshInvoice.balance > 0.01) ...[
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () =>
+                              _showPaymentDialog(freshInvoice, widget.student),
+                          icon: const Icon(Icons.payment, size: 16),
+                          label: const Text('Record Payment'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green.shade600,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: invoicePayments.isNotEmpty
+                            ? () => _showInvoiceReceipts(
+                                freshInvoice, invoicePayments)
+                            : null,
+                        icon: Icon(
+                          Icons.receipt_long,
+                          size: 16,
+                          color: invoicePayments.isEmpty ? Colors.grey : null,
+                        ),
+                        label: Text(
+                          invoicePayments.isEmpty
+                              ? 'No Receipts'
+                              : 'Receipts (${invoicePayments.length})',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          foregroundColor:
+                              invoicePayments.isEmpty ? Colors.grey : null,
+                        ),
                       ),
                     ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-              ],
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: invoicePayments.isNotEmpty
-                      ? () =>
-                          _showInvoiceReceipts(freshInvoice, invoicePayments)
-                      : null,
-                  icon: Icon(
-                    Icons.receipt_long,
-                    size: 16,
-                    color: invoicePayments.isEmpty ? Colors.grey : null,
-                  ),
-                  label: Text(invoicePayments.isEmpty
-                      ? 'No Receipts'
-                      : 'View Receipts (${invoicePayments.length})'),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+                  ],
+                );
+              } else {
+                // Desktop/tablet layout - buttons side by side
+                return Row(
+                  children: [
+                    if (freshInvoice.balance > 0.01) ...[
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () =>
+                              _showPaymentDialog(freshInvoice, widget.student),
+                          icon: const Icon(Icons.payment, size: 16),
+                          label: const Text(
+                            'Record Payment',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green.shade600,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                    ],
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: invoicePayments.isNotEmpty
+                            ? () => _showInvoiceReceipts(
+                                freshInvoice, invoicePayments)
+                            : null,
+                        icon: Icon(
+                          Icons.receipt_long,
+                          size: 16,
+                          color: invoicePayments.isEmpty ? Colors.grey : null,
+                        ),
+                        label: Text(
+                          invoicePayments.isEmpty
+                              ? 'No Receipts'
+                              : 'View Receipts (${invoicePayments.length})',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          foregroundColor:
+                              invoicePayments.isEmpty ? Colors.grey : null,
+                        ),
+                      ),
                     ),
-                    foregroundColor:
-                        invoicePayments.isEmpty ? Colors.grey : null,
-                  ),
-                ),
-              ),
-            ],
+                  ],
+                );
+              }
+            },
           ),
         );
       },
@@ -886,164 +1186,236 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
       context: context,
       builder: (context) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Container(
-          width: MediaQuery.of(context).size.width * 0.9,
-          height: MediaQuery.of(context).size.height * 0.7,
-          child: Column(
-            children: [
-              // Header
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade600,
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(16),
-                    topRight: Radius.circular(16),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.receipt_long, color: Colors.white, size: 24),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Receipts for Invoice #${invoice.invoiceNumber}',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
+        insetPadding: const EdgeInsets.all(16),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final screenHeight = MediaQuery.of(context).size.height;
+            final maxHeight = screenHeight * 0.85; // Use 85% of screen height
+
+            return Container(
+              width: double.infinity,
+              constraints: BoxConstraints(maxHeight: maxHeight),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Header
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade600,
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(16),
+                        topRight: Radius.circular(16),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.receipt_long, color: Colors.white, size: 24),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Invoice #${invoice.invoiceNumber}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Text(
+                                '${payments.length} payment${payments.length != 1 ? 's' : ''} made',
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
                           ),
-                          Text(
-                            '${payments.length} payment${payments.length != 1 ? 's' : ''} made',
-                            style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
+                        ),
+                        IconButton(
+                          onPressed: () => Navigator.pop(context),
+                          icon: const Icon(Icons.close, color: Colors.white),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Invoice Summary - Mobile Optimized
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade50,
+                      border: Border(
+                        bottom: BorderSide(color: Colors.grey.shade300),
                       ),
                     ),
-                    IconButton(
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.close, color: Colors.white),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        if (constraints.maxWidth < 400) {
+                          // Mobile: 2x2 grid layout
+                          return Column(
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildSummaryColumn(
+                                      'Total',
+                                      '\$${invoice.totalAmountCalculated.toStringAsFixed(2)}',
+                                      Colors.blue.shade600,
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: _buildSummaryColumn(
+                                      'Paid',
+                                      '\$${invoice.amountPaid.toStringAsFixed(2)}',
+                                      Colors.green.shade600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildSummaryColumn(
+                                      'Balance',
+                                      '\$${invoice.balance.toStringAsFixed(2)}',
+                                      invoice.balance > 0
+                                          ? Colors.red.shade600
+                                          : Colors.green.shade600,
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: _buildSummaryColumn(
+                                      'Payments',
+                                      '${payments.length}',
+                                      Colors.grey.shade600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          );
+                        } else {
+                          // Desktop: single row
+                          return Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceAround,
+                            children: [
+                              _buildSummaryColumn(
+                                'Total Amount',
+                                '\$${invoice.totalAmountCalculated.toStringAsFixed(2)}',
+                                Colors.blue.shade600,
+                              ),
+                              _buildSummaryColumn(
+                                'Amount Paid',
+                                '\$${invoice.amountPaid.toStringAsFixed(2)}',
+                                Colors.green.shade600,
+                              ),
+                              _buildSummaryColumn(
+                                'Balance',
+                                '\$${invoice.balance.toStringAsFixed(2)}',
+                                invoice.balance > 0
+                                    ? Colors.red.shade600
+                                    : Colors.green.shade600,
+                              ),
+                            ],
+                          );
+                        }
+                      },
                     ),
-                  ],
-                ),
-              ),
-
-              // Invoice Summary
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade50,
-                  border: Border(
-                    bottom: BorderSide(color: Colors.grey.shade300),
                   ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _buildSummaryColumn(
-                      'Total Amount',
-                      '\$${invoice.totalAmountCalculated.toStringAsFixed(2)}',
-                      Colors.blue.shade600,
-                    ),
-                    _buildSummaryColumn(
-                      'Amount Paid',
-                      '\$${invoice.amountPaid.toStringAsFixed(2)}',
-                      Colors.green.shade600,
-                    ),
-                    _buildSummaryColumn(
-                      'Balance',
-                      '\$${invoice.balance.toStringAsFixed(2)}',
-                      invoice.balance > 0
-                          ? Colors.red.shade600
-                          : Colors.green.shade600,
-                    ),
-                  ],
-                ),
-              ),
 
-              // Payments List
-              Expanded(
-                child: ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: payments.length,
-                  itemBuilder: (context, index) {
-                    final payment = payments[index];
-                    return _buildPaymentCard(payment, index);
-                  },
-                ),
-              ),
+                  // Payments List - Optimized for mobile scrolling
+                  Flexible(
+                    child: ListView.builder(
+                      padding: const EdgeInsets.all(16),
+                      shrinkWrap: true,
+                      itemCount: payments.length,
+                      itemBuilder: (context, index) {
+                        return _buildMobilePaymentCard(payments[index], index);
+                      },
+                    ),
+                  ),
 
-              // Footer with total payments
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade50,
-                  borderRadius: const BorderRadius.only(
-                    bottomLeft: Radius.circular(16),
-                    bottomRight: Radius.circular(16),
-                  ),
-                  border: Border(
-                    top: BorderSide(color: Colors.grey.shade300),
-                  ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Total Payments: ${payments.length}',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
+                  // Footer with total payments - Mobile optimized
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade50,
+                      borderRadius: const BorderRadius.only(
+                        bottomLeft: Radius.circular(16),
+                        bottomRight: Radius.circular(16),
+                      ),
+                      border: Border(
+                        top: BorderSide(color: Colors.grey.shade300),
                       ),
                     ),
-                    Text(
-                      'Total Paid: \$${payments.fold<double>(0, (sum, p) => sum + p.amount).toStringAsFixed(2)}',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.green.shade600,
-                      ),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        if (constraints.maxWidth < 350) {
+                          // Very small screens - stack vertically
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Text(
+                                'Total Payments: ${payments.length}',
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Total Paid: \$${payments.fold<double>(0, (sum, p) => sum + p.amount).toStringAsFixed(2)}',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.green.shade600,
+                                ),
+                              ),
+                            ],
+                          );
+                        } else {
+                          // Regular mobile - side by side
+                          return Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Total Payments: ${payments.length}',
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              Text(
+                                'Total: \$${payments.fold<double>(0, (sum, p) => sum + p.amount).toStringAsFixed(2)}',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.green.shade600,
+                                ),
+                              ),
+                            ],
+                          );
+                        }
+                      },
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );
   }
 
-  Widget _buildSummaryColumn(String label, String value, Color color) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
-        ),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.grey.shade600,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPaymentCard(Payment payment, int index) {
+  Widget _buildMobilePaymentCard(Payment payment, int index) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 2,
@@ -1053,7 +1425,7 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Payment Header
+            // Payment Header - Mobile optimized
             Row(
               children: [
                 Container(
@@ -1085,9 +1457,10 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                         ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                       Text(
-                        DateFormat('MMM dd, yyyy HH:mm')
+                        DateFormat('MMM dd, yyyy • HH:mm')
                             .format(payment.paymentDate),
                         style: TextStyle(
                           fontSize: 12,
@@ -1118,9 +1491,7 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
-                        payment.receiptGenerated
-                            ? 'Receipt Generated'
-                            : 'No Receipt',
+                        payment.receiptGenerated ? 'Receipt' : 'No Receipt',
                         style: TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
@@ -1137,33 +1508,34 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
 
             const SizedBox(height: 12),
 
-            // Payment Details
-            Row(
+            // Payment Details - Mobile chips
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
               children: [
                 _buildPaymentDetailChip(
                   payment.method.toUpperCase(),
                   Icons.payment,
                   Colors.blue.shade600,
                 ),
-                const SizedBox(width: 8),
-                if (payment.notes != null && payment.notes!.isNotEmpty) ...[
+                if (payment.notes != null && payment.notes!.isNotEmpty)
                   _buildPaymentDetailChip(
                     'Has Notes',
                     Icons.note,
                     Colors.purple.shade600,
                   ),
-                  const SizedBox(width: 8),
-                ],
               ],
             ),
 
             if (payment.notes != null && payment.notes!.isNotEmpty) ...[
               const SizedBox(height: 12),
               Container(
-                padding: const EdgeInsets.all(8),
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: Colors.grey.shade50,
                   borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey.shade200),
                 ),
                 child: Text(
                   payment.notes!,
@@ -1178,22 +1550,22 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
 
             const SizedBox(height: 12),
 
-            // Payment Actions
-            Row(
-              children: [
-                if (payment.receiptGenerated &&
-                    payment.receiptPath != null) ...[
+            // Payment Actions - Mobile optimized buttons
+            if (payment.receiptGenerated && payment.receiptPath != null) ...[
+              // Two buttons side by side for existing receipts
+              Row(
+                children: [
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: () => _viewReceipt(payment),
                       icon: const Icon(Icons.visibility, size: 16),
-                      label: const Text('View Receipt'),
+                      label: const Text('View'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.blue.shade600,
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(6),
+                          borderRadius: BorderRadius.circular(8),
                         ),
                       ),
                     ),
@@ -1205,35 +1577,64 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
                       icon: const Icon(Icons.print, size: 16),
                       label: const Text('Print'),
                       style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                      ),
-                    ),
-                  ),
-                ] else ...[
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () => _generateReceiptForPayment(payment),
-                      icon: const Icon(Icons.receipt, size: 16),
-                      label: const Text('Generate Receipt'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.orange.shade600,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(6),
+                          borderRadius: BorderRadius.circular(8),
                         ),
                       ),
                     ),
                   ),
                 ],
-              ],
-            ),
+              ),
+            ] else ...[
+              // Single button for generating receipt
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => _generateReceiptForPayment(payment),
+                  icon: const Icon(Icons.receipt, size: 16),
+                  label: const Text('Generate Receipt'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange.shade600,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildSummaryColumn(String label, String value, Color color) {
+    return Column(
+      children: [
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            value,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+        ),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.grey.shade600,
+          ),
+          textAlign: TextAlign.center,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
     );
   }
 
@@ -1375,57 +1776,59 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.picture_as_pdf,
-                      size: 80,
-                      color: Colors.red.shade400,
-                    ),
-                    const SizedBox(height: 20),
-                    Text(
-                      'Receipt Generated',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey.shade800,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.picture_as_pdf,
+                        size: 50,
+                        color: Colors.red.shade400,
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Reference: ${payment.reference ?? 'N/A'}',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.grey.shade600,
+                      const SizedBox(height: 20),
+                      ResponsiveText(
+                        'Receipt Generated',
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey.shade800,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Amount: ${payment.formattedAmount}',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.green.shade600,
+                      const SizedBox(height: 12),
+                      ResponsiveText(
+                        'Reference: ${payment.reference ?? 'N/A'}',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.grey.shade600,
+                        ),
                       ),
-                    ),
-                    Text(
-                      'Date: ${DateFormat('MMM dd, yyyy HH:mm').format(payment.paymentDate)}',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey.shade600,
+                      const SizedBox(height: 8),
+                      ResponsiveText(
+                        'Amount: ${payment.formattedAmount}',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.green.shade600,
+                        ),
                       ),
-                    ),
-                    Text(
-                      payment.receiptPath!,
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: Colors.grey.shade700,
-                        fontFamily: 'monospace',
+                      ResponsiveText(
+                        'Date: ${DateFormat('MMM dd, yyyy HH:mm').format(payment.paymentDate)}',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey.shade600,
+                        ),
                       ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
+                      ResponsiveText(
+                        payment.receiptPath!,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.grey.shade700,
+                          fontFamily: 'monospace',
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

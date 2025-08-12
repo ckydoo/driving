@@ -226,211 +226,227 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
           colors: [Colors.blue.shade600, Colors.blue.shade800],
         ),
       ),
-      child: Column(
-        children: [
-          // App Bar
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              children: [
-                IconButton(
-                  icon: Icon(Icons.arrow_back, color: Colors.white),
-                  onPressed: () => Get.back(),
-                ),
-                Expanded(
-                  child: Text(
-                    'Student Details',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
+      child: SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min, // Add this to prevent overflow
+          children: [
+            // App Bar
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: Icon(Icons.arrow_back, color: Colors.white),
+                    onPressed: () => Get.back(),
+                  ),
+                  Expanded(
+                    child: Text(
+                      'Student Details',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
-                ),
-                IconButton(
-                  icon: Icon(Icons.more_vert, color: Colors.white),
-                  onPressed: () => _showOptionsMenu(),
-                ),
-              ],
+                  IconButton(
+                    icon: Icon(Icons.more_vert, color: Colors.white),
+                    onPressed: () => _showOptionsMenu(),
+                  ),
+                ],
+              ),
             ),
-          ),
 
-          // Profile Section
-          Padding(
-            padding: EdgeInsets.all(16),
-            child: Row(
-              children: [
-                // Enhanced Avatar with Progress Ring
-                Stack(
+            // Profile Section
+            Flexible(
+              // Wrap with Flexible to prevent overflow
+              child: Padding(
+                padding: EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 8), // Reduced vertical padding
+                child: Row(
                   children: [
-                    Container(
-                      width: 80,
-                      height: 80,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 3),
-                      ),
-                      child: CircularProgressIndicator(
-                        value: _getProgressPercentage(),
-                        backgroundColor: Colors.white.withOpacity(0.3),
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                        strokeWidth: 3,
-                      ),
-                    ),
-                    Positioned.fill(
-                      child: Container(
-                        margin: EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: LinearGradient(
-                            colors: [
-                              Colors.blue.shade300,
-                              Colors.blue.shade500
-                            ],
+                    // Enhanced Avatar with Progress Ring
+                    Stack(
+                      children: [
+                        Container(
+                          width: 70, // Reduced size
+                          height: 70, // Reduced size
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 3),
+                          ),
+                          child: CircularProgressIndicator(
+                            value: _getProgressPercentage(),
+                            backgroundColor: Colors.white.withOpacity(0.3),
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.white),
+                            strokeWidth: 3,
                           ),
                         ),
-                        child: Center(
-                          child: Text(
-                            '${student!.fname[0]}${student!.lname[0]}'
-                                .toUpperCase(),
-                            style: TextStyle(
-                              fontSize: 26,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
+                        Positioned.fill(
+                          child: Container(
+                            margin: EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: LinearGradient(
+                                colors: [
+                                  Colors.blue.shade300,
+                                  Colors.blue.shade500
+                                ],
+                              ),
+                            ),
+                            child: Center(
+                              child: Text(
+                                '${student!.fname[0]}${student!.lname[0]}'
+                                    .toUpperCase(),
+                                style: TextStyle(
+                                  fontSize: 22, // Reduced font size
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
                             ),
                           ),
                         ),
-                      ),
+                        Positioned(
+                          bottom: 0,
+                          right: 0,
+                          child: Container(
+                            width: 20, // Reduced size
+                            height: 20, // Reduced size
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: student!.status.toLowerCase() == 'active'
+                                  ? Colors.green.shade400
+                                  : Colors.orange.shade400,
+                              border: Border.all(color: Colors.white, width: 2),
+                            ),
+                            child: Icon(
+                              student!.status.toLowerCase() == 'active'
+                                  ? Icons.check
+                                  : Icons.pause,
+                              color: Colors.white,
+                              size: 10, // Reduced icon size
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    Positioned(
-                      bottom: 0,
-                      right: 0,
-                      child: Container(
-                        width: 24,
-                        height: 24,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: student!.status.toLowerCase() == 'active'
-                              ? Colors.green.shade400
-                              : Colors.orange.shade400,
-                          border: Border.all(color: Colors.white, width: 2),
-                        ),
-                        child: Icon(
-                          student!.status.toLowerCase() == 'active'
-                              ? Icons.check
-                              : Icons.pause,
-                          color: Colors.white,
-                          size: 12,
-                        ),
+
+                    SizedBox(width: 16),
+
+                    // Student Info
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min, // Add this
+                        children: [
+                          Text(
+                            '${student!.fname} ${student!.lname}',
+                            style: TextStyle(
+                              fontSize: 20, // Reduced font size
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                            maxLines: 1, // Add maxLines
+                            overflow:
+                                TextOverflow.ellipsis, // Add overflow handling
+                          ),
+                          SizedBox(height: 2), // Reduced spacing
+                          Text(
+                            'ID: ${student!.idnumber}',
+                            style: TextStyle(
+                              fontSize: 14, // Reduced font size
+                              color: Colors.white.withOpacity(0.8),
+                            ),
+                          ),
+                          SizedBox(height: 6), // Reduced spacing
+                          Wrap(
+                            // Use Wrap instead of Row for better responsiveness
+                            spacing: 8,
+                            runSpacing: 4,
+                            children: [
+                              Container(
+                                padding: EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 4), // Reduced padding
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(
+                                      16), // Reduced radius
+                                ),
+                                child: Text(
+                                  student!.status,
+                                  style: TextStyle(
+                                    fontSize: 11, // Reduced font size
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                              if (_showPaymentReminder)
+                                Container(
+                                  padding: EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red.shade500,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.warning,
+                                          color: Colors.white,
+                                          size: 10), // Reduced icon size
+                                      SizedBox(width: 2), // Reduced spacing
+                                      Text(
+                                        'Payment Due',
+                                        style: TextStyle(
+                                          fontSize: 9, // Reduced font size
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
+              ),
+            ),
 
-                SizedBox(width: 16),
-
-                // Student Info
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${student!.fname} ${student!.lname}',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        'ID: ${student!.idnumber}',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Colors.white.withOpacity(0.8),
-                        ),
-                      ),
-                      SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Container(
-                            padding: EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text(
-                              student!.status,
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                          if (_showPaymentReminder) ...[
-                            SizedBox(width: 8),
-                            Container(
-                              padding: EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: Colors.red.shade500,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.warning,
-                                      color: Colors.white, size: 12),
-                                  SizedBox(width: 4),
-                                  Text(
-                                    'Payment Due',
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ],
+            // Quick Stats Row - Fixed overflow issue
+            Container(
+              margin: EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  _buildQuickStat(
+                    'Progress',
+                    '${(_getProgressPercentage() * 100).toInt()}%',
+                    Icons.trending_up,
                   ),
-                ),
-              ],
+                  _buildQuickStat(
+                    'Lessons',
+                    '${_getCompletedLessonsCount()}/${_getTotalLessonsCount()}',
+                    Icons.school,
+                  ),
+                  _buildQuickStat(
+                    'Next Lesson',
+                    _getNextLessonDate(),
+                    Icons.schedule,
+                  ),
+                ],
+              ),
             ),
-          ),
 
-          // Quick Stats Row
-          Container(
-            margin: EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                _buildQuickStat(
-                  'Progress',
-                  '${(_getProgressPercentage() * 100).toInt()}%',
-                  Icons.trending_up,
-                ),
-                _buildQuickStat(
-                  'Lessons',
-                  '${_getCompletedLessonsCount()}/${_getTotalLessonsCount()}',
-                  Icons.school,
-                ),
-                _buildQuickStat(
-                  'Next Lesson',
-                  _getNextLessonDate(),
-                  Icons.schedule,
-                ),
-              ],
-            ),
-          ),
-
-          SizedBox(height: 16),
-        ],
+            SizedBox(height: 12), // Reduced bottom spacing
+          ],
+        ),
       ),
     );
   }
@@ -438,31 +454,36 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
   Widget _buildQuickStat(String label, String value, IconData icon) {
     return Expanded(
       child: Container(
-        padding: EdgeInsets.symmetric(vertical: 12),
-        margin: EdgeInsets.symmetric(horizontal: 4),
+        padding: EdgeInsets.symmetric(vertical: 10), // Reduced padding
+        margin: EdgeInsets.symmetric(horizontal: 3), // Reduced margin
         decoration: BoxDecoration(
           color: Colors.white.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(10), // Reduced radius
         ),
         child: Column(
+          mainAxisSize: MainAxisSize.min, // Add this
           children: [
-            Icon(icon, color: Colors.white, size: 20),
-            SizedBox(height: 4),
+            Icon(icon, color: Colors.white, size: 18), // Reduced icon size
+            SizedBox(height: 3), // Reduced spacing
             Text(
               value,
               style: TextStyle(
-                fontSize: 14,
+                fontSize: 12, // Reduced font size
                 fontWeight: FontWeight.bold,
                 color: Colors.white,
               ),
               textAlign: TextAlign.center,
+              maxLines: 1, // Add maxLines
+              overflow: TextOverflow.ellipsis, // Add overflow handling
             ),
             Text(
               label,
               style: TextStyle(
-                fontSize: 10,
+                fontSize: 9, // Reduced font size
                 color: Colors.white.withOpacity(0.8),
               ),
+              maxLines: 1, // Add maxLines
+              overflow: TextOverflow.ellipsis, // Add overflow handling
             ),
           ],
         ),
@@ -2087,8 +2108,7 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
                       (BuildContext context, bool innerBoxIsScrolled) {
                     return <Widget>[
                       SliverAppBar(
-                        expandedHeight:
-                            300.0, // Adjust based on your header height
+                        expandedHeight: 250.0,
                         floating: false,
                         pinned: false,
                         flexibleSpace: FlexibleSpaceBar(
@@ -2106,15 +2126,33 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
                   body: TabBarView(
                     controller: _tabController,
                     children: [
-                      _buildOverviewTab(),
-                      _buildScheduleTab(),
-                      _buildProgressTab(),
-                      _buildBillingTab(),
-                      _buildNotesTab(),
-                      _buildAttachmentsTab(),
+                      // Wrap each tab with proper overflow handling
+                      _buildSafeTab(_buildOverviewTab()),
+                      _buildSafeTab(_buildScheduleTab()),
+                      _buildSafeTab(_buildProgressTab()),
+                      _buildSafeTab(_buildBillingTab()),
+                      _buildSafeTab(_buildNotesTab()),
+                      _buildSafeTab(_buildAttachmentsTab()),
                     ],
                   ),
                 ),
+    );
+  }
+
+// Add this helper method to wrap tabs with overflow protection
+  Widget _buildSafeTab(Widget child) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: constraints.maxHeight,
+              maxWidth: constraints.maxWidth,
+            ),
+            child: child,
+          ),
+        );
+      },
     );
   }
 }
