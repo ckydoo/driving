@@ -1,4 +1,5 @@
 import 'package:driving/controllers/auth_controller.dart';
+import 'package:driving/screens/users/graduation_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:driving/controllers/billing_controller.dart';
 import 'package:driving/controllers/course_controller.dart';
@@ -982,6 +983,17 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
           SizedBox(height: 16),
           _buildLessonHistoryCard(),
         ],
+      ),
+    );
+  }
+
+  void _navigateToGraduation() {
+    if (student == null) return;
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => GraduationScreen(student: student!),
       ),
     );
   }
@@ -2011,6 +2023,20 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (student?.role == 'student') // Only show for active students
+
+              ListTile(
+                leading: Icon(Icons.grade, color: Colors.blue),
+                title: Text('Graduate', style: TextStyle(color: Colors.blue)),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => GraduationScreen(student: student!),
+                    ),
+                  );
+                },
+              ),
             ListTile(
               leading: Icon(Icons.delete, color: Colors.red),
               title:

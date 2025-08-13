@@ -183,8 +183,11 @@ class DatabaseHelper {
     await db.execute('''
       CREATE TABLE timeline(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user INTEGER NOT NULL,
-        activity TEXT NOT NULL,
+        title TEXT NOT NULL,
+        event_type TEXT ,
+        description TEXT ,
+        created_by INTEGER NOT NULL,
+        FOREIGN KEY (studentId) REFERENCES users(id)
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     ''');

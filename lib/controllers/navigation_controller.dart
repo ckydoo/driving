@@ -28,6 +28,7 @@ class NavigationController extends GetxController {
     '/settings': 'settings',
     '/financial': 'financial_group',
     '/reports': 'reports',
+    'alumni': 'alumni',
     '/main': 'dashboard',
   };
 
@@ -121,6 +122,14 @@ class NavigationController extends GetxController {
       icon: Icons.search,
       route: '/quick-search',
       pageKey: 'quick_search',
+      requiredRoles: ['admin', 'instructor'],
+    ),
+
+    NavigationItem(
+      title: 'Alumni',
+      icon: Icons.people_alt,
+      route: '/alumni',
+      pageKey: 'alumni',
       requiredRoles: ['admin', 'instructor'],
     ),
 
@@ -359,6 +368,8 @@ class NavigationController extends GetxController {
         return 'Point of Sale';
       case 'schedules':
         return 'Schedule Management';
+      case 'alumni':
+        return 'Alumni Management';
       case 'users':
         return 'User Management';
       case 'settings':

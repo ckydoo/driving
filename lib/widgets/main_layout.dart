@@ -2,6 +2,7 @@
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/controllers/settings_controller.dart';
 import 'package:driving/dashboard.dart';
+import 'package:driving/models/user.dart';
 import 'package:driving/overview/quick_search_screen.dart';
 import 'package:driving/reports/course.dart';
 import 'package:driving/screens/billing/billing_screen.dart';
@@ -11,7 +12,9 @@ import 'package:driving/screens/receipts/receipt_management_screen.dart';
 import 'package:driving/screens/reports/financial_reports_screen.dart';
 import 'package:driving/screens/reports/users_reports_screen.dart';
 import 'package:driving/screens/schedule/schedule_screen.dart';
+import 'package:driving/screens/users/alumni_screen.dart';
 import 'package:driving/screens/users/enhanced_users_screen.dart';
+import 'package:driving/screens/users/graduation_screen.dart';
 import 'package:driving/settings/settings_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -457,6 +460,17 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
         },
       ));
 
+      widgets.add(_buildSidebarItem(
+        Icons.people_alt,
+        'Alumni',
+        'alumni',
+        navController.currentPage.value,
+        () {
+          navController.navigateToPage('alumni');
+          if (autoClose) Navigator.of(context).pop();
+        },
+      ));
+
       widgets.addAll(_buildFinancesDropdown(navController, autoClose));
 
       widgets.addAll(_buildReportsDropdown(navController, autoClose));
@@ -477,7 +491,6 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
     return widgets;
   }
 
-  // Build reports dropdown - EXACT copy of your dropdown logic
   List<Widget> _buildFinancesDropdown(
       NavigationController navController, bool autoClose) {
     List<Widget> widgets = [];
@@ -648,7 +661,6 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
     return widgets;
   }
 
-  // Build dropdown child item - EXACT copy
   Widget _buildDropdownChild(
     IconData icon,
     String title,
@@ -827,6 +839,9 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
         return const QuickSearchScreen();
       case 'settings':
         return SettingsScreen();
+
+      case 'alumni':
+        return const AlumniScreen();
       default:
         return const FixedDashboardContent();
     }

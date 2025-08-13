@@ -3,6 +3,7 @@
 
 import 'package:driving/screens/users/enhanced_recommendations_screen.dart';
 import 'package:driving/screens/users/add_user_screen.dart';
+import 'package:driving/screens/users/graduation_screen.dart';
 import 'package:driving/screens/users/student_details_screen.dart';
 import 'package:driving/screens/users/user_form_dialog.dart';
 import 'package:driving/widgets/responsive_extensions.dart';
@@ -729,6 +730,21 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
                       AddUserScreen(role: widget.role, user: user),
                     ),
                   ),
+                  PopupMenuItem(
+                      child: ListTile(
+                        leading: Icon(Icons.star),
+                        title: Text('Graduate'),
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) =>
+                                GraduationScreen(student: user),
+                          ),
+                        );
+                      }),
                   PopupMenuItem(
                     child: ListTile(
                       leading: Icon(Icons.delete, color: Colors.red),
