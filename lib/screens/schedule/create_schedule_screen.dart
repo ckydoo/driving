@@ -48,8 +48,6 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
   bool _showAvailabilityStatus = false;
   bool _instructorAvailable = true;
 
-  final List<String> _statusOptions = ['Scheduled', 'Confirmed', 'Pending'];
-
   @override
   void initState() {
     super.initState();
@@ -421,8 +419,6 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
                     _buildDateTimeSection(),
                     _buildValidationMessages(),
                     SizedBox(height: 20),
-                    _buildLessonDetailsSection(),
-                    SizedBox(height: 30),
                     _buildActionButtons(),
                   ],
                 ),
@@ -841,49 +837,6 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
               subtitle: Text(_endTime.format(context)),
               trailing: Icon(Icons.arrow_forward_ios),
               onTap: () => _selectTime(false),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLessonDetailsSection() {
-    return Card(
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.settings, color: Colors.teal),
-                SizedBox(width: 8),
-                Text(
-                  'Lesson Details',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-            SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              value: _selectedStatus,
-              decoration: InputDecoration(
-                labelText: 'Status',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.flag),
-              ),
-              items: _statusOptions
-                  .map((status) => DropdownMenuItem(
-                        value: status,
-                        child: Text(status),
-                      ))
-                  .toList(),
-              onChanged: (String? value) {
-                setState(() {
-                  _selectedStatus = value!;
-                });
-              },
             ),
           ],
         ),
