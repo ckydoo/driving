@@ -52,6 +52,12 @@ class _GraduationScreenState extends State<GraduationScreen> {
     return width >= 768 && width < 1024;
   }
 
+// Add these variables to track lesson completion
+  int _totalLessonsCompleted = 0;
+  int _minimumRequiredLessons = 1; // Default minimum - should be configurable
+  List<String> _completedCourses = [];
+  bool _hasCompletedRequiredLessons = false;
+
   Future<void> _checkGraduationEligibility() async {
     setState(() {
       _isLoading = true;
@@ -64,7 +70,21 @@ class _GraduationScreenState extends State<GraduationScreen> {
       await scheduleController.fetchSchedules();
       await courseController.fetchCourses();
 
-      // Check remaining scheduled lessons
+      // 1. CHECK COMPLETED LESSONS (Most Important!)
+      final completedSchedules = scheduleController.schedules
+          .where((schedule) =>
+              schedule.studentId == widget.student.id &&
+              schedule.status == 'Completed' &&
+              schedule.attended == true)
+          .toList();
+
+      _totalLessonsCompleted = completedSchedules.fold<int>(
+          0, (sum, schedule) => sum + schedule.lessonsDeducted);
+
+      _hasCompletedRequiredLessons =
+          _totalLessonsCompleted >= _minimumRequiredLessons;
+
+      // 2. CHECK REMAINING SCHEDULED LESSONS
       _remainingSchedules = scheduleController.schedules
           .where((schedule) =>
               schedule.studentId == widget.student.id &&
@@ -73,7 +93,7 @@ class _GraduationScreenState extends State<GraduationScreen> {
               schedule.start.isAfter(DateTime.now()))
           .toList();
 
-      // Check outstanding invoices/payments
+      // 3. CHECK OUTSTANDING INVOICES/PAYMENTS
       _outstandingInvoices = billingController.invoices
           .where((invoice) =>
               invoice.studentId == widget.student.id && invoice.balance > 0)
@@ -82,14 +102,32 @@ class _GraduationScreenState extends State<GraduationScreen> {
       _totalOutstandingBalance = _outstandingInvoices.fold(
           0.0, (sum, invoice) => sum + invoice.balance);
 
-      // Determine if student can graduate
-      _canGraduate =
-          _remainingSchedules.isEmpty && _totalOutstandingBalance <= 0;
+      // 4. DETERMINE GRADUATION ELIGIBILITY (SIMPLIFIED)
+      _canGraduate = _hasCompletedRequiredLessons &&
+          _remainingSchedules.isEmpty &&
+          _totalOutstandingBalance <= 0;
 
+      // 5. SET STATUS MESSAGE
       if (_canGraduate) {
         _graduationStatus = 'Student is eligible for graduation!';
       } else {
-        _graduationStatus = 'Student has pending requirements for graduation.';
+        List<String> missing = [];
+
+        if (!_hasCompletedRequiredLessons) {
+          missing.add(
+              'Needs ${_minimumRequiredLessons - _totalLessonsCompleted} more lessons');
+        }
+
+        if (_remainingSchedules.isNotEmpty) {
+          missing.add('${_remainingSchedules.length} pending lessons');
+        }
+
+        if (_totalOutstandingBalance > 0) {
+          missing.add(
+              '\$${_totalOutstandingBalance.toStringAsFixed(2)} outstanding');
+        }
+
+        _graduationStatus = 'Missing requirements: ${missing.join(', ')}';
       }
     } catch (e) {
       _graduationStatus = 'Error checking eligibility: ${e.toString()}';
@@ -136,19 +174,19 @@ class _GraduationScreenState extends State<GraduationScreen> {
       // Refresh user data
       await userController.fetchUsers();
 
-      // Show success message
-      Get.snackbar(
-        'Graduation Successful',
-        '${widget.student.fname} ${widget.student.lname} has been successfully graduated and moved to alumni.',
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
-        duration: Duration(seconds: 5),
-      );
+      setState(() {
+        _isProcessing = false;
+      });
 
-      // Navigate back
-      Get.back();
-      Get.back(); // Go back to previous screen as well
+      // Show success dialog
+      await _showSuccessDialog();
+
+      // Navigation is now handled in the success dialog
     } catch (e) {
+      setState(() {
+        _isProcessing = false;
+      });
+
       Get.snackbar(
         'Graduation Failed',
         'Failed to process graduation: ${e.toString()}',
@@ -156,11 +194,99 @@ class _GraduationScreenState extends State<GraduationScreen> {
         colorText: Colors.white,
         duration: Duration(seconds: 5),
       );
-    } finally {
-      setState(() {
-        _isProcessing = false;
-      });
     }
+  }
+
+  Future<void> _showSuccessDialog() async {
+    return await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Success Icon
+              Container(
+                padding: EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.green[100],
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.check_circle,
+                  color: Colors.green[600],
+                  size: 64,
+                ),
+              ),
+              SizedBox(height: 24),
+
+              // Success Title
+              Text(
+                'Graduation Successful!',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.green[700],
+                ),
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: 16),
+
+              // Success Message
+              Text(
+                '${widget.student.fname} ${widget.student.lname} has been successfully graduated and moved to alumni.',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.grey[700],
+                ),
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: 24),
+
+              // Celebration emoji
+              Text(
+                '🎓✨',
+                style: TextStyle(fontSize: 32),
+              ),
+            ],
+          ),
+          actions: [
+            Center(
+              child: ElevatedButton(
+                onPressed: () async {
+                  Navigator.of(context).pop(); // Close the success dialog
+
+                  // Refresh students list
+                  await userController.fetchUsers();
+
+                  // Navigate back to students screen and clear navigation stack
+                  Get.offAllNamed('/students');
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green[600],
+                  foregroundColor: Colors.white,
+                  padding: EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: Text(
+                  'Back to Students',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Future<void> _addGraduationRecord() async {
@@ -576,129 +702,6 @@ class _GraduationScreenState extends State<GraduationScreen> {
     );
   }
 
-  Widget _buildStatusOverview(bool isMobile) {
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.all(isMobile ? 16 : 20),
-      decoration: BoxDecoration(
-        color: _canGraduate ? Colors.green[50] : Colors.orange[50],
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: _canGraduate ? Colors.green[200]! : Colors.orange[200]!,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                _canGraduate ? Icons.check_circle : Icons.warning_amber,
-                color: _canGraduate ? Colors.green[600] : Colors.orange[600],
-                size: isMobile ? 24 : 28,
-              ),
-              SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  'Graduation Status',
-                  style: TextStyle(
-                    fontSize: isMobile ? 18 : 20,
-                    fontWeight: FontWeight.bold,
-                    color:
-                        _canGraduate ? Colors.green[800] : Colors.orange[800],
-                  ),
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 12),
-          Text(
-            _graduationStatus,
-            style: TextStyle(
-              fontSize: isMobile ? 14 : 16,
-              color: _canGraduate ? Colors.green[700] : Colors.orange[700],
-            ),
-          ),
-          SizedBox(height: 16),
-          if (isMobile)
-            Column(
-              children: [
-                _buildStatusCard(
-                  'Remaining Schedules',
-                  _remainingSchedules.length.toString(),
-                  _remainingSchedules.isEmpty ? Colors.green : Colors.orange,
-                  Icons.schedule,
-                ),
-                SizedBox(height: 12),
-                _buildStatusCard(
-                  'Outstanding Balance',
-                  '\$${_totalOutstandingBalance.toStringAsFixed(2)}',
-                  _totalOutstandingBalance <= 0 ? Colors.green : Colors.red,
-                  Icons.payment,
-                ),
-              ],
-            )
-          else
-            Row(
-              children: [
-                Expanded(
-                  child: _buildStatusCard(
-                    'Remaining Schedules',
-                    _remainingSchedules.length.toString(),
-                    _remainingSchedules.isEmpty ? Colors.green : Colors.orange,
-                    Icons.schedule,
-                  ),
-                ),
-                SizedBox(width: 16),
-                Expanded(
-                  child: _buildStatusCard(
-                    'Outstanding Balance',
-                    '\$${_totalOutstandingBalance.toStringAsFixed(2)}',
-                    _totalOutstandingBalance <= 0 ? Colors.green : Colors.red,
-                    Icons.payment,
-                  ),
-                ),
-              ],
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatusCard(
-      String title, String value, Color color, IconData icon) {
-    return Container(
-      padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, color: color, size: 24),
-          SizedBox(height: 8),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 12,
-              color: color,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildSchedulesSection(bool isMobile) {
     return Container(
       width: double.infinity,
@@ -1073,6 +1076,135 @@ class _GraduationScreenState extends State<GraduationScreen> {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusOverview(bool isMobile) {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(isMobile ? 16 : 20),
+      decoration: BoxDecoration(
+        color: _canGraduate ? Colors.green[50] : Colors.orange[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: _canGraduate ? Colors.green[200]! : Colors.orange[200]!,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                _canGraduate ? Icons.check_circle : Icons.warning_amber,
+                color: _canGraduate ? Colors.green[600] : Colors.orange[600],
+                size: isMobile ? 24 : 28,
+              ),
+              SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Graduation Status',
+                  style: TextStyle(
+                    fontSize: isMobile ? 18 : 20,
+                    fontWeight: FontWeight.bold,
+                    color:
+                        _canGraduate ? Colors.green[800] : Colors.orange[800],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 12),
+          Text(
+            _graduationStatus,
+            style: TextStyle(
+              fontSize: isMobile ? 14 : 16,
+              color: _canGraduate ? Colors.green[700] : Colors.orange[700],
+            ),
+          ),
+          SizedBox(height: 16),
+
+          // SIMPLIFIED GRADUATION REQUIREMENTS CHECKLIST
+          Text(
+            'Graduation Requirements:',
+            style: TextStyle(
+              fontSize: isMobile ? 14 : 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[800],
+            ),
+          ),
+          SizedBox(height: 8),
+
+          // Lessons Completed Requirement
+          _buildRequirementItem(
+            'Minimum Lessons Completed',
+            '$_totalLessonsCompleted / $_minimumRequiredLessons lessons completed',
+            _hasCompletedRequiredLessons,
+            Icons.school,
+          ),
+
+          // No Remaining Schedules
+          _buildRequirementItem(
+            'No Pending Lessons',
+            _remainingSchedules.isEmpty
+                ? 'All lessons completed'
+                : '${_remainingSchedules.length} lessons pending',
+            _remainingSchedules.isEmpty,
+            Icons.schedule,
+          ),
+
+          // No Outstanding Balance
+          _buildRequirementItem(
+            'No Outstanding Balance',
+            _totalOutstandingBalance <= 0
+                ? 'All payments completed'
+                : '\$${_totalOutstandingBalance.toStringAsFixed(2)} outstanding',
+            _totalOutstandingBalance <= 0,
+            Icons.payment,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRequirementItem(
+      String title, String subtitle, bool completed, IconData icon) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(
+            completed ? Icons.check_circle : Icons.radio_button_unchecked,
+            color: completed ? Colors.green[600] : Colors.grey[400],
+            size: 20,
+          ),
+          SizedBox(width: 8),
+          Icon(icon, size: 16, color: Colors.grey[600]),
+          SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: completed ? Colors.green[800] : Colors.grey[700],
+                  ),
+                ),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: completed ? Colors.green[600] : Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );

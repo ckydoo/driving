@@ -1,6 +1,9 @@
 // lib/screens/users/enhanced_users_screen.dart
 // ignore_for_file: unused_field
 
+import 'package:driving/controllers/billing_controller.dart';
+import 'package:driving/controllers/course_controller.dart';
+import 'package:driving/controllers/schedule_controller.dart';
 import 'package:driving/screens/users/enhanced_recommendations_screen.dart';
 import 'package:driving/screens/users/add_user_screen.dart';
 import 'package:driving/screens/users/graduation_screen.dart';
@@ -280,10 +283,22 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
   Future<void> _bulkGraduate() async {
     if (_selectedUsers.isEmpty || widget.role != 'student') return;
 
-    final selectedCount = _selectedUsers.length;
-    final confirmed = await _showBulkGraduateConfirmation(selectedCount);
+    final selectedStudents =
+        _users.where((user) => _selectedUsers.contains(user.id)).toList();
 
-    if (!confirmed) return;
+    // STEP 1: Check eligibility for all selected students
+    final eligibilityResults = await _checkBulkEligibility(selectedStudents);
+    final eligibleStudents = eligibilityResults
+        .where((result) => result['eligible'] == true)
+        .toList();
+    final ineligibleStudents = eligibilityResults
+        .where((result) => result['eligible'] == false)
+        .toList();
+
+    // STEP 2: Show eligibility summary dialog
+    final shouldProceed =
+        await _showEligibilityDialog(eligibleStudents, ineligibleStudents);
+    if (!shouldProceed) return;
 
     setState(() {
       _isProcessing = true;
@@ -291,34 +306,48 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
 
     try {
       final failedGraduations = <String>[];
+      int successCount = 0;
 
-      for (final userId in _selectedUsers) {
+      // STEP 3: Only graduate eligible students
+      for (final studentResult in eligibleStudents) {
         try {
-          final user = _users.firstWhere((u) => u.id == userId);
-          await _graduateStudent(user);
+          final student = studentResult['student'] as User;
+          await _graduateStudent(student);
+          successCount++;
         } catch (e) {
-          final user = _users.firstWhere((u) => u.id == userId);
-          failedGraduations.add('${user.fname} ${user.lname}');
+          final student = studentResult['student'] as User;
+          failedGraduations.add('${student.fname} ${student.lname}');
         }
       }
 
       await _loadUsers();
 
-      if (failedGraduations.isEmpty) {
+      // STEP 4: Show results
+      if (failedGraduations.isEmpty && successCount > 0) {
         Get.snackbar(
           'Success',
-          'Successfully graduated $selectedCount student${selectedCount > 1 ? 's' : ''}',
+          'Successfully graduated $successCount student${successCount > 1 ? 's' : ''}${ineligibleStudents.isNotEmpty ? ' (${ineligibleStudents.length} skipped due to incomplete requirements)' : ''}',
           backgroundColor: Colors.green[100],
           colorText: Colors.green[800],
-          duration: Duration(seconds: 3),
+          duration: Duration(seconds: 4),
         );
-      } else {
+      } else if (successCount > 0) {
         Get.snackbar(
           'Partial Success',
-          'Graduated ${selectedCount - failedGraduations.length} students. Failed: ${failedGraduations.join(', ')}',
+          'Graduated $successCount students. Failed: ${failedGraduations.join(', ')}${ineligibleStudents.isNotEmpty ? '. ${ineligibleStudents.length} skipped due to incomplete requirements.' : ''}',
           backgroundColor: Colors.orange[100],
           colorText: Colors.orange[800],
           duration: Duration(seconds: 5),
+        );
+      } else {
+        Get.snackbar(
+          'No Graduations',
+          ineligibleStudents.isNotEmpty
+              ? 'All ${ineligibleStudents.length} selected students are ineligible for graduation.'
+              : 'No students could be graduated.',
+          backgroundColor: Colors.red[100],
+          colorText: Colors.red[800],
+          duration: Duration(seconds: 4),
         );
       }
 
@@ -326,7 +355,7 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
     } catch (e) {
       Get.snackbar(
         'Error',
-        'Failed to graduate selected students: $e',
+        'Failed to graduate students: $e',
         backgroundColor: Colors.red[100],
         colorText: Colors.red[800],
         duration: Duration(seconds: 3),
@@ -336,6 +365,273 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
         _isProcessing = false;
       });
     }
+  }
+
+  // NEW: Check eligibility for multiple students (SIMPLIFIED)
+  Future<List<Map<String, dynamic>>> _checkBulkEligibility(
+      List<User> students) async {
+    List<Map<String, dynamic>> results = [];
+
+    // Get all necessary data
+    await controller.fetchUsers();
+    final scheduleController = Get.find<ScheduleController>();
+    final billingController = Get.find<BillingController>();
+
+    await scheduleController.fetchSchedules();
+    await billingController.fetchBillingData();
+
+    const int minimumRequiredLessons = 1; // Only need 1 lesson
+
+    for (final student in students) {
+      // 1. Check completed lessons
+      final completedSchedules = scheduleController.schedules
+          .where((schedule) =>
+              schedule.studentId == student.id &&
+              schedule.status == 'Completed' &&
+              schedule.attended == true)
+          .toList();
+
+      final totalLessonsCompleted = completedSchedules.fold<int>(
+          0, (sum, schedule) => sum + schedule.lessonsDeducted);
+
+      final hasCompletedRequiredLessons =
+          totalLessonsCompleted >= minimumRequiredLessons;
+
+      // 2. Check remaining schedules
+      final remainingSchedules = scheduleController.schedules
+          .where((schedule) =>
+              schedule.studentId == student.id &&
+              schedule.status != 'Completed' &&
+              schedule.status != 'Cancelled' &&
+              schedule.start.isAfter(DateTime.now()))
+          .toList();
+
+      // 3. Check outstanding balance
+      final outstandingInvoices = billingController.invoices
+          .where((invoice) =>
+              invoice.studentId == student.id && invoice.balance > 0)
+          .toList();
+
+      final totalOutstandingBalance = outstandingInvoices.fold(
+          0.0, (sum, invoice) => sum + invoice.balance);
+
+      // 4. SIMPLIFIED ELIGIBILITY CHECK
+      final isEligible = hasCompletedRequiredLessons &&
+          remainingSchedules.isEmpty &&
+          totalOutstandingBalance <= 0;
+
+      // 5. Build reason list for ineligible students
+      List<String> missingRequirements = [];
+      if (!hasCompletedRequiredLessons) {
+        missingRequirements.add('Must attend at least 1 lesson');
+      }
+      if (remainingSchedules.isNotEmpty) {
+        missingRequirements.add('${remainingSchedules.length} pending lessons');
+      }
+      if (totalOutstandingBalance > 0) {
+        missingRequirements
+            .add('\${totalOutstandingBalance.toStringAsFixed(2)} outstanding');
+      }
+
+      results.add({
+        'student': student,
+        'eligible': isEligible,
+        'completedLessons': totalLessonsCompleted,
+        'requiredLessons': minimumRequiredLessons,
+        'pendingLessons': remainingSchedules.length,
+        'outstandingBalance': totalOutstandingBalance,
+        'missingRequirements': missingRequirements,
+      });
+    }
+
+    return results;
+  }
+
+  // NEW: Show eligibility dialog before proceeding
+  Future<bool> _showEligibilityDialog(List<Map<String, dynamic>> eligible,
+      List<Map<String, dynamic>> ineligible) async {
+    if (eligible.isEmpty && ineligible.isEmpty) return false;
+
+    return await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (BuildContext dialogContext) {
+            return WillPopScope(
+              onWillPop: () async => false,
+              child: AlertDialog(
+                title: Row(
+                  children: [
+                    Icon(Icons.school, color: Colors.blue),
+                    SizedBox(width: 8),
+                    Expanded(child: Text('Graduation Eligibility Check')),
+                  ],
+                ),
+                content: Container(
+                  width: MediaQuery.of(context).size.width * 0.8,
+                  constraints: BoxConstraints(maxHeight: 400),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (eligible.isNotEmpty) ...[
+                          Text(
+                            '✅ Eligible Students (${eligible.length})',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.green[700],
+                              fontSize: 16,
+                            ),
+                          ),
+                          SizedBox(height: 8),
+                          ...eligible.map((result) {
+                            final student = result['student'] as User;
+                            return Padding(
+                              padding: EdgeInsets.only(bottom: 4),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.check_circle,
+                                      color: Colors.green, size: 16),
+                                  SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      '${student.fname} ${student.lname} (${result['completedLessons']} lessons, ${result['completedCourses'].length} courses)',
+                                      style: TextStyle(fontSize: 14),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }).toList(),
+                        ],
+                        if (eligible.isNotEmpty && ineligible.isNotEmpty)
+                          SizedBox(height: 16),
+                        if (ineligible.isNotEmpty) ...[
+                          Text(
+                            '❌ Ineligible Students (${ineligible.length})',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.red[700],
+                              fontSize: 16,
+                            ),
+                          ),
+                          SizedBox(height: 8),
+                          ...ineligible.map((result) {
+                            final student = result['student'] as User;
+                            final missing =
+                                result['missingRequirements'] as List<String>;
+                            return Padding(
+                              padding: EdgeInsets.only(bottom: 8),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(Icons.cancel,
+                                          color: Colors.red, size: 16),
+                                      SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          '${student.fname} ${student.lname}',
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  Padding(
+                                    padding: EdgeInsets.only(left: 24),
+                                    child: Text(
+                                      'Missing: ${missing.join(', ')}',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.red[600],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }).toList(),
+                        ],
+                        if (eligible.isNotEmpty) ...[
+                          SizedBox(height: 16),
+                          Container(
+                            padding: EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.green[50],
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.green[200]!),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.info, color: Colors.green[600]),
+                                SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Only eligible students will be graduated. Ineligible students will be skipped.',
+                                    style: TextStyle(
+                                      color: Colors.green[800],
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ] else ...[
+                          SizedBox(height: 16),
+                          Container(
+                            padding: EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.red[50],
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.red[200]!),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.warning, color: Colors.red[600]),
+                                SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'No students meet graduation requirements. Please ensure students complete their training before graduation.',
+                                    style: TextStyle(
+                                      color: Colors.red[800],
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(false),
+                    child: Text('Cancel'),
+                  ),
+                  if (eligible.isNotEmpty)
+                    ElevatedButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(true),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: Text(
+                          'Graduate ${eligible.length} Student${eligible.length > 1 ? 's' : ''}'),
+                    ),
+                ],
+              ),
+            );
+          },
+        ) ??
+        false;
   }
 
   Future<void> _graduateStudent(User student) async {
