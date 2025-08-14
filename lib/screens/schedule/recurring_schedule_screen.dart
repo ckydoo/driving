@@ -1,6 +1,7 @@
 // lib/screens/schedule/recurring_schedule_screen.dart
 import 'package:driving/controllers/settings_controller.dart';
 import 'package:driving/widgets/recuring_progress.dart';
+import 'package:driving/widgets/responsive_text.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
@@ -166,119 +167,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
                 }
               },
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCourseSection() {
-    return Card(
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.book, color: Colors.green),
-                SizedBox(width: 8),
-                Text(
-                  'Course & Billing',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-            SizedBox(height: 16),
-            DropdownButtonFormField<Course>(
-              value: _selectedCourse,
-              decoration: InputDecoration(
-                labelText: 'Available Courses',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.library_books),
-              ),
-              validator: (value) =>
-                  value == null ? 'Please select a course' : null,
-              items: _availableCourses
-                  .map((course) => DropdownMenuItem(
-                        value: course,
-                        child: Text(course.name),
-                      ))
-                  .toList(),
-              onChanged: (Course? value) {
-                setState(() {
-                  _selectedCourse = value;
-                });
-                if (value != null && _selectedStudent != null) {
-                  _updateLessonCounts();
-                }
-              },
-            ),
-            if (_remainingLessons > 0) ...[
-              SizedBox(height: 12),
-              Container(
-                padding: EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.green.withOpacity(0.3)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.check_circle, color: Colors.green, size: 20),
-                        SizedBox(width: 8),
-                        Text(
-                          'Remaining Lessons: $_remainingLessons',
-                          style: TextStyle(
-                            color: Colors.green.shade700,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (_maxPossibleLessons > 0) ...[
-                      SizedBox(height: 4),
-                      Text(
-                        'Max recurring lessons possible: $_maxPossibleLessons',
-                        style: TextStyle(
-                          color: Colors.green.shade600,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ] else if (_selectedStudent != null &&
-                _availableCourses.isEmpty) ...[
-              SizedBox(height: 12),
-              Container(
-                padding: EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.orange.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.orange.withOpacity(0.3)),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.warning, color: Colors.orange, size: 20),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'No lessons remaining. Please create an invoice first.',
-                        style: TextStyle(
-                          color: Colors.orange.shade700,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
           ],
         ),
       ),
@@ -571,91 +459,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     );
   }
 
-  Widget _buildEndConditionSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('End Condition:', style: TextStyle(fontWeight: FontWeight.w500)),
-        SizedBox(height: 8),
-        Row(
-          children: [
-            Radio<bool>(
-              value: true,
-              groupValue: _useEndDate,
-              onChanged: (value) {
-                setState(() {
-                  _useEndDate = value!;
-                  _updatePreviewCount();
-                });
-              },
-            ),
-            Text('End Date'),
-          ],
-        ),
-        if (_useEndDate) ...[
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: Icon(Icons.event_available, color: Colors.red),
-            title: Text('End Date'),
-            subtitle: Text(
-                DateFormat('EEEE, MMMM dd, yyyy').format(_recurrenceEndDate!)),
-            trailing: Icon(Icons.arrow_forward_ios),
-            onTap: () => _selectEndDate(),
-          ),
-        ],
-        Row(
-          children: [
-            Radio<bool>(
-              value: false,
-              groupValue: _useEndDate,
-              onChanged: (value) {
-                setState(() {
-                  _useEndDate = value!;
-                  _updatePreviewCount();
-                });
-              },
-            ),
-            Text('Number of Lessons'),
-          ],
-        ),
-        if (!_useEndDate) ...[
-          Container(
-            width: 120,
-            child: TextFormField(
-              initialValue: _maxOccurrences.toString(),
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(
-                labelText: 'Lessons',
-                border: OutlineInputBorder(),
-                helperText: 'Max: $_remainingLessons',
-              ),
-              validator: (value) {
-                final val = int.tryParse(value ?? '');
-                if (val == null || val <= 0) {
-                  return 'Enter valid number';
-                }
-                if (val > _remainingLessons && _remainingLessons > 0) {
-                  return 'Exceeds remaining lessons';
-                }
-                return null;
-              },
-              onChanged: (value) {
-                setState(() {
-                  _maxOccurrences = int.tryParse(value) ?? 10;
-                  if (_maxOccurrences > _remainingLessons &&
-                      _remainingLessons > 0) {
-                    _maxOccurrences = _remainingLessons;
-                  }
-                  _updatePreviewCount();
-                });
-              },
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-
   Widget _buildLessonDetailsSection() {
     return Card(
       child: Padding(
@@ -697,201 +500,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
         ),
       ),
     );
-  }
-
-  Widget _buildPreviewSection() {
-    return Card(
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.preview, color: Colors.amber),
-                SizedBox(width: 8),
-                Text(
-                  'Schedule Preview',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-            SizedBox(height: 16),
-
-            // Lesson count preview
-            Container(
-              padding: EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.blue.withOpacity(0.3)),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.schedule, color: Colors.blue, size: 20),
-                  SizedBox(width: 8),
-                  Text(
-                    'Total lessons to schedule: $_previewCount',
-                    style: TextStyle(
-                      color: Colors.blue.shade700,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            SizedBox(height: 12),
-
-            // Validation messages integrated here
-            ..._buildPreviewValidationMessages(),
-
-            // Success message when ready
-            if (_previewCount > 0 &&
-                _previewCount <= _remainingLessons &&
-                _getValidationErrors().isEmpty) ...[
-              SizedBox(height: 8),
-              Container(
-                padding: EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.green.withOpacity(0.3)),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.check_circle, color: Colors.green, size: 20),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Ready to schedule. Lessons will be deducted from billing.',
-                        style: TextStyle(
-                          color: Colors.green.shade700,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  List<String> _getValidationErrors() {
-    List<String> errors = [];
-
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final selectedDay = DateTime(_selectedStartDate.year,
-        _selectedStartDate.month, _selectedStartDate.day);
-
-    if (selectedDay.isBefore(today)) {
-      errors.add('Cannot schedule lessons for past dates');
-    }
-
-    // Check for past time on today's date
-    if (selectedDay.isAtSameMomentAs(today)) {
-      final startDateTime = DateTime(
-        _selectedStartDate.year,
-        _selectedStartDate.month,
-        _selectedStartDate.day,
-        _startTime.hour,
-        _startTime.minute,
-      );
-
-      if (startDateTime.isBefore(now)) {
-        errors.add('Cannot schedule lessons for past times');
-      }
-    }
-
-    final startDateTime = DateTime(
-        _selectedStartDate.year,
-        _selectedStartDate.month,
-        _selectedStartDate.day,
-        _startTime.hour,
-        _startTime.minute);
-    final endDateTime = DateTime(
-        _selectedStartDate.year,
-        _selectedStartDate.month,
-        _selectedStartDate.day,
-        _endTime.hour,
-        _endTime.minute);
-    final duration = endDateTime.difference(startDateTime);
-
-    if (duration.inMinutes <= 0) {
-      errors.add('End time must be after start time');
-    }
-
-    // Business settings validation
-    final settingsController = Get.find<SettingsController>();
-
-    // Check if scheduling on closed days
-    if (_selectedInstructor != null) {
-      final closedDays = _getClosedDaysFromSettings(settingsController);
-
-      // Check if start date falls on a closed day
-      if (closedDays.contains(_selectedStartDate.weekday)) {
-        final dayName = _getDayName(_selectedStartDate.weekday);
-        errors.add('Cannot schedule on $dayName - Business is closed');
-      }
-
-      // For recurring schedules, check if any selected days are closed
-      if (_recurrencePattern == 'weekly' && _selectedDaysOfWeek.isNotEmpty) {
-        final conflictingDays = _selectedDaysOfWeek
-            .where((day) => closedDays.contains(day))
-            .toList();
-        if (conflictingDays.isNotEmpty) {
-          final dayNames =
-              conflictingDays.map((day) => _getDayName(day)).join(', ');
-          errors.add(
-              'Cannot schedule on $dayNames - Business is closed on these days');
-        }
-      }
-    }
-
-    // Business hours validation
-    if (settingsController.enforceWorkingHours.value &&
-        _selectedInstructor != null) {
-      final startTime =
-          TimeOfDay(hour: _startTime.hour, minute: _startTime.minute);
-      final endTime = TimeOfDay(hour: _endTime.hour, minute: _endTime.minute);
-
-      final workingStart =
-          _parseTimeString(settingsController.workingHoursStart.value);
-      final workingEnd =
-          _parseTimeString(settingsController.workingHoursEnd.value);
-
-      if (_isTimeOutsideBusinessHours(
-          startTime, endTime, workingStart, workingEnd)) {
-        errors.add(
-            'Schedule time is outside business hours (${settingsController.workingHoursStart.value} - ${settingsController.workingHoursEnd.value})');
-      }
-    }
-
-    // Check if end date would generate too many lessons
-    if (_useEndDate && _recurrenceEndDate != null && _remainingLessons > 0) {
-      int estimatedLessons =
-          _calculateLessonsForPeriod(_selectedStartDate, _recurrenceEndDate!);
-
-      if (estimatedLessons > _remainingLessons) {
-        errors.add(
-            'End date would generate $estimatedLessons lessons, but only $_remainingLessons lessons remain');
-      }
-    }
-
-    // Check if number of lessons exceeds remaining when not using end date
-    if (!_useEndDate &&
-        _maxOccurrences > _remainingLessons &&
-        _remainingLessons > 0) {
-      errors.add(
-          'Number of lessons ($_maxOccurrences) exceeds remaining lessons ($_remainingLessons)');
-    }
-
-    return errors;
   }
 
   List<String> _getValidationWarnings() {
@@ -1408,16 +1016,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     }
   }
 
-  void _updateLessonCounts() {
-    if (_selectedStudent != null && _selectedCourse != null) {
-      setState(() {
-        _remainingLessons = _scheduleController.getRemainingLessons(
-            _selectedStudent!.id!, _selectedCourse!.id!);
-      });
-      _updatePreviewCount();
-    }
-  }
-
   int _getUsedLessons(int studentId, int courseId) {
     return _scheduleController.getUsedLessons(studentId, courseId);
   }
@@ -1470,417 +1068,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     print('Used lessons: $usedLessons');
     print('Remaining lessons: $remainingLessons');
     print('=== END DEBUG ===');
-  }
-
-  Future<void> _selectTime(bool isStartTime) async {
-    final TimeOfDay? picked = await showTimePicker(
-      context: context,
-      initialTime: isStartTime ? _startTime : _endTime,
-    );
-    if (picked != null) {
-      setState(() {
-        if (isStartTime) {
-          _startTime = picked;
-          _endTime = TimeOfDay(
-            hour: (picked.hour + 1) % 24,
-            minute: picked.minute,
-          );
-        } else {
-          _endTime = picked;
-        }
-      });
-    }
-  }
-
-  Future<void> _createRecurringSchedule() async {
-    if (!_canCreateRecurringSchedule()) {
-      Get.snackbar(
-        'Validation Error',
-        'Please complete all required fields',
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-      );
-      return;
-    }
-
-    try {
-      setState(() {
-        _isLoading = true;
-      });
-
-      // Show progress dialog - Issue 3 fix
-      Get.dialog(
-        RecurringScheduleProgressDialog(
-          totalSchedules: _previewCount,
-          onComplete: (successCount, conflictCount) {
-            _handleRecurringScheduleComplete(successCount, conflictCount);
-          },
-        ),
-        barrierDismissible: false,
-      );
-
-      // Generate schedules
-      final schedules = <Schedule>[];
-      DateTime currentDate = _selectedStartDate;
-      int count = 0;
-
-      while (
-          count < _previewCount && currentDate.isBefore(_recurrenceEndDate!)) {
-        // Skip weekends for weekday patterns
-        if (_recurrencePattern == 'weekdays' &&
-            (currentDate.weekday == DateTime.saturday ||
-                currentDate.weekday == DateTime.sunday)) {
-          currentDate = currentDate.add(Duration(days: 1));
-          continue;
-        }
-
-        final startDateTime = DateTime(
-          currentDate.year,
-          currentDate.month,
-          currentDate.day,
-          _startTime.hour,
-          _startTime.minute,
-        );
-
-        final endDateTime = DateTime(
-          currentDate.year,
-          currentDate.month,
-          currentDate.day,
-          _endTime.hour,
-          _endTime.minute,
-        );
-
-        // Check instructor availability
-        final available = await _scheduleController.checkAvailability(
-          _selectedInstructor!.id!,
-          startDateTime,
-          endDateTime,
-        );
-
-        if (available) {
-          final schedule = Schedule(
-            start: startDateTime,
-            end: endDateTime,
-            courseId: _selectedCourse!.id!,
-            studentId: _selectedStudent!.id!,
-            instructorId: _selectedInstructor!.id!,
-            carId: _selectedVehicle?.id,
-            status: _selectedStatus,
-            isRecurring: true,
-            recurrencePattern: _recurrencePattern,
-            recurrenceEndDate: _recurrenceEndDate,
-            classType: _selectedClassType,
-          );
-
-          schedules.add(schedule);
-          count++;
-        }
-
-        // Move to next iteration
-        switch (_recurrencePattern) {
-          case 'daily':
-          case 'weekdays':
-            currentDate = currentDate.add(Duration(days: 1));
-            break;
-          case 'weekly':
-            currentDate = currentDate.add(Duration(days: 7));
-            break;
-          case 'monthly':
-            currentDate = DateTime(
-              currentDate.year,
-              currentDate.month + 1,
-              currentDate.day,
-            );
-            break;
-        }
-
-        if (schedules.length > 1000) break; // Safety check
-      }
-
-      // Save schedules with progress updates
-      await _saveSchedulesWithProgress(schedules);
-    } catch (e) {
-      Get.back(); // Close progress dialog
-      Get.snackbar(
-        'Error',
-        'Failed to create recurring schedule: ${e.toString()}',
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-      );
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
-    }
-  }
-
-  Future<void> _saveSchedulesWithProgress(List<Schedule> schedules) async {
-    int successCount = 0;
-    int conflictCount = 0;
-
-    for (int i = 0; i < schedules.length; i++) {
-      try {
-        await _scheduleController.addOrUpdateSchedule(schedules[i]);
-        successCount++;
-
-        // Update progress - Issue 3 fix
-        if (Get.isDialogOpen == true) {
-          Get.find<RecurringScheduleProgressController>().updateProgress(
-              i + 1, schedules.length, successCount, conflictCount);
-        }
-
-        // Small delay to show progress
-        await Future.delayed(Duration(milliseconds: 50));
-      } catch (e) {
-        conflictCount++;
-        print('Failed to create schedule: $e');
-      }
-    }
-
-    // Complete the process
-    if (Get.isDialogOpen == true) {
-      Get.find<RecurringScheduleProgressController>()
-          .complete(successCount, conflictCount);
-    }
-
-    // FIXED: Force schedule controller to refresh
-    _scheduleController.fetchSchedules();
-  }
-
-  void _handleRecurringScheduleComplete(int successCount, int conflictCount) {
-    Get.back(); // Close progress dialog
-
-    // Show detailed results dialog instead of just a snackbar
-    _showScheduleResultsDialog(successCount, conflictCount);
-  }
-
-  void _showScheduleResultsDialog(int successCount, int conflictCount) {
-    final totalAttempted = successCount + conflictCount;
-    final bool hasConflicts = conflictCount > 0;
-    final bool allSuccessful =
-        successCount == totalAttempted && totalAttempted > 0;
-
-    Get.dialog(
-      Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Container(
-          width: double.infinity,
-          constraints: BoxConstraints(maxWidth: 400),
-          padding: EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Header with icon
-              Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  color: allSuccessful
-                      ? Colors.green.withOpacity(0.1)
-                      : hasConflicts
-                          ? Colors.orange.withOpacity(0.1)
-                          : Colors.red.withOpacity(0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  allSuccessful
-                      ? Icons.check_circle
-                      : hasConflicts
-                          ? Icons.warning
-                          : Icons.error,
-                  size: 48,
-                  color: allSuccessful
-                      ? Colors.green
-                      : hasConflicts
-                          ? Colors.orange
-                          : Colors.red,
-                ),
-              ),
-
-              SizedBox(height: 16),
-
-              // Title
-              Text(
-                allSuccessful
-                    ? 'Scheduling Complete!'
-                    : hasConflicts
-                        ? 'Partially Scheduled'
-                        : 'Scheduling Failed',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: allSuccessful
-                      ? Colors.green
-                      : hasConflicts
-                          ? Colors.orange
-                          : Colors.red,
-                ),
-                textAlign: TextAlign.center,
-              ),
-
-              SizedBox(height: 20),
-
-              // Results summary
-              Container(
-                width: double.infinity,
-                padding: EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.grey.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey.withOpacity(0.3)),
-                ),
-                child: Column(
-                  children: [
-                    // Success count
-                    _buildResultRow(
-                      icon: Icons.check_circle,
-                      color: Colors.green,
-                      label: 'Successfully Scheduled',
-                      value: '$successCount lessons',
-                    ),
-
-                    if (conflictCount > 0) ...[
-                      SizedBox(height: 12),
-                      _buildResultRow(
-                        icon: Icons.sync_problem,
-                        color: Colors.orange,
-                        label: 'Skipped (Conflicts)',
-                        value: '$conflictCount lessons',
-                      ),
-                    ],
-
-                    SizedBox(height: 12),
-                    Divider(),
-                    SizedBox(height: 8),
-
-                    // Total and remaining lessons
-                    _buildResultRow(
-                      icon: Icons.assignment,
-                      color: Colors.blue,
-                      label: 'Total Attempted',
-                      value: '$totalAttempted lessons',
-                    ),
-
-                    SizedBox(height: 8),
-
-                    _buildResultRow(
-                      icon: Icons.schedule,
-                      color: Colors.purple,
-                      label: 'Remaining Lessons',
-                      value: '${_remainingLessons - successCount} lessons',
-                    ),
-                  ],
-                ),
-              ),
-
-              SizedBox(height: 16),
-
-              // Student and course info
-              Container(
-                width: double.infinity,
-                padding: EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Schedule Details:',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blue.shade700,
-                      ),
-                    ),
-                    SizedBox(height: 8),
-                    Text(
-                        'Student: ${_selectedStudent?.fname} ${_selectedStudent?.lname}'),
-                    Text('Course: ${_selectedCourse?.name}'),
-                    Text(
-                        'Instructor: ${_selectedInstructor?.fname} ${_selectedInstructor?.lname}'),
-                    Text('Pattern: ${_recurrencePattern.capitalize}'),
-                    if (_selectedVehicle != null)
-                      Text(
-                          'Vehicle: ${_selectedVehicle!.make} ${_selectedVehicle!.model}'),
-                  ],
-                ),
-              ),
-
-              if (hasConflicts) ...[
-                SizedBox(height: 16),
-                Container(
-                  width: double.infinity,
-                  padding: EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.orange.withOpacity(0.3)),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.info, color: Colors.orange, size: 20),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Some lessons were skipped due to instructor unavailability. You can reschedule these manually.',
-                          style: TextStyle(
-                            color: Colors.orange.shade700,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-
-              SizedBox(height: 24),
-
-              // Action buttons
-              Row(
-                children: [
-                  if (successCount > 0) ...[
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () {
-                          Get.back(); // Close dialog
-                          Get.back(); // Go back to schedule screen
-                          // Navigate to schedule view to see created lessons
-                          Get.toNamed('/schedule');
-                        },
-                        icon: Icon(Icons.calendar_view_day),
-                        label: Text('View Schedule'),
-                        style: OutlinedButton.styleFrom(
-                          padding: EdgeInsets.symmetric(vertical: 12),
-                        ),
-                      ),
-                    ),
-                    SizedBox(width: 12),
-                  ],
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        Get.back(); // Close dialog
-                        Get.back(); // Close recurring schedule screen
-                      },
-                      icon: Icon(Icons.check),
-                      label: Text('Done'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        foregroundColor: Colors.white,
-                        padding: EdgeInsets.symmetric(vertical: 12),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-      barrierDismissible: false,
-    );
   }
 
   Widget _buildResultRow({
@@ -2056,67 +1243,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     }
   }
 
-  bool _canCreateRecurringSchedule() {
-    if (_selectedStudent == null ||
-        _selectedCourse == null ||
-        _selectedInstructor == null) {
-      return false;
-    }
-
-    // Check if vehicle is required and available for practical lessons
-    if (_selectedClassType == 'Practical') {
-      if (_selectedVehicle == null) {
-        return false;
-      }
-      // Ensure the vehicle is actually assigned to the selected instructor
-      if (_selectedVehicle!.instructor != _selectedInstructor!.id) {
-        return false;
-      }
-    }
-
-    // Check if start date and time is not in the past
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final startDay = DateTime(_selectedStartDate.year, _selectedStartDate.month,
-        _selectedStartDate.day);
-
-    if (startDay.isBefore(today)) {
-      return false;
-    }
-
-    // Check if time is in the past for today's date
-    if (startDay.isAtSameMomentAs(today)) {
-      final startDateTime = DateTime(
-        _selectedStartDate.year,
-        _selectedStartDate.month,
-        _selectedStartDate.day,
-        _startTime.hour,
-        _startTime.minute,
-      );
-
-      if (startDateTime.isBefore(now)) {
-        return false;
-      }
-    }
-
-    // Check if we have preview count and remaining lessons
-    if (_previewCount <= 0 || _remainingLessons <= 0) {
-      return false;
-    }
-
-    // Check if preview count doesn't exceed remaining lessons
-    if (_previewCount > _remainingLessons) {
-      return false;
-    }
-
-    // Check for validation errors
-    if (_getValidationErrors().isNotEmpty) {
-      return false;
-    }
-
-    return true;
-  }
-
   TimeOfDay _parseTimeString(String timeString) {
     final parts = timeString.split(':');
     final hour = int.parse(parts[0]);
@@ -2185,5 +1311,1441 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     }
 
     return lastValidDate;
+  }
+
+  // Add these methods to your RecurringScheduleScreen class
+
+// Calculate how many lessons each occurrence will deduct
+  int _getLessonsPerOccurrence() {
+    final startDateTime = DateTime(
+      _selectedStartDate.year,
+      _selectedStartDate.month,
+      _selectedStartDate.day,
+      _startTime.hour,
+      _startTime.minute,
+    );
+    final endDateTime = DateTime(
+      _selectedStartDate.year,
+      _selectedStartDate.month,
+      _selectedStartDate.day,
+      _endTime.hour,
+      _endTime.minute,
+    );
+
+    final duration = endDateTime.difference(startDateTime);
+    final minutes = duration.inMinutes;
+    // Each lesson is 30 minutes, so divide by 30 and round up
+    return (minutes / 30).ceil().clamp(1, 10); // Minimum 1 lesson, max 10
+  }
+
+// Calculate total lessons that will be deducted for current preview
+  int _getTotalLessonsToDeduct() {
+    return _previewCount * _getLessonsPerOccurrence();
+  }
+
+// Calculate maximum occurrences possible based on remaining lessons
+  int _getMaxPossibleOccurrences() {
+    final lessonsPerOccurrence = _getLessonsPerOccurrence();
+    if (lessonsPerOccurrence <= 0 || _remainingLessons <= 0) return 0;
+    return (_remainingLessons / lessonsPerOccurrence).floor();
+  }
+
+// REPLACE your existing _getValidationErrors method with this:
+  List<String> _getValidationErrors() {
+    List<String> errors = [];
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final selectedDay = DateTime(_selectedStartDate.year,
+        _selectedStartDate.month, _selectedStartDate.day);
+
+    if (selectedDay.isBefore(today)) {
+      errors.add('Cannot schedule lessons for past dates');
+    }
+
+    // Check for past time on today's date
+    if (selectedDay.isAtSameMomentAs(today)) {
+      final startDateTime = DateTime(
+        _selectedStartDate.year,
+        _selectedStartDate.month,
+        _selectedStartDate.day,
+        _startTime.hour,
+        _startTime.minute,
+      );
+
+      if (startDateTime.isBefore(now)) {
+        errors.add('Cannot schedule lessons for past times');
+      }
+    }
+
+    final startDateTime = DateTime(
+        _selectedStartDate.year,
+        _selectedStartDate.month,
+        _selectedStartDate.day,
+        _startTime.hour,
+        _startTime.minute);
+    final endDateTime = DateTime(
+        _selectedStartDate.year,
+        _selectedStartDate.month,
+        _selectedStartDate.day,
+        _endTime.hour,
+        _endTime.minute);
+    final duration = endDateTime.difference(startDateTime);
+
+    if (duration.inMinutes <= 0) {
+      errors.add('End time must be after start time');
+    }
+
+    // Business settings validation
+    final settingsController = Get.find<SettingsController>();
+
+    // Check if scheduling on closed days
+    if (_selectedInstructor != null) {
+      final closedDays = _getClosedDaysFromSettings(settingsController);
+
+      // Check if start date falls on a closed day
+      if (closedDays.contains(_selectedStartDate.weekday)) {
+        final dayName = _getDayName(_selectedStartDate.weekday);
+        errors.add('Cannot schedule on $dayName - Business is closed');
+      }
+
+      // For recurring schedules, check if any selected days are closed
+      if (_recurrencePattern == 'weekly' && _selectedDaysOfWeek.isNotEmpty) {
+        final conflictingDays = _selectedDaysOfWeek
+            .where((day) => closedDays.contains(day))
+            .toList();
+        if (conflictingDays.isNotEmpty) {
+          final dayNames =
+              conflictingDays.map((day) => _getDayName(day)).join(', ');
+          errors.add(
+              'Cannot schedule on $dayNames - Business is closed on these days');
+        }
+      }
+    }
+
+    // Business hours validation
+    if (settingsController.enforceWorkingHours.value &&
+        _selectedInstructor != null) {
+      final startTime =
+          TimeOfDay(hour: _startTime.hour, minute: _startTime.minute);
+      final endTime = TimeOfDay(hour: _endTime.hour, minute: _endTime.minute);
+
+      final workingStart =
+          _parseTimeString(settingsController.workingHoursStart.value);
+      final workingEnd =
+          _parseTimeString(settingsController.workingHoursEnd.value);
+
+      if (_isTimeOutsideBusinessHours(
+          startTime, endTime, workingStart, workingEnd)) {
+        errors.add(
+            'Schedule time is outside business hours (${settingsController.workingHoursStart.value} - ${settingsController.workingHoursEnd.value})');
+      }
+    }
+
+    // FIXED: Check total lessons instead of just occurrences
+    final totalLessonsNeeded = _getTotalLessonsToDeduct();
+
+    if (totalLessonsNeeded > _remainingLessons && _remainingLessons > 0) {
+      final lessonsPerOccurrence = _getLessonsPerOccurrence();
+      errors.add(
+          'This schedule needs $totalLessonsNeeded lessons ($_previewCount occurrences × $lessonsPerOccurrence lessons each), but only $_remainingLessons lessons remain');
+    }
+
+    // Check if end date would generate too many lessons
+    if (_useEndDate && _recurrenceEndDate != null && _remainingLessons > 0) {
+      int estimatedOccurrences =
+          _calculateLessonsForPeriod(_selectedStartDate, _recurrenceEndDate!);
+      int estimatedTotalLessons =
+          estimatedOccurrences * _getLessonsPerOccurrence();
+
+      if (estimatedTotalLessons > _remainingLessons) {
+        errors.add(
+            'End date would generate $estimatedTotalLessons lessons ($estimatedOccurrences occurrences × ${_getLessonsPerOccurrence()} lessons each), but only $_remainingLessons lessons remain');
+      }
+    }
+
+    return errors;
+  }
+
+// SIMPLIFIED: Auto-calculate optimal end date when user selects course/time
+  void _updateLessonCounts() {
+    if (_selectedStudent != null && _selectedCourse != null) {
+      setState(() {
+        _remainingLessons = _scheduleController.getRemainingLessons(
+            _selectedStudent!.id!, _selectedCourse!.id!);
+
+        // AUTO-SET optimal end date when course is selected
+        if (_remainingLessons > 0) {
+          _recurrenceEndDate = _calculateOptimalEndDate();
+        }
+      });
+      _updatePreviewCount();
+    }
+  }
+
+// SIMPLIFIED: Calculate the perfect end date for user's remaining lessons
+  DateTime _calculateOptimalEndDate() {
+    if (_remainingLessons <= 0) {
+      return DateTime.now().add(Duration(days: 30));
+    }
+
+    final lessonsPerOccurrence = _getLessonsPerOccurrence();
+    final neededOccurrences =
+        (_remainingLessons / lessonsPerOccurrence).floor();
+
+    DateTime currentDate = _selectedStartDate;
+    int occurrenceCount = 0;
+    int safety = 0;
+
+    while (occurrenceCount < neededOccurrences && safety < 1000) {
+      safety++;
+
+      bool shouldCount = false;
+      switch (_recurrencePattern) {
+        case 'daily':
+          shouldCount = true;
+          break;
+        case 'weekly':
+          shouldCount = _selectedDaysOfWeek.contains(currentDate.weekday);
+          break;
+        case 'monthly':
+          shouldCount = currentDate.day == _selectedStartDate.day;
+          break;
+        case 'custom':
+          final daysDiff = currentDate.difference(_selectedStartDate).inDays;
+          shouldCount = daysDiff % _customInterval == 0;
+          break;
+      }
+
+      if (shouldCount) {
+        occurrenceCount++;
+      }
+
+      if (occurrenceCount >= neededOccurrences) {
+        return currentDate;
+      }
+
+      currentDate = currentDate.add(Duration(days: 1));
+    }
+
+    return currentDate;
+  }
+
+// SIMPLIFIED: Show clear guidance in course section
+  Widget _buildCourseSection() {
+    return Card(
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.book, color: Colors.green),
+                SizedBox(width: 8),
+                Text(
+                  'Course & Lessons',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            SizedBox(height: 16),
+            DropdownButtonFormField<Course>(
+              value: _selectedCourse,
+              decoration: InputDecoration(
+                labelText: 'Available Courses',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.library_books),
+              ),
+              validator: (value) =>
+                  value == null ? 'Please select a course' : null,
+              items: _availableCourses
+                  .map((course) => DropdownMenuItem(
+                        value: course,
+                        child: Text(course.name),
+                      ))
+                  .toList(),
+              onChanged: (Course? value) {
+                setState(() {
+                  _selectedCourse = value;
+                });
+                if (value != null && _selectedStudent != null) {
+                  _updateLessonCounts();
+                }
+              },
+            ),
+            if (_remainingLessons > 0) ...[
+              SizedBox(height: 16),
+              // SIMPLIFIED: Show lesson info in plain English
+              Container(
+                padding: EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.green.withOpacity(0.3)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.info, color: Colors.green, size: 20),
+                        SizedBox(width: 8),
+                        Text(
+                          'Lesson Summary',
+                          style: TextStyle(
+                            color: Colors.green.shade700,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 12),
+                    _buildLessonInfoRow(
+                        'Available lessons:', '$_remainingLessons'),
+                    if (_startTime != null && _endTime != null) ...[
+                      SizedBox(height: 8),
+                      _buildLessonInfoRow(
+                          'Each session duration:',
+                          _formatDuration(Duration(
+                              minutes: _endTime.hour * 60 +
+                                  _endTime.minute -
+                                  (_startTime.hour * 60 + _startTime.minute)))),
+                      SizedBox(height: 8),
+                      _buildLessonInfoRow('Lessons per session:',
+                          '${_getLessonsPerOccurrence()}'),
+                      SizedBox(height: 8),
+                      _buildLessonInfoRow('Max sessions possible:',
+                          '${(_remainingLessons / _getLessonsPerOccurrence()).floor()}'),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+            if (_selectedStudent != null && _availableCourses.isEmpty) ...[
+              SizedBox(height: 12),
+              Container(
+                padding: EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.warning, color: Colors.orange, size: 20),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'No lessons remaining. Please create an invoice first.',
+                        style: TextStyle(
+                          color: Colors.orange.shade700,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+// Helper to build lesson info rows
+  Widget _buildLessonInfoRow(String label, String value) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: Colors.green.shade600,
+            fontSize: 14,
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            color: Colors.green.shade800,
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
+    );
+  }
+
+// SIMPLIFIED: Auto-update end date when time changes
+  Future<void> _selectTime(bool isStartTime) async {
+    final TimeOfDay? picked = await showTimePicker(
+      context: context,
+      initialTime: isStartTime ? _startTime : _endTime,
+    );
+    if (picked != null) {
+      setState(() {
+        if (isStartTime) {
+          _startTime = picked;
+          // Auto-set end time to 1 hour later
+          _endTime = TimeOfDay(
+            hour: (picked.hour + 1) % 24,
+            minute: picked.minute,
+          );
+        } else {
+          _endTime = picked;
+        }
+
+        // AUTO-UPDATE optimal end date when time changes
+        if (_remainingLessons > 0) {
+          _recurrenceEndDate = _calculateOptimalEndDate();
+        }
+      });
+      _updatePreviewCount();
+    }
+  }
+
+// SIMPLIFIED: Smart end date selection with guidance
+  Widget _buildEndConditionSection() {
+    final lessonsPerSession = _getLessonsPerOccurrence();
+    final maxSessions = _remainingLessons > 0
+        ? (_remainingLessons / lessonsPerSession).floor()
+        : 0;
+    final optimalEndDate = _calculateOptimalEndDate();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('How long to schedule?',
+            style: TextStyle(fontWeight: FontWeight.w500, fontSize: 16)),
+        SizedBox(height: 12),
+
+        // RECOMMENDED option (make it prominent)
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.blue.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.blue.withOpacity(0.3)),
+          ),
+          child: RadioListTile<bool>(
+            value: true,
+            groupValue: _useEndDate,
+            onChanged: (value) {
+              setState(() {
+                _useEndDate = value!;
+                _recurrenceEndDate = optimalEndDate; // Set to optimal
+                _updatePreviewCount();
+              });
+            },
+            title: Row(
+              children: [
+                Icon(Icons.recommend, color: Colors.blue, size: 20),
+                SizedBox(width: 8),
+                Expanded(
+                  // Takes remaining space
+                  child: Text(
+                    'Use all remaining lessons (Recommended)',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+            subtitle: Text(
+              'Will schedule $maxSessions sessions until ${DateFormat('MMM dd, yyyy').format(optimalEndDate)}',
+              style: TextStyle(color: Colors.blue.shade600),
+            ),
+          ),
+        ),
+
+        if (_useEndDate) ...[
+          SizedBox(height: 8),
+          ListTile(
+            contentPadding: EdgeInsets.only(left: 32),
+            leading: Icon(Icons.event_available, color: Colors.blue),
+            title: Text('End Date'),
+            subtitle: Text(
+                DateFormat('EEEE, MMMM dd, yyyy').format(_recurrenceEndDate!)),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextButton(
+                  onPressed: () {
+                    setState(() {
+                      _recurrenceEndDate = optimalEndDate;
+                      _updatePreviewCount();
+                    });
+                  },
+                  child: Text('Use Optimal'),
+                ),
+                IconButton(
+                  onPressed: () => _selectEndDate(),
+                  icon: Icon(Icons.edit),
+                ),
+              ],
+            ),
+          ),
+        ],
+
+        SizedBox(height: 8),
+
+        // Custom option (less prominent)
+        RadioListTile<bool>(
+          value: false,
+          groupValue: _useEndDate,
+          onChanged: (value) {
+            setState(() {
+              _useEndDate = value!;
+              _maxOccurrences = maxSessions.clamp(1, maxSessions);
+              _updatePreviewCount();
+            });
+          },
+          title: Text('Custom number of sessions'),
+          subtitle: Text('Manually choose how many sessions to schedule'),
+        ),
+
+        if (!_useEndDate) ...[
+          Container(
+            margin: EdgeInsets.only(left: 32, top: 8),
+            width: 150,
+            child: TextFormField(
+              initialValue: _maxOccurrences.toString(),
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(
+                labelText: 'Sessions',
+                border: OutlineInputBorder(),
+                helperText: 'Max: $maxSessions',
+                suffixText: 'of $maxSessions',
+              ),
+              validator: (value) {
+                final val = int.tryParse(value ?? '');
+                if (val == null || val <= 0) {
+                  return 'Enter valid number';
+                }
+                if (val > maxSessions && maxSessions > 0) {
+                  return 'Max $maxSessions sessions';
+                }
+                return null;
+              },
+              onChanged: (value) {
+                setState(() {
+                  _maxOccurrences = int.tryParse(value) ?? 1;
+                  if (_maxOccurrences > maxSessions && maxSessions > 0) {
+                    _maxOccurrences = maxSessions;
+                  }
+                  _updatePreviewCount();
+                });
+              },
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+// SIMPLIFIED: Clear preview with plain English
+  Widget _buildPreviewSection() {
+    final lessonsPerSession = _getLessonsPerOccurrence();
+    final totalLessonsToUse = _previewCount * lessonsPerSession;
+    final remainingAfter = _remainingLessons - totalLessonsToUse;
+
+    return Card(
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.preview, color: Colors.amber),
+                SizedBox(width: 8),
+                Text(
+                  'Schedule Preview',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            SizedBox(height: 16),
+
+            // SIMPLIFIED: Show in plain English
+            Container(
+              padding: EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.withOpacity(0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Your Schedule:',
+                    style: TextStyle(
+                      color: Colors.blue.shade700,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  SizedBox(height: 12),
+                  _buildPreviewRow(
+                    icon: Icons.calendar_today,
+                    label: 'Sessions to create:',
+                    value: '$_previewCount',
+                    color: Colors.blue,
+                  ),
+                  _buildPreviewRow(
+                    icon: Icons.access_time,
+                    label: 'Each session:',
+                    value: _formatDuration(
+                        Duration(minutes: lessonsPerSession * 30)),
+                    color: Colors.green,
+                  ),
+                  _buildPreviewRow(
+                    icon: Icons.school,
+                    label: 'Total lessons to use:',
+                    value: '$totalLessonsToUse of $_remainingLessons',
+                    color: Colors.orange,
+                  ),
+                  _buildPreviewRow(
+                    icon: Icons.bookmark,
+                    label: 'Lessons remaining after:',
+                    value: '$remainingAfter',
+                    color: remainingAfter >= 0 ? Colors.green : Colors.red,
+                  ),
+                ],
+              ),
+            ),
+
+            SizedBox(height: 12),
+
+            // Validation messages
+            ..._buildSimpleValidationMessages(),
+
+            // Success message
+            if (_previewCount > 0 &&
+                totalLessonsToUse <= _remainingLessons &&
+                _getValidationErrors().isEmpty) ...[
+              SizedBox(height: 8),
+              Container(
+                padding: EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.green.withOpacity(0.3)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.check_circle, color: Colors.green, size: 20),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Perfect! Ready to create your schedule.',
+                        style: TextStyle(
+                          color: Colors.green.shade700,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPreviewRow({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 18),
+          SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(fontSize: 14),
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+// SIMPLIFIED: Clear validation messages
+  List<Widget> _buildSimpleValidationMessages() {
+    List<Widget> messages = [];
+    final errors = _getValidationErrors();
+    final totalLessonsToUse = _previewCount * _getLessonsPerOccurrence();
+
+    // Show lesson count error in simple terms
+    if (totalLessonsToUse > _remainingLessons && _remainingLessons > 0) {
+      messages.add(Container(
+        margin: EdgeInsets.only(bottom: 8),
+        padding: EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.red.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.red.withOpacity(0.3)),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.error, color: Colors.red, size: 20),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Not enough lessons! You need $totalLessonsToUse lessons but only have $_remainingLessons remaining.',
+                style: TextStyle(
+                  color: Colors.red.shade700,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ));
+    }
+
+    // Show other errors in simple language
+    for (String error in errors) {
+      if (!error.contains('lessons')) {
+        // Skip the complex lesson error, we handle it above
+        messages.add(Container(
+          margin: EdgeInsets.only(bottom: 8),
+          padding: EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.orange.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.orange.withOpacity(0.3)),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.warning, color: Colors.orange, size: 20),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  error,
+                  style: TextStyle(
+                    color: Colors.orange.shade700,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ));
+      }
+    }
+
+    return messages;
+  }
+
+  Future<void> _createRecurringSchedule() async {
+    print('🔄 RECURRING SCHEDULE CREATION STARTED');
+
+    if (!_canCreateRecurringSchedule()) {
+      Get.snackbar('Validation Error', 'Please complete all required fields');
+      return;
+    }
+
+    try {
+      setState(() {
+        _isLoading = true;
+      });
+
+      Get.dialog(
+        Dialog(
+          child: Padding(
+            padding: EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Creating recurring schedules...'),
+                SizedBox(height: 8),
+                Text('This may take a moment',
+                    style: TextStyle(color: Colors.grey)),
+              ],
+            ),
+          ),
+        ),
+        barrierDismissible: false,
+      );
+
+      // Debug information
+      print('🔄 RECURRING PARAMETERS:');
+      print('   Pattern: $_recurrencePattern');
+      print('   Start Date: $_selectedStartDate');
+      print('   End Date: $_recurrenceEndDate');
+      print('   Use End Date: $_useEndDate');
+      print('   Max Occurrences: $_maxOccurrences');
+      print('   Preview Count: $_previewCount');
+      print('   Selected Days: $_selectedDaysOfWeek');
+      print('   Start Time: $_startTime');
+      print('   End Time: $_endTime');
+
+      final schedules = <Schedule>[];
+      DateTime currentDate = _selectedStartDate;
+      int schedulesCreated = 0;
+      int daysChecked = 0;
+      final maxDays = 1000; // Safety limit
+
+      // Determine the actual end condition
+      final targetScheduleCount = _useEndDate ? _previewCount : _maxOccurrences;
+      final endDate = _useEndDate
+          ? _recurrenceEndDate!
+          : DateTime.now().add(Duration(days: 365));
+
+      print('🔄 TARGET: Create $targetScheduleCount schedules until $endDate');
+
+      while (schedulesCreated < targetScheduleCount &&
+          currentDate.isBefore(endDate) &&
+          daysChecked < maxDays) {
+        daysChecked++;
+        bool shouldCreateSchedule = false;
+
+        // Check if this date matches our recurrence pattern
+        switch (_recurrencePattern) {
+          case 'daily':
+            shouldCreateSchedule = true;
+            break;
+
+          case 'weekly':
+            shouldCreateSchedule =
+                _selectedDaysOfWeek.contains(currentDate.weekday);
+            break;
+
+          case 'monthly':
+            shouldCreateSchedule = currentDate.day == _selectedStartDate.day;
+            break;
+
+          case 'custom':
+            final daysDiff = currentDate.difference(_selectedStartDate).inDays;
+            shouldCreateSchedule = daysDiff % _customInterval == 0;
+            break;
+        }
+
+        if (shouldCreateSchedule) {
+          print(
+              '🔄 Creating schedule for ${currentDate.toString().substring(0, 10)} (${_getDayName(currentDate.weekday)})');
+
+          final startDateTime = DateTime(
+            currentDate.year,
+            currentDate.month,
+            currentDate.day,
+            _startTime.hour,
+            _startTime.minute,
+          );
+
+          final endDateTime = DateTime(
+            currentDate.year,
+            currentDate.month,
+            currentDate.day,
+            _endTime.hour,
+            _endTime.minute,
+          );
+
+          // Create the schedule
+          final schedule = Schedule(
+            start: startDateTime,
+            end: endDateTime,
+            courseId: _selectedCourse!.id!,
+            studentId: _selectedStudent!.id!,
+            instructorId: _selectedInstructor!.id!,
+            carId: _selectedVehicle?.id,
+            status: _selectedStatus,
+            isRecurring: true,
+            recurrencePattern: _recurrencePattern,
+            recurrenceEndDate: _recurrenceEndDate,
+            classType: _selectedClassType,
+          );
+
+          schedules.add(schedule);
+          schedulesCreated++;
+
+          print('✅ Schedule ${schedulesCreated} added for $startDateTime');
+        } else {
+          print(
+              '⏭️ Skipping ${currentDate.toString().substring(0, 10)} (${_getDayName(currentDate.weekday)}) - doesn\'t match pattern');
+        }
+
+        // Move to next day
+        currentDate = currentDate.add(Duration(days: 1));
+
+        // Progress update every 50 days
+        if (daysChecked % 50 == 0) {
+          print(
+              '🔄 Progress: Checked $daysChecked days, created $schedulesCreated schedules');
+        }
+      }
+
+      print('🔄 GENERATION COMPLETE:');
+      print('   Days checked: $daysChecked');
+      print('   Schedules generated: ${schedules.length}');
+      print('   Target was: $targetScheduleCount');
+
+      if (schedules.isEmpty) {
+        throw Exception(
+            'No schedules were generated. Check your date range and pattern settings.');
+      }
+
+      // Save all schedules
+      print('🔄 SAVING ${schedules.length} SCHEDULES...');
+      int savedCount = 0;
+      int failedCount = 0;
+      List<String> errors = [];
+
+      for (int i = 0; i < schedules.length; i++) {
+        try {
+          print('💾 Saving schedule ${i + 1}/${schedules.length}...');
+          await _scheduleController.addOrUpdateSchedule(schedules[i]);
+          savedCount++;
+          print('✅ Saved schedule ${i + 1}');
+        } catch (e) {
+          failedCount++;
+          errors.add('Schedule ${i + 1}: $e');
+          print('❌ Failed to save schedule ${i + 1}: $e');
+        }
+      }
+
+      print('🔄 SAVE RESULTS:');
+      print('   Successfully saved: $savedCount');
+      print('   Failed to save: $failedCount');
+
+      // Close loading dialog
+      if (Get.isDialogOpen == true) {
+        Get.back();
+      }
+
+      // Refresh schedule controller
+      _scheduleController.fetchSchedules();
+
+      // Show results
+      _showRecurringResultsDialog(
+          savedCount, failedCount, schedules.length, errors);
+    } catch (e, stackTrace) {
+      print('🚨 ERROR in recurring schedule creation: $e');
+      print('🚨 Stack trace: $stackTrace');
+
+      if (Get.isDialogOpen == true) {
+        Get.back();
+      }
+
+      Get.snackbar(
+        'Error',
+        'Failed to create recurring schedule: ${e.toString()}',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+        duration: Duration(seconds: 5),
+      );
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  void _showRecurringResultsDialog(int savedCount, int failedCount,
+      int totalGenerated, List<String> errors) {
+    Get.dialog(
+      Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Container(
+          padding: EdgeInsets.all(24),
+          constraints: BoxConstraints(maxWidth: 400),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Icon
+              Icon(
+                savedCount > 0 ? Icons.check_circle : Icons.error,
+                size: 60,
+                color: savedCount > 0 ? Colors.green : Colors.red,
+              ),
+
+              SizedBox(height: 16),
+
+              // Title
+              Text(
+                savedCount > 0
+                    ? 'Recurring Schedule Created!'
+                    : 'Creation Failed',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: savedCount > 0 ? Colors.green : Colors.red,
+                ),
+                textAlign: TextAlign.center,
+              ),
+
+              SizedBox(height: 20),
+
+              // Results summary
+              Container(
+                width: double.infinity,
+                padding: EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.grey.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Summary:',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 16)),
+                    SizedBox(height: 12),
+                    _buildSummaryRow(
+                        Icons.event, 'Generated', '$totalGenerated schedules'),
+                    _buildSummaryRow(Icons.check, 'Successfully saved',
+                        '$savedCount schedules'),
+                    if (failedCount > 0)
+                      _buildSummaryRow(Icons.error, 'Failed to save',
+                          '$failedCount schedules'),
+                    SizedBox(height: 8),
+                    Divider(),
+                    SizedBox(height: 8),
+                    _buildSummaryRow(Icons.school, 'Lessons used',
+                        '${savedCount * _getLessonsPerOccurrence()}'),
+                    _buildSummaryRow(Icons.bookmark, 'Lessons remaining',
+                        '${_remainingLessons - (savedCount * _getLessonsPerOccurrence())}'),
+                  ],
+                ),
+              ),
+
+              if (savedCount > 0) ...[
+                SizedBox(height: 16),
+                Container(
+                  width: double.infinity,
+                  padding: EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Schedule Details:',
+                          style: TextStyle(fontWeight: FontWeight.bold)),
+                      SizedBox(height: 8),
+                      Text(
+                          'Student: ${_selectedStudent?.fname} ${_selectedStudent?.lname}'),
+                      Text('Course: ${_selectedCourse?.name}'),
+                      Text(
+                          'Instructor: ${_selectedInstructor?.fname} ${_selectedInstructor?.lname}'),
+                      Text('Pattern: ${_recurrencePattern.capitalize}'),
+                      Text(
+                          'Time: ${_startTime.format(context)} - ${_endTime.format(context)}'),
+                    ],
+                  ),
+                ),
+              ],
+
+              if (errors.isNotEmpty) ...[
+                SizedBox(height: 16),
+                Container(
+                  width: double.infinity,
+                  padding: EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Errors:',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold, color: Colors.red)),
+                      SizedBox(height: 8),
+                      ...errors.take(3).map((error) =>
+                          Text('• $error', style: TextStyle(fontSize: 12))),
+                      if (errors.length > 3)
+                        Text('... and ${errors.length - 3} more'),
+                    ],
+                  ),
+                ),
+              ],
+
+              SizedBox(height: 24),
+
+              // Action buttons
+              Row(
+                children: [
+                  if (savedCount > 0) ...[
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Get.back(); // Close dialog
+                          Get.back(); // Go back
+                          Get.toNamed('/schedule'); // View schedules
+                        },
+                        icon: Icon(Icons.calendar_view_day),
+                        label: Text('View Schedules'),
+                      ),
+                    ),
+                    SizedBox(width: 12),
+                  ],
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Get.back(); // Close dialog
+                        if (savedCount > 0) {
+                          Get.back(); // Close screen if successful
+                        }
+                      },
+                      icon: Icon(Icons.check),
+                      label: Text('Done'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor:
+                            savedCount > 0 ? Colors.green : Colors.grey,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+      barrierDismissible: false,
+    );
+  }
+
+  Widget _buildSummaryRow(IconData icon, String label, String value) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: Colors.blue),
+          SizedBox(width: 8),
+          Expanded(child: Text(label, style: TextStyle(fontSize: 14))),
+          Text(value,
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
+// Also add this debug version of _canCreateRecurringSchedule:
+  bool _canCreateRecurringSchedule() {
+    print('=== DEBUG: Checking _canCreateRecurringSchedule ===');
+
+    if (_selectedStudent == null) {
+      print('DEBUG: _selectedStudent is null');
+      return false;
+    }
+    print(
+        'DEBUG: _selectedStudent = ${_selectedStudent!.fname} ${_selectedStudent!.lname}');
+
+    if (_selectedCourse == null) {
+      print('DEBUG: _selectedCourse is null');
+      return false;
+    }
+    print('DEBUG: _selectedCourse = ${_selectedCourse!.name}');
+
+    if (_selectedInstructor == null) {
+      print('DEBUG: _selectedInstructor is null');
+      return false;
+    }
+    print(
+        'DEBUG: _selectedInstructor = ${_selectedInstructor!.fname} ${_selectedInstructor!.lname}');
+
+    // Check if vehicle is required and available for practical lessons
+    if (_selectedClassType == 'Practical') {
+      if (_selectedVehicle == null) {
+        print('DEBUG: _selectedVehicle is null for practical lesson');
+        return false;
+      }
+      print(
+          'DEBUG: _selectedVehicle = ${_selectedVehicle!.make} ${_selectedVehicle!.model}');
+
+      // Ensure the vehicle is actually assigned to the selected instructor
+      if (_selectedVehicle!.instructor != _selectedInstructor!.id) {
+        print('DEBUG: Vehicle not assigned to instructor');
+        return false;
+      }
+    }
+
+    // Check if start date and time is not in the past
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final startDay = DateTime(_selectedStartDate.year, _selectedStartDate.month,
+        _selectedStartDate.day);
+
+    if (startDay.isBefore(today)) {
+      print('DEBUG: Start date is in the past');
+      return false;
+    }
+
+    // Check if time is in the past for today's date
+    if (startDay.isAtSameMomentAs(today)) {
+      final startDateTime = DateTime(
+        _selectedStartDate.year,
+        _selectedStartDate.month,
+        _selectedStartDate.day,
+        _startTime.hour,
+        _startTime.minute,
+      );
+
+      if (startDateTime.isBefore(now)) {
+        print('DEBUG: Start time is in the past');
+        return false;
+      }
+    }
+
+    // Check if we have preview count and remaining lessons
+    if (_previewCount <= 0) {
+      print('DEBUG: _previewCount is <= 0: $_previewCount');
+      return false;
+    }
+
+    if (_remainingLessons <= 0) {
+      print('DEBUG: _remainingLessons is <= 0: $_remainingLessons');
+      return false;
+    }
+
+    // Check total lessons to deduct instead of just occurrences
+    final totalLessonsToDeduct = _getTotalLessonsToDeduct();
+    if (totalLessonsToDeduct > _remainingLessons) {
+      print(
+          'DEBUG: totalLessonsToDeduct ($totalLessonsToDeduct) > _remainingLessons ($_remainingLessons)');
+      return false;
+    }
+
+    // Check for validation errors
+    final errors = _getValidationErrors();
+    if (errors.isNotEmpty) {
+      print('DEBUG: Validation errors: $errors');
+      return false;
+    }
+
+    print('DEBUG: All validation checks passed');
+    return true;
+  }
+
+// Keep your existing _showSimpleResultsDialog method
+// Add this method to show simple results
+  void _showSimpleResultsDialog(int successCount, int conflictCount) {
+    final totalLessonsDeducted = successCount * _getLessonsPerOccurrence();
+
+    Get.dialog(
+      Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Container(
+          padding: EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Success icon
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: successCount > 0
+                      ? Colors.green.withOpacity(0.1)
+                      : Colors.red.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  successCount > 0 ? Icons.check_circle : Icons.error,
+                  size: 48,
+                  color: successCount > 0 ? Colors.green : Colors.red,
+                ),
+              ),
+
+              SizedBox(height: 16),
+
+              // Title
+              Text(
+                successCount > 0 ? 'Schedule Created!' : 'Schedule Failed',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: successCount > 0 ? Colors.green : Colors.red,
+                ),
+                textAlign: TextAlign.center,
+              ),
+
+              SizedBox(height: 20),
+
+              // Results summary in simple language
+              Container(
+                width: double.infinity,
+                padding: EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.grey.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  children: [
+                    _buildResultRow(
+                      icon: Icons.event,
+                      color: Colors.green,
+                      label: 'Sessions Created',
+                      value: '$successCount',
+                    ),
+                    if (conflictCount > 0) ...[
+                      SizedBox(height: 8),
+                      _buildResultRow(
+                        icon: Icons.warning,
+                        color: Colors.orange,
+                        label: 'Skipped (Conflicts)',
+                        value: '$conflictCount',
+                      ),
+                    ],
+                    SizedBox(height: 8),
+                    _buildResultRow(
+                      icon: Icons.school,
+                      color: Colors.blue,
+                      label: 'Lessons Used',
+                      value: '$totalLessonsDeducted',
+                    ),
+                    SizedBox(height: 8),
+                    _buildResultRow(
+                      icon: Icons.bookmark,
+                      color: Colors.purple,
+                      label: 'Lessons Remaining',
+                      value: '${_remainingLessons - totalLessonsDeducted}',
+                    ),
+                  ],
+                ),
+              ),
+
+              if (successCount > 0) ...[
+                SizedBox(height: 16),
+                Container(
+                  width: double.infinity,
+                  padding: EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Schedule Details:',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue.shade700,
+                        ),
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                          'Student: ${_selectedStudent?.fname} ${_selectedStudent?.lname}'),
+                      Text('Course: ${_selectedCourse?.name}'),
+                      Text(
+                          'Instructor: ${_selectedInstructor?.fname} ${_selectedInstructor?.lname}'),
+                      Text('Pattern: ${_recurrencePattern.capitalize}'),
+                      if (_selectedVehicle != null)
+                        Text(
+                            'Vehicle: ${_selectedVehicle!.make} ${_selectedVehicle!.model}'),
+                    ],
+                  ),
+                ),
+              ],
+
+              if (conflictCount > 0) ...[
+                SizedBox(height: 16),
+                Container(
+                  width: double.infinity,
+                  padding: EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info, color: Colors.orange, size: 20),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Some sessions were skipped because the instructor was busy. You can schedule these manually later.',
+                          style: TextStyle(
+                            color: Colors.orange.shade700,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
+              SizedBox(height: 24),
+
+              // Action buttons
+              Row(
+                children: [
+                  if (successCount > 0) ...[
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Get.back(); // Close dialog
+                          Get.back(); // Go back to previous screen
+                          // Navigate to schedule view to see created sessions
+                          Get.toNamed('/schedule');
+                        },
+                        icon: Icon(Icons.calendar_view_day),
+                        label: Text('View Schedule'),
+                      ),
+                    ),
+                    SizedBox(width: 12),
+                  ],
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Get.back(); // Close dialog
+                        Get.back(); // Close recurring schedule screen
+                      },
+                      icon: Icon(Icons.check),
+                      label: Text('Done'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+      barrierDismissible: false,
+    );
+  }
+
+// Helper method to format duration
+  String _formatDuration(Duration duration) {
+    final hours = duration.inHours;
+    final minutes = duration.inMinutes.remainder(60);
+
+    if (hours > 0 && minutes > 0) {
+      return '${hours}h ${minutes}m';
+    } else if (hours > 0) {
+      return '${hours}h';
+    } else {
+      return '${minutes}m';
+    }
   }
 }
