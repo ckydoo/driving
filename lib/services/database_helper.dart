@@ -181,16 +181,17 @@ class DatabaseHelper {
   )
 ''');
     await db.execute('''
-      CREATE TABLE timeline(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT NOT NULL,
-        event_type TEXT ,
-        description TEXT ,
-        created_by INTEGER NOT NULL,
-        FOREIGN KEY (studentId) REFERENCES users(id)
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-      )
-    ''');
+  CREATE TABLE timeline(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    studentId INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    event_type TEXT,
+    description TEXT,
+    created_by INTEGER NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (studentId) REFERENCES users(id)
+  )
+''');
 
     await db.execute('''
       CREATE TABLE usermessages(
@@ -232,7 +233,7 @@ class DatabaseHelper {
         password TEXT NOT NULL,
         course TEXT,
         role TEXT NOT NULL,
-            courseIds TEXT,
+        courseIds TEXT,
         status TEXT NOT NULL DEFAULT 'Active',
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
       )

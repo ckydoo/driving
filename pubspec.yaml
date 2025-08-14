@@ -53,9 +53,22 @@ dependencies:
   crypto: ^3.0.3  # Added for password hashing
   equatable: ^2.0.5
   shared_preferences: ^2.0.15
-  pdf_render: ^1.4.0
+  
   pdf: ^3.10.4
-
+  # Firebase Core
+  firebase_core: ^2.24.2
+  
+  # Firebase Auth
+  firebase_auth: ^4.15.3
+  
+  # Cloud Firestore
+  cloud_firestore: ^4.13.6
+  
+  # Firebase Storage (for attachments)
+  firebase_storage: ^11.5.6
+  
+  # Connectivity checking
+  connectivity_plus: ^5.0.2
 
 
 

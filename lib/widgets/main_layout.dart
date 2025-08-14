@@ -88,51 +88,85 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
     );
   }
 
-  // Mobile top bar with hamburger menu
+
   Widget _buildMobileTopBar(NavigationController navController) {
     return Container(
-      height: 60,
-      color: Colors.white,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.2),
+            spreadRadius: 1,
+            blurRadius: 3,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
       child: SafeArea(
-        child: Row(
-          children: [
-            // Hamburger menu
-            IconButton(
-              icon: const Icon(Icons.menu),
-              onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-            ),
-            // Page title
-            Expanded(
-              child: Obx(() => Text(
+        child: Container(
+          height: 80,//Increased height for mobile
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          child: Row(
+            children: [
+              // Hamburger menu - bigger touch target
+              Container(
+                width: 56,
+                height: 56,
+                child: IconButton(
+                  icon: const Icon(Icons.menu, size: 35), // Bigger icon
+                  onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+                  tooltip: 'Menu',
+                  splashRadius: 28,
+                ),
+              ),
+              // Page title with better constraints
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Obx(() => Text(
                     navController.getCurrentPageTitle(),
                     style: const TextStyle(
-                      fontSize: 18,
+                      fontSize: 20, // Increased font size
                       fontWeight: FontWeight.w600,
                       color: Colors.black87,
                     ),
                     overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
                   )),
-            ),
-            // Quick actions
-            IconButton(
-              onPressed: () => navController.navigateToPage('pos'),
-              icon: const Icon(Icons.payment),
-            ),
-            IconButton(
-              icon: const Icon(Icons.search),
-              tooltip: 'Search',
-              onPressed: () => navController.navigateToPage('quick_search'),
-            ),
-          ],
+                ),
+              ),
+              // Action buttons with bigger touch targets
+              Container(
+                width: 56,
+                height: 56,
+                child: IconButton(
+                  onPressed: () => navController.navigateToPage('pos'),
+                  icon: const Icon(Icons.payment, size: 35), // Bigger icon
+                  tooltip: 'POS',
+                  splashRadius: 24,
+                ),
+              ),
+              Container(
+                width: 56,
+                height: 56,
+                child: IconButton(
+                  icon: const Icon(Icons.search, size: 35), // Bigger icon
+                  tooltip: 'Search',
+                  onPressed: () => navController.navigateToPage('quick_search'),
+                  splashRadius: 24,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  // Desktop top bar - EXACT copy of your current structure
+// Also update the desktop topbar for consistency:
   Widget _buildDesktopTopBar(NavigationController navController) {
     return Container(
-      height: 60,
+      height: 64, // Slightly taller for desktop
       color: Colors.white,
       child: Row(
         children: [
@@ -141,20 +175,22 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24.0),
               child: Obx(() => Text(
-                    navController.getCurrentPageTitle(),
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black87,
-                    ),
-                  )),
+                navController.getCurrentPageTitle(),
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              )),
             ),
           ),
+          // Action buttons
           IconButton(
             onPressed: () {
               navController.navigateToPage('pos');
             },
             icon: const Icon(Icons.payment),
+            tooltip: 'POS',
           ),
           IconButton(
             icon: const Icon(Icons.search),
@@ -163,23 +199,24 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
               navController.navigateToPage('quick_search');
             },
           ),
-          // User menu dropdown - EXACT copy
+          // User menu dropdown
           PopupMenuButton<String>(
             onSelected: (value) {
               switch (value) {
                 case 'profile':
-                  // Handle profile navigation
+                // Handle profile navigation
                   break;
                 case 'settings':
                   navController.navigateToPage('settings');
                   break;
                 case 'logout':
-                  Get.find<AuthController>().logout();
+                  final AuthController authController = Get.find<AuthController>();
+                  authController.logout();
                   break;
               }
             },
             itemBuilder: (BuildContext context) => [
-              const PopupMenuItem<String>(
+              PopupMenuItem<String>(
                 value: 'profile',
                 child: Row(
                   children: [
@@ -189,7 +226,7 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
                   ],
                 ),
               ),
-              const PopupMenuItem<String>(
+              PopupMenuItem<String>(
                 value: 'settings',
                 child: Row(
                   children: [
@@ -199,8 +236,8 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
                   ],
                 ),
               ),
-              const PopupMenuDivider(),
-              const PopupMenuItem<String>(
+              PopupMenuDivider(),
+              PopupMenuItem<String>(
                 value: 'logout',
                 child: Row(
                   children: [
@@ -211,12 +248,36 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
                 ),
               ),
             ],
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 16,
+                    backgroundColor: Colors.blue,
+                    child: Obx(() {
+                      final AuthController authController = Get.find<AuthController>();
+                      final user = authController.currentUser.value;
+                      return Text(
+                        user?.fname?.substring(0, 1).toUpperCase() ?? 'U',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      );
+                    }),
+                  ),
+                  SizedBox(width: 8),
+                  Icon(Icons.arrow_drop_down),
+                ],
+              ),
+            ),
           ),
         ],
       ),
     );
   }
-
   // Mobile drawer - Exact content as desktop sidebar but in drawer format
   Widget _buildMobileDrawer(
     NavigationController navController,

@@ -6,18 +6,18 @@ import 'package:driving/services/app_initialization.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'dart:io' show Platform;
 
 void main() async {
-  // Initialize FFI for Windows
-  sqfliteFfiInit();
-
-  // Set the database factory to use FFI
-  databaseFactory = databaseFactoryFfi;
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize the app with migration
-  await AppInitialization.initialize();
+  // Only use FFI on desktop platforms
+  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  }
 
+  await AppInitialization.initialize();
   runApp(MyApp());
 }
 

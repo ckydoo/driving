@@ -1,4 +1,4 @@
-package com.example.driving
+package com.codzlabzim.driving
 
 import io.flutter.embedding.android.FlutterActivity
 

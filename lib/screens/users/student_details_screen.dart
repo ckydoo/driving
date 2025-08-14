@@ -220,6 +220,10 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
 
   Widget _buildEnhancedHeader() {
     return Container(
+      constraints: BoxConstraints(
+        minHeight: 250, // Match SliverAppBar's expandedHeight
+        maxHeight: 250, // Match SliverAppBar's expandedHeight
+      ),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -229,185 +233,83 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
       ),
       child: SafeArea(
         child: Column(
-          mainAxisSize: MainAxisSize.min, // Add this to prevent overflow
+          mainAxisSize: MainAxisSize.min,
           children: [
-            // App Bar
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Row(
-                children: [
-                  Spacer(),
-                  Expanded(
-                    child: Text(
-                      'Student Details',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
+            // App Bar Section (Fixed height)
+            SizedBox(
+              height: 60, // Fixed height for app bar section
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  children: [
+                    Spacer(),
+                    Expanded(
+                      child: Text(
+                        'Student Details',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
-                  ),
-                  IconButton(
-                    icon: Icon(Icons.more_vert, color: Colors.white),
-                    onPressed: () => _showOptionsMenu(),
-                  ),
-                ],
+                    IconButton(
+                      icon: Icon(Icons.more_vert, color: Colors.white),
+                      onPressed: () => _showOptionsMenu(),
+                    ),
+                  ],
+                ),
               ),
             ),
 
-            // Profile Section
-            Flexible(
-              // Wrap with Flexible to prevent overflow
+            // Profile Section (Flexible but constrained)
+            Expanded(
               child: Padding(
-                padding: EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 8), // Reduced vertical padding
+                padding: EdgeInsets.symmetric(horizontal: 16),
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    // Enhanced Avatar with Progress Ring
-                    Stack(
-                      children: [
-                        Container(
-                          width: 70, // Reduced size
-                          height: 70, // Reduced size
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 3),
-                          ),
-                          child: CircularProgressIndicator(
-                            value: _getProgressPercentage(),
-                            backgroundColor: Colors.white.withOpacity(0.3),
-                            valueColor:
-                                AlwaysStoppedAnimation<Color>(Colors.white),
-                            strokeWidth: 3,
-                          ),
-                        ),
-                        Positioned.fill(
-                          child: Container(
-                            margin: EdgeInsets.all(6),
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              gradient: LinearGradient(
-                                colors: [
-                                  Colors.blue.shade300,
-                                  Colors.blue.shade500
-                                ],
-                              ),
-                            ),
-                            child: Center(
-                              child: Text(
-                                '${student!.fname[0]}${student!.lname[0]}'
-                                    .toUpperCase(),
-                                style: TextStyle(
-                                  fontSize: 22, // Reduced font size
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        Positioned(
-                          bottom: 0,
-                          right: 0,
-                          child: Container(
-                            width: 20, // Reduced size
-                            height: 20, // Reduced size
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: student!.status.toLowerCase() == 'active'
-                                  ? Colors.green.shade400
-                                  : Colors.orange.shade400,
-                              border: Border.all(color: Colors.white, width: 2),
-                            ),
-                            child: Icon(
-                              student!.status.toLowerCase() == 'active'
-                                  ? Icons.check
-                                  : Icons.pause,
-                              color: Colors.white,
-                              size: 10, // Reduced icon size
-                            ),
-                          ),
-                        ),
-                      ],
+                    // Avatar with Progress Ring
+                    SizedBox(
+                      width: 70,
+                      height: 70,
+                      child: Stack(
+                        children: [
+                          // ... your existing avatar stack content
+                        ],
+                      ),
                     ),
-
-                    SizedBox(width: 16),
-
+                    SizedBox(width: 14),
                     // Student Info
                     Expanded(
                       child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min, // Add this
                         children: [
                           Text(
                             '${student!.fname} ${student!.lname}',
                             style: TextStyle(
-                              fontSize: 20, // Reduced font size
+                              fontSize: 20,
                               fontWeight: FontWeight.bold,
                               color: Colors.white,
                             ),
-                            maxLines: 1, // Add maxLines
-                            overflow:
-                                TextOverflow.ellipsis, // Add overflow handling
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          SizedBox(height: 2), // Reduced spacing
+                          SizedBox(height: 4),
                           Text(
                             'ID: ${student!.idnumber}',
                             style: TextStyle(
-                              fontSize: 14, // Reduced font size
+                              fontSize: 14,
                               color: Colors.white.withOpacity(0.8),
                             ),
                           ),
-                          SizedBox(height: 6), // Reduced spacing
+                          SizedBox(height: 8),
                           Wrap(
-                            // Use Wrap instead of Row for better responsiveness
                             spacing: 8,
                             runSpacing: 4,
                             children: [
-                              Container(
-                                padding: EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 4), // Reduced padding
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.2),
-                                  borderRadius: BorderRadius.circular(
-                                      16), // Reduced radius
-                                ),
-                                child: Text(
-                                  student!.status,
-                                  style: TextStyle(
-                                    fontSize: 11, // Reduced font size
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ),
-                              if (_showPaymentReminder)
-                                Container(
-                                  padding: EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: Colors.red.shade500,
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.warning,
-                                          color: Colors.white,
-                                          size: 10), // Reduced icon size
-                                      SizedBox(width: 2), // Reduced spacing
-                                      Text(
-                                        'Payment Due',
-                                        style: TextStyle(
-                                          fontSize: 9, // Reduced font size
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
+                              // ... your status chips
                             ],
                           ),
                         ],
@@ -418,73 +320,86 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
               ),
             ),
 
-            // Quick Stats Row - Fixed overflow issue
-            Container(
-              margin: EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  _buildQuickStat(
-                    'Progress',
-                    '${(_getProgressPercentage() * 100).toInt()}%',
-                    Icons.trending_up,
-                  ),
-                  _buildQuickStat(
-                    'Lessons',
-                    '${_getCompletedLessonsCount()}/${_getTotalLessonsCount()}',
-                    Icons.school,
-                  ),
-                  _buildQuickStat(
-                    'Next Lesson',
-                    _getNextLessonDate(),
-                    Icons.schedule,
-                  ),
-                ],
+            // Quick Stats Row (Fixed height)
+            SizedBox(
+              height: 80, // Fixed height for stats row
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    return Row(
+                      children: [
+                        Expanded(
+                          child: _buildQuickStat(
+                            'Progress',
+                            '${(_getProgressPercentage() * 100).toInt()}%',
+                            Icons.trending_up,
+                          ),
+                        ),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: _buildQuickStat(
+                            'Lessons',
+                            '${_getCompletedLessonsCount()}/${_getTotalLessonsCount()}',
+                            Icons.school,
+                          ),
+                        ),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: _buildQuickStat(
+                            'Next Lesson',
+                            _getNextLessonDate(),
+                            Icons.schedule,
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
               ),
             ),
-
-            SizedBox(height: 12), // Reduced bottom spacing
           ],
         ),
       ),
     );
   }
 
+// Simplified Quick Stat widget
   Widget _buildQuickStat(String label, String value, IconData icon) {
-    return Expanded(
-      child: Container(
-        padding: EdgeInsets.symmetric(vertical: 10), // Reduced padding
-        margin: EdgeInsets.symmetric(horizontal: 3), // Reduced margin
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(10), // Reduced radius
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min, // Add this
-          children: [
-            Icon(icon, color: Colors.white, size: 18), // Reduced icon size
-            SizedBox(height: 3), // Reduced spacing
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 12, // Reduced font size
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-              textAlign: TextAlign.center,
-              maxLines: 1, // Add maxLines
-              overflow: TextOverflow.ellipsis, // Add overflow handling
+    return Container(
+      padding: EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, color: Colors.white, size: 18),
+          SizedBox(height: 4),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
             ),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 9, // Reduced font size
-                color: Colors.white.withOpacity(0.8),
-              ),
-              maxLines: 1, // Add maxLines
-              overflow: TextOverflow.ellipsis, // Add overflow handling
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 9,
+              color: Colors.white.withOpacity(0.8),
             ),
-          ],
-        ),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
       ),
     );
   }
@@ -532,15 +447,14 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
 
   Widget _buildOverviewTab() {
     return SingleChildScrollView(
-      padding: EdgeInsets.all(16),
+      padding: EdgeInsets.only(bottom: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(height: 35),
           _buildPersonalInfoCard(),
-          SizedBox(height: 16),
+          SizedBox(height: 12),
           _buildLearningStatsCard(),
-          SizedBox(height: 16),
+          SizedBox(height: 12),
           _buildRecentActivityCard(),
         ],
       ),
@@ -550,6 +464,7 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
   Widget _buildPersonalInfoCard() {
     return Card(
       elevation: 2,
+      margin: EdgeInsets.only(bottom: 12), // Add bottom margin
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: ExpansionTile(
         leading: Icon(Icons.person, color: Colors.blue.shade600),
@@ -562,6 +477,8 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
           ),
         ),
         initiallyExpanded: true,
+        childrenPadding: EdgeInsets.only(bottom: 12), // Add children padding
+
         children: [
           Padding(
             padding: EdgeInsets.all(16),
@@ -636,48 +553,60 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
               ],
             ),
             SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildMetricCard(
-                    'Completed Lessons',
-                    _getCompletedLessonsCount().toString(),
-                    Icons.check_circle,
-                    Colors.green,
-                  ),
-                ),
-                SizedBox(width: 16),
-                Expanded(
-                  child: _buildMetricCard(
-                    'Remaining Lessons',
-                    _getRemainingLessonsCount().toString(),
-                    Icons.schedule,
-                    Colors.orange,
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildMetricCard(
-                    'Attendance Rate',
-                    '${_getAttendanceRate()}%',
-                    Icons.person_pin_circle,
-                    Colors.purple,
-                  ),
-                ),
-                SizedBox(width: 16),
-                Expanded(
-                  child: _buildMetricCard(
-                    'Overall Progress',
-                    '${(_getProgressPercentage() * 100).toInt()}%',
-                    Icons.trending_up,
-                    Colors.blue,
-                  ),
-                ),
-              ],
+            LayoutBuilder(
+              builder: (context, constraints) {
+                // Calculate the available width for metrics
+                final availableWidth = constraints.maxWidth;
+                final isWide = availableWidth > 400;
+
+                return Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildMetricCard(
+                            'Completed Lessons',
+                            _getCompletedLessonsCount().toString(),
+                            Icons.check_circle,
+                            Colors.green,
+                          ),
+                        ),
+                        SizedBox(width: isWide ? 16 : 8),
+                        Expanded(
+                          child: _buildMetricCard(
+                            'Remaining Lessons',
+                            _getRemainingLessonsCount().toString(),
+                            Icons.schedule,
+                            Colors.orange,
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: isWide ? 16 : 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildMetricCard(
+                            'Attendance Rate',
+                            '${_getAttendanceRate()}%',
+                            Icons.person_pin_circle,
+                            Colors.purple,
+                          ),
+                        ),
+                        SizedBox(width: isWide ? 16 : 8),
+                        Expanded(
+                          child: _buildMetricCard(
+                            'Overall Progress',
+                            '${(_getProgressPercentage() * 100).toInt()}%',
+                            Icons.trending_up,
+                            Colors.blue,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                );
+              },
             ),
           ],
         ),
@@ -688,7 +617,7 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
   Widget _buildMetricCard(
       String title, String value, IconData icon, Color color) {
     return Container(
-      padding: EdgeInsets.all(16),
+      padding: EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
@@ -696,12 +625,12 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
       ),
       child: Column(
         children: [
-          Icon(icon, color: color, size: 32),
+          Icon(icon, color: color, size: 28),
           SizedBox(height: 8),
           Text(
             value,
             style: TextStyle(
-              fontSize: 20,
+              fontSize: 18,
               fontWeight: FontWeight.bold,
               color: color,
             ),
@@ -1274,77 +1203,90 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
                     ],
                   ),
                   SizedBox(height: 20),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildBillingSummaryItem(
-                          'Total Amount',
-                          '\$${totalAmount.toStringAsFixed(2)}',
-                          Colors.blue,
-                          Icons.receipt_long,
-                        ),
-                      ),
-                      SizedBox(width: 16),
-                      Expanded(
-                        child: _buildBillingSummaryItem(
-                          'Paid',
-                          '\$${totalPaid.toStringAsFixed(2)}',
-                          Colors.green,
-                          Icons.check_circle,
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildBillingSummaryItem(
-                          'Outstanding',
-                          '\$${totalBalance.toStringAsFixed(2)}',
-                          totalBalance > 0 ? Colors.red : Colors.green,
-                          totalBalance > 0 ? Icons.warning : Icons.check_circle,
-                        ),
-                      ),
-                      SizedBox(width: 16),
-                      Expanded(
-                        child: Container(
-                          padding: EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade50,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Column(
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final isWide = constraints.maxWidth > 400;
+
+                      return Column(
+                        children: [
+                          Row(
                             children: [
-                              CircularProgressIndicator(
-                                value: totalAmount > 0
-                                    ? totalPaid / totalAmount
-                                    : 0,
-                                backgroundColor: Colors.grey.shade300,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                    Colors.blue.shade600),
-                              ),
-                              SizedBox(height: 8),
-                              Text(
-                                '${totalAmount > 0 ? ((totalPaid / totalAmount) * 100).toInt() : 0}%',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.blue.shade800,
+                              Expanded(
+                                child: _buildBillingSummaryItem(
+                                  'Total Amount',
+                                  '\$${totalAmount.toStringAsFixed(2)}',
+                                  Colors.blue,
+                                  Icons.receipt_long,
                                 ),
                               ),
-                              Text(
-                                'Paid',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey.shade600,
+                              SizedBox(width: isWide ? 16 : 8),
+                              Expanded(
+                                child: _buildBillingSummaryItem(
+                                  'Paid',
+                                  '\$${totalPaid.toStringAsFixed(2)}',
+                                  Colors.green,
+                                  Icons.check_circle,
                                 ),
                               ),
                             ],
                           ),
-                        ),
-                      ),
-                    ],
+                          SizedBox(height: isWide ? 16 : 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _buildBillingSummaryItem(
+                                  'Outstanding',
+                                  '\$${totalBalance.toStringAsFixed(2)}',
+                                  totalBalance > 0 ? Colors.red : Colors.green,
+                                  totalBalance > 0
+                                      ? Icons.warning
+                                      : Icons.check_circle,
+                                ),
+                              ),
+                              SizedBox(width: isWide ? 16 : 8),
+                              Expanded(
+                                child: Container(
+                                  padding: EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.shade50,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      CircularProgressIndicator(
+                                        value: totalAmount > 0
+                                            ? totalPaid / totalAmount
+                                            : 0,
+                                        backgroundColor: Colors.grey.shade300,
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                                Colors.blue.shade600),
+                                      ),
+                                      SizedBox(height: 8),
+                                      Text(
+                                        '${totalAmount > 0 ? ((totalPaid / totalAmount) * 100).toInt() : 0}%',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.blue.shade800,
+                                        ),
+                                      ),
+                                      Text(
+                                        'Paid',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey.shade600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      );
+                    },
                   ),
                 ],
               ),
@@ -1678,11 +1620,6 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
                           color: Colors.grey.shade600,
                         ),
                       ),
-                      // Text(note['note_by']?.toString() ?? 'Unknown User',
-                      //     style: TextStyle(
-                      //       fontSize: 12,
-                      //       color: Colors.grey.shade600,
-                      //     )),
                     ],
                   ),
                 ),
@@ -2024,17 +1961,12 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
           mainAxisSize: MainAxisSize.min,
           children: [
             if (student?.role == 'student') // Only show for active students
-
               ListTile(
                 leading: Icon(Icons.grade, color: Colors.blue),
                 title: Text('Graduate', style: TextStyle(color: Colors.blue)),
                 onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => GraduationScreen(student: student!),
-                    ),
-                  );
+                  Navigator.pop(context);
+                  _navigateToGraduation();
                 },
               ),
             ListTile(
@@ -2042,7 +1974,7 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
               title:
                   Text('Delete Student', style: TextStyle(color: Colors.red)),
               onTap: () {
-                Navigator.pop(context); // Use context here
+                Navigator.pop(context);
                 _confirmDelete();
               },
             ),
@@ -2127,6 +2059,7 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
           : student == null
               ? _buildErrorState()
               : NestedScrollView(
+                  physics: ClampingScrollPhysics(), // Add this
                   headerSliverBuilder:
                       (BuildContext context, bool innerBoxIsScrolled) {
                     return <Widget>[
@@ -2146,36 +2079,21 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
                       ),
                     ];
                   },
-                  body: TabBarView(
-                    controller: _tabController,
-                    children: [
-                      // Wrap each tab with proper overflow handling
-                      _buildSafeTab(_buildOverviewTab()),
-                      _buildSafeTab(_buildScheduleTab()),
-                      _buildSafeTab(_buildProgressTab()),
-                      _buildSafeTab(_buildBillingTab()),
-                      _buildSafeTab(_buildNotesTab()),
-                      _buildSafeTab(_buildAttachmentsTab()),
-                    ],
+                  body: Container(
+                    padding: EdgeInsets.only(bottom: 12), // Add bottom padding
+                    child: TabBarView(
+                      controller: _tabController,
+                      children: [
+                        _buildOverviewTab(),
+                        _buildScheduleTab(),
+                        _buildProgressTab(),
+                        _buildBillingTab(),
+                        _buildNotesTab(),
+                        _buildAttachmentsTab(),
+                      ],
+                    ),
                   ),
                 ),
-    );
-  }
-
-// Add this helper method to wrap tabs with overflow protection
-  Widget _buildSafeTab(Widget child) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return SingleChildScrollView(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              minHeight: constraints.maxHeight,
-              maxWidth: constraints.maxWidth,
-            ),
-            child: child,
-          ),
-        );
-      },
     );
   }
 }
@@ -2186,10 +2104,10 @@ class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
   _SliverAppBarDelegate({required this.child});
 
   @override
-  double get minExtent => 60.0; // Height of the tab bar
+  double get minExtent => 60.0;
 
   @override
-  double get maxExtent => 60.0; // Height of the tab bar
+  double get maxExtent => 60.0;
 
   @override
   Widget build(
