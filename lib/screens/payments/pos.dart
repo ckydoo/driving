@@ -60,7 +60,10 @@ class _POSScreenState extends State<POSScreen> with TickerProviderStateMixin {
   String _currentStep = 'search'; // search, details, payment, confirmation
 
   // Quick Actions
-  final List<double> _quickAmounts = [50.0, 100.0, 200.0, 500.0];
+  final List<double> _quickAmounts = [20.0];
+  final GlobalKey<FormState> _paymentFormKey = GlobalKey<FormState>();
+  String? _paymentAmountError;
+  bool _isFormValid = false; // ADD THIS FOR BUTTON STATE
 
   @override
   void initState() {
@@ -69,6 +72,7 @@ class _POSScreenState extends State<POSScreen> with TickerProviderStateMixin {
     _loadData();
     _setupKeyboardShortcuts();
     _loadRecentStudents();
+    _paymentAmountError = null;
   }
 
   // Helper method to get screen breakpoints
@@ -158,23 +162,6 @@ class _POSScreenState extends State<POSScreen> with TickerProviderStateMixin {
         .where((user) => user.role.toLowerCase() == 'student')
         .take(5)
         .toList();
-  }
-
-  void _clearAll() {
-    setState(() {
-      _selectedStudent = null;
-      _searchController.clear();
-      _paymentAmountController.clear();
-      _notesController.clear();
-      _selectedCourse = null;
-      _lessonsController.text = '1';
-      _invoiceDueDate = DateTime.now().add(Duration(days: 30));
-      _paymentMethod = 'Cash';
-      _generateReceipt = true;
-      _showSearchResults = false;
-      _currentStep = 'search';
-    });
-    _searchFocusNode.requestFocus();
   }
 
   void _showEnhancedSnackbar(String message, SnackbarType type) {
@@ -390,7 +377,8 @@ class _POSScreenState extends State<POSScreen> with TickerProviderStateMixin {
   PreferredSizeWidget _buildEnhancedAppBar() {
     return AppBar(
       title: _isMobile
-          ? Text('POS', style: TextStyle(fontWeight: FontWeight.bold))
+          ? Text('Make Payments & Billing',
+              style: TextStyle(fontWeight: FontWeight.bold))
           : Row(
               children: [
                 Container(
@@ -1030,268 +1018,6 @@ class _POSScreenState extends State<POSScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildEnhancedPaymentForm() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            blurRadius: 20,
-            spreadRadius: 2,
-            offset: Offset(0, 4),
-          ),
-        ],
-      ),
-      padding: _responsivePadding,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header
-          Row(
-            children: [
-              Container(
-                padding: EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.green.shade100,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(Icons.payment, color: Colors.green.shade700),
-              ),
-              SizedBox(width: 12),
-              Text(
-                'Process Payment',
-                style: TextStyle(
-                  fontSize: _isMobile ? 18 : 22,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey[800],
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: _isMobile ? 16 : 24),
-
-          if (_selectedStudent == null)
-            Container(
-              padding: EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.orange.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.orange.shade200),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.info, color: Colors.orange.shade600),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Please select a student to process payment',
-                      style: TextStyle(
-                        color: Colors.orange.shade700,
-                        fontSize: _isMobile ? 14 : 16,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            )
-          else ...[
-            // Amount Input
-            Text(
-              'Payment Amount',
-              style: TextStyle(
-                fontSize: _isMobile ? 14 : 16,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey[700],
-              ),
-            ),
-            SizedBox(height: 8),
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.grey[50],
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade300),
-              ),
-              child: TextField(
-                controller: _paymentAmountController,
-                focusNode: _amountFocusNode,
-                keyboardType: TextInputType.numberWithOptions(decimal: true),
-                decoration: InputDecoration(
-                  hintText: '0.00',
-                  prefixText: '\$ ',
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.all(16),
-                  prefixStyle: TextStyle(
-                    fontSize: _isMobile ? 16 : 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey[800],
-                  ),
-                  hintStyle: TextStyle(color: Colors.grey.shade500),
-                ),
-                style: TextStyle(
-                  fontSize: _isMobile ? 16 : 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey[800],
-                ),
-              ),
-            ),
-            SizedBox(height: _isMobile ? 12 : 16),
-
-            // Quick Amount Buttons
-            Text(
-              'Quick Amounts',
-              style: TextStyle(
-                fontSize: _isMobile ? 14 : 16,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey[700],
-              ),
-            ),
-            SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                ..._quickAmounts.map((amount) => _buildQuickAmountChip(amount)),
-                // Add full balance button
-                if (_getStudentBalance(_selectedStudent!) > 0)
-                  _buildQuickAmountChip(_getStudentBalance(_selectedStudent!),
-                      isBalance: true),
-              ],
-            ),
-            SizedBox(height: _isMobile ? 16 : 24),
-
-            // Payment Method
-            Text(
-              'Payment Method',
-              style: TextStyle(
-                fontSize: _isMobile ? 14 : 16,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey[700],
-              ),
-            ),
-            SizedBox(height: 8),
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.grey[50],
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade300),
-              ),
-              child: DropdownButtonFormField<String>(
-                value: _paymentMethod,
-                decoration: InputDecoration(
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.all(16),
-                ),
-                items:
-                    ['Cash', 'Card', 'Bank Transfer', 'Check', 'Mobile Money']
-                        .map((method) => DropdownMenuItem(
-                              value: method,
-                              child: Text(method),
-                            ))
-                        .toList(),
-                onChanged: (value) => setState(() => _paymentMethod = value!),
-              ),
-            ),
-            SizedBox(height: _isMobile ? 16 : 24),
-
-            // Notes
-            Text(
-              'Notes (Optional)',
-              style: TextStyle(
-                fontSize: _isMobile ? 14 : 16,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey[700],
-              ),
-            ),
-            SizedBox(height: 8),
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.grey[50],
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade300),
-              ),
-              child: TextField(
-                controller: _notesController,
-                maxLines: 3,
-                decoration: InputDecoration(
-                  hintText: 'Add any notes for this payment...',
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.all(16),
-                  hintStyle: TextStyle(color: Colors.grey.shade500),
-                ),
-              ),
-            ),
-            SizedBox(height: _isMobile ? 16 : 24),
-
-            // Receipt Option
-            Row(
-              children: [
-                Checkbox(
-                  value: _generateReceipt,
-                  onChanged: (value) =>
-                      setState(() => _generateReceipt = value!),
-                  activeColor: Colors.blue.shade600,
-                ),
-                Expanded(
-                  child: Text(
-                    'Generate receipt',
-                    style: TextStyle(
-                      fontSize: _isMobile ? 14 : 16,
-                      color: Colors.grey[700],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: _isMobile ? 24 : 32),
-
-            // Process Payment Button
-            SizedBox(
-              width: double.infinity,
-              height: _isMobile ? 48 : 56,
-              child: ElevatedButton(
-                onPressed: _isProcessing ? null : _processPayment,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green.shade600,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  elevation: 2,
-                ),
-                child: _isProcessing
-                    ? SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2,
-                        ),
-                      )
-                    : Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.payment,
-                              color: Colors.white, size: _isMobile ? 20 : 24),
-                          SizedBox(width: 12),
-                          Text(
-                            'Process Payment',
-                            style: TextStyle(
-                              fontSize: _isMobile ? 16 : 18,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ],
-                      ),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
   Widget _buildQuickAmountChip(double amount, {bool isBalance = false}) {
     return Material(
       color: Colors.transparent,
@@ -1614,7 +1340,529 @@ class _POSScreenState extends State<POSScreen> with TickerProviderStateMixin {
     });
   }
 
-  // Updated _selectStudent method using exact same logic as student details screen
+  bool _canProcessPayment() {
+    // Basic requirements
+    if (_selectedStudent == null || _isProcessing) {
+      return false;
+    }
+
+    // Check if amount is entered
+    if (_paymentAmountController.text.isEmpty) {
+      return false;
+    }
+
+    // Validate amount
+    final amount = double.tryParse(_paymentAmountController.text);
+    if (amount == null || amount <= 0) {
+      return false;
+    }
+
+    // Check balance
+    final balance = _getStudentBalance(_selectedStudent!);
+    if (amount > balance) {
+      return false;
+    }
+
+    // Check if student has any balance to pay
+    if (balance <= 0) {
+      return false;
+    }
+
+    // Form validation
+    if (_paymentFormKey.currentState?.validate() != true) {
+      return false;
+    }
+
+    return true;
+  }
+
+// 3. UPDATE YOUR PROCESS PAYMENT BUTTON WITH SMART STATE:
+  Widget _buildProcessPaymentButton() {
+    final canProcess = _canProcessPayment();
+    final buttonColor =
+        canProcess ? Colors.green.shade600 : Colors.grey.shade400;
+
+    return SizedBox(
+      width: double.infinity,
+      height: _isMobile ? 48 : 56,
+      child: ElevatedButton(
+        onPressed: canProcess ? _processPayment : null, // SMART DISABLE
+        style: ElevatedButton.styleFrom(
+          backgroundColor: buttonColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          elevation: canProcess ? 2 : 0,
+          disabledBackgroundColor: Colors.grey.shade300, // DISABLED STYLE
+        ),
+        child: _isProcessing
+            ? SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  color: Colors.white,
+                  strokeWidth: 2,
+                ),
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.payment,
+                    color: canProcess ? Colors.white : Colors.grey.shade600,
+                    size: _isMobile ? 20 : 24,
+                  ),
+                  SizedBox(width: 12),
+                  Text(
+                    _getButtonText(),
+                    style: TextStyle(
+                      fontSize: _isMobile ? 16 : 18,
+                      fontWeight: FontWeight.bold,
+                      color: canProcess ? Colors.white : Colors.grey.shade600,
+                    ),
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+
+// 4. ADD METHOD TO GET DYNAMIC BUTTON TEXT:
+  String _getButtonText() {
+    if (_selectedStudent == null) {
+      return 'Select Student First';
+    }
+
+    if (_paymentAmountController.text.isEmpty) {
+      return 'Enter Payment Amount';
+    }
+
+    final amount = double.tryParse(_paymentAmountController.text);
+    if (amount == null || amount <= 0) {
+      return 'Enter Valid Amount';
+    }
+
+    final balance = _getStudentBalance(_selectedStudent!);
+    if (balance <= 0) {
+      return 'No Outstanding Balance';
+    }
+
+    if (amount > balance) {
+      return 'Amount Exceeds Balance';
+    }
+
+    return 'Process Payment';
+  }
+
+// 5. UPDATE _buildPaymentAmountSection TO TRIGGER VALIDATION:
+  Widget _buildPaymentAmountSection(double balance) {
+    final currentAmount = double.tryParse(_paymentAmountController.text) ?? 0.0;
+    final isExceeding = currentAmount > balance;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Header with balance info
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Payment Amount',
+              style: TextStyle(
+                fontSize: _isMobile ? 14 : 16,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[700],
+              ),
+            ),
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: balance > 0 ? Colors.red.shade50 : Colors.green.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color:
+                      balance > 0 ? Colors.red.shade200 : Colors.green.shade200,
+                ),
+              ),
+              child: Text(
+                'Balance: \$${balance.toStringAsFixed(2)}',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color:
+                      balance > 0 ? Colors.red.shade700 : Colors.green.shade700,
+                ),
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: 8),
+
+        // Payment amount input with validation
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.grey[50],
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isExceeding
+                  ? Colors.red.shade400
+                  : _paymentAmountError != null
+                      ? Colors.red.shade400
+                      : Colors.grey.shade300,
+              width: isExceeding || _paymentAmountError != null ? 2 : 1,
+            ),
+          ),
+          child: TextFormField(
+            controller: _paymentAmountController,
+            focusNode: _amountFocusNode,
+            keyboardType: TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+            ],
+            decoration: InputDecoration(
+              hintText: '0.00',
+              prefixText: '\$ ',
+              border: InputBorder.none,
+              contentPadding: EdgeInsets.all(16),
+              prefixStyle: TextStyle(
+                fontSize: _isMobile ? 16 : 18,
+                fontWeight: FontWeight.bold,
+                color: isExceeding ? Colors.red.shade700 : Colors.grey[800],
+              ),
+              hintStyle: TextStyle(color: Colors.grey.shade500),
+            ),
+            style: TextStyle(
+              fontSize: _isMobile ? 16 : 18,
+              fontWeight: FontWeight.bold,
+              color: isExceeding ? Colors.red.shade700 : Colors.grey[800],
+            ),
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter payment amount';
+              }
+
+              final amount = double.tryParse(value);
+              if (amount == null) {
+                return 'Please enter a valid number';
+              }
+
+              if (amount <= 0) {
+                return 'Amount must be greater than zero';
+              }
+
+              if (_selectedStudent != null && amount > balance) {
+                return 'Amount cannot exceed balance (\$${balance.toStringAsFixed(2)})';
+              }
+
+              return null;
+            },
+            onChanged: (value) {
+              setState(() {
+                _paymentAmountError = null;
+                // TRIGGER BUTTON STATE UPDATE
+                _isFormValid =
+                    _paymentFormKey.currentState?.validate() ?? false;
+              });
+            },
+          ),
+        ),
+
+        // Show error message if validation fails
+        if (_paymentAmountError != null) ...[
+          SizedBox(height: 8),
+          Row(
+            children: [
+              Icon(Icons.error, color: Colors.red.shade600, size: 16),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _paymentAmountError!,
+                  style: TextStyle(
+                    color: Colors.red.shade700,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+
+        // Show visual warning if exceeding balance
+        if (_selectedStudent != null && isExceeding && currentAmount > 0) ...[
+          SizedBox(height: 8),
+          Container(
+            padding: EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.red.shade50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.red.shade200),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.warning_amber, color: Colors.red.shade600, size: 20),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Amount Exceeds Balance',
+                        style: TextStyle(
+                          color: Colors.red.shade800,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        'Payment exceeds balance by \$${(currentAmount - balance).toStringAsFixed(2)}',
+                        style: TextStyle(
+                          color: Colors.red.shade700,
+                          fontSize: 12,
+                        ),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        'Please reduce the amount to continue',
+                        style: TextStyle(
+                          color: Colors.red.shade600,
+                          fontSize: 11,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+
+        // Show helpful info if balance is 0
+        if (_selectedStudent != null && balance == 0) ...[
+          SizedBox(height: 8),
+          Container(
+            padding: EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.green.shade50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.green.shade200),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.check_circle,
+                    color: Colors.green.shade600, size: 20),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'This student has no outstanding balance',
+                    style: TextStyle(
+                      color: Colors.green.shade700,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+// 6. UPDATE _buildEnhancedPaymentForm TO USE NEW BUTTON:
+  Widget _buildEnhancedPaymentForm() {
+    final balance =
+        _selectedStudent != null ? _getStudentBalance(_selectedStudent!) : 0.0;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            blurRadius: 20,
+            spreadRadius: 2,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      padding: _responsivePadding,
+      child: Form(
+        key: _paymentFormKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Row(
+              children: [
+                Container(
+                  padding: EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(Icons.payment, color: Colors.green.shade700),
+                ),
+                SizedBox(width: 12),
+                Text(
+                  'Process Payment',
+                  style: TextStyle(
+                    fontSize: _isMobile ? 18 : 22,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey[800],
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: _isMobile ? 16 : 24),
+
+            if (_selectedStudent == null)
+              Container(
+                padding: EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info, color: Colors.orange.shade600),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Please select a student to process payment',
+                        style: TextStyle(
+                          color: Colors.orange.shade700,
+                          fontSize: _isMobile ? 14 : 16,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else ...[
+              _buildPaymentAmountSection(balance),
+              SizedBox(height: _isMobile ? 12 : 16),
+
+              // Quick Amount Buttons
+              Text(
+                'Quick Amounts',
+                style: TextStyle(
+                  fontSize: _isMobile ? 14 : 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey[700],
+                ),
+              ),
+              SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ..._quickAmounts
+                      .map((amount) => _buildQuickAmountChip(amount)),
+                  if (balance > 0)
+                    _buildQuickAmountChip(balance, isBalance: true),
+                ],
+              ),
+              SizedBox(height: _isMobile ? 16 : 24),
+
+              // Payment Method
+              Text(
+                'Payment Method',
+                style: TextStyle(
+                  fontSize: _isMobile ? 14 : 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey[700],
+                ),
+              ),
+              SizedBox(height: 8),
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.grey[50],
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: DropdownButtonFormField<String>(
+                  value: _paymentMethod,
+                  decoration: InputDecoration(
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.all(16),
+                  ),
+                  items: ['Cash', 'Mobile Money']
+                      .map((method) => DropdownMenuItem(
+                            value: method,
+                            child: Text(method),
+                          ))
+                      .toList(),
+                  onChanged: (value) => setState(() => _paymentMethod = value!),
+                ),
+              ),
+              SizedBox(height: _isMobile ? 16 : 24),
+
+              // Notes
+              Text(
+                'Notes (Optional)',
+                style: TextStyle(
+                  fontSize: _isMobile ? 14 : 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey[700],
+                ),
+              ),
+              SizedBox(height: 8),
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.grey[50],
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: TextField(
+                  controller: _notesController,
+                  maxLines: 3,
+                  decoration: InputDecoration(
+                    hintText: 'Add any notes for this payment...',
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.all(16),
+                    hintStyle: TextStyle(color: Colors.grey.shade500),
+                  ),
+                ),
+              ),
+              SizedBox(height: _isMobile ? 16 : 24),
+
+              // Receipt Option
+              Row(
+                children: [
+                  Checkbox(
+                    value: _generateReceipt,
+                    onChanged: (value) =>
+                        setState(() => _generateReceipt = value!),
+                    activeColor: Colors.blue.shade600,
+                  ),
+                  Expanded(
+                    child: Text(
+                      'Generate receipt',
+                      style: TextStyle(
+                        fontSize: _isMobile ? 14 : 16,
+                        color: Colors.grey[700],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: _isMobile ? 24 : 32),
+
+              // SMART PROCESS PAYMENT BUTTON
+              _buildProcessPaymentButton(),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+// 7. UPDATE _selectStudent TO TRIGGER BUTTON STATE UPDATE:
   void _selectStudent(User student) {
     setState(() {
       _selectedStudent = student;
@@ -1639,23 +1887,14 @@ class _POSScreenState extends State<POSScreen> with TickerProviderStateMixin {
     if (balance > 0) {
       _paymentAmountController.text = balance.toStringAsFixed(2);
     }
+
+    // TRIGGER BUTTON STATE UPDATE
+    setState(() {
+      _isFormValid = _paymentFormKey.currentState?.validate() ?? false;
+    });
   }
 
-  Future<void> _selectDueDate() async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _invoiceDueDate,
-      firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(Duration(days: 365)),
-    );
-    if (picked != null && picked != _invoiceDueDate) {
-      setState(() {
-        _invoiceDueDate = picked;
-      });
-    }
-  }
-
-  // Updated _processPayment using EXACT same logic as payment dialog
+// 4. UPDATED _processPayment METHOD WITH VALIDATION:
   void _processPayment() async {
     if (_selectedStudent == null || _paymentAmountController.text.isEmpty) {
       _showEnhancedSnackbar('Please select a student and enter payment amount',
@@ -1663,16 +1902,46 @@ class _POSScreenState extends State<POSScreen> with TickerProviderStateMixin {
       return;
     }
 
+    // VALIDATE FORM FIRST
+    if (!_paymentFormKey.currentState!.validate()) {
+      _showEnhancedSnackbar('Please fix the errors above', SnackbarType.error);
+      return;
+    }
+
     final amount = double.tryParse(_paymentAmountController.text);
     if (amount == null || amount <= 0) {
+      setState(() {
+        _paymentAmountError = 'Please enter a valid payment amount';
+      });
       _showEnhancedSnackbar(
           'Please enter a valid payment amount', SnackbarType.error);
+      return;
+    }
+
+    // DOUBLE CHECK AGAINST CURRENT BALANCE
+    final currentBalance = _getStudentBalance(_selectedStudent!);
+    if (amount > currentBalance) {
+      setState(() {
+        _paymentAmountError =
+            'Amount cannot exceed balance (\$${currentBalance.toStringAsFixed(2)})';
+      });
+      _showEnhancedSnackbar(
+          'Payment amount (\$${amount.toStringAsFixed(2)}) cannot exceed outstanding balance (\$${currentBalance.toStringAsFixed(2)})',
+          SnackbarType.error);
+      return;
+    }
+
+    // CHECK IF BALANCE IS ZERO
+    if (currentBalance == 0) {
+      _showEnhancedSnackbar(
+          'This student has no outstanding balance to pay', SnackbarType.error);
       return;
     }
 
     setState(() {
       _isProcessing = true;
       _currentStep = 'processing';
+      _paymentAmountError = null; // Clear any errors
     });
 
     try {
@@ -1747,6 +2016,38 @@ class _POSScreenState extends State<POSScreen> with TickerProviderStateMixin {
     } finally {
       setState(() {
         _isProcessing = false;
+      });
+    }
+  }
+
+// 5. UPDATE _clearAll METHOD TO RESET VALIDATION:
+  void _clearAll() {
+    setState(() {
+      _selectedStudent = null;
+      _paymentAmountController.clear();
+      _notesController.clear();
+      _searchController.clear();
+      _showSearchResults = false;
+      _currentStep = 'search';
+      _operationMode = 'payment';
+      _paymentMethod = 'Cash';
+      _generateReceipt = true;
+      _isProcessing = false;
+      _paymentAmountError = null; // CLEAR VALIDATION ERRORS
+    });
+    _paymentFormKey.currentState?.reset(); // RESET FORM VALIDATION
+  }
+
+  Future<void> _selectDueDate() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _invoiceDueDate,
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(Duration(days: 365)),
+    );
+    if (picked != null && picked != _invoiceDueDate) {
+      setState(() {
+        _invoiceDueDate = picked;
       });
     }
   }

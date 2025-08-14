@@ -209,9 +209,8 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
                   navController.navigateToPage('settings');
                   break;
                 case 'logout':
-                  final AuthController authController =
-                      Get.find<AuthController>();
-                  authController.logout();
+                  // SAFE LOGOUT - Use the new method
+                  _performSafeLogout();
                   break;
               }
             },
@@ -292,7 +291,7 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
         child: SafeArea(
           child: Column(
             children: [
-              // Header with user info - EXACT copy
+              // Header with user info
               Container(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
@@ -309,18 +308,11 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
                           textAlign: TextAlign.center,
                         )),
                     const SizedBox(height: 8),
-                    const Text(
-                      'Management System',
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 12,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
+                    const SizedBox(height: 16),
                   ],
                 ),
               ),
-              // Navigation items - EXACT copy but auto-close drawer on tap
+              // Navigation items
               Expanded(
                 child: SingleChildScrollView(
                   child: Obx(() => Column(
@@ -329,7 +321,7 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
                       )),
                 ),
               ),
-              // Logout button - EXACT copy
+              // UPDATED LOGOUT BUTTON WITH SAFE LOGOUT:
               Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: SizedBox(
@@ -337,7 +329,7 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
                   child: ElevatedButton.icon(
                     onPressed: () {
                       Navigator.of(context).pop(); // Close drawer first
-                      authController.logout();
+                      _performSafeLogout(); // USE SAFE LOGOUT METHOD
                     },
                     icon: const Icon(Icons.logout, color: Colors.red),
                     label: const Text(
@@ -411,7 +403,7 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
             child: SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: authController.logout,
+                onPressed: _performSafeLogout, // USE SAFE LOGOUT METHOD
                 icon: const Icon(Icons.logout, color: Colors.red),
                 label: const Text(
                   'Logout',
@@ -432,6 +424,11 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
   // Build navigation items - EXACT copy of your logic
   List<Widget> _buildNavigationItems(NavigationController navController,
       {bool autoClose = false}) {
+    // SAFE USER ROLE ACCESS:
+    final user = navController.authController.currentUser.value;
+    if (user == null || !navController.authController.isLoggedIn.value) {
+      return []; // Return empty list if no user
+    }
     final userRole =
         navController.authController.currentUser.value!.role.toLowerCase();
 
@@ -819,6 +816,64 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
         ),
       ),
     );
+  }
+
+// 5. ADD THIS NEW SAFE LOGOUT METHOD TO YOUR _ResponsiveMainLayoutState CLASS:
+  Future<void> _performSafeLogout() async {
+    try {
+      final authController = Get.find<AuthController>();
+
+      // Show loading dialog
+      Get.dialog(
+        Center(
+          child: Container(
+            padding: EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(color: Colors.blue),
+                SizedBox(height: 16),
+                Text(
+                  'Logging out...',
+                  style: TextStyle(fontSize: 16),
+                ),
+              ],
+            ),
+          ),
+        ),
+        barrierDismissible: false,
+      );
+
+      // Small delay to ensure UI updates
+      await Future.delayed(Duration(milliseconds: 300));
+
+      // Perform logout
+      await authController.logout();
+
+      // Close loading dialog if still open
+      if (Get.isDialogOpen ?? false) {
+        Get.back();
+      }
+
+      // Navigate to login
+      Get.offAllNamed('/login');
+    } catch (e) {
+      // Close loading dialog on error
+      if (Get.isDialogOpen ?? false) {
+        Get.back();
+      }
+
+      Get.snackbar(
+        'Error',
+        'Failed to logout: $e',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    }
   }
 
   // Content area - EXACT copy

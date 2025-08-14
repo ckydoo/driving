@@ -1,6 +1,7 @@
 import 'package:driving/controllers/utils/responsive_utils.dart';
 import 'package:driving/widgets/responsive_extensions.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/src/services/text_formatter.dart';
 
 class ResponsiveFormField extends StatelessWidget {
   final String? label;
@@ -31,6 +32,8 @@ class ResponsiveFormField extends StatelessWidget {
     this.onTap,
     this.onChanged,
     required InputDecoration decoration,
+    required List<FilteringTextInputFormatter> inputFormatters,
+    required TextCapitalization textCapitalization,
   }) : super(key: key);
 
   @override

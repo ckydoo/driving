@@ -829,57 +829,36 @@ class ScheduleController extends GetxController {
     }
   }
 
-  /// ENHANCED: Update schedule with consistency checks
-  Future<void> updateSchedule(Schedule schedule) async {
+  Future<void> updateSchedule(Schedule schedule, {bool silent = false}) async {
     try {
       isLoading(true);
 
+      await _dbHelper.updateSchedule({
+        'id': schedule.id,
+        'status': schedule.status,
+        'attended': schedule.attended ? 1 : 0,
+      });
+
       final index = schedules.indexWhere((s) => s.id == schedule.id);
-      if (index == -1) {
-        throw Exception('Schedule not found');
+      if (index != -1) {
+        schedules[index] = schedule;
+        schedules.refresh();
       }
 
-      final originalSchedule = schedules[index];
-
-      // Check if lesson deduction changed and validate availability
-      if (schedule.lessonsDeducted != originalSchedule.lessonsDeducted) {
-        final lessonDifference =
-            schedule.lessonsDeducted - originalSchedule.lessonsDeducted;
-
-        if (lessonDifference > 0) {
-          // Adding lessons - check availability
-          if (!LessonCountingService.instance.canScheduleLessons(
-              schedule.studentId, schedule.courseId, lessonDifference)) {
-            final remaining = LessonCountingService.instance
-                .getRemainingLessons(schedule.studentId, schedule.courseId);
-
-            throw Exception(
-                'Insufficient lessons for update. Additional needed: $lessonDifference, Available: $remaining');
-          }
-        }
+      // Only show snackbar if not silent
+      if (!silent) {
+        Get.snackbar(
+          'Success',
+          'Schedule updated successfully',
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+        );
       }
-
-      // CONSISTENCY CHECK: Ensure status and attendance alignment
-      final consistentSchedule = _ensureStatusConsistency(schedule);
-
-      // Update database
-      await _dbHelper.updateSchedule(consistentSchedule.toJson());
-
-      // Update local state
-      schedules[index] = consistentSchedule;
-      schedules.refresh();
-      _applyFilters();
-
-      Get.snackbar(
-        'Success',
-        'Schedule updated successfully',
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
-      );
     } catch (e) {
-      print('Error updating schedule: $e');
-      Get.snackbar('Error', 'Failed to update schedule: ${e.toString()}');
-      rethrow;
+      if (!silent) {
+        Get.snackbar('Error', 'Failed to update schedule: ${e.toString()}');
+      }
+      throw e;
     } finally {
       isLoading(false);
     }

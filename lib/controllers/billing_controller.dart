@@ -234,7 +234,7 @@ class BillingController extends GetxController {
     }
   }
 
-  Future<void> recordPayment(Payment payment) async {
+  Future<void> recordPayment(Payment payment, {bool silent = false}) async {
     print('=== STARTING recordPayment ===');
     print(
         'Payment details: Invoice ID: ${payment.invoiceId}, Amount: ${payment.amount}');
@@ -267,11 +267,20 @@ class BillingController extends GetxController {
       print('✓ Billing data refreshed');
 
       print('=== recordPayment COMPLETED SUCCESSFULLY ===');
+      if (!silent) {
+        Get.snackbar(
+          'Payment Recorded',
+          'Payment of \$${payment.amount.toStringAsFixed(2)} recorded successfully',
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+        );
+      }
     } catch (e) {
       print('=== ERROR in recordPayment ===');
-      print('Error: $e');
-      print('Stack trace: ${e.toString()}');
-      rethrow;
+      if (!silent) {
+        Get.snackbar('Error', 'Failed to record payment: ${e.toString()}');
+      }
+      throw e;
     } finally {
       isLoading(false);
       print('Setting isLoading to false');

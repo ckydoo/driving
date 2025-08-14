@@ -1,5 +1,4 @@
 import 'package:driving/controllers/user_controller.dart';
-import 'package:driving/widgets/responsive_form_field.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
@@ -67,7 +66,7 @@ class _FleetFormDialogState extends State<FleetFormDialog>
     _makeController = TextEditingController(text: widget.vehicle?.make ?? '');
     _modelController = TextEditingController(text: widget.vehicle?.model ?? '');
     _modelYear = widget.vehicle?.modelYear ?? DateTime.now().year.toString();
-    _selectedInstructorId = widget.vehicle?.instructor;
+    _selectedInstructorId = widget.vehicle?.instructor ?? 0;
   }
 
   Future<void> _loadInstructors() async {
@@ -517,11 +516,20 @@ class _FleetFormDialogState extends State<FleetFormDialog>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Assigned Instructor',
+          'Assigned Instructor (Optional)', // CHANGE: Add "(Optional)" to indicate it's not required
           style: TextStyle(
             fontWeight: FontWeight.bold,
             color: Colors.grey.shade800,
             fontSize: isVerySmallScreen ? 14 : 16,
+          ),
+        ),
+        SizedBox(height: 4), // Add small spacing
+        Text(
+          'You can assign an instructor now or leave unassigned for later', // CHANGE: Add helper text
+          style: TextStyle(
+            fontSize: isVerySmallScreen ? 11 : 12,
+            color: Colors.grey.shade600,
+            fontStyle: FontStyle.italic,
           ),
         ),
         SizedBox(height: isVerySmallScreen ? 6 : 8),
@@ -555,250 +563,141 @@ class _FleetFormDialogState extends State<FleetFormDialog>
               ],
             ),
           )
-        else if (_availableInstructors.isEmpty)
-          _buildEmptyInstructorField(isVerySmallScreen)
         else
+          // CHANGE: Always show the dropdown, even if no instructors available
           _buildSearchableInstructorDropdown(isVerySmallScreen),
       ],
     );
   }
 
-  Widget _buildEmptyInstructorField([bool isVerySmallScreen = false]) {
+// CHANGE: Update your _buildSearchableInstructorDropdown method to include "No Assignment" option
+  Widget _buildSearchableInstructorDropdown([bool isVerySmallScreen = false]) {
     return Container(
-      padding: EdgeInsets.all(isVerySmallScreen ? 12 : 16),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.grey.shade300),
-        color: Colors.grey.shade100,
       ),
-      child: Row(
-        children: [
-          Icon(Icons.person_off,
-              color: Colors.grey.shade400, size: isVerySmallScreen ? 18 : 20),
-          SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              'No available instructors',
-              style: TextStyle(
-                color: Colors.grey.shade600,
-                fontSize: isVerySmallScreen ? 13 : 14,
-              ),
-              overflow: TextOverflow.ellipsis,
+      child: DropdownButtonFormField<int>(
+        value: _selectedInstructorId,
+        decoration: InputDecoration(
+          contentPadding: EdgeInsets.symmetric(
+            horizontal: isVerySmallScreen ? 12 : 16,
+            vertical: isVerySmallScreen ? 12 : 16,
+          ),
+          border: InputBorder.none,
+          hintText: 'Select instructor or leave unassigned',
+          hintStyle: TextStyle(
+            color: Colors.grey.shade500,
+            fontSize: isVerySmallScreen ? 13 : 14,
+          ),
+        ),
+        isExpanded: true,
+        // CHANGE: Remove validator to make it optional
+        validator:
+            null, // Was: (value) => value == null ? 'Please select an instructor' : null,
+        items: [
+          // CHANGE: Add "No Assignment" option at the beginning
+          DropdownMenuItem<int>(
+            value: 0,
+            child: Row(
+              children: [
+                Icon(
+                  Icons.remove_circle_outline,
+                  color: Colors.grey.shade600,
+                  size: isVerySmallScreen ? 18 : 20,
+                ),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'No Assignment (Available)',
+                    style: TextStyle(
+                      fontStyle: FontStyle.italic,
+                      color: Colors.grey.shade600,
+                      fontSize: isVerySmallScreen ? 13 : 14,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
             ),
           ),
+          // Add your existing instructor items
+          ..._availableInstructors.map((instructor) {
+            final isAlreadyAssigned =
+                _checkIfInstructorAssigned(instructor.id!);
+
+            return DropdownMenuItem<int>(
+              value: instructor.id,
+              child: Row(
+                children: [
+                  Icon(
+                    isAlreadyAssigned ? Icons.warning_amber : Icons.person,
+                    color: isAlreadyAssigned
+                        ? Colors.orange.shade600
+                        : Colors.green.shade600,
+                    size: isVerySmallScreen ? 18 : 20,
+                  ),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '${instructor.fname} ${instructor.lname}',
+                          style: TextStyle(
+                            fontWeight: isAlreadyAssigned
+                                ? FontWeight.normal
+                                : FontWeight.w500,
+                            color: isAlreadyAssigned
+                                ? Colors.orange.shade700
+                                : Colors.black87,
+                            fontSize: isVerySmallScreen ? 13 : 14,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (isAlreadyAssigned)
+                          Text(
+                            'Already assigned to another vehicle',
+                            style: TextStyle(
+                              fontSize: isVerySmallScreen ? 10 : 11,
+                              color: Colors.orange.shade600,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        if (instructor.email.isNotEmpty &&
+                            !isVerySmallScreen &&
+                            !isAlreadyAssigned)
+                          Text(
+                            instructor.email,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade600,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
         ],
+        onChanged: (int? value) {
+          setState(() {
+            _selectedInstructorId = value;
+          });
+        },
       ),
     );
   }
 
-  Widget _buildSearchableInstructorDropdown([bool isVerySmallScreen = false]) {
-    final selectedInstructor = _selectedInstructorId != null
-        ? _availableInstructors.firstWhere(
-            (instructor) => instructor.id == _selectedInstructorId,
-            orElse: () => _availableInstructors.first,
-          )
-        : null;
-
-    return Autocomplete<User>(
-      optionsBuilder: (TextEditingValue textEditingValue) {
-        if (textEditingValue.text.isEmpty) {
-          return _availableInstructors;
-        }
-        return _availableInstructors.where((User instructor) {
-          final fullName =
-              '${instructor.fname} ${instructor.lname}'.toLowerCase();
-          final searchTerm = textEditingValue.text.toLowerCase();
-          return fullName.contains(searchTerm);
-        });
-      },
-      displayStringForOption: (User instructor) =>
-          '${instructor.fname} ${instructor.lname}',
-      fieldViewBuilder: (
-        BuildContext context,
-        TextEditingController fieldTextEditingController,
-        FocusNode fieldFocusNode,
-        VoidCallback onFieldSubmitted,
-      ) {
-        // Set initial value if instructor is selected
-        if (selectedInstructor != null &&
-            fieldTextEditingController.text.isEmpty) {
-          fieldTextEditingController.text =
-              '${selectedInstructor.fname} ${selectedInstructor.lname}';
-        }
-
-        return TextFormField(
-          controller: fieldTextEditingController,
-          focusNode: fieldFocusNode,
-          style: TextStyle(fontSize: isVerySmallScreen ? 14 : 16),
-          decoration: InputDecoration(
-            hintText: 'Search for an instructor...',
-            hintStyle: TextStyle(fontSize: isVerySmallScreen ? 13 : 14),
-            prefixIcon: Icon(Icons.person_search,
-                color: Colors.green.shade600,
-                size: isVerySmallScreen ? 18 : 20),
-            suffixIcon: fieldTextEditingController.text.isNotEmpty
-                ? IconButton(
-                    icon: Icon(Icons.clear,
-                        color: Colors.grey.shade600,
-                        size: isVerySmallScreen ? 18 : 20),
-                    onPressed: () {
-                      fieldTextEditingController.clear();
-                      setState(() {
-                        _selectedInstructorId = null;
-                      });
-                    },
-                  )
-                : Icon(Icons.arrow_drop_down,
-                    color: Colors.grey.shade600,
-                    size: isVerySmallScreen ? 18 : 20),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.grey.shade300),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.grey.shade300),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.green.shade600, width: 2),
-            ),
-            errorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.red.shade400, width: 2),
-            ),
-            filled: true,
-            fillColor: Colors.grey.shade50,
-            contentPadding: EdgeInsets.symmetric(
-                horizontal: isVerySmallScreen ? 12 : 16,
-                vertical: isVerySmallScreen ? 12 : 16),
-          ),
-          validator: (value) {
-            if (_selectedInstructorId == null) {
-              return 'Please select an instructor';
-            }
-            return null;
-          },
-          onTap: () {
-            // Show all options when field is tapped
-            if (fieldTextEditingController.text.isEmpty) {
-              fieldTextEditingController.text = ' ';
-              fieldTextEditingController.selection =
-                  TextSelection.collapsed(offset: 0);
-            }
-          },
-        );
-      },
-      optionsViewBuilder: (
-        BuildContext context,
-        AutocompleteOnSelected<User> onSelected,
-        Iterable<User> options,
-      ) {
-        return Align(
-          alignment: Alignment.topLeft,
-          child: Material(
-            elevation: 8,
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-              width: MediaQuery.of(context).size.width *
-                  (isVerySmallScreen ? 0.9 : 0.8),
-              constraints: BoxConstraints(
-                  maxHeight: 200,
-                  maxWidth: isVerySmallScreen ? double.infinity : 400),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                color: Colors.white,
-                border: Border.all(color: Colors.grey.shade300),
-              ),
-              child: ListView.builder(
-                padding: EdgeInsets.zero,
-                shrinkWrap: true,
-                itemCount: options.length,
-                itemBuilder: (BuildContext context, int index) {
-                  final User instructor = options.elementAt(index);
-                  final bool isSelected =
-                      _selectedInstructorId == instructor.id;
-
-                  return InkWell(
-                    onTap: () => onSelected(instructor),
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      padding: EdgeInsets.symmetric(
-                          horizontal: isVerySmallScreen ? 12 : 16,
-                          vertical: isVerySmallScreen ? 10 : 12),
-                      decoration: BoxDecoration(
-                        color: isSelected ? Colors.green.shade50 : null,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: [
-                          CircleAvatar(
-                            radius: isVerySmallScreen ? 16 : 18,
-                            backgroundColor: isSelected
-                                ? Colors.green.shade200
-                                : Colors.green.shade100,
-                            child: Text(
-                              instructor.fname[0].toUpperCase(),
-                              style: TextStyle(
-                                color: Colors.green.shade700,
-                                fontWeight: FontWeight.bold,
-                                fontSize: isVerySmallScreen ? 14 : 16,
-                              ),
-                            ),
-                          ),
-                          SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '${instructor.fname} ${instructor.lname}',
-                                  style: TextStyle(
-                                    fontWeight: isSelected
-                                        ? FontWeight.bold
-                                        : FontWeight.normal,
-                                    color: isSelected
-                                        ? Colors.green.shade800
-                                        : Colors.black87,
-                                    fontSize: isVerySmallScreen ? 13 : 14,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                if (instructor.email.isNotEmpty &&
-                                    !isVerySmallScreen)
-                                  Text(
-                                    instructor.email,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey.shade600,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                              ],
-                            ),
-                          ),
-                          if (isSelected)
-                            Icon(
-                              Icons.check_circle,
-                              color: Colors.green.shade600,
-                              size: isVerySmallScreen ? 18 : 20,
-                            ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ),
-        );
-      },
-      onSelected: (User instructor) {
-        setState(() {
-          _selectedInstructorId = instructor.id;
-        });
-      },
-    );
+// CHANGE: Add this helper method to check if instructor is already assigned
+  bool _checkIfInstructorAssigned(int instructorId) {
+    final fleetController = Get.find<FleetController>();
+    return fleetController.fleet.any((vehicle) =>
+        vehicle.instructor == instructorId && vehicle.id != widget.vehicle?.id);
   }
 
   Widget _buildNoInstructorsWarning([bool isVerySmallScreen = false]) {
@@ -937,9 +836,7 @@ class _FleetFormDialogState extends State<FleetFormDialog>
                 Expanded(
                   flex: 2,
                   child: ElevatedButton(
-                    onPressed: _isLoading || _availableInstructors.isEmpty
-                        ? null
-                        : _submit,
+                    onPressed: _isLoading ? null : _submit,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.green.shade700,
                       padding: EdgeInsets.symmetric(
@@ -977,7 +874,7 @@ class _FleetFormDialogState extends State<FleetFormDialog>
   }
 
   void _submit() async {
-    if (!_formKey.currentState!.validate() || _selectedInstructorId == null) {
+    if (!_formKey.currentState!.validate()) {
       return;
     }
 
@@ -990,7 +887,7 @@ class _FleetFormDialogState extends State<FleetFormDialog>
         make: _makeController.text.trim(),
         model: _modelController.text.trim(),
         modelYear: _modelYear,
-        instructor: _selectedInstructorId!,
+        instructor: _selectedInstructorId ?? 0, // CHANGE: Ensure 0 if null
       );
 
       await Get.find<FleetController>().handleFleet(
@@ -1004,11 +901,36 @@ class _FleetFormDialogState extends State<FleetFormDialog>
       // Show success feedback after dialog is closed
       await Future.delayed(const Duration(milliseconds: 100));
 
+      // CHANGE: Update success message to reflect assignment status
+      final isAssigned = (vehicle.instructor > 0);
+      final instructorName = isAssigned
+          ? _availableInstructors
+              .firstWhereOrNull((i) => i.id == vehicle.instructor)
+          : null;
+
+      String successMessage;
+      if (widget.vehicle == null) {
+        // Adding new vehicle
+        if (isAssigned && instructorName != null) {
+          successMessage =
+              'Vehicle ${vehicle.carPlate} added and assigned to ${instructorName.fname} ${instructorName.lname}';
+        } else {
+          successMessage =
+              'Vehicle ${vehicle.carPlate} added successfully (unassigned)';
+        }
+      } else {
+        // Updating existing vehicle
+        if (isAssigned && instructorName != null) {
+          successMessage =
+              'Vehicle ${vehicle.carPlate} updated and assigned to ${instructorName.fname} ${instructorName.lname}';
+        } else {
+          successMessage = 'Vehicle ${vehicle.carPlate} updated successfully';
+        }
+      }
+
       Get.snackbar(
         widget.vehicle == null ? 'Vehicle Added!' : 'Vehicle Updated!',
-        widget.vehicle == null
-            ? 'Vehicle ${vehicle.carPlate} has been added to your fleet'
-            : 'Vehicle ${vehicle.carPlate} has been updated successfully',
+        successMessage,
         backgroundColor: Colors.green.shade600,
         colorText: Colors.white,
         icon: const Icon(Icons.check_circle, color: Colors.white),
@@ -1018,17 +940,15 @@ class _FleetFormDialogState extends State<FleetFormDialog>
     } catch (e) {
       Get.snackbar(
         'Error',
-        'Failed to ${widget.vehicle == null ? "add" : "update"} vehicle: ${e.toString()}',
+        'Failed to ${widget.vehicle == null ? 'add' : 'update'} vehicle: $e',
         backgroundColor: Colors.red.shade600,
         colorText: Colors.white,
         icon: const Icon(Icons.error, color: Colors.white),
-        duration: const Duration(seconds: 4),
+        duration: const Duration(seconds: 3),
         snackPosition: SnackPosition.TOP,
       );
     } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      setState(() => _isLoading = false);
     }
   }
 }

@@ -302,6 +302,7 @@ class _GraduationScreenState extends State<GraduationScreen> {
       for (var schedule in _remainingSchedules) {
         await scheduleController.updateSchedule(
           schedule.copyWith(status: 'Cancelled'),
+          silent: true,
         );
       }
 
@@ -426,8 +427,7 @@ class _GraduationScreenState extends State<GraduationScreen> {
           notes: 'Graduation payment - remaining balance',
         );
 
-        await billingController.recordPayment(payment);
-        remainingAmount -= paymentAmount;
+        await billingController.recordPayment(payment, silent: true);
       }
 
       await _checkGraduationEligibility();
