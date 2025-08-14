@@ -900,11 +900,19 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
         setState(() {
           if (isStartTime) {
             _startTime = picked;
-            // Ensure end time is after start time using safe method
-            final nextHour = (picked.hour + 1) % 24;
+
+            // FIXED: Set end time to 30 minutes after start time instead of 1 hour
+            final startInMinutes = picked.hour * 60 + picked.minute;
+            final endInMinutes =
+                startInMinutes + 30; // Add 30 minutes instead of 60
+
+            // Handle day overflow (if time goes past midnight)
+            final endHour = (endInMinutes ~/ 60) % 24;
+            final endMinute = endInMinutes % 60;
+
             _endTime = TimeOfDay(
-              hour: nextHour,
-              minute: picked.minute,
+              hour: endHour,
+              minute: endMinute,
             );
           } else {
             _endTime = picked;
@@ -921,8 +929,9 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
       Get.snackbar(
         'Error',
         'Failed to select time. Please try again.',
-        backgroundColor: Colors.red.shade600,
+        backgroundColor: Colors.red,
         colorText: Colors.white,
+        duration: Duration(seconds: 3),
       );
     }
   }

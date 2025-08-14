@@ -24,6 +24,8 @@ class RecurringScheduleScreen extends StatefulWidget {
 }
 
 class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
+  bool _hasConflicts = false;
+  List<String> _conflictDetails = [];
   final _formKey = GlobalKey<FormState>();
   final _scheduleController = Get.find<ScheduleController>();
   final _userController = Get.find<UserController>();
@@ -506,99 +508,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     );
   }
 
-// Helper method to get closed days from settings
-  List<int> _getClosedDaysFromSettings(SettingsController settingsController) {
-    List<int> closedDays = [];
-
-    // For now, assume all days are open since the specific day properties don't exist
-    // This method can be updated when the SettingsController has the required properties
-
-    return closedDays;
-  }
-
-// Helper method to get day name from weekday number
-  String _getDayName(int weekday) {
-    switch (weekday) {
-      case 1:
-        return 'Monday';
-      case 2:
-        return 'Tuesday';
-      case 3:
-        return 'Wednesday';
-      case 4:
-        return 'Thursday';
-      case 5:
-        return 'Friday';
-      case 6:
-        return 'Saturday';
-      case 7:
-        return 'Sunday';
-      default:
-        return 'Unknown';
-    }
-  }
-
-// Updated method name for clarity
-  bool _isTimeOutsideBusinessHours(TimeOfDay startTime, TimeOfDay endTime,
-      TimeOfDay businessStart, TimeOfDay businessEnd) {
-    int startMinutes = startTime.hour * 60 + startTime.minute;
-    int endMinutes = endTime.hour * 60 + endTime.minute;
-    int businessStartMinutes = businessStart.hour * 60 + businessStart.minute;
-    int businessEndMinutes = businessEnd.hour * 60 + businessEnd.minute;
-
-    return startMinutes < businessStartMinutes ||
-        endMinutes > businessEndMinutes;
-  }
-
-// Updated method to respect closed days when calculating lessons
-  int _calculateLessonsForPeriod(DateTime startDate, DateTime endDate) {
-    if (_selectedInstructor == null) return 0;
-
-    final settingsController = Get.find<SettingsController>();
-    final closedDays = _getClosedDaysFromSettings(settingsController);
-
-    DateTime currentDate = startDate;
-    int count = 0;
-
-    while (currentDate.isBefore(endDate) ||
-        currentDate.isAtSameMomentAs(endDate)) {
-      // Skip if it's a closed day
-      if (closedDays.contains(currentDate.weekday)) {
-        currentDate = _getNextDate(currentDate);
-        continue;
-      }
-
-      bool shouldCreateSchedule = false;
-
-      switch (_recurrencePattern) {
-        case 'daily':
-          shouldCreateSchedule = true;
-          break;
-        case 'weekly':
-          shouldCreateSchedule =
-              _selectedDaysOfWeek.contains(currentDate.weekday);
-          break;
-        case 'monthly':
-          shouldCreateSchedule = currentDate.day == startDate.day;
-          break;
-        case 'custom':
-          final daysDiff = currentDate.difference(startDate).inDays;
-          shouldCreateSchedule = daysDiff % _customInterval == 0;
-          break;
-      }
-
-      if (shouldCreateSchedule) {
-        count++;
-      }
-
-      currentDate = _getNextDate(currentDate);
-
-      if (count > 1000) break;
-    }
-
-    return count;
-  }
-
 // Helper method to get next date based on recurrence pattern
   DateTime _getNextDate(DateTime currentDate) {
     switch (_recurrencePattern) {
@@ -966,13 +875,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     }
   }
 
-  TimeOfDay _parseTimeString(String timeString) {
-    final parts = timeString.split(':');
-    final hour = int.parse(parts[0]);
-    final minute = int.parse(parts[1]);
-    return TimeOfDay(hour: hour, minute: minute);
-  }
-
   bool _isTimeOutsideWorkingHours(TimeOfDay startTime, TimeOfDay endTime,
       TimeOfDay workingStart, TimeOfDay workingEnd) {
     int startMinutes = startTime.hour * 60 + startTime.minute;
@@ -981,36 +883,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     int workingEndMinutes = workingEnd.hour * 60 + workingEnd.minute;
 
     return startMinutes < workingStartMinutes || endMinutes > workingEndMinutes;
-  }
-
-  // Add these methods to your RecurringScheduleScreen class
-
-// Calculate how many lessons each occurrence will deduct
-  int _getLessonsPerOccurrence() {
-    final startDateTime = DateTime(
-      _selectedStartDate.year,
-      _selectedStartDate.month,
-      _selectedStartDate.day,
-      _startTime.hour,
-      _startTime.minute,
-    );
-    final endDateTime = DateTime(
-      _selectedStartDate.year,
-      _selectedStartDate.month,
-      _selectedStartDate.day,
-      _endTime.hour,
-      _endTime.minute,
-    );
-
-    final duration = endDateTime.difference(startDateTime);
-    final minutes = duration.inMinutes;
-    // Each lesson is 30 minutes, so divide by 30 and round up
-    return (minutes / 30).ceil().clamp(1, 10); // Minimum 1 lesson, max 10
-  }
-
-// Calculate total lessons that will be deducted for current preview
-  int _getTotalLessonsToDeduct() {
-    return _previewCount * _getLessonsPerOccurrence();
   }
 
 // Calculate maximum occurrences possible based on remaining lessons
@@ -1424,138 +1296,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     final end2Minutes = end2.hour * 60 + end2.minute;
 
     return !(end1Minutes <= start2Minutes || start1Minutes >= end2Minutes);
-  }
-
-// REPLACE your existing _getValidationErrors method with this:
-  List<String> _getValidationErrors() {
-    List<String> errors = [];
-    final settingsController = Get.find<SettingsController>();
-
-    // Basic validation
-    if (_selectedStudent == null) {
-      errors.add('Please select a student');
-    }
-    if (_selectedInstructor == null) {
-      errors.add('Please select an instructor');
-    }
-    if (_selectedCourse == null) {
-      errors.add('Please select a course');
-    }
-
-    // Time validation
-    final startDateTime = DateTime(
-      _selectedStartDate.year,
-      _selectedStartDate.month,
-      _selectedStartDate.day,
-      _startTime.hour,
-      _startTime.minute,
-    );
-    final endDateTime = DateTime(
-      _selectedStartDate.year,
-      _selectedStartDate.month,
-      _selectedStartDate.day,
-      _endTime.hour,
-      _endTime.minute,
-    );
-
-    if (endDateTime.isBefore(startDateTime) ||
-        endDateTime.isAtSameMomentAs(startDateTime)) {
-      errors.add('End time must be after start time');
-    }
-
-    // Past date validation
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final selectedDay = DateTime(_selectedStartDate.year,
-        _selectedStartDate.month, _selectedStartDate.day);
-
-    if (selectedDay.isBefore(today)) {
-      errors.add('Cannot schedule lessons for past dates');
-    }
-
-    // Past time validation for today
-    if (selectedDay.isAtSameMomentAs(today) && startDateTime.isBefore(now)) {
-      errors.add('Cannot schedule lessons for past times');
-    }
-
-    // FIXED: Working hours validation
-    if (settingsController.enforceWorkingHours.value &&
-        _selectedInstructor != null) {
-      final startTime =
-          TimeOfDay(hour: _startTime.hour, minute: _startTime.minute);
-      final endTime = TimeOfDay(hour: _endTime.hour, minute: _endTime.minute);
-
-      final workingStart =
-          _parseTimeString(settingsController.workingHoursStart.value);
-      final workingEnd =
-          _parseTimeString(settingsController.workingHoursEnd.value);
-
-      if (_isTimeOutsideWorkingHours(
-          startTime, endTime, workingStart, workingEnd)) {
-        errors.add(
-            'Schedule time is outside working hours (${settingsController.workingHoursStart.value} - ${settingsController.workingHoursEnd.value})');
-      }
-    }
-
-    // FIXED: Instructor time conflict validation
-    if (_selectedInstructor != null) {
-      final conflictingSchedules =
-          _scheduleController.schedules.where((schedule) {
-        if (schedule.instructorId != _selectedInstructor!.id) return false;
-
-        // Check for exact time overlaps on the same day
-        final scheduleDate = DateTime(
-            schedule.start.year, schedule.start.month, schedule.start.day);
-        final selectedScheduleDate = DateTime(_selectedStartDate.year,
-            _selectedStartDate.month, _selectedStartDate.day);
-
-        if (!scheduleDate.isAtSameMomentAs(selectedScheduleDate)) return false;
-
-        // Check for time overlap
-        final scheduleStart = TimeOfDay.fromDateTime(schedule.start);
-        final scheduleEnd = TimeOfDay.fromDateTime(schedule.end);
-
-        return _hasTimeOverlap(
-            _startTime, _endTime, scheduleStart, scheduleEnd);
-      }).toList();
-
-      if (conflictingSchedules.isNotEmpty) {
-        errors.add('Instructor has conflicting schedules at the selected time');
-      }
-    }
-
-    // Closed days validation
-    if (_selectedInstructor != null) {
-      final closedDays = _getClosedDaysFromSettings(settingsController);
-
-      if (closedDays.contains(_selectedStartDate.weekday)) {
-        final dayName = _getDayName(_selectedStartDate.weekday);
-        errors.add('Cannot schedule on $dayName - Business is closed');
-      }
-
-      // For recurring schedules, check if any selected days are closed
-      if (_recurrencePattern == 'weekly' && _selectedDaysOfWeek.isNotEmpty) {
-        final conflictingDays = _selectedDaysOfWeek
-            .where((day) => closedDays.contains(day))
-            .toList();
-        if (conflictingDays.isNotEmpty) {
-          final dayNames =
-              conflictingDays.map((day) => _getDayName(day)).join(', ');
-          errors.add(
-              'Cannot schedule on $dayNames - Business is closed on these days');
-        }
-      }
-    }
-
-    // Lesson count validation
-    final totalLessonsNeeded = _getTotalLessonsToDeduct();
-    if (totalLessonsNeeded > _remainingLessons && _remainingLessons > 0) {
-      final lessonsPerOccurrence = _getLessonsPerOccurrence();
-      errors.add(
-          'This schedule needs $totalLessonsNeeded lessons ($_previewCount occurrences × $lessonsPerOccurrence lessons each), but only $_remainingLessons lessons remain');
-    }
-
-    return errors;
   }
 
 // UPDATE your existing _getValidationWarnings method with enhanced break validation:
@@ -2670,5 +2410,645 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
   bool _canCreateRecurringSchedule() {
     final errors = _getValidationErrors();
     return errors.isEmpty && _previewCount > 0 && _remainingLessons > 0;
+  }
+
+// HELPER METHOD: Validate lesson duration and show helpful messages
+  void _validateLessonDuration() {
+    final startInMinutes = _startTime.hour * 60 + _startTime.minute;
+    final endInMinutes = _endTime.hour * 60 + _endTime.minute;
+    final durationMinutes = endInMinutes - startInMinutes;
+
+    if (durationMinutes <= 0) {
+      Get.snackbar(
+        'Invalid Duration',
+        'End time must be after start time',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    } else if (durationMinutes < 30) {
+      Get.snackbar(
+        'Short Duration',
+        'Lesson is ${durationMinutes} minutes. Minimum recommended: 30 minutes',
+        backgroundColor: Colors.orange,
+        colorText: Colors.white,
+      );
+    } else if (durationMinutes % 30 != 0) {
+      final lessons = (durationMinutes / 30.0).toStringAsFixed(1);
+      Get.snackbar(
+        'Duration Info',
+        'Lesson duration: ${durationMinutes} minutes (${lessons} lessons)',
+        backgroundColor: Colors.blue,
+        colorText: Colors.white,
+      );
+    } else {
+      final lessons = (durationMinutes / 30).round();
+      Get.snackbar(
+        'Duration Set',
+        'Lesson duration: ${durationMinutes} minutes (${lessons} lesson${lessons > 1 ? 's' : ''})',
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
+    }
+  }
+
+// FIX 2: Proper lesson duration calculation (30 minutes = 1 lesson)
+  int _getLessonsPerOccurrence() {
+    final startDateTime = DateTime(
+      _selectedStartDate.year,
+      _selectedStartDate.month,
+      _selectedStartDate.day,
+      _startTime.hour,
+      _startTime.minute,
+    );
+    final endDateTime = DateTime(
+      _selectedStartDate.year,
+      _selectedStartDate.month,
+      _selectedStartDate.day,
+      _endTime.hour,
+      _endTime.minute,
+    );
+
+    final duration = endDateTime.difference(startDateTime);
+    final minutes = duration.inMinutes;
+
+    // FIXED: Each lesson is exactly 30 minutes
+    // Use proper division and rounding for accurate lesson count
+    if (minutes <= 0) return 1; // Minimum 1 lesson
+
+    final lessons = (minutes / 30.0).round(); // Round to nearest lesson
+    return lessons.clamp(1, 8); // Min 1 lesson, max 8 lessons (4 hours)
+  }
+
+// FIX 3: Add missing helper method
+  int _getTotalLessonsToDeduct() {
+    return _previewCount * _getLessonsPerOccurrence();
+  }
+
+// FIX 4: Enhanced instructor availability checking for recurring schedules
+  Future<void> _checkInstructorAvailabilityForRecurring() async {
+    if (_selectedInstructor == null) {
+      setState(() {
+        _hasConflicts = false;
+      });
+      return;
+    }
+
+    final settingsController = Get.find<SettingsController>();
+    List<String> conflicts = [];
+
+    // Generate preview dates to check conflicts
+    List<DateTime> previewDates = _generatePreviewDates();
+
+    for (DateTime date in previewDates) {
+      final startDateTime = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        _startTime.hour,
+        _startTime.minute,
+      );
+
+      final endDateTime = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        _endTime.hour,
+        _endTime.minute,
+      );
+
+      // Check for instructor conflicts on this date
+      final conflictingSchedules =
+          _scheduleController.schedules.where((schedule) {
+        // Check if it's the same instructor
+        if (schedule.instructorId != _selectedInstructor!.id) return false;
+
+        // Check if cancelled schedules should be ignored
+        if (schedule.status.toLowerCase() == 'cancelled') return false;
+
+        // Check for time overlap
+        return (startDateTime.isBefore(schedule.end) &&
+            endDateTime.isAfter(schedule.start));
+      }).toList();
+
+      if (conflictingSchedules.isNotEmpty) {
+        final dateStr = DateFormat('MMM dd').format(date);
+        final timeStr =
+            DateFormat('hh:mm a').format(conflictingSchedules.first.start);
+        conflicts.add('$dateStr at $timeStr');
+      }
+
+      // Check break between lessons if enforced
+      if (settingsController.enforceWorkingHours.value &&
+          !settingsController.allowBackToBackLessons.value) {
+        final breakMinutes = settingsController.breakBetweenLessons.value;
+
+        final tooCloseSchedules =
+            _scheduleController.schedules.where((schedule) {
+          if (schedule.instructorId != _selectedInstructor!.id) return false;
+          if (schedule.status.toLowerCase() == 'cancelled') return false;
+
+          final scheduleDate = DateTime(
+              schedule.start.year, schedule.start.month, schedule.start.day);
+          final selectedDate = DateTime(date.year, date.month, date.day);
+
+          if (!scheduleDate.isAtSameMomentAs(selectedDate)) return false;
+
+          // Check if there's insufficient break time
+          final timeDifference =
+              startDateTime.difference(schedule.end).inMinutes.abs();
+          return timeDifference > 0 && timeDifference < breakMinutes;
+        }).toList();
+
+        if (tooCloseSchedules.isNotEmpty) {
+          final dateStr = DateFormat('MMM dd').format(date);
+          conflicts.add('$dateStr - insufficient break time');
+        }
+      }
+    }
+
+    setState(() {
+      _hasConflicts = conflicts.isNotEmpty;
+      _conflictDetails = conflicts;
+    });
+
+    if (conflicts.isNotEmpty && conflicts.length <= 3) {
+      Get.snackbar(
+        'Instructor Conflicts',
+        'Conflicts on: ${conflicts.take(3).join(', ')}${conflicts.length > 3 ? '...' : ''}',
+        backgroundColor: Colors.orange,
+        colorText: Colors.white,
+        duration: Duration(seconds: 5),
+      );
+    }
+  }
+
+// FIX 5: Enhanced past date/time validation
+  List<String> _getValidationErrors() {
+    List<String> errors = [];
+    final now = DateTime.now();
+
+    // Validate start date is not in the past
+    final today = DateTime(now.year, now.month, now.day);
+    final selectedDay = DateTime(_selectedStartDate.year,
+        _selectedStartDate.month, _selectedStartDate.day);
+
+    if (selectedDay.isBefore(today)) {
+      errors.add('Cannot schedule lessons for past dates');
+      return errors; // Return early if date is in past
+    }
+
+    // FIXED: More precise past time validation for today
+    if (selectedDay.isAtSameMomentAs(today)) {
+      final startDateTime = DateTime(
+        _selectedStartDate.year,
+        _selectedStartDate.month,
+        _selectedStartDate.day,
+        _startTime.hour,
+        _startTime.minute,
+      );
+
+      // Add 5-minute buffer to allow for small delays
+      final bufferTime = now.add(Duration(minutes: 5));
+
+      if (startDateTime.isBefore(bufferTime)) {
+        final timeStr = DateFormat('hh:mm a').format(bufferTime);
+        errors.add('Cannot schedule lessons before $timeStr (5-minute buffer)');
+      }
+    }
+
+    // Validate end time is after start time
+    final startDateTime = DateTime(
+      _selectedStartDate.year,
+      _selectedStartDate.month,
+      _selectedStartDate.day,
+      _startTime.hour,
+      _startTime.minute,
+    );
+    final endDateTime = DateTime(
+      _selectedStartDate.year,
+      _selectedStartDate.month,
+      _selectedStartDate.day,
+      _endTime.hour,
+      _endTime.minute,
+    );
+
+    final duration = endDateTime.difference(startDateTime);
+
+    if (duration.inMinutes <= 0) {
+      errors.add('End time must be after start time');
+      return errors;
+    }
+
+    // Validate minimum lesson duration (30 minutes)
+    if (duration.inMinutes < 30) {
+      errors.add('Lesson duration must be at least 30 minutes');
+    }
+
+    // Validate maximum lesson duration (4 hours)
+    if (duration.inHours > 4) {
+      errors.add('Lesson duration cannot exceed 4 hours');
+    }
+
+    // Business settings validation
+    final settingsController = Get.find<SettingsController>();
+
+    // Check business closed days
+    if (_selectedInstructor != null) {
+      final closedDays = _getClosedDaysFromSettings(settingsController);
+
+      // Check if start date falls on a closed day
+      if (closedDays.contains(_selectedStartDate.weekday)) {
+        final dayName = _getDayName(_selectedStartDate.weekday);
+        errors.add('Cannot schedule on $dayName - Business is closed');
+      }
+
+      // For recurring schedules, check if any selected days are closed
+      if (_recurrencePattern == 'weekly' && _selectedDaysOfWeek.isNotEmpty) {
+        final conflictingDays = _selectedDaysOfWeek
+            .where((day) => closedDays.contains(day))
+            .toList();
+        if (conflictingDays.isNotEmpty) {
+          final dayNames =
+              conflictingDays.map((day) => _getDayName(day)).join(', ');
+          errors.add(
+              'Cannot schedule on $dayNames - Business is closed on these days');
+        }
+      }
+    }
+
+    // Business hours validation
+    if (settingsController.enforceWorkingHours.value &&
+        _selectedInstructor != null) {
+      final startTime =
+          TimeOfDay(hour: _startTime.hour, minute: _startTime.minute);
+      final endTime = TimeOfDay(hour: _endTime.hour, minute: _endTime.minute);
+
+      // FIXED: Use correct property names from SettingsController
+      final workingStart =
+          _parseTimeString(settingsController.businessStartTime.value);
+      final workingEnd =
+          _parseTimeString(settingsController.businessEndTime.value);
+
+      if (_isTimeOutsideBusinessHours(
+          startTime, endTime, workingStart, workingEnd)) {
+        errors.add(
+            'Schedule time is outside business hours (${settingsController.businessStartTime.value} - ${settingsController.businessEndTime.value})');
+      }
+    }
+
+    // FIXED: Lesson count validation with proper calculation
+    final totalLessonsNeeded = _getTotalLessonsToDeduct();
+
+    if (totalLessonsNeeded > _remainingLessons && _remainingLessons > 0) {
+      final lessonsPerOccurrence = _getLessonsPerOccurrence();
+      errors.add(
+          'This schedule needs $totalLessonsNeeded lessons ($_previewCount occurrences × $lessonsPerOccurrence lessons each), but only $_remainingLessons lessons remain');
+    }
+
+    // Check if end date would generate too many lessons
+    if (_useEndDate && _recurrenceEndDate != null && _remainingLessons > 0) {
+      // FIXED: Proper calculation including business days
+      final estimatedOccurrences =
+          _calculateLessonsForPeriod(_selectedStartDate, _recurrenceEndDate!);
+      final estimatedTotalLessons =
+          estimatedOccurrences * _getLessonsPerOccurrence();
+
+      if (estimatedTotalLessons > _remainingLessons) {
+        errors.add(
+            'End date would generate $estimatedTotalLessons lessons ($estimatedOccurrences occurrences × ${_getLessonsPerOccurrence()} lessons each), but only $_remainingLessons lessons remain');
+      }
+    }
+
+    return errors;
+  }
+
+// FIX 6: Proper day calculation excluding closed days
+  int _calculateLessonsForPeriod(DateTime startDate, DateTime endDate) {
+    if (endDate.isBefore(startDate)) return 0;
+
+    final settingsController = Get.find<SettingsController>();
+    final closedDays = _getClosedDaysFromSettings(settingsController);
+
+    int count = 0;
+    DateTime currentDate =
+        DateTime(startDate.year, startDate.month, startDate.day);
+    final finalDate = DateTime(endDate.year, endDate.month, endDate.day);
+
+    // Prevent infinite loops - limit to 1000 days maximum
+    int dayCount = 0;
+    const maxDays = 1000;
+
+    while (!currentDate.isAfter(finalDate) && dayCount < maxDays) {
+      bool shouldInclude = false;
+
+      switch (_recurrencePattern) {
+        case 'daily':
+          // Skip closed days for daily recurring
+          shouldInclude = !closedDays.contains(currentDate.weekday);
+          break;
+        case 'weekly':
+          // Only include if it matches selected days and isn't a closed day
+          shouldInclude = _selectedDaysOfWeek.contains(currentDate.weekday) &&
+              !closedDays.contains(currentDate.weekday);
+          break;
+        case 'custom':
+          // For custom patterns, check interval
+          final daysDiff = currentDate.difference(startDate).inDays;
+          shouldInclude = (daysDiff % _customInterval == 0) &&
+              !closedDays.contains(currentDate.weekday);
+          break;
+        case 'monthly':
+          // For monthly, check if it's the same day of month and not closed
+          shouldInclude = (currentDate.day == startDate.day) &&
+              !closedDays.contains(currentDate.weekday);
+          break;
+      }
+
+      if (shouldInclude) {
+        count++;
+      }
+
+      currentDate = currentDate.add(Duration(days: 1));
+      dayCount++;
+    }
+
+    return count;
+  }
+
+// FIX 7: Generate proper preview dates for validation
+  List<DateTime> _generatePreviewDates() {
+    List<DateTime> dates = [];
+    final settingsController = Get.find<SettingsController>();
+    final closedDays = _getClosedDaysFromSettings(settingsController);
+
+    DateTime currentDate = DateTime(_selectedStartDate.year,
+        _selectedStartDate.month, _selectedStartDate.day);
+    int count = 0;
+    int dayCount = 0;
+    const maxDays = 365; // Limit to 1 year for preview
+
+    while (count < _previewCount && dayCount < maxDays) {
+      bool shouldInclude = false;
+
+      // Skip past dates
+      final today = DateTime.now();
+      final todayDate = DateTime(today.year, today.month, today.day);
+
+      if (currentDate.isBefore(todayDate)) {
+        currentDate = currentDate.add(Duration(days: 1));
+        dayCount++;
+        continue;
+      }
+
+      switch (_recurrencePattern) {
+        case 'daily':
+          shouldInclude = !closedDays.contains(currentDate.weekday);
+          break;
+        case 'weekly':
+          shouldInclude = _selectedDaysOfWeek.contains(currentDate.weekday) &&
+              !closedDays.contains(currentDate.weekday);
+          break;
+        case 'custom':
+          final daysDiff = currentDate.difference(_selectedStartDate).inDays;
+          shouldInclude = (daysDiff % _customInterval == 0) &&
+              !closedDays.contains(currentDate.weekday);
+          break;
+        case 'monthly':
+          shouldInclude = (currentDate.day == _selectedStartDate.day) &&
+              !closedDays.contains(currentDate.weekday);
+          break;
+      }
+
+      if (shouldInclude) {
+        dates.add(currentDate);
+        count++;
+      }
+
+      currentDate = currentDate.add(Duration(days: 1));
+      dayCount++;
+    }
+
+    return dates;
+  }
+
+// FIX 8: Enhanced _canSchedule method that checks all conditions
+  bool _canSchedule() {
+    // Check basic requirements
+    if (_selectedStudent == null ||
+        _selectedInstructor == null ||
+        _selectedCourse == null ||
+        _remainingLessons <= 0) {
+      return false;
+    }
+
+    // Check if vehicle is required and available for practical lessons
+    if (_selectedClassType == 'Practical') {
+      if (_selectedVehicle == null) return false;
+
+      // Ensure the vehicle is actually assigned to the selected instructor
+      if (_selectedVehicle!.instructor != _selectedInstructor!.id) {
+        return false;
+      }
+    }
+
+    // Check validation errors
+    final errors = _getValidationErrors();
+    if (errors.isNotEmpty) return false;
+
+    // Check if we have enough lessons
+    final totalLessonsNeeded = _getTotalLessonsToDeduct();
+    if (totalLessonsNeeded > _remainingLessons) return false;
+
+    // Check preview count
+    if (_previewCount <= 0) return false;
+
+    // Optional: Allow scheduling with conflicts but warn user
+    // You can choose to return false here to prevent scheduling with conflicts
+    // return !_hasConflicts;
+
+    return true; // Allow scheduling even with conflicts (user will be warned)
+  }
+
+// FIX 9: Call availability check when instructor or time changes
+  void _onInstructorChanged() {
+    if (mounted) {
+      // _updateVehicleAvailability();
+      _checkInstructorAvailabilityForRecurring(); // Add this line
+      _updatePreview();
+    }
+  }
+
+  void _onTimeChanged() {
+    if (mounted) {
+      _updateLessonCounts();
+      _checkInstructorAvailabilityForRecurring(); // Add this line
+      _updatePreview();
+    }
+  }
+
+// FIX 10: Add the missing parseTimeString method with error handling
+  TimeOfDay _parseTimeString(String timeString) {
+    try {
+      if (timeString.isEmpty || !timeString.contains(':')) {
+        return const TimeOfDay(hour: 9, minute: 0);
+      }
+
+      final parts = timeString.trim().split(':');
+      if (parts.length != 2) {
+        return const TimeOfDay(hour: 9, minute: 0);
+      }
+
+      final hour = int.tryParse(parts[0].trim()) ?? 9;
+      final minute = int.tryParse(parts[1].trim()) ?? 0;
+
+      // Validate ranges
+      if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+        return const TimeOfDay(hour: 9, minute: 0);
+      }
+
+      return TimeOfDay(hour: hour, minute: minute);
+    } catch (e) {
+      return const TimeOfDay(hour: 9, minute: 0);
+    }
+  }
+
+// FIX 11: Add missing helper methods
+  void _updatePreview() {
+    _updatePreviewCount();
+    // Force UI refresh
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+// FIX 12: Simplified closed days method (since business days aren't fully implemented yet)
+  List<int> _getClosedDaysFromSettings(SettingsController settingsController) {
+    // For now, return empty list - no closed days
+    // This can be expanded later when business operating days are fully implemented
+    List<int> closedDays = [];
+
+    // FUTURE: When business days are implemented, you can add:
+    // if (settingsController.operatingDays.isNotEmpty) {
+    //   for (int day = 1; day <= 7; day++) {
+    //     final dayName = _getDayName(day);
+    //     if (!settingsController.operatingDays.contains(dayName)) {
+    //       closedDays.add(day);
+    //     }
+    //   }
+    // }
+
+    return closedDays;
+  }
+
+// FIX 13: Add helper method for day names
+  String _getDayName(int weekday) {
+    switch (weekday) {
+      case 1:
+        return 'Monday';
+      case 2:
+        return 'Tuesday';
+      case 3:
+        return 'Wednesday';
+      case 4:
+        return 'Thursday';
+      case 5:
+        return 'Friday';
+      case 6:
+        return 'Saturday';
+      case 7:
+        return 'Sunday';
+      default:
+        return 'Unknown';
+    }
+  }
+
+// FIX 14: Add helper method for business hours validation
+  bool _isTimeOutsideBusinessHours(TimeOfDay startTime, TimeOfDay endTime,
+      TimeOfDay businessStart, TimeOfDay businessEnd) {
+    int startMinutes = startTime.hour * 60 + startTime.minute;
+    int endMinutes = endTime.hour * 60 + endTime.minute;
+    int businessStartMinutes = businessStart.hour * 60 + businessStart.minute;
+    int businessEndMinutes = businessEnd.hour * 60 + businessEnd.minute;
+
+    return startMinutes < businessStartMinutes ||
+        endMinutes > businessEndMinutes;
+  }
+
+// FIX 15: Update your time picker handlers to call availability check
+  void _selectStartTime() async {
+    final TimeOfDay? picked = await showTimePicker(
+      context: context,
+      initialTime: _startTime,
+    );
+    if (picked != null) {
+      setState(() {
+        _startTime = picked;
+      });
+      _onTimeChanged(); // This will now check availability
+    }
+  }
+
+  void _selectEndTime() async {
+    final TimeOfDay? picked = await showTimePicker(
+      context: context,
+      initialTime: _endTime,
+    );
+    if (picked != null) {
+      setState(() {
+        _endTime = picked;
+      });
+      _onTimeChanged(); // This will now check availability
+    }
+  }
+
+// FIX 16: Update instructor selection to call availability check
+  void _onStudentChanged(User? student) {
+    setState(() {
+      _selectedStudent = student;
+    });
+  }
+
+  void _onInstructorSelectionChanged(User? instructor) {
+    setState(() {
+      _selectedInstructor = instructor;
+    });
+    _onInstructorChanged(); // This will call availability check
+  }
+
+// FIX 17: Add UI widget to show conflicts (add this to your build method where appropriate)
+  Widget _buildConflictWarning() {
+    if (!_hasConflicts || _conflictDetails.isEmpty) {
+      return SizedBox.shrink();
+    }
+
+    return Container(
+      padding: EdgeInsets.all(12),
+      margin: EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.orange.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.orange.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.warning, color: Colors.orange, size: 20),
+              SizedBox(width: 8),
+              Text('Instructor Conflicts Detected',
+                  style: TextStyle(
+                      fontWeight: FontWeight.bold, color: Colors.orange)),
+            ],
+          ),
+          SizedBox(height: 8),
+          ...(_conflictDetails.take(3).map((conflict) =>
+              Text('• $conflict', style: TextStyle(fontSize: 14)))),
+          if (_conflictDetails.length > 3)
+            Text('• and ${_conflictDetails.length - 3} more...',
+                style: TextStyle(fontSize: 14, fontStyle: FontStyle.italic)),
+        ],
+      ),
+    );
   }
 }

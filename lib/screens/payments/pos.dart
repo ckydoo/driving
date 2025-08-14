@@ -1802,35 +1802,6 @@ class _POSScreenState extends State<POSScreen> with TickerProviderStateMixin {
               ),
               SizedBox(height: _isMobile ? 16 : 24),
 
-              // Notes
-              Text(
-                'Notes (Optional)',
-                style: TextStyle(
-                  fontSize: _isMobile ? 14 : 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey[700],
-                ),
-              ),
-              SizedBox(height: 8),
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.grey[50],
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey.shade300),
-                ),
-                child: TextField(
-                  controller: _notesController,
-                  maxLines: 3,
-                  decoration: InputDecoration(
-                    hintText: 'Add any notes for this payment...',
-                    border: InputBorder.none,
-                    contentPadding: EdgeInsets.all(16),
-                    hintStyle: TextStyle(color: Colors.grey.shade500),
-                  ),
-                ),
-              ),
-              SizedBox(height: _isMobile ? 16 : 24),
-
               // Receipt Option
               Row(
                 children: [
