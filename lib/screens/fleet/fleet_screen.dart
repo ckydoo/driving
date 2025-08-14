@@ -441,7 +441,7 @@ class _FleetScreenState extends State<FleetScreen>
         },
         label: MediaQuery.of(context).size.width > 600
             ? Text('Add Vehicle')
-            : Text('Add'),
+            : Text('Add Vehicle'),
         icon: Icon(Icons.add),
         backgroundColor: Colors.blue[600],
       ),
@@ -1162,40 +1162,42 @@ class _FleetScreenState extends State<FleetScreen>
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(stat['icon'], color: stat['color'], size: 24),
-                Spacer(),
-                Text(
-                  stat['value'],
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey[800],
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(stat['icon'], color: stat['color'], size: 24),
+                  Spacer(),
+                  Text(
+                    stat['value'],
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey[800],
+                    ),
                   ),
+                ],
+              ),
+              SizedBox(height: 8),
+              Text(
+                stat['title'],
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.grey[700],
                 ),
-              ],
-            ),
-            SizedBox(height: 8),
-            Text(
-              stat['title'],
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: Colors.grey[700],
               ),
-            ),
-            Text(
-              stat['subtitle'],
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[500],
+              Text(
+                stat['subtitle'],
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[500],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

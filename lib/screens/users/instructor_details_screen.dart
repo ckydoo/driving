@@ -223,149 +223,155 @@ class _InstructorDetailsScreenState extends State<InstructorDetailsScreen>
   }
 
   Widget _buildMobileHeader() {
-    return Padding(
+    return Container(
+      height: 290.0, // Fixed height for the header
       padding: EdgeInsets.all(16),
-      child: Column(
-        children: [
-          // Top Row with back button
-          Row(
-            children: [
-              IconButton(
-                icon: Icon(Icons.arrow_back, color: Colors.white),
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-              Spacer(),
-              IconButton(
-                icon: Icon(Icons.more_vert, color: Colors.white),
-                onPressed: () => _showOptionsMenu(),
-              ),
-            ],
-          ),
-
-          SizedBox(height: 20),
-
-          // Profile section
-          Row(
-            children: [
-              // Avatar
-              Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white.withOpacity(0.2),
+      child: SingleChildScrollView(
+        // Add scrolling if content overflows
+        child: Column(
+          mainAxisSize:
+              MainAxisSize.min, // Important to prevent infinite height
+          children: [
+            // Top Row with back button
+            Row(
+              children: [
+                IconButton(
+                  icon: Icon(Icons.arrow_back, color: Colors.white),
+                  onPressed: () => Navigator.of(context).pop(),
                 ),
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    CircleAvatar(
-                      radius: 35,
-                      backgroundColor: Colors.white,
-                      child: Text(
-                        instructor!.fname[0].toUpperCase(),
+                Spacer(),
+                IconButton(
+                  icon: Icon(Icons.more_vert, color: Colors.white),
+                  onPressed: () => _showOptionsMenu(),
+                ),
+              ],
+            ),
+
+            SizedBox(height: 12), // Reduced from 20
+
+            // Profile section
+            Row(
+              children: [
+                // Avatar
+                Container(
+                  width: 70, // Reduced from 80
+                  height: 70, // Reduced from 80
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white.withOpacity(0.2),
+                  ),
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      CircleAvatar(
+                        radius: 30, // Reduced from 35
+                        backgroundColor: Colors.white,
+                        child: Text(
+                          instructor!.fname[0].toUpperCase(),
+                          style: TextStyle(
+                            fontSize: 24, // Reduced from 28
+                            fontWeight: FontWeight.bold,
+                            color: Colors.green.shade600,
+                          ),
+                        ),
+                      ),
+                      // Status indicator
+                      Positioned(
+                        bottom: 2, // Adjusted position
+                        right: 2, // Adjusted position
+                        child: Container(
+                          width: 16, // Reduced from 20
+                          height: 16, // Reduced from 20
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: instructor!.status.toLowerCase() == 'active'
+                                ? Colors.green.shade400
+                                : Colors.orange.shade400,
+                            border: Border.all(color: Colors.white, width: 2),
+                          ),
+                          child: Icon(
+                            instructor!.status.toLowerCase() == 'active'
+                                ? Icons.check
+                                : Icons.pause,
+                            color: Colors.white,
+                            size: 10, // Reduced from 12
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                SizedBox(width: 12), // Reduced from 16
+
+                // Instructor Info
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${instructor!.fname} ${instructor!.lname}',
                         style: TextStyle(
-                          fontSize: 28,
+                          fontSize: 18, // Reduced from 20
                           fontWeight: FontWeight.bold,
-                          color: Colors.green.shade600,
-                        ),
-                      ),
-                    ),
-                    // Status indicator
-                    Positioned(
-                      bottom: 5,
-                      right: 5,
-                      child: Container(
-                        width: 20,
-                        height: 20,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: instructor!.status.toLowerCase() == 'active'
-                              ? Colors.green.shade400
-                              : Colors.orange.shade400,
-                          border: Border.all(color: Colors.white, width: 2),
-                        ),
-                        child: Icon(
-                          instructor!.status.toLowerCase() == 'active'
-                              ? Icons.check
-                              : Icons.pause,
                           color: Colors.white,
-                          size: 12,
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              ),
-
-              SizedBox(width: 16),
-
-              // Instructor Info
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${instructor!.fname} ${instructor!.lname}',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      'ID: ${instructor!.idnumber}',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.white.withOpacity(0.8),
-                      ),
-                    ),
-                    SizedBox(height: 8),
-                    Container(
-                      padding:
-                          EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        instructor!.status,
+                      SizedBox(height: 2), // Reduced from 4
+                      Text(
+                        'ID: ${instructor!.idnumber}',
                         style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white,
+                          fontSize: 12, // Reduced from 14
+                          color: Colors.white.withOpacity(0.8),
                         ),
                       ),
-                    ),
-                  ],
+                      SizedBox(height: 6), // Reduced from 8
+                      Container(
+                        padding: EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4), // Reduced padding
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          instructor!.status,
+                          style: TextStyle(
+                            fontSize: 10, // Reduced from 12
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
 
-          SizedBox(height: 20),
+            SizedBox(height: 12), // Reduced from 20
 
-          // Mobile Quick Stats
-          Row(
-            children: [
-              _buildMobileQuickStat(
-                'Students',
-                _getActiveStudentsCount().toString(),
-                Icons.people,
-              ),
-              _buildMobileQuickStat(
-                'Lessons',
-                _getTotalLessonsCount().toString(),
-                Icons.school,
-              ),
-              _buildMobileQuickStat(
-                'This Week',
-                _getWeeklyLessonsCount().toString(),
-                Icons.calendar_today,
-              ),
-            ],
-          ),
-        ],
+            // Mobile Quick Stats
+            Row(
+              children: [
+                _buildMobileQuickStat(
+                  'Students',
+                  _getActiveStudentsCount().toString(),
+                  Icons.people,
+                ),
+                _buildMobileQuickStat(
+                  'Lessons',
+                  _getTotalLessonsCount().toString(),
+                  Icons.school,
+                ),
+                _buildMobileQuickStat(
+                  'This Week',
+                  _getWeeklyLessonsCount().toString(),
+                  Icons.calendar_today,
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -373,20 +379,21 @@ class _InstructorDetailsScreenState extends State<InstructorDetailsScreen>
   Widget _buildMobileQuickStat(String label, String value, IconData icon) {
     return Expanded(
       child: Container(
-        padding: EdgeInsets.symmetric(vertical: 12),
-        margin: EdgeInsets.symmetric(horizontal: 4),
+        padding: EdgeInsets.symmetric(vertical: 8), // Reduced vertical padding
+        margin: EdgeInsets.symmetric(horizontal: 2), // Reduced margin
         decoration: BoxDecoration(
           color: Colors.white.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(8), // Smaller radius
         ),
         child: Column(
+          mainAxisSize: MainAxisSize.min, // Important for Column
           children: [
-            Icon(icon, color: Colors.white, size: 18),
-            SizedBox(height: 4),
+            Icon(icon, color: Colors.white, size: 16), // Reduced from 18
+            SizedBox(height: 2), // Reduced from 4
             Text(
               value,
               style: TextStyle(
-                fontSize: 16,
+                fontSize: 14, // Reduced from 16
                 fontWeight: FontWeight.bold,
                 color: Colors.white,
               ),
@@ -394,7 +401,7 @@ class _InstructorDetailsScreenState extends State<InstructorDetailsScreen>
             Text(
               label,
               style: TextStyle(
-                fontSize: 10,
+                fontSize: 9, // Reduced from 10
                 color: Colors.white.withOpacity(0.8),
               ),
             ),

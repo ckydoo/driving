@@ -308,7 +308,7 @@ class _CourseScreenState extends State<CourseScreen>
               children: [
                 // Quick stats cards - responsive
                 Container(
-                  height: _isMobile(context) ? 100 : 120,
+                  height: _isMobile(context) ? 110 : 130, // Increased by 10px
                   child: ListView.builder(
                     scrollDirection: Axis.horizontal,
                     itemCount: _quickStats.length,
@@ -486,7 +486,10 @@ class _CourseScreenState extends State<CourseScreen>
         value: _sortBy,
         underline: Container(),
         items: [
-          DropdownMenuItem(value: 'name', child: Text('Sort by Name')),
+          DropdownMenuItem(
+              value: 'name',
+              child:
+                  Text('Sort by Name', style: TextStyle(color: Colors.blue))),
           DropdownMenuItem(value: 'price', child: Text('Sort by Price')),
           DropdownMenuItem(value: 'status', child: Text('Sort by Status')),
           DropdownMenuItem(value: 'created', child: Text('Sort by Date')),
@@ -600,14 +603,15 @@ class _CourseScreenState extends State<CourseScreen>
 
   Widget _buildResponsiveFAB(BuildContext context) {
     if (_isMobile(context)) {
-      return FloatingActionButton(
+      return FloatingActionButton.extended(
         onPressed: () async {
           final result = await Get.dialog<bool>(CourseFormDialog());
           if (result == true) {
             await _loadCourses();
           }
         },
-        child: Icon(Icons.add),
+        label: Text('Add Course'),
+        icon: Icon(Icons.add),
         backgroundColor: Colors.blue[600],
       );
     } else {
@@ -630,8 +634,10 @@ class _CourseScreenState extends State<CourseScreen>
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
-        padding: EdgeInsets.all(_isMobile(context) ? 12 : 16),
+        padding: EdgeInsets.all(
+            _isMobile(context) ? 10 : 14), // Reduced padding slightly
         child: Column(
+          mainAxisSize: MainAxisSize.min, // Important to prevent overflow
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
@@ -639,14 +645,17 @@ class _CourseScreenState extends State<CourseScreen>
                 Icon(
                   stat['icon'],
                   color: stat['color'],
-                  size: _isMobile(context) ? 20 : 24,
+                  size: _isMobile(context)
+                      ? 18
+                      : 22, // Slightly reduced icon size
                 ),
-                Spacer(),
                 Flexible(
                   child: Text(
                     stat['value'],
                     style: TextStyle(
-                      fontSize: _isMobile(context) ? 16 : 20,
+                      fontSize: _isMobile(context)
+                          ? 15
+                          : 18, // Slightly reduced font size
                       fontWeight: FontWeight.bold,
                       color: Colors.grey[800],
                     ),
@@ -655,11 +664,12 @@ class _CourseScreenState extends State<CourseScreen>
                 ),
               ],
             ),
-            SizedBox(height: 8),
+            SizedBox(height: 6), // Reduced spacing
             Text(
               stat['title'],
               style: TextStyle(
-                fontSize: _isMobile(context) ? 12 : 14,
+                fontSize:
+                    _isMobile(context) ? 11 : 13, // Slightly reduced font size
                 fontWeight: FontWeight.w500,
                 color: Colors.grey[700],
               ),
@@ -669,7 +679,8 @@ class _CourseScreenState extends State<CourseScreen>
             Text(
               stat['subtitle'],
               style: TextStyle(
-                fontSize: _isMobile(context) ? 10 : 12,
+                fontSize:
+                    _isMobile(context) ? 9 : 11, // Slightly reduced font size
                 color: Colors.grey[500],
               ),
               maxLines: 1,

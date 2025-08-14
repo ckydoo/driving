@@ -364,7 +364,7 @@ class _GraduationScreenState extends State<GraduationScreen> {
                     labelText: 'Payment Method',
                     border: OutlineInputBorder(),
                   ),
-                  items: ['Cash', 'Card', 'Mobile Money', 'Bank Transfer']
+                  items: ['Cash', 'Mobile Money']
                       .map((method) => DropdownMenuItem(
                             value: method,
                             child: Text(method),

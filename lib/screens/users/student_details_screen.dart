@@ -324,32 +324,43 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
             SizedBox(
               height: 80, // Fixed height for stats row
               child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: EdgeInsets.symmetric(
+                    horizontal: 8, vertical: 4), // Reduced padding
                 child: LayoutBuilder(
                   builder: (context, constraints) {
                     return Row(
                       children: [
                         Expanded(
-                          child: _buildQuickStat(
-                            'Progress',
-                            '${(_getProgressPercentage() * 100).toInt()}%',
-                            Icons.trending_up,
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(
+                                horizontal: 4), // Added inner padding
+                            child: _buildQuickStat(
+                              'Progress',
+                              '${(_getProgressPercentage() * 100).toInt()}%',
+                              Icons.trending_up,
+                            ),
                           ),
                         ),
-                        SizedBox(width: 8),
+                        SizedBox(width: 4), // Reduced spacing
                         Expanded(
-                          child: _buildQuickStat(
-                            'Lessons',
-                            '${_getCompletedLessonsCount()}/${_getTotalLessonsCount()}',
-                            Icons.school,
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 4),
+                            child: _buildQuickStat(
+                              'Lessons',
+                              '${_getCompletedLessonsCount()}/${_getTotalLessonsCount()}',
+                              Icons.school,
+                            ),
                           ),
                         ),
-                        SizedBox(width: 8),
+                        SizedBox(width: 4), // Reduced spacing
                         Expanded(
-                          child: _buildQuickStat(
-                            'Next Lesson',
-                            _getNextLessonDate(),
-                            Icons.schedule,
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 4),
+                            child: _buildQuickStat(
+                              'Next Lesson',
+                              _getNextLessonDate(),
+                              Icons.schedule,
+                            ),
                           ),
                         ),
                       ],
@@ -364,10 +375,10 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
     );
   }
 
-// Simplified Quick Stat widget
   Widget _buildQuickStat(String label, String value, IconData icon) {
     return Container(
-      padding: EdgeInsets.symmetric(vertical: 8),
+      padding: EdgeInsets.symmetric(
+          vertical: 8, horizontal: 4), // Added horizontal padding
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.1),
         borderRadius: BorderRadius.circular(10),
@@ -376,12 +387,12 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
         mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, color: Colors.white, size: 18),
+          Icon(icon, color: Colors.white, size: 16), // Reduced icon size
           SizedBox(height: 4),
           Text(
             value,
             style: TextStyle(
-              fontSize: 12,
+              fontSize: 12, // Reduced font size
               fontWeight: FontWeight.bold,
               color: Colors.white,
             ),
@@ -392,7 +403,7 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
           Text(
             label,
             style: TextStyle(
-              fontSize: 9,
+              fontSize: 10, // Reduced font size
               color: Colors.white.withOpacity(0.8),
             ),
             textAlign: TextAlign.center,

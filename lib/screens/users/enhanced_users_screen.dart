@@ -436,7 +436,10 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
                 children: [
                   Icon(Icons.school, color: Colors.blue),
                   SizedBox(width: 8),
-                  Text('Bulk Graduate Confirmation'),
+                  ResponsiveText(
+                    'Confirm Bulk Graduate ',
+                    style: TextStyle(fontSize: 12),
+                  ),
                 ],
               ),
               content: Column(

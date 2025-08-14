@@ -88,7 +88,6 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
     );
   }
 
-
   Widget _buildMobileTopBar(NavigationController navController) {
     return Container(
       decoration: BoxDecoration(
@@ -104,7 +103,7 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
       ),
       child: SafeArea(
         child: Container(
-          height: 80,//Increased height for mobile
+          height: 80, //Increased height for mobile
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           child: Row(
             children: [
@@ -124,15 +123,15 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: Obx(() => Text(
-                    navController.getCurrentPageTitle(),
-                    style: const TextStyle(
-                      fontSize: 20, // Increased font size
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black87,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
-                  )),
+                        navController.getCurrentPageTitle(),
+                        style: const TextStyle(
+                          fontSize: 20, // Increased font size
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black87,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      )),
                 ),
               ),
               // Action buttons with bigger touch targets
@@ -175,13 +174,13 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24.0),
               child: Obx(() => Text(
-                navController.getCurrentPageTitle(),
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black87,
-                ),
-              )),
+                    navController.getCurrentPageTitle(),
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black87,
+                    ),
+                  )),
             ),
           ),
           // Action buttons
@@ -204,13 +203,14 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
             onSelected: (value) {
               switch (value) {
                 case 'profile':
-                // Handle profile navigation
+                  // Handle profile navigation
                   break;
                 case 'settings':
                   navController.navigateToPage('settings');
                   break;
                 case 'logout':
-                  final AuthController authController = Get.find<AuthController>();
+                  final AuthController authController =
+                      Get.find<AuthController>();
                   authController.logout();
                   break;
               }
@@ -256,7 +256,8 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
                     radius: 16,
                     backgroundColor: Colors.blue,
                     child: Obx(() {
-                      final AuthController authController = Get.find<AuthController>();
+                      final AuthController authController =
+                          Get.find<AuthController>();
                       final user = authController.currentUser.value;
                       return Text(
                         user?.fname?.substring(0, 1).toUpperCase() ?? 'U',
@@ -278,6 +279,7 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
       ),
     );
   }
+
   // Mobile drawer - Exact content as desktop sidebar but in drawer format
   Widget _buildMobileDrawer(
     NavigationController navController,
@@ -709,7 +711,7 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
 
       widgets.add(_buildDropdownChild(
         Icons.people_alt,
-        'Receipts',
+        'Users Reports',
         'user_reports',
         navController.currentPage.value,
         () {

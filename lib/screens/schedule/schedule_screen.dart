@@ -449,6 +449,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       style: TextStyle(
         fontSize: ResponsiveUtils.getValue(context,
             mobile: 12.0, tablet: 13.0, desktop: 14.0),
+        color: Colors.black,
       ),
       value: value,
       isExpanded: true, // Add this to prevent overflow
@@ -583,7 +584,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       icon: const Icon(Icons.add),
       label: ResponsiveText(
         style: TextStyle(),
-        context.isMobile ? 'New' : 'New Lesson',
+        context.isMobile ? 'New Schedule' : 'New Schedule',
         fontSize: ResponsiveUtils.getValue(context,
             mobile: 12.0, tablet: 13.0, desktop: 14.0),
       ),
