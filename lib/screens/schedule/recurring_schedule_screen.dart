@@ -26,6 +26,10 @@ class RecurringScheduleScreen extends StatefulWidget {
 class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
   bool _hasConflicts = false;
   List<String> _conflictDetails = [];
+  bool _instructorAvailable = true;
+  bool _vehicleAvailable = true;
+  bool _showAvailabilityStatus = false;
+
   final _formKey = GlobalKey<FormState>();
   final _scheduleController = Get.find<ScheduleController>();
   final _userController = Get.find<UserController>();
@@ -81,6 +85,11 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     super.initState();
     _recurrenceEndDate = DateTime.now().add(Duration(days: 30));
     _selectedDaysOfWeek = [DateTime.now().weekday]; // Default to today
+    // Initialize availability status
+    _instructorAvailable = true;
+    _vehicleAvailable = true;
+    _showAvailabilityStatus = false;
+    _conflictDetails = [];
   }
 
   @override
@@ -172,124 +181,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     );
   }
 
-  Widget _buildInstructorSection() {
-    return Card(
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.person_pin, color: Colors.purple),
-                SizedBox(width: 8),
-                Text(
-                  'Instructor & Vehicle',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-            SizedBox(height: 16),
-            DropdownButtonFormField<User>(
-              value: _selectedInstructor,
-              decoration: InputDecoration(
-                labelText: 'Select Instructor',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.supervisor_account),
-              ),
-              validator: (value) =>
-                  value == null ? 'Please select an instructor' : null,
-              items: _userController.users
-                  .where((user) => user.role.toLowerCase() == 'instructor')
-                  .where((instructor) {
-                    // For practical lessons, only show instructors with assigned vehicles
-                    if (_selectedClassType == 'Practical') {
-                      return _fleetController.fleet.any(
-                        (vehicle) => vehicle.instructor == instructor.id,
-                      );
-                    }
-                    // For theory lessons, show all instructors
-                    return true;
-                  })
-                  .map((user) => DropdownMenuItem(
-                        value: user,
-                        child: Text('${user.fname} ${user.lname}'),
-                      ))
-                  .toList(),
-              onChanged: (User? value) {
-                setState(() {
-                  _selectedInstructor = value;
-                });
-                if (value != null) {
-                  _assignInstructorVehicle(value);
-                  _updatePreviewCount();
-                }
-              },
-            ),
-            SizedBox(height: 16),
-            // Vehicle field - make it read-only for practical lessons
-            if (_selectedClassType == 'Practical') ...[
-              TextFormField(
-                readOnly: true,
-                decoration: InputDecoration(
-                  labelText: 'Assigned Vehicle',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.directions_car),
-                  suffixIcon: Icon(Icons.lock, color: Colors.grey),
-                ),
-                controller: TextEditingController(
-                  text: _selectedVehicle != null
-                      ? '${_selectedVehicle!.make} ${_selectedVehicle!.model} (${_selectedVehicle!.carPlate})'
-                      : 'No vehicle assigned to instructor',
-                ),
-                validator: (value) => _selectedVehicle == null
-                    ? 'Instructor must have an assigned vehicle for practical lessons'
-                    : null,
-              ),
-              SizedBox(height: 8),
-              Text(
-                'Vehicle is automatically assigned based on instructor selection',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey.shade600,
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-            ] else ...[
-              // For theory lessons, vehicle is optional and can be manually selected
-              DropdownButtonFormField<Fleet>(
-                value: _selectedVehicle,
-                decoration: InputDecoration(
-                  labelText: 'Vehicle (Optional)',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.directions_car),
-                ),
-                items: [
-                  DropdownMenuItem<Fleet>(
-                    value: null,
-                    child: Text('No vehicle required'),
-                  ),
-                  ..._fleetController.fleet
-                      .map((vehicle) => DropdownMenuItem(
-                            value: vehicle,
-                            child: Text(
-                                '${vehicle.make} ${vehicle.model} (${vehicle.carPlate})'),
-                          ))
-                      .toList(),
-                ],
-                onChanged: (Fleet? value) {
-                  setState(() {
-                    _selectedVehicle = value;
-                  });
-                },
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildRecurrenceSection() {
     return Card(
       child: Padding(
@@ -371,106 +262,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildRecurrenceChip(String pattern) {
-    final isSelected = _recurrencePattern == pattern;
-    return FilterChip(
-      label: Text(pattern.capitalize ?? pattern),
-      selected: isSelected,
-      onSelected: (selected) {
-        setState(() {
-          _recurrencePattern = pattern;
-          _updatePreviewCount();
-        });
-      },
-      selectedColor: Colors.green.withOpacity(0.2),
-      checkmarkColor: Colors.green,
-    );
-  }
-
-  Widget _buildWeeklyOptions() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Select Days:', style: TextStyle(fontWeight: FontWeight.w500)),
-        SizedBox(height: 8),
-
-        // DEBUG: Show current selection
-        if (_selectedDaysOfWeek.isNotEmpty) ...[
-          Container(
-            padding: EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.blue.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text(
-              'Selected: ${_selectedDaysOfWeek.map((day) => _getDayName(day)).join(', ')}',
-              style: TextStyle(fontSize: 12, color: Colors.blue.shade700),
-            ),
-          ),
-          SizedBox(height: 8),
-        ],
-
-        Wrap(
-          spacing: 8,
-          children: List.generate(_daysOfWeek.length, (index) {
-            final day = _daysOfWeek[index];
-            final dayNumber = index + 1; // Monday = 1, Tuesday = 2, etc.
-            final isSelected = _selectedDaysOfWeek.contains(dayNumber);
-
-            return FilterChip(
-              label: Text(day.substring(0, 3)),
-              selected: isSelected,
-              onSelected: (selected) {
-                setState(() {
-                  if (selected) {
-                    if (!_selectedDaysOfWeek.contains(dayNumber)) {
-                      _selectedDaysOfWeek.add(dayNumber);
-                    }
-                  } else {
-                    _selectedDaysOfWeek.remove(dayNumber);
-                  }
-                  _selectedDaysOfWeek.sort();
-
-                  // DEBUG: Print the updated selection
-                  print('🔄 Day selection updated: $_selectedDaysOfWeek');
-                  print(
-                      '   Selected days: ${_selectedDaysOfWeek.map((d) => _getDayName(d)).join(', ')}');
-
-                  _updatePreviewCount();
-                });
-              },
-              selectedColor: Colors.blue.withOpacity(0.2),
-              checkmarkColor: Colors.blue,
-            );
-          }),
-        ),
-
-        // WARNING: Show if no days are selected for weekly pattern
-        if (_recurrencePattern == 'weekly' && _selectedDaysOfWeek.isEmpty) ...[
-          SizedBox(height: 8),
-          Container(
-            padding: EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.red.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: Colors.red.withOpacity(0.3)),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.warning, color: Colors.red, size: 16),
-                SizedBox(width: 8),
-                Text(
-                  'Please select at least one day for weekly pattern',
-                  style: TextStyle(color: Colors.red.shade700, fontSize: 12),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ],
     );
   }
 
@@ -729,61 +520,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     );
   }
 
-  Future<void> _selectStartDate() async {
-    final scheduleController = Get.find<ScheduleController>();
-
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedStartDate,
-      firstDate:
-          scheduleController.getMinimumScheduleDate(), // Prevent past dates
-      lastDate: scheduleController.getMaximumScheduleDate(),
-      helpText: 'Select Start Date',
-      cancelText: 'Cancel',
-      confirmText: 'Select',
-      errorFormatText: 'Enter valid date',
-      errorInvalidText: 'Enter date in valid range',
-      fieldLabelText: 'Start Date',
-      fieldHintText: 'mm/dd/yyyy',
-      selectableDayPredicate: (DateTime date) {
-        // Only allow today and future dates
-        final now = DateTime.now();
-        final today = DateTime(now.year, now.month, now.day);
-        final checkDate = DateTime(date.year, date.month, date.day);
-        return checkDate.isAtSameMomentAs(today) || checkDate.isAfter(today);
-      },
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.light(
-              primary: Colors.blue[600]!,
-              onPrimary: Colors.white,
-              onSurface: Colors.black,
-            ),
-            textButtonTheme: TextButtonThemeData(
-              style: TextButton.styleFrom(
-                foregroundColor: Colors.blue[600],
-              ),
-            ),
-          ),
-          child: child!,
-        );
-      },
-    );
-
-    if (picked != null && picked != _selectedStartDate) {
-      setState(() {
-        _selectedStartDate = picked;
-        // Ensure end date is not before start date
-        if (_recurrenceEndDate != null &&
-            _recurrenceEndDate!.isBefore(picked)) {
-          _recurrenceEndDate = picked.add(Duration(days: 30));
-        }
-      });
-      _updatePreviewCount();
-    }
-  }
-
   Future<void> _selectEndDate() async {
     final scheduleController = Get.find<ScheduleController>();
 
@@ -892,22 +628,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     return (_remainingLessons / lessonsPerOccurrence).floor();
   }
 
-// SIMPLIFIED: Auto-calculate optimal end date when user selects course/time
-  void _updateLessonCounts() {
-    if (_selectedStudent != null && _selectedCourse != null) {
-      setState(() {
-        _remainingLessons = _scheduleController.getRemainingLessons(
-            _selectedStudent!.id!, _selectedCourse!.id!);
-
-        // AUTO-SET optimal end date when course is selected
-        if (_remainingLessons > 0) {
-          _recurrenceEndDate = _calculateOptimalEndDate();
-        }
-      });
-      _updatePreviewCount();
-    }
-  }
-
 // Helper to build lesson info rows
   Widget _buildLessonInfoRow(String label, String value) {
     return Row(
@@ -930,34 +650,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
         ),
       ],
     );
-  }
-
-// SIMPLIFIED: Auto-update end date when time changes
-  Future<void> _selectTime(bool isStartTime) async {
-    final TimeOfDay? picked = await showTimePicker(
-      context: context,
-      initialTime: isStartTime ? _startTime : _endTime,
-    );
-    if (picked != null) {
-      setState(() {
-        if (isStartTime) {
-          _startTime = picked;
-          // Auto-set end time to 1 hour later
-          _endTime = TimeOfDay(
-            hour: (picked.hour + 1) % 24,
-            minute: picked.minute,
-          );
-        } else {
-          _endTime = picked;
-        }
-
-        // AUTO-UPDATE optimal end date when time changes
-        if (_remainingLessons > 0) {
-          _recurrenceEndDate = _calculateOptimalEndDate();
-        }
-      });
-      _updatePreviewCount();
-    }
   }
 
 // SIMPLIFIED: Clear preview with plain English
@@ -1746,6 +1438,7 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     setState(() {
       _previewCount = count;
     });
+    _triggerConflictCheck();
   }
 
 // FIXED: Smart end date selection with guidance
@@ -2015,298 +1708,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     );
   }
 
-// REPLACE your _createRecurringSchedule method with this debug version
-
-  Future<void> _createRecurringSchedule() async {
-    print('🔄 RECURRING SCHEDULE CREATION STARTED');
-
-    if (!_canCreateRecurringSchedule()) {
-      // Show specific validation errors
-      final errors = _getValidationErrors();
-      Get.snackbar(
-        'Validation Error',
-        errors.isNotEmpty
-            ? errors.first
-            : 'Please complete all required fields',
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-        duration: Duration(seconds: 3),
-      );
-      return;
-    }
-
-    try {
-      setState(() {
-        _isLoading = true;
-      });
-
-      Get.dialog(
-        Dialog(
-          child: Padding(
-            padding: EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CircularProgressIndicator(color: Colors.green),
-                SizedBox(height: 16),
-                Text('Creating recurring schedules...'),
-                SizedBox(height: 8),
-                Text('This may take a moment',
-                    style: TextStyle(color: Colors.grey)),
-              ],
-            ),
-          ),
-        ),
-        barrierDismissible: false,
-      );
-
-      // ENHANCED DEBUG: Print all current settings
-      print('🔄 DEBUG INFO:');
-      print(
-          '   Selected Student: ${_selectedStudent?.fname} ${_selectedStudent?.lname}');
-      print('   Selected Course: ${_selectedCourse?.name}');
-      print(
-          '   Selected Instructor: ${_selectedInstructor?.fname} ${_selectedInstructor?.lname}');
-      print('   Remaining Lessons: $_remainingLessons');
-      print('   Start Date: ${_selectedStartDate.toString().substring(0, 10)}');
-      print('   Start Time: ${_startTime.format(context)}');
-      print('   End Time: ${_endTime.format(context)}');
-      print('   Recurrence Pattern: $_recurrencePattern');
-      print('   Selected Days of Week: $_selectedDaysOfWeek');
-      print('   Use End Date: $_useEndDate');
-      print(
-          '   Recurrence End Date: ${_recurrenceEndDate?.toString().substring(0, 10)}');
-      print('   Max Occurrences: $_maxOccurrences');
-      print('   Preview Count: $_previewCount');
-      print('   Custom Interval: $_customInterval');
-
-      final schedules = <Schedule>[];
-      DateTime currentDate = _selectedStartDate;
-      int schedulesCreated = 0;
-      int daysChecked = 0;
-      final maxDays = 1000; // Safety limit
-
-      // Determine the actual end condition
-      final targetScheduleCount = _useEndDate ? _previewCount : _maxOccurrences;
-      final endDate = _useEndDate
-          ? _recurrenceEndDate!
-          : _selectedStartDate
-              .add(Duration(days: 365)); // Use a reasonable default
-
-      print(
-          '🔄 TARGET: Create $targetScheduleCount schedules until ${endDate.toString().substring(0, 10)}');
-
-      // SAFETY CHECK: Ensure we have valid parameters
-      if (targetScheduleCount <= 0) {
-        throw Exception(
-            'Target schedule count is 0. Check your preview count or max occurrences setting.');
-      }
-
-      if (_selectedDaysOfWeek.isEmpty && _recurrencePattern == 'weekly') {
-        throw Exception(
-            'No days selected for weekly pattern. Please select at least one day of the week.');
-      }
-
-      if (endDate.isBefore(_selectedStartDate)) {
-        throw Exception(
-            'End date (${endDate.toString().substring(0, 10)}) is before start date (${_selectedStartDate.toString().substring(0, 10)}).');
-      }
-
-      while (schedulesCreated < targetScheduleCount &&
-          (currentDate.isBefore(endDate) ||
-              currentDate.isAtSameMomentAs(endDate)) &&
-          daysChecked < maxDays) {
-        daysChecked++;
-        bool shouldCreateSchedule = false;
-
-        // ENHANCED DEBUG: Log each day being checked
-        if (daysChecked <= 10 || daysChecked % 50 == 0) {
-          print(
-              '🔄 Day $daysChecked: Checking ${currentDate.toString().substring(0, 10)} (${_getDayName(currentDate.weekday)})');
-        }
-
-        // Check if this date matches our recurrence pattern
-        switch (_recurrencePattern) {
-          case 'daily':
-            shouldCreateSchedule = true;
-            if (daysChecked <= 10) print('   Daily pattern: MATCH');
-            break;
-
-          case 'weekly':
-            shouldCreateSchedule =
-                _selectedDaysOfWeek.contains(currentDate.weekday);
-            if (daysChecked <= 10) {
-              print(
-                  '   Weekly pattern: Day ${currentDate.weekday} in $_selectedDaysOfWeek? $shouldCreateSchedule');
-            }
-            break;
-
-          case 'monthly':
-            shouldCreateSchedule = currentDate.day == _selectedStartDate.day;
-            if (daysChecked <= 10) {
-              print(
-                  '   Monthly pattern: Day ${currentDate.day} == ${_selectedStartDate.day}? $shouldCreateSchedule');
-            }
-            break;
-
-          case 'custom':
-            final daysDiff = currentDate.difference(_selectedStartDate).inDays;
-            shouldCreateSchedule = daysDiff % _customInterval == 0;
-            if (daysChecked <= 10) {
-              print(
-                  '   Custom pattern: Day diff $daysDiff % $_customInterval == 0? $shouldCreateSchedule');
-            }
-            break;
-        }
-
-        if (shouldCreateSchedule) {
-          final startDateTime = DateTime(
-            currentDate.year,
-            currentDate.month,
-            currentDate.day,
-            _startTime.hour,
-            _startTime.minute,
-          );
-
-          final endDateTime = DateTime(
-            currentDate.year,
-            currentDate.month,
-            currentDate.day,
-            _endTime.hour,
-            _endTime.minute,
-          );
-
-          // SAFETY CHECK: Ensure end time is after start time
-          if (endDateTime.isBefore(startDateTime) ||
-              endDateTime.isAtSameMomentAs(startDateTime)) {
-            print(
-                '❌ Invalid time range for ${currentDate.toString().substring(0, 10)}: ${_startTime.format(context)} - ${_endTime.format(context)}');
-            throw Exception(
-                'End time must be after start time. Current: ${_startTime.format(context)} - ${_endTime.format(context)}');
-          }
-
-          // Create the schedule
-          final schedule = Schedule(
-            start: startDateTime,
-            end: endDateTime,
-            courseId: _selectedCourse!.id!,
-            studentId: _selectedStudent!.id!,
-            instructorId: _selectedInstructor!.id!,
-            carId: _selectedVehicle?.id,
-            status: _selectedStatus,
-            isRecurring: true,
-            recurrencePattern: _recurrencePattern,
-            recurrenceEndDate: _recurrenceEndDate,
-            classType: _selectedClassType,
-          );
-
-          schedules.add(schedule);
-          schedulesCreated++;
-
-          print(
-              '✅ Schedule $schedulesCreated created for ${startDateTime.toString().substring(0, 16)}');
-        }
-
-        // Move to next day
-        currentDate = currentDate.add(Duration(days: 1));
-
-        // Safety check to prevent infinite loops
-        if (daysChecked >= maxDays) {
-          print(
-              '⚠️ Reached maximum days limit ($maxDays), stopping generation');
-          break;
-        }
-      }
-
-      print('🔄 GENERATION COMPLETE:');
-      print('   Days checked: $daysChecked');
-      print('   Schedules generated: ${schedules.length}');
-      print('   Target was: $targetScheduleCount');
-      print('   Schedules created: $schedulesCreated');
-
-      if (schedules.isEmpty) {
-        // Provide more specific error information
-        String errorMsg = 'No schedules were generated. ';
-
-        if (_recurrencePattern == 'weekly' && _selectedDaysOfWeek.isEmpty) {
-          errorMsg +=
-              'Please select at least one day of the week for weekly pattern.';
-        } else if (targetScheduleCount <= 0) {
-          errorMsg +=
-              'Target schedule count is 0 - check your remaining lessons and lesson duration.';
-        } else if (endDate.isBefore(_selectedStartDate)) {
-          errorMsg += 'End date is before start date.';
-        } else {
-          errorMsg += 'Check your date range and pattern settings. ';
-          errorMsg +=
-              'Start: ${_selectedStartDate.toString().substring(0, 10)}, ';
-          errorMsg += 'End: ${endDate.toString().substring(0, 10)}, ';
-          errorMsg += 'Pattern: $_recurrencePattern';
-          if (_recurrencePattern == 'weekly') {
-            errorMsg += ', Days: $_selectedDaysOfWeek';
-          }
-        }
-
-        throw Exception(errorMsg);
-      }
-
-      // Save all schedules
-      int savedCount = 0;
-      int failedCount = 0;
-      List<String> errors = [];
-
-      for (int i = 0; i < schedules.length; i++) {
-        try {
-          await _scheduleController.addOrUpdateSchedule(schedules[i]);
-          savedCount++;
-          if (i < 5) {
-            print(
-                '✅ Saved schedule ${i + 1}: ${schedules[i].start.toString().substring(0, 16)}');
-          }
-        } catch (e) {
-          failedCount++;
-          errors.add('Schedule ${i + 1}: $e');
-          print('❌ Failed to save schedule ${i + 1}: $e');
-        }
-      }
-
-      print('🔄 SAVE RESULTS:');
-      print('   Successfully saved: $savedCount');
-      print('   Failed to save: $failedCount');
-
-      // Close loading dialog
-      if (Get.isDialogOpen == true) {
-        Get.back();
-      }
-
-      // Refresh schedule controller
-      await _scheduleController.fetchSchedules();
-
-      // Show results and handle navigation properly
-      _showRecurringResultsDialog(
-          savedCount, failedCount, schedules.length, errors);
-    } catch (e, stackTrace) {
-      print('🚨 ERROR in recurring schedule creation: $e');
-      print('🚨 Stack trace: $stackTrace');
-
-      if (Get.isDialogOpen == true) {
-        Get.back();
-      }
-
-      Get.snackbar(
-        'Error',
-        'Failed to create recurring schedule: ${e.toString()}',
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-        duration: Duration(seconds: 8), // Longer duration to read the error
-      );
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
-    }
-  }
-
 // ALSO ADD this debug method to help troubleshoot
   void _debugCurrentState() {
     print('🔍 CURRENT STATE DEBUG:');
@@ -2337,79 +1738,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
 
     final warnings = _getValidationWarnings();
     print('   Validation warnings: $warnings');
-  }
-
-// ALSO UPDATE your _buildActionButtons to call debug method
-  Widget _buildActionButtons() {
-    final errors = _getValidationErrors();
-    final hasErrors = errors.isNotEmpty;
-
-    return Column(
-      children: [
-        // ADD DEBUG BUTTON (temporary for troubleshooting)
-        // SizedBox(
-        //   width: double.infinity,
-        //   height: 40,
-        //   child: OutlinedButton(
-        //     onPressed: _debugCurrentState,
-        //     style: OutlinedButton.styleFrom(
-        //       side: BorderSide(color: Colors.blue),
-        //       shape: RoundedRectangleBorder(
-        //         borderRadius: BorderRadius.circular(10),
-        //       ),
-        //     ),
-        //     child: Text(
-        //       'Debug State (Check Console)',
-        //       style: TextStyle(fontSize: 14, color: Colors.blue),
-        //     ),
-        //   ),
-        // ),
-        // SizedBox(height: 12),
-
-        SizedBox(
-          width: double.infinity,
-          height: 50,
-          child: ElevatedButton(
-            onPressed: hasErrors ? null : _createRecurringSchedule,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: hasErrors ? Colors.grey : Colors.green,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            child: Text(
-              'Create Recurring Schedule',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-          ),
-        ),
-        SizedBox(height: 12),
-        SizedBox(
-          width: double.infinity,
-          height: 50,
-          child: OutlinedButton(
-            onPressed: () => Get.back(),
-            style: OutlinedButton.styleFrom(
-              side: BorderSide(color: Colors.grey),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            child: Text(
-              'Cancel',
-              style: TextStyle(fontSize: 16),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-// UPDATE your existing _canCreateRecurringSchedule method to use the new validation:
-  bool _canCreateRecurringSchedule() {
-    final errors = _getValidationErrors();
-    return errors.isEmpty && _previewCount > 0 && _remainingLessons > 0;
   }
 
 // HELPER METHOD: Validate lesson duration and show helpful messages
@@ -2580,146 +1908,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
         duration: Duration(seconds: 5),
       );
     }
-  }
-
-// FIX 5: Enhanced past date/time validation
-  List<String> _getValidationErrors() {
-    List<String> errors = [];
-    final now = DateTime.now();
-
-    // Validate start date is not in the past
-    final today = DateTime(now.year, now.month, now.day);
-    final selectedDay = DateTime(_selectedStartDate.year,
-        _selectedStartDate.month, _selectedStartDate.day);
-
-    if (selectedDay.isBefore(today)) {
-      errors.add('Cannot schedule lessons for past dates');
-      return errors; // Return early if date is in past
-    }
-
-    // FIXED: More precise past time validation for today
-    if (selectedDay.isAtSameMomentAs(today)) {
-      final startDateTime = DateTime(
-        _selectedStartDate.year,
-        _selectedStartDate.month,
-        _selectedStartDate.day,
-        _startTime.hour,
-        _startTime.minute,
-      );
-
-      // Add 5-minute buffer to allow for small delays
-      final bufferTime = now.add(Duration(minutes: 5));
-
-      if (startDateTime.isBefore(bufferTime)) {
-        final timeStr = DateFormat('hh:mm a').format(bufferTime);
-        errors.add('Cannot schedule lessons before $timeStr (5-minute buffer)');
-      }
-    }
-
-    // Validate end time is after start time
-    final startDateTime = DateTime(
-      _selectedStartDate.year,
-      _selectedStartDate.month,
-      _selectedStartDate.day,
-      _startTime.hour,
-      _startTime.minute,
-    );
-    final endDateTime = DateTime(
-      _selectedStartDate.year,
-      _selectedStartDate.month,
-      _selectedStartDate.day,
-      _endTime.hour,
-      _endTime.minute,
-    );
-
-    final duration = endDateTime.difference(startDateTime);
-
-    if (duration.inMinutes <= 0) {
-      errors.add('End time must be after start time');
-      return errors;
-    }
-
-    // Validate minimum lesson duration (30 minutes)
-    if (duration.inMinutes < 30) {
-      errors.add('Lesson duration must be at least 30 minutes');
-    }
-
-    // Validate maximum lesson duration (4 hours)
-    if (duration.inHours > 4) {
-      errors.add('Lesson duration cannot exceed 4 hours');
-    }
-
-    // Business settings validation
-    final settingsController = Get.find<SettingsController>();
-
-    // Check business closed days
-    if (_selectedInstructor != null) {
-      final closedDays = _getClosedDaysFromSettings(settingsController);
-
-      // Check if start date falls on a closed day
-      if (closedDays.contains(_selectedStartDate.weekday)) {
-        final dayName = _getDayName(_selectedStartDate.weekday);
-        errors.add('Cannot schedule on $dayName - Business is closed');
-      }
-
-      // For recurring schedules, check if any selected days are closed
-      if (_recurrencePattern == 'weekly' && _selectedDaysOfWeek.isNotEmpty) {
-        final conflictingDays = _selectedDaysOfWeek
-            .where((day) => closedDays.contains(day))
-            .toList();
-        if (conflictingDays.isNotEmpty) {
-          final dayNames =
-              conflictingDays.map((day) => _getDayName(day)).join(', ');
-          errors.add(
-              'Cannot schedule on $dayNames - Business is closed on these days');
-        }
-      }
-    }
-
-    // Business hours validation
-    if (settingsController.enforceWorkingHours.value &&
-        _selectedInstructor != null) {
-      final startTime =
-          TimeOfDay(hour: _startTime.hour, minute: _startTime.minute);
-      final endTime = TimeOfDay(hour: _endTime.hour, minute: _endTime.minute);
-
-      // FIXED: Use correct property names from SettingsController
-      final workingStart =
-          _parseTimeString(settingsController.businessStartTime.value);
-      final workingEnd =
-          _parseTimeString(settingsController.businessEndTime.value);
-
-      if (_isTimeOutsideBusinessHours(
-          startTime, endTime, workingStart, workingEnd)) {
-        errors.add(
-            'Schedule time is outside business hours (${settingsController.businessStartTime.value} - ${settingsController.businessEndTime.value})');
-      }
-    }
-
-    // FIXED: Lesson count validation with proper calculation
-    final totalLessonsNeeded = _getTotalLessonsToDeduct();
-
-    if (totalLessonsNeeded > _remainingLessons && _remainingLessons > 0) {
-      final lessonsPerOccurrence = _getLessonsPerOccurrence();
-      errors.add(
-          'This schedule needs $totalLessonsNeeded lessons ($_previewCount occurrences × $lessonsPerOccurrence lessons each), but only $_remainingLessons lessons remain');
-    }
-
-    // Check if end date would generate too many lessons
-    if (_useEndDate && _recurrenceEndDate != null && _remainingLessons > 0) {
-      // FIXED: Proper calculation including business days
-      final estimatedOccurrences =
-          _calculateLessonsForPeriod(_selectedStartDate, _recurrenceEndDate!);
-      final estimatedTotalLessons =
-          estimatedOccurrences * _getLessonsPerOccurrence();
-
-      if (estimatedTotalLessons > _remainingLessons) {
-        errors.add(
-            'End date would generate $estimatedTotalLessons lessons ($estimatedOccurrences occurrences × ${_getLessonsPerOccurrence()} lessons each), but only $_remainingLessons lessons remain');
-      }
-    }
-
-    return errors;
   }
 
 // FIX 6: Proper day calculation excluding closed days
@@ -3015,40 +2203,1412 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     _onInstructorChanged(); // This will call availability check
   }
 
-// FIX 17: Add UI widget to show conflicts (add this to your build method where appropriate)
-  Widget _buildConflictWarning() {
-    if (!_hasConflicts || _conflictDetails.isEmpty) {
-      return SizedBox.shrink();
+// STEP 1: Replace your existing instructor dropdown in _buildInstructorSection()
+  Widget _buildInstructorSection() {
+    return Card(
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.person_pin, color: Colors.purple),
+                SizedBox(width: 8),
+                Text(
+                  'Instructor & Vehicle',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            SizedBox(height: 16),
+            DropdownButtonFormField<User>(
+              value: _selectedInstructor,
+              decoration: InputDecoration(
+                labelText: 'Select Instructor',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.supervisor_account),
+              ),
+              validator: (value) {
+                if (value == null) return 'Please select an instructor';
+
+                // Show availability status in validation
+                if (_showAvailabilityStatus && !_instructorAvailable) {
+                  return 'Instructor has scheduling conflicts';
+                }
+
+                return null;
+              },
+              items: _userController.users
+                  .where((user) => user.role.toLowerCase() == 'instructor')
+                  .where((instructor) {
+                    // For practical lessons, only show instructors with assigned vehicles
+                    if (_selectedClassType == 'Practical') {
+                      return _fleetController.fleet.any(
+                        (vehicle) => vehicle.instructor == instructor.id,
+                      );
+                    }
+                    // For theory lessons, show all instructors
+                    return true;
+                  })
+                  .map((user) => DropdownMenuItem(
+                        value: user,
+                        child: Text('${user.fname} ${user.lname}'),
+                      ))
+                  .toList(),
+              onChanged: (User? value) {
+                setState(() {
+                  _selectedInstructor = value;
+                });
+                if (value != null) {
+                  _assignInstructorVehicle(value);
+                  _updatePreviewCount();
+                  // NEW: Check for conflicts when instructor changes
+                  _checkInstructorAndVehicleAvailability();
+                }
+              },
+            ),
+
+            // NEW: Add availability status display right after instructor selection
+            _buildAvailabilityStatus(),
+
+            SizedBox(height: 16),
+            // Vehicle field - make it read-only for practical lessons
+            if (_selectedClassType == 'Practical') ...[
+              TextFormField(
+                readOnly: true,
+                decoration: InputDecoration(
+                  labelText: 'Assigned Vehicle',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.directions_car),
+                  suffixIcon: Icon(Icons.lock, color: Colors.grey),
+                ),
+                controller: TextEditingController(
+                  text: _selectedVehicle != null
+                      ? '${_selectedVehicle!.make} ${_selectedVehicle!.model} (${_selectedVehicle!.carPlate})'
+                      : 'No vehicle assigned to instructor',
+                ),
+                validator: (value) => _selectedVehicle == null
+                    ? 'Instructor must have an assigned vehicle for practical lessons'
+                    : null,
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Vehicle is automatically assigned based on instructor selection',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade600,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ] else ...[
+              // For theory lessons, vehicle is optional and can be manually selected
+              DropdownButtonFormField<Fleet>(
+                value: _selectedVehicle,
+                decoration: InputDecoration(
+                  labelText: 'Vehicle (Optional)',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.directions_car),
+                ),
+                items: [
+                  DropdownMenuItem<Fleet>(
+                    value: null,
+                    child: Text('No vehicle required'),
+                  ),
+                  ..._fleetController.fleet
+                      .map((vehicle) => DropdownMenuItem(
+                            value: vehicle,
+                            child: Text(
+                                '${vehicle.make} ${vehicle.model} (${vehicle.carPlate})'),
+                          ))
+                      .toList(),
+                ],
+                onChanged: (Fleet? value) {
+                  setState(() {
+                    _selectedVehicle = value;
+                  });
+                  // NEW: Check for vehicle conflicts when vehicle changes
+                  if (_selectedClassType == 'Practical') {
+                    _checkInstructorAndVehicleAvailability();
+                  }
+                },
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+// STEP 2: Update your time selection methods to trigger conflict checking
+  Future<void> _selectTime(bool isStartTime) async {
+    final TimeOfDay? picked = await showTimePicker(
+      context: context,
+      initialTime: isStartTime ? _startTime : _endTime,
+    );
+    if (picked != null) {
+      setState(() {
+        if (isStartTime) {
+          _startTime = picked;
+          // Auto-set end time to 1 hour later
+          _endTime = TimeOfDay(
+            hour: (picked.hour + 1) % 24,
+            minute: picked.minute,
+          );
+        } else {
+          _endTime = picked;
+        }
+
+        // AUTO-UPDATE optimal end date when time changes
+        if (_remainingLessons > 0) {
+          _recurrenceEndDate = _calculateOptimalEndDate();
+        }
+      });
+      _updatePreviewCount();
+
+      // NEW: Check for conflicts when time changes
+      if (_selectedInstructor != null) {
+        _checkInstructorAndVehicleAvailability();
+      }
+    }
+  }
+
+// STEP 3: Update your start date selection to trigger conflict checking
+  Future<void> _selectStartDate() async {
+    final scheduleController = Get.find<ScheduleController>();
+
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedStartDate,
+      firstDate: scheduleController.getMinimumScheduleDate(),
+      lastDate: scheduleController.getMaximumScheduleDate(),
+      helpText: 'Select Start Date',
+      cancelText: 'Cancel',
+      confirmText: 'Select',
+      errorFormatText: 'Enter valid date',
+      errorInvalidText: 'Enter date in valid range',
+      fieldLabelText: 'Start Date',
+      fieldHintText: 'mm/dd/yyyy',
+      selectableDayPredicate: (DateTime date) {
+        final now = DateTime.now();
+        final today = DateTime(now.year, now.month, now.day);
+        final checkDate = DateTime(date.year, date.month, date.day);
+        return checkDate.isAtSameMomentAs(today) || checkDate.isAfter(today);
+      },
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.light(
+              primary: Colors.blue[600]!,
+              onPrimary: Colors.white,
+              onSurface: Colors.black,
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.blue[600],
+              ),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null && picked != _selectedStartDate) {
+      setState(() {
+        _selectedStartDate = picked;
+        // Ensure end date is not before start date
+        if (_recurrenceEndDate != null &&
+            _recurrenceEndDate!.isBefore(picked)) {
+          _recurrenceEndDate = picked.add(Duration(days: 30));
+        }
+      });
+      _updatePreviewCount();
+
+      // NEW: Check for conflicts when date changes
+      if (_selectedInstructor != null) {
+        _checkInstructorAndVehicleAvailability();
+      }
+    }
+  }
+
+// STEP 4: Update your recurrence pattern selection to trigger conflict checking
+  Widget _buildRecurrenceChip(String pattern) {
+    final isSelected = _recurrencePattern == pattern;
+    return FilterChip(
+      label: Text(pattern.capitalize ?? pattern),
+      selected: isSelected,
+      onSelected: (selected) {
+        setState(() {
+          _recurrencePattern = pattern;
+          _updatePreviewCount();
+        });
+
+        // NEW: Check for conflicts when pattern changes
+        if (_selectedInstructor != null) {
+          _checkInstructorAndVehicleAvailability();
+        }
+      },
+      selectedColor: Colors.green.withOpacity(0.2),
+      checkmarkColor: Colors.green,
+    );
+  }
+
+// STEP 5: Update your weekly options to trigger conflict checking
+  Widget _buildWeeklyOptions() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Select Days:', style: TextStyle(fontWeight: FontWeight.w500)),
+        SizedBox(height: 8),
+
+        // DEBUG: Show current selection
+        if (_selectedDaysOfWeek.isNotEmpty) ...[
+          Container(
+            padding: EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.blue.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              'Selected: ${_selectedDaysOfWeek.map((day) => _getDayName(day)).join(', ')}',
+              style: TextStyle(fontSize: 12, color: Colors.blue.shade700),
+            ),
+          ),
+          SizedBox(height: 8),
+        ],
+
+        Wrap(
+          spacing: 8,
+          children: List.generate(_daysOfWeek.length, (index) {
+            final day = _daysOfWeek[index];
+            final dayNumber = index + 1; // Monday = 1, Tuesday = 2, etc.
+            final isSelected = _selectedDaysOfWeek.contains(dayNumber);
+
+            return FilterChip(
+              label: Text(day.substring(0, 3)),
+              selected: isSelected,
+              onSelected: (selected) {
+                setState(() {
+                  if (selected) {
+                    if (!_selectedDaysOfWeek.contains(dayNumber)) {
+                      _selectedDaysOfWeek.add(dayNumber);
+                    }
+                  } else {
+                    _selectedDaysOfWeek.remove(dayNumber);
+                  }
+                  _selectedDaysOfWeek.sort();
+
+                  print('🔄 Day selection updated: $_selectedDaysOfWeek');
+                  print(
+                      '   Selected days: ${_selectedDaysOfWeek.map((d) => _getDayName(d)).join(', ')}');
+
+                  _updatePreviewCount();
+                });
+
+                // NEW: Check for conflicts when selected days change
+                if (_selectedInstructor != null) {
+                  _checkInstructorAndVehicleAvailability();
+                }
+              },
+              selectedColor: Colors.blue.withOpacity(0.2),
+              checkmarkColor: Colors.blue,
+            );
+          }),
+        ),
+
+        // WARNING: Show if no days are selected for weekly pattern
+        if (_recurrencePattern == 'weekly' && _selectedDaysOfWeek.isEmpty) ...[
+          SizedBox(height: 8),
+          Container(
+            padding: EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.red.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: Colors.red.withOpacity(0.3)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.warning, color: Colors.red, size: 16),
+                SizedBox(width: 8),
+                Text(
+                  'Please select at least one day for weekly pattern',
+                  style: TextStyle(color: Colors.red.shade700, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+// STEP 6: Fix the _generateScheduleDates method to properly generate dates
+  List<DateTime> _generateScheduleDates() {
+    List<DateTime> dates = [];
+    DateTime currentDate = _selectedStartDate;
+    int count = 0;
+    int maxCount = _useEndDate ? 100 : _maxOccurrences;
+    int safetyCounter = 0;
+    const maxDays = 1000; // Safety limit
+
+    while (count < maxCount && count < 20 && safetyCounter < maxDays) {
+      bool shouldCreateSchedule = false;
+
+      switch (_recurrencePattern) {
+        case 'daily':
+          shouldCreateSchedule = true;
+          break;
+        case 'weekly':
+          shouldCreateSchedule =
+              _selectedDaysOfWeek.contains(currentDate.weekday);
+          break;
+        case 'monthly':
+          shouldCreateSchedule = currentDate.day == _selectedStartDate.day;
+          break;
+        case 'custom':
+          final daysDiff = currentDate.difference(_selectedStartDate).inDays;
+          shouldCreateSchedule = daysDiff % _customInterval == 0;
+          break;
+      }
+
+      if (shouldCreateSchedule) {
+        dates.add(currentDate);
+        count++;
+      }
+
+      if (_useEndDate &&
+          _recurrenceEndDate != null &&
+          currentDate.isAfter(_recurrenceEndDate!)) {
+        break;
+      }
+
+      currentDate = currentDate.add(Duration(days: 1));
+      safetyCounter++;
     }
 
+    return dates;
+  }
+
+// STEP 7: Fix the conflict detection method to work properly
+  Future<void> _checkInstructorAndVehicleAvailability() async {
+    if (_selectedInstructor == null) {
+      setState(() {
+        _instructorAvailable = true;
+        _vehicleAvailable = true;
+        _showAvailabilityStatus = false;
+        _conflictDetails.clear();
+      });
+      return;
+    }
+
+    try {
+      List<String> conflicts = [];
+      bool instructorConflict = false;
+      bool vehicleConflict = false;
+
+      // Generate all the dates this recurring schedule would create
+      List<DateTime> scheduleDates = _generateScheduleDates();
+
+      print('🔄 Checking conflicts for ${scheduleDates.length} dates');
+
+      for (DateTime scheduleDate in scheduleDates) {
+        final checkStartTime = DateTime(
+          scheduleDate.year,
+          scheduleDate.month,
+          scheduleDate.day,
+          _startTime.hour,
+          _startTime.minute,
+        );
+
+        final checkEndTime = DateTime(
+          scheduleDate.year,
+          scheduleDate.month,
+          scheduleDate.day,
+          _endTime.hour,
+          _endTime.minute,
+        );
+
+        // Check instructor conflicts
+        final instructorConflicts =
+            _scheduleController.schedules.where((schedule) {
+          // Check if it's the same instructor
+          if (schedule.instructorId != _selectedInstructor!.id) {
+            return false;
+          }
+
+          // Skip cancelled schedules
+          if (schedule.status.toLowerCase() == 'cancelled') {
+            return false;
+          }
+
+          // Check for time overlap
+          return (checkStartTime.isBefore(schedule.end) &&
+              checkEndTime.isAfter(schedule.start));
+        }).toList();
+
+        if (instructorConflicts.isNotEmpty) {
+          instructorConflict = true;
+          final conflictTime = DateFormat('MMM d, hh:mm a')
+              .format(instructorConflicts.first.start);
+          final conflictEndTime =
+              DateFormat('hh:mm a').format(instructorConflicts.first.end);
+          conflicts.add(
+              '${DateFormat('MMM d').format(scheduleDate)}: Instructor busy $conflictTime-$conflictEndTime');
+        }
+
+        // Check vehicle conflicts for practical lessons
+        if (_selectedClassType == 'Practical' && _selectedVehicle != null) {
+          final vehicleConflicts =
+              _scheduleController.schedules.where((schedule) {
+            // Check if it's the same vehicle
+            if (schedule.carId != _selectedVehicle!.id) {
+              return false;
+            }
+
+            // Skip cancelled schedules
+            if (schedule.status.toLowerCase() == 'cancelled') {
+              return false;
+            }
+
+            // Check for time overlap
+            return (checkStartTime.isBefore(schedule.end) &&
+                checkEndTime.isAfter(schedule.start));
+          }).toList();
+
+          if (vehicleConflicts.isNotEmpty) {
+            vehicleConflict = true;
+            final conflictTime = DateFormat('MMM d, hh:mm a')
+                .format(vehicleConflicts.first.start);
+            final conflictEndTime =
+                DateFormat('hh:mm a').format(vehicleConflicts.first.end);
+            conflicts.add(
+                '${DateFormat('MMM d').format(scheduleDate)}: Vehicle busy $conflictTime-$conflictEndTime');
+          }
+        }
+
+        // Limit conflicts shown to prevent overwhelming the user
+        if (conflicts.length >= 5) {
+          conflicts.add('... and more conflicts');
+          break;
+        }
+      }
+
+      setState(() {
+        _instructorAvailable = !instructorConflict;
+        _vehicleAvailable = !vehicleConflict;
+        _showAvailabilityStatus = true;
+        _conflictDetails = conflicts;
+      });
+
+      // Show snackbar if there are conflicts
+      if (conflicts.isNotEmpty) {
+        final conflictType = instructorConflict && vehicleConflict
+            ? 'Instructor and Vehicle'
+            : instructorConflict
+                ? 'Instructor'
+                : 'Vehicle';
+
+        Get.snackbar(
+          '$conflictType Conflicts Detected',
+          '${conflicts.length > 5 ? '5+' : conflicts.length} scheduling conflicts found',
+          backgroundColor: Colors.orange,
+          colorText: Colors.white,
+          duration: Duration(seconds: 4),
+        );
+      }
+
+      print('🔄 Conflict check complete: ${conflicts.length} conflicts found');
+    } catch (e) {
+      print('Error checking availability: $e');
+      setState(() {
+        _instructorAvailable = false;
+        _vehicleAvailable = false;
+        _showAvailabilityStatus = true;
+        _conflictDetails = ['Error checking availability'];
+      });
+    }
+  }
+
+// STEP 8: Enhance the create button to show warnings for conflicts
+  Widget _buildActionButtons() {
+    final errors = _getValidationErrors();
+    final hasErrors = errors.isNotEmpty;
+    final hasConflicts = _showAvailabilityStatus &&
+        (!_instructorAvailable || !_vehicleAvailable);
+
+    return Column(
+      children: [
+        // Show conflict warning if there are conflicts but no blocking errors
+        if (hasConflicts && !hasErrors) ...[
+          Container(
+            width: double.infinity,
+            margin: EdgeInsets.only(bottom: 16),
+            padding: EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.orange.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.orange.withOpacity(0.3)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.warning, color: Colors.orange, size: 20),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Warning: ${_conflictDetails.length} scheduling conflicts detected. Some sessions may be skipped during creation.',
+                    style: TextStyle(
+                      color: Colors.orange.shade700,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+
+        SizedBox(
+          width: double.infinity,
+          height: 50,
+          child: ElevatedButton(
+            onPressed: hasErrors ? null : _createRecurringSchedule,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: hasErrors
+                  ? Colors.grey
+                  : hasConflicts
+                      ? Colors.orange
+                      : Colors.green,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            child: _isLoading
+                ? SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                : Text(
+                    hasConflicts && !hasErrors
+                        ? 'Create Schedule (Skip Conflicts)'
+                        : 'Create Recurring Schedule',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+          ),
+        ),
+        SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          height: 50,
+          child: OutlinedButton(
+            onPressed: () => Get.back(),
+            style: OutlinedButton.styleFrom(
+              side: BorderSide(color: Colors.grey),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            child: Text(
+              'Cancel',
+              style: TextStyle(fontSize: 16),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+// STEP 9: Enhanced _createRecurringSchedule method that handles conflicts properly
+  // STEP 9: Enhanced _createRecurringSchedule method that handles conflicts properly
+  Future<void> _createRecurringSchedule() async {
+    print('🔄 RECURRING SCHEDULE CREATION STARTED');
+
+    if (!_canCreateRecurringSchedule()) {
+      final errors = _getValidationErrors();
+      Get.snackbar(
+        'Validation Error',
+        errors.isNotEmpty
+            ? errors.first
+            : 'Please complete all required fields',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+        duration: Duration(seconds: 3),
+      );
+      return;
+    }
+
+    try {
+      setState(() {
+        _isLoading = true;
+      });
+
+      Get.dialog(
+        Dialog(
+          child: Padding(
+            padding: EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(color: Colors.green),
+                SizedBox(height: 16),
+                Text('Creating recurring schedules...'),
+                SizedBox(height: 8),
+                Text('Checking for conflicts and creating valid schedules',
+                    style: TextStyle(color: Colors.grey)),
+              ],
+            ),
+          ),
+        ),
+        barrierDismissible: false,
+      );
+
+      final schedules = <Schedule>[];
+      final skippedDates = <DateTime>[];
+      DateTime currentDate = _selectedStartDate;
+      int schedulesCreated = 0;
+      int daysChecked = 0;
+      final maxDays = 1000; // Safety limit
+
+      // Determine the actual end condition
+      final targetScheduleCount = _useEndDate ? _previewCount : _maxOccurrences;
+      final endDate = _useEndDate
+          ? _recurrenceEndDate!
+          : _selectedStartDate.add(Duration(days: 365));
+
+      print(
+          '🔄 TARGET: Create $targetScheduleCount schedules until ${endDate.toString().substring(0, 10)}');
+
+      while (schedulesCreated < targetScheduleCount &&
+          (currentDate.isBefore(endDate) ||
+              currentDate.isAtSameMomentAs(endDate)) &&
+          daysChecked < maxDays) {
+        daysChecked++;
+        bool shouldCreateSchedule = false;
+
+        // Check if this date matches our recurrence pattern
+        switch (_recurrencePattern) {
+          case 'daily':
+            shouldCreateSchedule = true;
+            break;
+          case 'weekly':
+            shouldCreateSchedule =
+                _selectedDaysOfWeek.contains(currentDate.weekday);
+            break;
+          case 'monthly':
+            shouldCreateSchedule = currentDate.day == _selectedStartDate.day;
+            break;
+          case 'custom':
+            final daysDiff = currentDate.difference(_selectedStartDate).inDays;
+            shouldCreateSchedule = daysDiff % _customInterval == 0;
+            break;
+        }
+
+        if (shouldCreateSchedule) {
+          final startDateTime = DateTime(
+            currentDate.year,
+            currentDate.month,
+            currentDate.day,
+            _startTime.hour,
+            _startTime.minute,
+          );
+
+          final endDateTime = DateTime(
+            currentDate.year,
+            currentDate.month,
+            currentDate.day,
+            _endTime.hour,
+            _endTime.minute,
+          );
+
+          // Check for conflicts before creating this schedule
+          bool hasConflict =
+              await _checkSingleDateConflict(startDateTime, endDateTime);
+
+          if (!hasConflict) {
+            // Create the schedule
+            final schedule = Schedule(
+              start: startDateTime,
+              end: endDateTime,
+              courseId: _selectedCourse!.id!,
+              studentId: _selectedStudent!.id!,
+              instructorId: _selectedInstructor!.id!,
+              carId: _selectedVehicle?.id,
+              status: _selectedStatus,
+              isRecurring: true,
+              recurrencePattern: _recurrencePattern,
+              recurrenceEndDate: _recurrenceEndDate,
+              classType: _selectedClassType,
+            );
+
+            schedules.add(schedule);
+            schedulesCreated++;
+
+            print(
+                '✅ Schedule $schedulesCreated created for ${startDateTime.toString().substring(0, 16)}');
+          } else {
+            // Skip this date due to conflict
+            skippedDates.add(currentDate);
+            print(
+                '⚠️ Skipped ${currentDate.toString().substring(0, 10)} due to conflict');
+          }
+        }
+
+        // Move to next day
+        currentDate = currentDate.add(Duration(days: 1));
+
+        if (daysChecked >= maxDays) {
+          print(
+              '⚠️ Reached maximum days limit ($maxDays), stopping generation');
+          break;
+        }
+      }
+
+      print('🔄 GENERATION COMPLETE:');
+      print('   Days checked: $daysChecked');
+      print('   Schedules generated: ${schedules.length}');
+      print('   Schedules skipped: ${skippedDates.length}');
+      print('   Target was: $targetScheduleCount');
+
+      if (schedules.isEmpty) {
+        throw Exception(
+            'No schedules could be created. All dates had conflicts or no valid dates found.');
+      }
+
+      // Save all schedules
+      int savedCount = 0;
+      int failedCount = 0;
+      List<String> errors = [];
+
+      for (int i = 0; i < schedules.length; i++) {
+        try {
+          await _scheduleController.addOrUpdateSchedule(schedules[i]);
+          savedCount++;
+          if (i < 5) {
+            print(
+                '✅ Saved schedule ${i + 1}: ${schedules[i].start.toString().substring(0, 16)}');
+          }
+        } catch (e) {
+          failedCount++;
+          errors.add('Schedule ${i + 1}: $e');
+          print('❌ Failed to save schedule ${i + 1}: $e');
+        }
+      }
+
+      print('🔄 SAVE RESULTS:');
+      print('   Successfully saved: $savedCount');
+      print('   Failed to save: $failedCount');
+      print('   Conflicts skipped: ${skippedDates.length}');
+
+      // Close loading dialog
+      if (Get.isDialogOpen == true) {
+        Get.back();
+      }
+
+      // Refresh schedule controller
+      await _scheduleController.fetchSchedules();
+
+      // Show enhanced results dialog with conflict information
+      _showEnhancedResultsDialog(savedCount, failedCount, skippedDates.length,
+          schedules.length, errors);
+    } catch (e, stackTrace) {
+      print('🚨 ERROR in recurring schedule creation: $e');
+      print('🚨 Stack trace: $stackTrace');
+
+      if (Get.isDialogOpen == true) {
+        Get.back();
+      }
+
+      Get.snackbar(
+        'Error',
+        'Failed to create recurring schedule: ${e.toString()}',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+        duration: Duration(seconds: 8),
+      );
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+// STEP 10: Method to check for conflicts on a single date
+  Future<bool> _checkSingleDateConflict(
+      DateTime startDateTime, DateTime endDateTime) async {
+    // Check instructor conflicts
+    final instructorConflicts = _scheduleController.schedules.where((schedule) {
+      // Check if it's the same instructor
+      if (schedule.instructorId != _selectedInstructor!.id) return false;
+
+      // Skip cancelled schedules
+      if (schedule.status.toLowerCase() == 'cancelled') return false;
+
+      // Check for time overlap
+      return (startDateTime.isBefore(schedule.end) &&
+          endDateTime.isAfter(schedule.start));
+    }).toList();
+
+    if (instructorConflicts.isNotEmpty) {
+      return true; // Has conflict
+    }
+
+    // Check vehicle conflicts for practical lessons
+    if (_selectedClassType == 'Practical' && _selectedVehicle != null) {
+      final vehicleConflicts = _scheduleController.schedules.where((schedule) {
+        // Check if it's the same vehicle
+        if (schedule.carId != _selectedVehicle!.id) return false;
+
+        // Skip cancelled schedules
+        if (schedule.status.toLowerCase() == 'cancelled') return false;
+
+        // Check for time overlap
+        return (startDateTime.isBefore(schedule.end) &&
+            endDateTime.isAfter(schedule.start));
+      }).toList();
+
+      if (vehicleConflicts.isNotEmpty) {
+        return true; // Has conflict
+      }
+    }
+
+    return false; // No conflicts
+  }
+
+// STEP 11: Enhanced results dialog that shows conflict information
+  void _showEnhancedResultsDialog(int savedCount, int failedCount,
+      int conflictCount, int totalGenerated, List<String> errors) {
+    Get.dialog(
+      Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Container(
+          padding: EdgeInsets.all(24),
+          constraints: BoxConstraints(maxWidth: 400),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Icon
+              Icon(
+                savedCount > 0 ? Icons.check_circle : Icons.error,
+                size: 60,
+                color: savedCount > 0 ? Colors.green : Colors.red,
+              ),
+
+              SizedBox(height: 16),
+
+              // Title
+              Text(
+                savedCount > 0
+                    ? 'Recurring Schedule Created!'
+                    : 'Creation Failed',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: savedCount > 0 ? Colors.green : Colors.red,
+                ),
+                textAlign: TextAlign.center,
+              ),
+
+              SizedBox(height: 12),
+
+              // Summary
+              Container(
+                padding: EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  children: [
+                    _buildResultSummaryRow(
+                        'Successfully created:', savedCount, Colors.green),
+                    if (failedCount > 0)
+                      _buildResultSummaryRow(
+                          'Failed to create:', failedCount, Colors.red),
+                    if (conflictCount > 0)
+                      _buildResultSummaryRow(
+                          'Skipped (conflicts):', conflictCount, Colors.orange),
+                    _buildResultSummaryRow(
+                        'Total attempted:', totalGenerated, Colors.blue),
+                    SizedBox(height: 8),
+                    Divider(),
+                    SizedBox(height: 8),
+                    _buildResultSummaryRow(
+                        'Lessons used:',
+                        (savedCount * _getLessonsPerOccurrence()),
+                        Colors.purple),
+                    _buildResultSummaryRow(
+                        'Lessons remaining:',
+                        (_remainingLessons -
+                            (savedCount * _getLessonsPerOccurrence())),
+                        Colors.teal),
+                  ],
+                ),
+              ),
+
+              // Show conflict information if any
+              if (conflictCount > 0) ...[
+                SizedBox(height: 16),
+                Container(
+                  padding: EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info, color: Colors.orange, size: 20),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '$conflictCount sessions were skipped due to instructor/vehicle conflicts. You can schedule these manually later.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.orange.shade700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
+              // Show errors if any
+              if (errors.isNotEmpty) ...[
+                SizedBox(height: 16),
+                Container(
+                  padding: EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red.shade200),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Errors:',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, color: Colors.red),
+                      ),
+                      SizedBox(height: 8),
+                      ...errors.take(3).map((error) => Text(
+                            '• $error',
+                            style: TextStyle(
+                                fontSize: 12, color: Colors.red.shade700),
+                          )),
+                      if (errors.length > 3)
+                        Text(
+                          '... and ${errors.length - 3} more',
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.red.shade700),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+
+              SizedBox(height: 24),
+
+              // Action buttons
+              Row(
+                children: [
+                  if (savedCount > 0) ...[
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Get.back(); // Close dialog
+                          Get.back(); // Go back to previous screen
+                          Get.offNamed(
+                              '/schedule'); // Navigate to schedule screen
+                        },
+                        icon: Icon(Icons.calendar_view_day),
+                        label: Text('View Schedules'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.green,
+                          side: BorderSide(color: Colors.green),
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: 12),
+                  ],
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Get.back(); // Close dialog
+                        if (savedCount > 0) {
+                          Get.back(); // Close recurring schedule screen
+                          Get.find<ScheduleController>().fetchSchedules();
+                        }
+                      },
+                      icon: Icon(Icons.check),
+                      label: Text('Done'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor:
+                            savedCount > 0 ? Colors.green : Colors.grey,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+      barrierDismissible: false,
+    );
+  }
+
+// STEP 12: Helper method for result summary rows
+  Widget _buildResultSummaryRow(String label, int count, Color color) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: TextStyle(fontSize: 14)),
+          Text(
+            count.toString(),
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAvailabilityStatus() {
+    if (!_showAvailabilityStatus) return SizedBox.shrink();
+
     return Container(
-      padding: EdgeInsets.all(12),
       margin: EdgeInsets.symmetric(vertical: 8),
+      padding: EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.orange.withOpacity(0.1),
+        color: (_instructorAvailable && _vehicleAvailable)
+            ? Colors.green.withOpacity(0.1)
+            : Colors.orange.withOpacity(0.1),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.orange.withOpacity(0.3)),
+        border: Border.all(
+          color: (_instructorAvailable && _vehicleAvailable)
+              ? Colors.green.withOpacity(0.3)
+              : Colors.orange.withOpacity(0.3),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(Icons.warning, color: Colors.orange, size: 20),
+              Icon(
+                (_instructorAvailable && _vehicleAvailable)
+                    ? Icons.check_circle
+                    : Icons.warning,
+                color: (_instructorAvailable && _vehicleAvailable)
+                    ? Colors.green
+                    : Colors.orange,
+                size: 20,
+              ),
               SizedBox(width: 8),
-              Text('Instructor Conflicts Detected',
+              Expanded(
+                child: Text(
+                  (_instructorAvailable && _vehicleAvailable)
+                      ? 'No scheduling conflicts detected'
+                      : 'Scheduling conflicts detected',
                   style: TextStyle(
-                      fontWeight: FontWeight.bold, color: Colors.orange)),
+                    fontWeight: FontWeight.w600,
+                    color: (_instructorAvailable && _vehicleAvailable)
+                        ? Colors.green.shade700
+                        : Colors.orange.shade700,
+                  ),
+                ),
+              ),
             ],
           ),
-          SizedBox(height: 8),
-          ...(_conflictDetails.take(3).map((conflict) =>
-              Text('• $conflict', style: TextStyle(fontSize: 14)))),
-          if (_conflictDetails.length > 3)
-            Text('• and ${_conflictDetails.length - 3} more...',
-                style: TextStyle(fontSize: 14, fontStyle: FontStyle.italic)),
+          if (_conflictDetails.isNotEmpty) ...[
+            SizedBox(height: 8),
+            Text(
+              'Conflicts found:',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: Colors.orange.shade600,
+              ),
+            ),
+            SizedBox(height: 4),
+            ...(_conflictDetails.take(3).map((conflict) => Padding(
+                  padding: EdgeInsets.only(left: 12, bottom: 2),
+                  child: Text(
+                    '• $conflict',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.orange.shade600,
+                    ),
+                  ),
+                ))),
+            if (_conflictDetails.length > 3)
+              Padding(
+                padding: EdgeInsets.only(left: 12),
+                child: Text(
+                  '• ... and ${_conflictDetails.length - 3} more conflicts',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.orange.shade600,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ),
+            SizedBox(height: 4),
+            Text(
+              'Note: Conflicting sessions will be automatically skipped during creation.',
+              style: TextStyle(
+                fontSize: 10,
+                color: Colors.orange.shade500,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
         ],
       ),
     );
+  }
+
+// STEP 14: Updated validation method that properly handles conflicts
+  List<String> _getValidationErrors() {
+    List<String> errors = [];
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final selectedDay = DateTime(_selectedStartDate.year,
+        _selectedStartDate.month, _selectedStartDate.day);
+
+    if (selectedDay.isBefore(today)) {
+      errors.add('Cannot schedule lessons for past dates');
+    }
+
+    // Check for past time on today's date
+    if (selectedDay.isAtSameMomentAs(today)) {
+      final startDateTime = DateTime(
+        _selectedStartDate.year,
+        _selectedStartDate.month,
+        _selectedStartDate.day,
+        _startTime.hour,
+        _startTime.minute,
+      );
+
+      if (startDateTime.isBefore(now)) {
+        errors.add('Cannot schedule lessons for past times');
+      }
+    }
+
+    final startDateTime = DateTime(
+        _selectedStartDate.year,
+        _selectedStartDate.month,
+        _selectedStartDate.day,
+        _startTime.hour,
+        _startTime.minute);
+    final endDateTime = DateTime(
+        _selectedStartDate.year,
+        _selectedStartDate.month,
+        _selectedStartDate.day,
+        _endTime.hour,
+        _endTime.minute);
+    final duration = endDateTime.difference(startDateTime);
+
+    if (duration.inMinutes <= 0) {
+      errors.add('End time must be after start time');
+    }
+
+    // Note: We don't add conflicts as blocking errors anymore
+    // They will be handled during creation by skipping conflicting dates
+
+    // Business settings validation
+    final settingsController = Get.find<SettingsController>();
+
+    // Check if scheduling on closed days
+    if (_selectedInstructor != null) {
+      final closedDays = _getClosedDaysFromSettings(settingsController);
+
+      // Check if start date falls on a closed day
+      if (closedDays.contains(_selectedStartDate.weekday)) {
+        final dayName = _getDayName(_selectedStartDate.weekday);
+        errors.add('Cannot schedule on $dayName - Business is closed');
+      }
+
+      // For recurring schedules, check if any selected days are closed
+      if (_recurrencePattern == 'weekly' && _selectedDaysOfWeek.isNotEmpty) {
+        final conflictingDays = _selectedDaysOfWeek
+            .where((day) => closedDays.contains(day))
+            .toList();
+        if (conflictingDays.isNotEmpty) {
+          final dayNames =
+              conflictingDays.map((day) => _getDayName(day)).join(', ');
+          errors.add(
+              'Cannot schedule on $dayNames - Business is closed on these days');
+        }
+      }
+    }
+
+    // Business hours validation
+    if (settingsController.enforceWorkingHours.value &&
+        _selectedInstructor != null) {
+      final startTime =
+          TimeOfDay(hour: _startTime.hour, minute: _startTime.minute);
+      final endTime = TimeOfDay(hour: _endTime.hour, minute: _endTime.minute);
+
+      final workingStart =
+          _parseTimeString(settingsController.workingHoursStart.value);
+      final workingEnd =
+          _parseTimeString(settingsController.workingHoursEnd.value);
+
+      if (_isTimeOutsideBusinessHours(
+          startTime, endTime, workingStart, workingEnd)) {
+        errors.add(
+            'Schedule time is outside business hours (${settingsController.workingHoursStart.value} - ${settingsController.workingHoursEnd.value})');
+      }
+    }
+
+    // Lesson count validation
+    final totalLessonsNeeded = _getTotalLessonsToDeduct();
+
+    if (totalLessonsNeeded > _remainingLessons && _remainingLessons > 0) {
+      final lessonsPerOccurrence = _getLessonsPerOccurrence();
+      errors.add(
+          'This schedule needs $totalLessonsNeeded lessons ($_previewCount occurrences × $lessonsPerOccurrence lessons each), but only $_remainingLessons lessons remain');
+    }
+
+    // Check if end date would generate too many lessons
+    if (_useEndDate && _recurrenceEndDate != null && _remainingLessons > 0) {
+      int estimatedOccurrences =
+          _calculateLessonsForPeriod(_selectedStartDate, _recurrenceEndDate!);
+      int estimatedTotalLessons =
+          estimatedOccurrences * _getLessonsPerOccurrence();
+
+      if (estimatedTotalLessons > _remainingLessons) {
+        errors.add(
+            'End date would generate $estimatedTotalLessons lessons ($estimatedOccurrences occurrences × ${_getLessonsPerOccurrence()} lessons each), but only $_remainingLessons lessons remain');
+      }
+    }
+
+    return errors;
+  }
+
+// STEP 15: Updated _canCreateRecurringSchedule method
+  bool _canCreateRecurringSchedule() {
+    if (_selectedStudent == null ||
+        _selectedInstructor == null ||
+        _selectedCourse == null ||
+        _previewCount <= 0 ||
+        _remainingLessons <= 0) {
+      print('DEBUG: Basic requirements not met');
+      return false;
+    }
+
+    // Note: We no longer block creation due to conflicts
+    // Conflicts will be handled by skipping those dates during creation
+
+    // Check vehicle availability for practical lessons
+    if (_selectedClassType == 'Practical') {
+      if (_selectedVehicle == null) {
+        print('DEBUG: _selectedVehicle is null for practical lesson');
+        return false;
+      }
+
+      // Ensure the vehicle is actually assigned to the selected instructor
+      if (_selectedVehicle!.instructor != _selectedInstructor!.id) {
+        print('DEBUG: Vehicle not assigned to instructor');
+        return false;
+      }
+    }
+
+    // Check if start date and time is not in the past
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final startDay = DateTime(_selectedStartDate.year, _selectedStartDate.month,
+        _selectedStartDate.day);
+
+    if (startDay.isBefore(today)) {
+      print('DEBUG: Start date is in the past');
+      return false;
+    }
+
+    // Check if time is in the past for today's date
+    if (startDay.isAtSameMomentAs(today)) {
+      final startDateTime = DateTime(
+        _selectedStartDate.year,
+        _selectedStartDate.month,
+        _selectedStartDate.day,
+        _startTime.hour,
+        _startTime.minute,
+      );
+
+      if (startDateTime.isBefore(now)) {
+        print('DEBUG: Start time is in the past');
+        return false;
+      }
+    }
+
+    // Check validation errors (but not conflicts)
+    final errors = _getValidationErrors();
+    if (errors.isNotEmpty) {
+      print('DEBUG: Validation errors: $errors');
+      return false;
+    }
+
+    print('DEBUG: All validations passed');
+    return true;
+  }
+
+// STEP 16: Add this method to trigger conflict checks when needed
+  void _triggerConflictCheck() {
+    if (_selectedInstructor != null && _selectedStartDate != null) {
+      // Add a small delay to ensure state is updated
+      Future.delayed(Duration(milliseconds: 100), () {
+        _checkInstructorAndVehicleAvailability();
+      });
+    }
+  }
+
+  void _updateLessonCounts() {
+    if (_selectedStudent != null && _selectedCourse != null) {
+      setState(() {
+        _remainingLessons = _scheduleController.getRemainingLessons(
+            _selectedStudent!.id!, _selectedCourse!.id!);
+
+        // AUTO-SET optimal end date when course is selected
+        if (_remainingLessons > 0) {
+          _recurrenceEndDate = _calculateOptimalEndDate();
+        }
+      });
+      _updatePreviewCount();
+
+      // Add this to trigger conflict check:
+      _triggerConflictCheck();
+    }
+  }
+
+// STEP 18: Quick test method (you can remove this after testing)
+  void _testConflictDetection() {
+    print('🔧 TESTING CONFLICT DETECTION');
+    print(
+        '   Instructor selected: ${_selectedInstructor?.fname} ${_selectedInstructor?.lname}');
+    print('   Start date: ${_selectedStartDate.toString().substring(0, 10)}');
+    print(
+        '   Time: ${_startTime.format(context)} - ${_endTime.format(context)}');
+    print('   Pattern: $_recurrencePattern');
+    print('   Selected days: $_selectedDaysOfWeek');
+    print('   Show availability status: $_showAvailabilityStatus');
+    print('   Instructor available: $_instructorAvailable');
+    print('   Conflict details: $_conflictDetails');
+
+    _checkInstructorAndVehicleAvailability();
   }
 }
