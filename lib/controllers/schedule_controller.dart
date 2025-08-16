@@ -425,7 +425,8 @@ class ScheduleController extends GetxController {
 
   // Fixed Schedule Controller - Issue 1: Scheduling but not deducting lessons from billed lessons
 
-  Future<void> addOrUpdateSchedule(Schedule schedule) async {
+  Future<void> addOrUpdateSchedule(Schedule schedule,
+      {bool silent = false}) async {
     try {
       isLoading(true);
 
@@ -457,16 +458,22 @@ class ScheduleController extends GetxController {
       // Force update to ensure UI reflects changes
       update();
 
-      Get.snackbar(
-        'Success',
-        schedule.id == null
-            ? 'Schedule created successfully'
-            : 'Schedule updated successfully',
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
-      );
+      // FIX: Only show snackbar if not in silent mode
+      if (!silent) {
+        Get.snackbar(
+          'Success',
+          schedule.id == null
+              ? 'Schedule created successfully'
+              : 'Schedule updated successfully',
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+        );
+      }
     } catch (e) {
-      Get.snackbar('Error', 'Failed to save schedule: ${e.toString()}');
+      // FIX: Only show error snackbar if not in silent mode
+      if (!silent) {
+        Get.snackbar('Error', 'Failed to save schedule: ${e.toString()}');
+      }
       rethrow; // Re-throw to handle in calling code
     } finally {
       isLoading(false);

@@ -1,4 +1,5 @@
 // lib/screens/schedule/recurring_schedule_screen.dart
+import 'package:driving/controllers/navigation_controller.dart';
 import 'package:driving/controllers/settings_controller.dart';
 import 'package:driving/widgets/recuring_progress.dart';
 import 'package:driving/widgets/responsive_text.dart';
@@ -2823,7 +2824,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     );
   }
 
-// STEP 9: Enhanced _createRecurringSchedule method that handles conflicts properly
   // STEP 9: Enhanced _createRecurringSchedule method that handles conflicts properly
   Future<void> _createRecurringSchedule() async {
     print('🔄 RECURRING SCHEDULE CREATION STARTED');
@@ -2979,14 +2979,16 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
             'No schedules could be created. All dates had conflicts or no valid dates found.');
       }
 
-      // Save all schedules
+      // Save all schedules WITH SILENT MODE to prevent multiple snackbars
       int savedCount = 0;
       int failedCount = 0;
       List<String> errors = [];
 
       for (int i = 0; i < schedules.length; i++) {
         try {
-          await _scheduleController.addOrUpdateSchedule(schedules[i]);
+          // FIX 1: Use silent mode to prevent individual success snackbars
+          await _scheduleController.addOrUpdateSchedule(schedules[i],
+              silent: true);
           savedCount++;
           if (i < 5) {
             print(
@@ -3012,6 +3014,17 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
       // Refresh schedule controller
       await _scheduleController.fetchSchedules();
 
+      // FIX 2: Show single consolidated success message
+      if (savedCount > 0) {
+        Get.snackbar(
+          'Success',
+          'Created $savedCount recurring schedule${savedCount > 1 ? 's' : ''} successfully!${skippedDates.length > 0 ? ' (${skippedDates.length} skipped due to conflicts)' : ''}',
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+          duration: Duration(seconds: 4),
+        );
+      }
+
       // Show enhanced results dialog with conflict information
       _showEnhancedResultsDialog(savedCount, failedCount, skippedDates.length,
           schedules.length, errors);
@@ -3035,6 +3048,159 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
         _isLoading = false;
       });
     }
+  }
+
+// FIX 3: Update the _showEnhancedResultsDialog method to fix navigation
+  void _showEnhancedResultsDialog(int savedCount, int failedCount,
+      int conflictsSkipped, int totalAttempted, List<String> errors) {
+    Get.dialog(
+      AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        title: Row(
+          children: [
+            Icon(
+              savedCount > 0 ? Icons.check_circle : Icons.error,
+              color: savedCount > 0 ? Colors.green : Colors.red,
+              size: 28,
+            ),
+            SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                savedCount > 0
+                    ? 'Recurring Schedule Created!'
+                    : 'Schedule Creation Failed',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Success summary
+              if (savedCount > 0) ...[
+                Container(
+                  padding: EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.green.shade200),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '✅ Successfully created: $savedCount schedule${savedCount > 1 ? 's' : ''}',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.green.shade700,
+                        ),
+                      ),
+                      if (conflictsSkipped > 0)
+                        Text(
+                          '⚠️ Skipped due to conflicts: $conflictsSkipped',
+                          style: TextStyle(color: Colors.orange.shade700),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+
+              // Failure summary
+              if (failedCount > 0) ...[
+                SizedBox(height: 12),
+                Container(
+                  padding: EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red.shade200),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '❌ Failed to create: $failedCount schedule${failedCount > 1 ? 's' : ''}',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.red.shade700,
+                        ),
+                      ),
+                      if (errors.isNotEmpty) ...[
+                        SizedBox(height: 8),
+                        ...errors.take(3).map((error) => Text(
+                              '• $error',
+                              style: TextStyle(
+                                  fontSize: 12, color: Colors.red.shade600),
+                            )),
+                        if (errors.length > 3)
+                          Text(
+                            '... and ${errors.length - 3} more errors',
+                            style: TextStyle(
+                                fontSize: 12, color: Colors.red.shade600),
+                          ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+
+              SizedBox(height: 16),
+              Text(
+                'Total attempted: $totalAttempted schedules',
+                style: TextStyle(color: Colors.grey.shade600),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          if (savedCount > 0) ...[
+            OutlinedButton.icon(
+              onPressed: () {
+                Get.back(); // Close dialog
+                Get.back(); // Go back to previous screen
+
+                // FIX 4: Use navigation controller for safer navigation
+                try {
+                  final navController = Get.find<NavigationController>();
+                  navController.navigateToPage('schedules');
+                } catch (e) {
+                  // Fallback to direct navigation with correct route
+                  Get.offNamed(
+                      '/schedules'); // Fixed: added 's' to make it '/schedules'
+                }
+              },
+              icon: Icon(Icons.calendar_view_day),
+              label: Text('View Schedules'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.green,
+                side: BorderSide(color: Colors.green),
+              ),
+            ),
+            SizedBox(width: 8),
+          ],
+          ElevatedButton.icon(
+            onPressed: () {
+              Get.back(); // Close dialog
+              if (savedCount > 0) {
+                Get.back(); // Close recurring schedule screen
+                // Refresh the schedule screen
+                Get.find<ScheduleController>().fetchSchedules();
+              }
+            },
+            icon: Icon(Icons.check),
+            label: Text('Done'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: savedCount > 0 ? Colors.green : Colors.grey,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+      barrierDismissible: false,
+    );
   }
 
 // STEP 10: Method to check for conflicts on a single date
@@ -3077,192 +3243,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     }
 
     return false; // No conflicts
-  }
-
-// STEP 11: Enhanced results dialog that shows conflict information
-  void _showEnhancedResultsDialog(int savedCount, int failedCount,
-      int conflictCount, int totalGenerated, List<String> errors) {
-    Get.dialog(
-      Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Container(
-          padding: EdgeInsets.all(24),
-          constraints: BoxConstraints(maxWidth: 400),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Icon
-              Icon(
-                savedCount > 0 ? Icons.check_circle : Icons.error,
-                size: 60,
-                color: savedCount > 0 ? Colors.green : Colors.red,
-              ),
-
-              SizedBox(height: 16),
-
-              // Title
-              Text(
-                savedCount > 0
-                    ? 'Recurring Schedule Created!'
-                    : 'Creation Failed',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: savedCount > 0 ? Colors.green : Colors.red,
-                ),
-                textAlign: TextAlign.center,
-              ),
-
-              SizedBox(height: 12),
-
-              // Summary
-              Container(
-                padding: EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Column(
-                  children: [
-                    _buildResultSummaryRow(
-                        'Successfully created:', savedCount, Colors.green),
-                    if (failedCount > 0)
-                      _buildResultSummaryRow(
-                          'Failed to create:', failedCount, Colors.red),
-                    if (conflictCount > 0)
-                      _buildResultSummaryRow(
-                          'Skipped (conflicts):', conflictCount, Colors.orange),
-                    _buildResultSummaryRow(
-                        'Total attempted:', totalGenerated, Colors.blue),
-                    SizedBox(height: 8),
-                    Divider(),
-                    SizedBox(height: 8),
-                    _buildResultSummaryRow(
-                        'Lessons used:',
-                        (savedCount * _getLessonsPerOccurrence()),
-                        Colors.purple),
-                    _buildResultSummaryRow(
-                        'Lessons remaining:',
-                        (_remainingLessons -
-                            (savedCount * _getLessonsPerOccurrence())),
-                        Colors.teal),
-                  ],
-                ),
-              ),
-
-              // Show conflict information if any
-              if (conflictCount > 0) ...[
-                SizedBox(height: 16),
-                Container(
-                  padding: EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.orange.shade200),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.info, color: Colors.orange, size: 20),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          '$conflictCount sessions were skipped due to instructor/vehicle conflicts. You can schedule these manually later.',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.orange.shade700,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-
-              // Show errors if any
-              if (errors.isNotEmpty) ...[
-                SizedBox(height: 16),
-                Container(
-                  padding: EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.red.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.red.shade200),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Errors:',
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold, color: Colors.red),
-                      ),
-                      SizedBox(height: 8),
-                      ...errors.take(3).map((error) => Text(
-                            '• $error',
-                            style: TextStyle(
-                                fontSize: 12, color: Colors.red.shade700),
-                          )),
-                      if (errors.length > 3)
-                        Text(
-                          '... and ${errors.length - 3} more',
-                          style: TextStyle(
-                              fontSize: 12, color: Colors.red.shade700),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-
-              SizedBox(height: 24),
-
-              // Action buttons
-              Row(
-                children: [
-                  if (savedCount > 0) ...[
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () {
-                          Get.back(); // Close dialog
-                          Get.back(); // Go back to previous screen
-                          Get.offNamed(
-                              '/schedule'); // Navigate to schedule screen
-                        },
-                        icon: Icon(Icons.calendar_view_day),
-                        label: Text('View Schedules'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.green,
-                          side: BorderSide(color: Colors.green),
-                        ),
-                      ),
-                    ),
-                    SizedBox(width: 12),
-                  ],
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        Get.back(); // Close dialog
-                        if (savedCount > 0) {
-                          Get.back(); // Close recurring schedule screen
-                          Get.find<ScheduleController>().fetchSchedules();
-                        }
-                      },
-                      icon: Icon(Icons.check),
-                      label: Text('Done'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor:
-                            savedCount > 0 ? Colors.green : Colors.grey,
-                        foregroundColor: Colors.white,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-      barrierDismissible: false,
-    );
   }
 
 // STEP 12: Helper method for result summary rows
