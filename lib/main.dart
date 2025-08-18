@@ -1,8 +1,10 @@
-// lib/main.dart - Fixed Firebase initialization
+// lib/main.dart - Fixed version preserving all your original code + PIN authentication
 import 'package:driving/routes/protected_routes.dart';
 import 'package:driving/screens/auth/login_screen.dart';
 import 'package:driving/services/app_bindings.dart';
 import 'package:driving/services/app_initialization.dart';
+import 'package:driving/controllers/auth_controller.dart';
+import 'package:driving/controllers/pin_controller.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -30,6 +32,10 @@ void main() async {
     print('⚠️ App will continue in offline-only mode');
     // Don't rethrow - let app continue without Firebase
   }
+
+  // Initialize PIN Controller early (before other controllers that might depend on it)
+  Get.put(PinController(), permanent: true);
+  print('✅ PinController initialized');
 
   // Initialize app bindings AFTER Firebase
   try {
@@ -100,14 +106,11 @@ class MyApp extends StatelessWidget {
         ),
       ),
 
-      // REMOVED: Don't call AppBindings() again since we already did it in main()
-      // initialBinding: AppBindings(),
-
       // Use protected routes with middleware
       getPages: ProtectedRoutes.routes,
 
-      // Start with login screen and let authentication handle the flow
-      initialRoute: '/login',
+      // Use AuthenticationWrapper to determine initial route with PIN support
+      home: const AuthenticationWrapper(),
 
       debugShowCheckedModeBanner: false,
 
@@ -117,5 +120,152 @@ class MyApp extends StatelessWidget {
         page: () => const LoginScreen(),
       ),
     );
+  }
+}
+
+class AuthenticationWrapper extends StatefulWidget {
+  const AuthenticationWrapper({Key? key}) : super(key: key);
+
+  @override
+  State<AuthenticationWrapper> createState() => _AuthenticationWrapperState();
+}
+
+class _AuthenticationWrapperState extends State<AuthenticationWrapper> {
+  @override
+  void initState() {
+    super.initState();
+    _determineInitialRoute();
+  }
+
+  Future<void> _determineInitialRoute() async {
+    // Wait for controllers to initialize
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    try {
+      // Check if AuthController exists, if not initialize it
+      AuthController authController;
+      try {
+        authController = Get.find<AuthController>();
+      } catch (e) {
+        // Initialize AuthController if not found
+        authController = Get.put(AuthController());
+        await Future.delayed(
+            const Duration(milliseconds: 200)); // Give it time to initialize
+      }
+
+      // Check PIN authentication status
+      final pinController = Get.find<PinController>();
+      final isUserVerified = await pinController.isUserVerified();
+
+      String initialRoute;
+
+      if (isUserVerified && pinController.shouldUsePinAuth()) {
+        // User has previously verified and PIN is enabled
+        initialRoute = '/pin-login';
+      } else {
+        // Default to email/password login
+        initialRoute = '/login';
+      }
+
+      // Navigate to the determined route
+      Get.offAllNamed(initialRoute);
+    } catch (e) {
+      // Fallback to login if there's any error
+      debugPrint('Error determining initial route: $e');
+      Get.offAllNamed('/login');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.blue.shade800,
+              Colors.blue.shade600,
+              Colors.blue.shade400,
+            ],
+          ),
+        ),
+        child: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Logo
+              Icon(
+                Icons.school,
+                size: 80,
+                color: Colors.white,
+              ),
+              SizedBox(height: 24),
+
+              // Title
+              Text(
+                'DRIVING SCHOOL',
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              SizedBox(height: 8),
+
+              Text(
+                'Management System',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.white70,
+                ),
+              ),
+              SizedBox(height: 40),
+
+              // Loading indicator
+              SizedBox(
+                width: 40,
+                height: 40,
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  strokeWidth: 3,
+                ),
+              ),
+              SizedBox(height: 16),
+
+              Text(
+                'Loading...',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Emergency fallback for missing controllers
+class EmergencyBindings {
+  static void initializeMissingControllers() {
+    try {
+      // Ensure PinController exists
+      if (!Get.isRegistered<PinController>()) {
+        Get.put(PinController(), permanent: true);
+        print('🔧 Emergency: PinController initialized');
+      }
+
+      // Ensure AuthController exists
+      if (!Get.isRegistered<AuthController>()) {
+        Get.put(AuthController(), permanent: true);
+        print('🔧 Emergency: AuthController initialized');
+      }
+    } catch (e) {
+      print('🚨 Emergency initialization failed: $e');
+    }
   }
 }

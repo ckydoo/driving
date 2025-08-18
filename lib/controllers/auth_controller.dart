@@ -1,7 +1,8 @@
-// lib/controllers/auth_controller.dart - FIXED PASSWORD HASHING
+// lib/controllers/auth_controller.dart - Updated with PIN integration for SQLite
 import 'package:crypto/crypto.dart';
 import 'package:driving/models/user.dart';
 import 'package:driving/services/database_helper.dart';
+import 'package:driving/controllers/pin_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'dart:convert';
@@ -15,9 +16,16 @@ class AuthController extends GetxController {
   // Remember me functionality
   final RxBool rememberMe = false.obs;
 
+  // Get PIN controller
+  PinController get _pinController => Get.find<PinController>();
+
   @override
   void onInit() {
     super.onInit();
+
+    // Initialize PIN Controller first
+    Get.lazyPut(() => PinController());
+
     _checkLoginStatus();
   }
 
@@ -29,10 +37,51 @@ class AuthController extends GetxController {
 
       // Ensure default users exist
       await DatabaseHelper.instance.ensureDefaultUsersExist();
-      isLoggedIn(false);
+
+      // Check if user should use PIN login
+      await _handleInitialAuthFlow();
     } catch (e) {
       print('Error checking login status: $e');
+      isLoggedIn(false);
     }
+  }
+
+  Future<void> _handleInitialAuthFlow() async {
+    // Check if user has completed initial email/password verification
+    final isUserVerified = await _pinController.isUserVerified();
+
+    if (isUserVerified) {
+      // User is verified - check PIN status
+      if (_pinController.shouldUsePinAuth()) {
+        // PIN is set up and enabled, should show PIN login
+        // Note: We don't auto-navigate here, let the UI handle routing
+        isLoggedIn(false); // User needs to authenticate with PIN
+      } else {
+        // No PIN or PIN disabled, user needs email/password login
+        isLoggedIn(false);
+      }
+    } else {
+      // No previous verification, user needs email/password login
+      isLoggedIn(false);
+    }
+  }
+
+  // Determine initial route for app startup
+  Future<String> determineInitialRoute() async {
+    await Future.delayed(const Duration(milliseconds: 100));
+
+    final isUserVerified = await _pinController.isUserVerified();
+    if (!isUserVerified) {
+      return '/login';
+    }
+
+    // Check if should use PIN login
+    if (_pinController.shouldUsePinAuth()) {
+      return '/pin-login';
+    }
+
+    // Default to email/password login
+    return '/login';
   }
 
   // Test password hashing function
@@ -181,15 +230,14 @@ class AuthController extends GetxController {
       isLoggedIn(true);
 
       print('🎉 Login successful for ${userObj.fname} ${userObj.lname}');
-      print('🔐 === LOGIN COMPLETE ===\n');
 
-      // Get.snackbar(
-      //   'Welcome!',
-      //   'Login successful. Welcome back, ${userObj.fname}!',
-      //   backgroundColor: Colors.green,
-      //   colorText: Colors.white,
-      //   duration: const Duration(seconds: 3),
-      // );
+      // Mark user as verified for PIN usage
+      await _pinController.setUserVerified(true);
+
+      // Handle post-login PIN flow
+      await _handlePostLoginFlow();
+
+      print('🔐 === LOGIN COMPLETE ===\n');
 
       return true;
     } catch (e) {
@@ -198,6 +246,111 @@ class AuthController extends GetxController {
       return false;
     } finally {
       isLoading(false);
+    }
+  }
+
+  Future<void> _handlePostLoginFlow() async {
+    // Check if user should setup PIN or go to main app
+    final isUserVerified = await _pinController.isUserVerified();
+
+    if (!isUserVerified) {
+      // First time login - offer to setup PIN
+      _showPinSetupOption();
+    } else {
+      // User is verified - check PIN status for next login
+      if (_pinController.shouldUsePinAuth()) {
+        // PIN is set up and enabled, go to main app
+        Get.offAllNamed('/main');
+      } else if (_pinController.isPinEnabled.value &&
+          !_pinController.isPinSet.value) {
+        // PIN was enabled but not set (edge case), show setup
+        Get.offAllNamed('/pin-setup');
+      } else {
+        // No PIN or PIN disabled, go to main app
+        Get.offAllNamed('/main');
+      }
+    }
+  }
+
+  void _showPinSetupOption() {
+    Get.dialog(
+      AlertDialog(
+        title: const Text('Quick Login Setup'),
+        content: const Text(
+            'Would you like to set up a 4-digit PIN for faster login next time? '
+            'You can always change this later in settings.'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Get.back();
+              // Skip PIN setup, but mark as verified
+              _pinController.setUserVerified(true);
+              Get.offAllNamed('/main');
+            },
+            child: const Text('Skip'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Get.back();
+              Get.offAllNamed('/pin-setup');
+            },
+            child: const Text('Setup PIN'),
+          ),
+        ],
+      ),
+      barrierDismissible: false,
+    );
+  }
+
+  // PIN Authentication - verify PIN and login user
+  Future<bool> authenticateWithPin(String pin) async {
+    try {
+      final isValid = await _pinController.verifyPin(pin);
+      if (isValid) {
+        // Get the user email associated with the PIN
+        final pinUserEmail = await _pinController.getPinUserEmail();
+
+        if (pinUserEmail != null) {
+          // Get user from database
+          final users = await DatabaseHelper.instance.getUsers();
+          final userData = users.firstWhereOrNull(
+            (user) =>
+                user['email'].toString().toLowerCase() ==
+                pinUserEmail.toLowerCase(),
+          );
+
+          if (userData != null) {
+            final userObj = User.fromJson(userData);
+            currentUser.value = userObj;
+            isLoggedIn(true);
+
+            print(
+                '🎉 PIN login successful for ${userObj.fname} ${userObj.lname}');
+            return true;
+          }
+        } else {
+          // Fallback: use admin user for demonstration
+          // In production, always associate PIN with specific user
+          final users = await DatabaseHelper.instance.getUsers();
+          final adminUser = users.firstWhereOrNull(
+            (user) => user['email'] == 'admin@drivingschool.com',
+          );
+
+          if (adminUser != null) {
+            final userObj = User.fromJson(adminUser);
+            currentUser.value = userObj;
+            isLoggedIn(true);
+
+            // Set the PIN user email for future use
+            await _pinController.setPinUserEmail(userObj.email);
+            return true;
+          }
+        }
+      }
+      return false;
+    } catch (e) {
+      print('PIN authentication error: $e');
+      return false;
     }
   }
 
@@ -426,9 +579,15 @@ class AuthController extends GetxController {
   // Logout
   Future<void> logout() async {
     try {
+      // Clear PIN data
+      await _pinController.clearAllPinData();
+
       currentUser.value = null;
       isLoggedIn(false);
       rememberMe(false);
+
+      // Navigate to login
+      Get.offAllNamed('/login');
 
       Get.snackbar(
         'Logged Out',
@@ -439,6 +598,23 @@ class AuthController extends GetxController {
     } catch (e) {
       print('Error during logout: $e');
     }
+  }
+
+  // PIN Management Methods
+  Future<bool> setupPinFromSettings(String pin) async {
+    if (currentUser.value != null) {
+      return await _pinController.setupPin(pin,
+          userEmail: currentUser.value!.email);
+    }
+    return await _pinController.setupPin(pin);
+  }
+
+  Future<bool> changePinFromSettings(String currentPin, String newPin) async {
+    return await _pinController.changePin(currentPin, newPin);
+  }
+
+  Future<void> disablePinFromSettings() async {
+    await _pinController.disablePin();
   }
 
   // Check if user has specific role
