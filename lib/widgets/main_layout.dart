@@ -156,16 +156,7 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
                   splashRadius: 24,
                 ),
               ),
-              Container(
-                width: 56,
-                height: 56,
-                child: IconButton(
-                  icon: const Icon(Icons.sync, size: 35), // Bigger icon
-                  tooltip: 'Sync',
-                  onPressed: () => SyncIndicator(), // Shows sync status
-                  splashRadius: 24,
-                ),
-              )
+              SyncStatusWidget(showFullStatus: false),
             ],
           ),
         ),
@@ -209,6 +200,8 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
               navController.navigateToPage('quick_search');
             },
           ),
+          SyncStatusWidget(showFullStatus: false),
+
           // User menu dropdown
           PopupMenuButton<String>(
             onSelected: (value) {

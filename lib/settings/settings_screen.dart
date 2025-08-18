@@ -1,4 +1,5 @@
 // lib/settings/enhanced_settings_screen.dart
+import 'package:driving/settings/sync_settings_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
@@ -166,6 +167,17 @@ class _SettingsScreenState extends State<SettingsScreen>
       spacing: 8,
       runSpacing: 8,
       children: [
+        if (authController.hasAnyRole(['admin', 'instructor']))
+          ElevatedButton(
+            onPressed: () {
+              Get.to(() => SyncSettingsScreen());
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade600,
+              foregroundColor: Colors.white,
+            ),
+            child: Text('Sync Settings'),
+          ),
         if (authController.hasAnyRole(['admin', 'instructor']))
           _buildQuickActionButton(
             icon: Icons.download,
