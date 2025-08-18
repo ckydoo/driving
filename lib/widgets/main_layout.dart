@@ -16,6 +16,7 @@ import 'package:driving/screens/users/alumni_screen.dart';
 import 'package:driving/screens/users/enhanced_users_screen.dart';
 import 'package:driving/screens/users/graduation_screen.dart';
 import 'package:driving/settings/settings_screen.dart';
+import 'package:driving/widgets/sync_status_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:driving/screens/payments/pos.dart';
@@ -155,6 +156,16 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
                   splashRadius: 24,
                 ),
               ),
+              Container(
+                width: 56,
+                height: 56,
+                child: IconButton(
+                  icon: const Icon(Icons.sync, size: 35), // Bigger icon
+                  tooltip: 'Sync',
+                  onPressed: () => SyncIndicator(), // Shows sync status
+                  splashRadius: 24,
+                ),
+              )
             ],
           ),
         ),

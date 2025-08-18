@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "933770543553",
+    "project_id": "driving-f1311",
+    "storage_bucket": "driving-f1311.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:933770543553:android:095192ad2c349af80daf40",
+        "android_client_info": {
+          "package_name": "com.codzlabzim.driving"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBQoaeGYON00oiH-jhqep6uGLqBOfgdetA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

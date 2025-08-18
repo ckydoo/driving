@@ -559,7 +559,7 @@ class ScheduleController extends GetxController {
           final billingRecords =
               await billingController.getBillingRecordsForInvoice(invoice.id!);
           if (billingRecords.isNotEmpty) {
-            await _dbHelper.deleteBillingRecord(billingRecords.first.id!);
+            await _dbHelper.deleteInvoice(billingRecords.first.id!);
           }
         }
       } catch (e) {
