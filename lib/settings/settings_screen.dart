@@ -1,4 +1,5 @@
 // lib/settings/enhanced_settings_screen.dart
+import 'package:driving/services/firebase_sync_service.dart';
 import 'package:driving/settings/sync_settings_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -177,6 +178,20 @@ class _SettingsScreenState extends State<SettingsScreen>
               foregroundColor: Colors.white,
             ),
             child: Text('Sync Settings'),
+          ),
+        if (authController.hasAnyRole(['admin', 'instructor']))
+          ElevatedButton(
+            onPressed: () async {
+              final syncService = Get.find<FirebaseSyncService>();
+              await syncService.emergencyDeduplication();
+
+              Get.snackbar(
+                'Deduplication Complete',
+                'Duplicate users have been removed',
+                backgroundColor: Colors.green,
+              );
+            },
+            child: Text('Fix Duplicate Users'),
           ),
         if (authController.hasAnyRole(['admin', 'instructor']))
           _buildQuickActionButton(

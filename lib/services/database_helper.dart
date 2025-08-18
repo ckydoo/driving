@@ -250,27 +250,29 @@ class DatabaseHelper {
         FOREIGN KEY (studentId) REFERENCES users(id)
       )
     ''');
-
     await db.execute('''
-      CREATE TABLE users(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        fname TEXT NOT NULL,
-        lname TEXT NOT NULL,
-        email TEXT NOT NULL,
-        gender TEXT,
-        date_of_birth DATE NOT NULL,
-        phone TEXT,
-        idnumber TEXT,
-        address TEXT,
-        password TEXT NOT NULL,
-        course TEXT,
-        role TEXT NOT NULL,
-        courseIds TEXT,
-        status TEXT NOT NULL DEFAULT 'Active',
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-      )
-    ''');
-
+  CREATE TABLE users(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    fname TEXT NOT NULL,
+    lname TEXT NOT NULL,
+    email TEXT NOT NULL UNIQUE,  
+    gender TEXT,
+    date_of_birth DATE NOT NULL,
+    phone TEXT UNIQUE,             
+    idnumber TEXT UNIQUE,        
+    address TEXT,
+    password TEXT NOT NULL,
+    course TEXT,
+    role TEXT NOT NULL,
+    courseIds TEXT,
+    status TEXT NOT NULL DEFAULT 'Active',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_modified INTEGER DEFAULT ${DateTime.now().millisecondsSinceEpoch},
+    firebase_synced INTEGER DEFAULT 0,
+    deleted INTEGER DEFAULT 0,
+    firebase_uid TEXT UNIQUE     
+  )
+''');
     await db.execute('''
       CREATE TABLE payments(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1073,7 +1075,8 @@ class DatabaseHelper {
       'notifications',
       'billing_records',
       'timeline',
-      'usermessages'
+      'usermessages',
+      'settings'
     ];
 
     for (String table in tables) {
@@ -1107,7 +1110,8 @@ class DatabaseHelper {
       'notifications',
       'billing_records',
       'timeline',
-      'usermessages'
+      'usermessages',
+      'settings'
     ];
 
     Map<String, int> syncStatus = {};
@@ -1175,7 +1179,8 @@ class DatabaseHelper {
       'currencies',
       'reminders',
       'timeline',
-      'usermessages'
+      'usermessages',
+      'settings'
     ];
 
     Map<String, List<Map<String, dynamic>>> exportData = {};
@@ -1237,7 +1242,8 @@ class DatabaseHelper {
       'notifications',
       'billing_records',
       'timeline',
-      'usermessages'
+      'usermessages',
+      'settings'
     ];
 
     for (String table in tables) {
@@ -1271,7 +1277,8 @@ class DatabaseHelper {
       'notifications',
       'billing_records',
       'timeline',
-      'usermessages'
+      'usermessages',
+      'settings'
     ];
 
     for (String table in tables) {
