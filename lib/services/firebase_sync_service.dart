@@ -196,16 +196,28 @@ class FirebaseSyncService extends GetxController {
     return shouldSync;
   }
 
-  /// Get current user's Firebase collection path
-  String _getUserCollectionPath(String table) {
-    final firebaseUserId = _authController.currentFirebaseUserId;
-    if (firebaseUserId == null) {
-      throw Exception('User not authenticated with Firebase');
-    }
+  String _getCollectionPath(String table) {
+    // Define which tables should be shared across all devices
+    final sharedTables = [
+      'courses',
+      'fleet',
+      'schedules',
+      'invoices',
+      'payments',
+      'users' // If you want user accounts to be shared
+    ];
 
-    final path = 'user_data/$firebaseUserId/$table';
-    print('📁 Collection path for $table: $path');
-    return path;
+    if (sharedTables.contains(table)) {
+      // Use global collection for shared data
+      return 'global_data/$table';
+    } else {
+      // Use user-specific collection for personal data
+      final firebaseUserId = _authController.currentFirebaseUserId;
+      if (firebaseUserId == null) {
+        throw Exception('User not authenticated with Firebase');
+      }
+      return 'user_data/$firebaseUserId/$table';
+    }
   }
 
   /// Trigger manual sync
@@ -410,79 +422,6 @@ class FirebaseSyncService extends GetxController {
     print('📤 Upload phase complete. Total uploaded: $totalUploaded records');
   }
 
-  /// Upload table records to user-specific collection with comprehensive logging
-  Future<void> _uploadTableRecords(
-      String table, List<Map<String, dynamic>> records) async {
-    if (_firestore == null) {
-      throw Exception('Firestore not available');
-    }
-
-    try {
-      print('📤 Uploading ${records.length} records to $table...');
-
-      final collectionPath = _getUserCollectionPath(table);
-      final collection = _firestore!.collection(collectionPath);
-
-      int successCount = 0;
-      int errorCount = 0;
-
-      // Upload records in batches
-      const batchSize = 10;
-      for (int i = 0; i < records.length; i += batchSize) {
-        final batch = _firestore!.batch();
-        final endIndex =
-            (i + batchSize < records.length) ? i + batchSize : records.length;
-        final batchRecords = records.sublist(i, endIndex);
-
-        print(
-            '📦 Processing batch ${(i ~/ batchSize) + 1}: records ${i + 1}-$endIndex');
-
-        for (final record in batchRecords) {
-          try {
-            final cleanRecord = _convertSqliteToFirestore(record);
-
-            // Use local ID as document ID for consistency
-            final docId = record['id'].toString();
-            final docRef = collection.doc(docId);
-
-            cleanRecord['last_modified'] = FieldValue.serverTimestamp();
-            cleanRecord['sync_device_id'] = await _getDeviceId();
-            cleanRecord['user_id'] = _authController.currentFirebaseUserId;
-
-            batch.set(docRef, cleanRecord, SetOptions(merge: true));
-
-            print('📄 Prepared record ID: $docId for upload');
-          } catch (e) {
-            print('❌ Error preparing record ${record['id']}: $e');
-            errorCount++;
-          }
-        }
-
-        // Execute batch
-        try {
-          await batch.commit();
-          successCount += batchRecords.length - errorCount;
-          print('✅ Batch ${(i ~/ batchSize) + 1} uploaded successfully');
-        } catch (e) {
-          print('❌ Batch ${(i ~/ batchSize) + 1} upload failed: $e');
-          errorCount += batchRecords.length;
-        }
-      }
-
-      // Mark successfully uploaded records as synced
-      if (successCount > 0) {
-        await _markRecordsAsSynced(table, records);
-        print('✅ Marked ${records.length} $table records as synced');
-      }
-
-      print(
-          '📤 $table upload complete - Success: $successCount, Errors: $errorCount');
-    } catch (e) {
-      print('❌ Error uploading $table records: $e');
-      throw e;
-    }
-  }
-
   /// Download remote changes from Firebase with comprehensive logging
   Future<void> _downloadRemoteChanges() async {
     int totalDownloaded = 0;
@@ -500,41 +439,6 @@ class FirebaseSyncService extends GetxController {
 
     print(
         '📥 Download phase complete. Total downloaded: $totalDownloaded records');
-  }
-
-  /// Download changes for a specific table from user-specific collection
-  Future<int> _downloadTableChanges(String table) async {
-    if (_firestore == null) {
-      throw Exception('Firestore not available');
-    }
-
-    try {
-      final collectionPath = _getUserCollectionPath(table);
-      Query query = _firestore!.collection(collectionPath);
-
-      // Only get changes since last sync
-      if (lastSyncTime.value.millisecondsSinceEpoch > 0) {
-        query = query.where(
-          'last_modified',
-          isGreaterThan: Timestamp.fromDate(lastSyncTime.value),
-        );
-        print('📥 Downloading $table changes since ${lastSyncTime.value}');
-      } else {
-        print('📥 Downloading all $table records (first sync)');
-      }
-
-      final snapshot = await query.get();
-      print('📥 Found ${snapshot.docs.length} remote changes in $table');
-
-      if (snapshot.docs.isNotEmpty) {
-        await _mergeDownloadedRecords(table, snapshot.docs);
-      }
-
-      return snapshot.docs.length;
-    } catch (e) {
-      print('❌ Error downloading $table changes: $e');
-      throw e;
-    }
   }
 
   /// Merge downloaded records with local database
@@ -996,5 +900,230 @@ class FirebaseSyncService extends GetxController {
     await _saveLastSyncTime();
 
     print('🔧 All records marked as unsynced. Ready for sync.');
+  }
+
+  // Fixed Firebase Sync Service - Collection Path Issue
+
+  /// Get current user's Firebase collection path
+  String _getUserCollectionPath(String table) {
+    final firebaseUserId = _authController.currentFirebaseUserId;
+    if (firebaseUserId == null || firebaseUserId.isEmpty) {
+      throw Exception('User not authenticated with Firebase');
+    }
+
+    // Debug: Print what we're getting
+    print('🔄 Getting collection path for table: $table');
+    print('🔑 Firebase User ID: $firebaseUserId');
+
+    // Fix: Ensure the path structure is correct
+    // Firestore collection paths must have odd number of segments
+    // Format: collection/document/collection
+    final path = 'user_data/$firebaseUserId/$table';
+
+    print('📁 Generated collection path: $path');
+
+    // Validate the path structure
+    final segments = path.split('/');
+    if (segments.length % 2 == 0) {
+      throw Exception(
+          'Invalid collection path: $path (even number of segments)');
+    }
+
+    return path;
+  }
+
+  /// Alternative: Simplified collection structure
+  String _getUserCollectionPathSimplified(String table) {
+    final firebaseUserId = _authController.currentFirebaseUserId;
+    if (firebaseUserId == null || firebaseUserId.isEmpty) {
+      throw Exception('User not authenticated with Firebase');
+    }
+
+    // Simplified approach: Direct table collections with user filtering
+    print('🔄 Getting collection path for table: $table');
+    print('🔑 Firebase User ID: $firebaseUserId');
+
+    // Just use the table name directly and filter by user_id
+    final path = table;
+
+    print('📁 Simplified collection path: $path');
+    return path;
+  }
+
+  /// Upload table records with proper error handling
+  Future<void> _uploadTableRecords(
+      String table, List<Map<String, dynamic>> records) async {
+    if (_firestore == null) {
+      throw Exception('Firestore not available');
+    }
+
+    try {
+      print('📤 Uploading ${records.length} records to $table...');
+
+      // Get collection path
+      final collectionPath = _getUserCollectionPath(table);
+      final collection = _firestore!.collection(collectionPath);
+
+      // Ensure collection exists by creating it if needed
+      await _ensureCollectionExists(collectionPath);
+      final firebaseUserId = _authController.currentFirebaseUserId;
+
+      int successCount = 0;
+      int errorCount = 0;
+
+      // Upload records in batches
+      const batchSize = 10;
+      for (int i = 0; i < records.length; i += batchSize) {
+        final batch = _firestore!.batch();
+        final endIndex =
+            (i + batchSize < records.length) ? i + batchSize : records.length;
+
+        for (int j = i; j < endIndex; j++) {
+          try {
+            final record = records[j];
+            final firestoreData = _convertSqliteToFirestore(record);
+
+            // Add user identification
+            firestoreData['user_id'] = firebaseUserId;
+            firestoreData['sync_device_id'] = await _getDeviceId();
+
+            // Use record ID as document ID
+            final docId = record['id'].toString();
+            final docRef = collection.doc(docId);
+
+            batch.set(docRef, firestoreData, SetOptions(merge: true));
+          } catch (e) {
+            print('❌ Error preparing record ${records[j]['id']}: $e');
+            errorCount++;
+          }
+        }
+
+        try {
+          await batch.commit();
+          successCount += (endIndex - i - errorCount);
+          print('✅ Batch uploaded: ${endIndex - i} records');
+        } catch (e) {
+          print('❌ Batch upload failed: $e');
+          errorCount += (endIndex - i);
+        }
+      }
+
+      print(
+          '📤 Upload complete for $table - Success: $successCount, Errors: $errorCount');
+
+      // Mark successfully uploaded records as synced
+      if (successCount > 0) {
+        await _markRecordsAsSynced(table, records.take(successCount).toList());
+      }
+    } catch (e) {
+      print('❌ Error uploading $table records: $e');
+      throw e;
+    }
+  }
+
+  /// Ensure collection exists in Firestore
+  Future<void> _ensureCollectionExists(String collectionPath) async {
+    if (_firestore == null) return;
+
+    try {
+      print('🔧 Ensuring collection exists: $collectionPath');
+
+      // Check if collection exists by trying to get any document
+      final testQuery =
+          await _firestore!.collection(collectionPath).limit(1).get();
+
+      if (testQuery.docs.isEmpty) {
+        print('📁 Collection does not exist, creating it...');
+
+        // Create collection by adding a temporary document
+        final tempDoc =
+            _firestore!.collection(collectionPath).doc('_temp_init');
+        await tempDoc.set({
+          'temp': true,
+          'created_at': FieldValue.serverTimestamp(),
+          'message': 'Collection initialization document'
+        });
+
+        print('✅ Collection created with temporary document');
+
+        // Optionally delete the temp document immediately
+        // await tempDoc.delete();
+        // print('🗑️ Temporary document removed');
+      } else {
+        print('✅ Collection already exists');
+      }
+    } catch (e) {
+      print('⚠️ Error ensuring collection exists: $e');
+      // Continue anyway - the first document will create the collection
+    }
+  }
+
+  /// Download changes for a specific table
+  Future<int> _downloadTableChanges(String table) async {
+    if (_firestore == null) {
+      throw Exception('Firestore not available');
+    }
+
+    try {
+      // Get collection path
+      final collectionPath = _getUserCollectionPath(table);
+
+      // Ensure collection exists before querying
+      await _ensureCollectionExists(collectionPath);
+
+      Query query = _firestore!.collection(collectionPath);
+      // Only get changes since last sync
+      if (lastSyncTime.value.millisecondsSinceEpoch > 0) {
+        query = query.where(
+          'last_modified',
+          isGreaterThan: Timestamp.fromDate(lastSyncTime.value),
+        );
+        print('📥 Downloading $table changes since ${lastSyncTime.value}');
+      } else {
+        print('📥 Downloading all $table records (first sync)');
+      }
+
+      final snapshot = await query.get();
+      print('📥 Found ${snapshot.docs.length} remote changes in $table');
+
+      if (snapshot.docs.isNotEmpty) {
+        await _mergeDownloadedRecords(table, snapshot.docs);
+      }
+
+      return snapshot.docs.length;
+    } catch (e) {
+      print('❌ Error downloading $table changes: $e');
+      throw e;
+    }
+  }
+
+  /// Debug: Test collection path generation
+  Future<void> debugCollectionPaths() async {
+    final tables = [
+      'users',
+      'courses',
+      'fleet',
+      'schedules',
+      'invoices',
+      'payments'
+    ];
+
+    print('\n🔧 === DEBUGGING COLLECTION PATHS ===');
+    print('Firebase User ID: ${_authController.currentFirebaseUserId}');
+
+    for (String table in tables) {
+      try {
+        final path = _getUserCollectionPath(table);
+        final segments = path.split('/');
+        print('✅ $table: $path (${segments.length} segments)');
+
+        // Test if we can create a reference
+        final ref = _firestore!.collection(path);
+        print('   📁 Collection reference created successfully');
+      } catch (e) {
+        print('❌ $table: ERROR - $e');
+      }
+    }
+    print('🔧 === END DEBUG ===\n');
   }
 }
