@@ -1,4 +1,4 @@
-// lib/services/app_bindings.dart - Complete with ALL required controllers
+// lib/services/app_bindings.dart - Updated with proper Firebase integration
 import 'package:get/get.dart';
 import 'package:firebase_core/firebase_core.dart';
 import '../controllers/auth_controller.dart';
@@ -32,101 +32,56 @@ class AppBindings extends Bindings {
     Get.put<AuthController>(AuthController(), permanent: true);
     print('✅ AuthController initialized');
 
-    // STEP 3: Initialize NavigationController (depends on AuthController)
+    // STEP 3: Initialize Firebase Sync Service with proper integration
+    await _initializeFirebaseSyncService();
+
+    // STEP 4: Initialize NavigationController (depends on AuthController)
     Get.put<NavigationController>(NavigationController(), permanent: true);
     print('✅ NavigationController initialized');
 
-    // STEP 4: Initialize SettingsController early (many services depend on it)
-    await Get.putAsync<SettingsController>(() async {
-      print('⚙️ Initializing SettingsController...');
-      final controller = SettingsController();
-      await controller.loadSettingsFromDatabase();
-      print('✅ SettingsController initialized');
-      return controller;
-    }, permanent: true);
+    // STEP 5: Initialize SettingsController
+    Get.put<SettingsController>(SettingsController(), permanent: true);
+    print('✅ SettingsController initialized');
 
-    // STEP 5: Initialize Core Data Controllers
-    await Get.putAsync<UserController>(() async {
-      print('👤 Initializing UserController...');
-      final controller = UserController();
-      await controller.fetchUsers();
-      print('✅ UserController initialized');
-      return controller;
-    }, permanent: true);
+    // STEP 6: Initialize business logic controllers
+    Get.put<UserController>(UserController(), permanent: true);
+    print('✅ UserController initialized');
 
-    await Get.putAsync<CourseController>(() async {
-      print('📚 Initializing CourseController...');
-      final controller = CourseController();
-      await controller.fetchCourses();
-      print('✅ CourseController initialized');
-      return controller;
-    }, permanent: true);
+    Get.put<CourseController>(CourseController(), permanent: true);
+    print('✅ CourseController initialized');
 
-    await Get.putAsync<FleetController>(() async {
-      print('🚗 Initializing FleetController...');
-      final controller = FleetController();
-      await controller.fetchFleet();
-      print('✅ FleetController initialized');
-      return controller;
-    }, permanent: true);
+    Get.put<FleetController>(FleetController(), permanent: true);
+    print('✅ FleetController initialized');
 
-    await Get.putAsync<BillingController>(() async {
-      print('💰 Initializing BillingController...');
-      final controller = BillingController();
-      await controller.fetchBillingData();
-      print('✅ BillingController initialized');
-      return controller;
-    }, permanent: true);
+    Get.put<BillingController>(BillingController(), permanent: true);
+    print('✅ BillingController initialized');
 
-    // STEP 6: Initialize ScheduleController (depends on other controllers)
-    await Get.putAsync<ScheduleController>(() async {
-      print('📅 Initializing ScheduleController...');
-      final controller = ScheduleController();
-      await controller.fetchSchedules();
-      print('✅ ScheduleController initialized');
-      return controller;
-    }, permanent: true);
+    Get.put<ScheduleController>(ScheduleController(), permanent: true);
+    print('✅ ScheduleController initialized');
 
-    // STEP 7: Initialize Services (depend on controllers)
-    await Get.putAsync<LessonCountingService>(() async {
-      print('🔢 Initializing LessonCountingService...');
-      // Ensure dependencies are available
-      if (!Get.isRegistered<SettingsController>()) {
-        throw Exception(
-            'SettingsController required for LessonCountingService');
-      }
-      final settingsController = Get.find<SettingsController>();
-      await settingsController.loadSettingsFromDatabase(); // Extra safety
-      final service = LessonCountingService();
-      print('✅ LessonCountingService initialized');
-      return service;
-    }, permanent: true);
+    // STEP 7: Initialize service controllers
+    Get.put<LessonCountingService>(LessonCountingService(), permanent: true);
+    print('✅ LessonCountingService initialized');
 
-    // STEP 8: Initialize Consistency Checker Service
-    Get.put<ConsistencyCheckerService>(
-      ConsistencyCheckerService(),
-      permanent: true,
-    );
+    Get.put<ConsistencyCheckerService>(ConsistencyCheckerService(),
+        permanent: true);
     print('✅ ConsistencyCheckerService initialized');
 
-    // STEP 9: Initialize Firebase Sync Service (last, since it might fail)
-    await _initializeFirebaseSync();
+    // STEP 8: Set up Firebase sync integration with AuthController
+    await _setupFirebaseSyncIntegration();
 
-    print('🎉 All app bindings initialized successfully!');
-
-    // STEP 10: Print summary of initialized controllers
+    // STEP 9: Print summary of initialized controllers
     _printInitializationSummary();
   }
 
-  /// Separate method to handle Firebase sync initialization with proper error handling
-  Future<void> _initializeFirebaseSync() async {
+  /// Enhanced Firebase Sync Service initialization
+  Future<void> _initializeFirebaseSyncService() async {
     try {
-      print('🔥 Checking Firebase availability...');
+      print('🔥 Initializing Firebase Sync Service...');
 
-      // Check if Firebase is initialized
+      // Check if Firebase is available
       bool isFirebaseAvailable = false;
       try {
-        // Test if Firebase is properly initialized
         if (Firebase.apps.isNotEmpty) {
           isFirebaseAvailable = true;
           print('✅ Firebase is available');
@@ -139,23 +94,20 @@ class AppBindings extends Bindings {
       }
 
       if (isFirebaseAvailable) {
-        // Try to initialize Firebase Sync Service
+        // Initialize real Firebase Sync Service
         await Get.putAsync<FirebaseSyncService>(() async {
-          print('🔄 Initializing FirebaseSyncService...');
+          print('🔄 Creating FirebaseSyncService...');
           final service = FirebaseSyncService();
 
           // Add sync tracking to database
           try {
-            final dbHelper = Get.find<DatabaseHelper>();
-            // Note: Import the extension or define these methods
-            // await DatabaseHelperSyncExtension.addSyncTrackingTriggers(await dbHelper.database);
-            // await DatabaseHelperSyncExtension.addDeletedColumn(await dbHelper.database);
+            await _addSyncTrackingToDatabase();
             print('✅ Database sync tracking enabled');
           } catch (e) {
             print('⚠️ Could not enable database sync tracking: $e');
           }
 
-          await service.onInit();
+          service.onInit();
           print('✅ FirebaseSyncService initialized');
           return service;
         }, permanent: true);
@@ -180,6 +132,81 @@ class AppBindings extends Bindings {
     }
   }
 
+  /// Add sync tracking columns to database tables
+  Future<void> _addSyncTrackingToDatabase() async {
+    final db = await DatabaseHelper.instance.database;
+    final syncTables = [
+      'users',
+      'courses',
+      'fleet',
+      'schedules',
+      'lessons',
+      'billing',
+      'payments'
+    ];
+
+    for (String table in syncTables) {
+      try {
+        // Add last_modified column
+        await db.execute(
+            'ALTER TABLE $table ADD COLUMN last_modified INTEGER DEFAULT 0');
+      } catch (e) {
+        // Column might already exist
+      }
+
+      try {
+        // Add firebase_synced column
+        await db.execute(
+            'ALTER TABLE $table ADD COLUMN firebase_synced INTEGER DEFAULT 0');
+      } catch (e) {
+        // Column might already exist
+      }
+
+      try {
+        // Add firebase_uid column for linking
+        await db.execute('ALTER TABLE $table ADD COLUMN firebase_uid TEXT');
+      } catch (e) {
+        // Column might already exist
+      }
+
+      print('✅ Sync tracking added to $table');
+    }
+  }
+
+  /// Set up integration between Firebase Sync and Auth Controller
+  Future<void> _setupFirebaseSyncIntegration() async {
+    try {
+      final authController = Get.find<AuthController>();
+      final syncService = Get.find<FirebaseSyncService>();
+
+      // Listen for authentication state changes
+      ever(authController.isLoggedIn, (bool isLoggedIn) {
+        print('🔄 Auth state changed - Logged in: $isLoggedIn');
+        if (isLoggedIn && authController.isFirebaseAuthenticated) {
+          print('🔄 User logged in with Firebase - initializing sync');
+          Future.delayed(const Duration(seconds: 1), () {
+            syncService.initializeUserSync();
+          });
+        }
+      });
+
+      // Listen for Firebase authentication changes
+      ever(authController.firebaseUser, (firebaseUser) {
+        print('🔄 Firebase user changed: ${firebaseUser?.email ?? 'null'}');
+        if (firebaseUser != null && authController.isLoggedIn.value) {
+          print('🔄 Firebase user authenticated - initializing sync');
+          Future.delayed(const Duration(seconds: 1), () {
+            syncService.initializeUserSync();
+          });
+        }
+      });
+
+      print('✅ Firebase sync integration set up');
+    } catch (e) {
+      print('⚠️ Could not set up Firebase sync integration: $e');
+    }
+  }
+
   /// Print summary of what was initialized
   void _printInitializationSummary() {
     print('\n📋 INITIALIZATION SUMMARY:');
@@ -198,31 +225,115 @@ class AppBindings extends Bindings {
     print(
         '✅ ConsistencyCheckerService: ${Get.isRegistered<ConsistencyCheckerService>()}');
     print('✅ FirebaseSyncService: ${Get.isRegistered<FirebaseSyncService>()}');
+
+    final authController = Get.find<AuthController>();
+    print('\n🔐 AUTHENTICATION STATUS:');
+    print('   Local Auth: ${authController.isLoggedIn.value}');
+    print('   Firebase Auth: ${authController.isFirebaseAuthenticated}');
+    print(
+        '   Current User: ${authController.currentUser.value?.email ?? 'None'}');
+    print(
+        '   Firebase User ID: ${authController.currentFirebaseUserId ?? 'None'}');
+
+    final syncService = Get.find<FirebaseSyncService>();
+    print('\n🔄 SYNC STATUS:');
+    final stats = syncService.getSyncStats();
+    print('   Online: ${stats['isOnline']}');
+    print('   Syncing: ${stats['isSyncing']}');
+    print('   Status: ${stats['syncStatus']}');
+    print('   Firebase Ready: ${stats['isFirebaseAuthenticated']}');
+
     print('\n🎯 Total Controllers Initialized: ${_getInitializedCount()}');
   }
 
   int _getInitializedCount() {
     int count = 0;
-    final controllers = [
-      DatabaseHelper,
-      AuthController,
-      NavigationController,
-      SettingsController,
-      UserController,
-      CourseController,
-      FleetController,
-      BillingController,
-      ScheduleController,
-      LessonCountingService,
-      ConsistencyCheckerService,
-      FirebaseSyncService,
-    ];
 
-    for (final controller in controllers) {
-      if (Get.isRegistered(tag: controller.toString())) {
-        count++;
-      }
+    // Check each controller individually
+    try {
+      Get.find<DatabaseHelper>();
+      count++;
+    } catch (e) {
+      // Controller not found
     }
+
+    try {
+      Get.find<AuthController>();
+      count++;
+    } catch (e) {
+      // Controller not found
+    }
+
+    try {
+      Get.find<NavigationController>();
+      count++;
+    } catch (e) {
+      // Controller not found
+    }
+
+    try {
+      Get.find<SettingsController>();
+      count++;
+    } catch (e) {
+      // Controller not found
+    }
+
+    try {
+      Get.find<UserController>();
+      count++;
+    } catch (e) {
+      // Controller not found
+    }
+
+    try {
+      Get.find<CourseController>();
+      count++;
+    } catch (e) {
+      // Controller not found
+    }
+
+    try {
+      Get.find<FleetController>();
+      count++;
+    } catch (e) {
+      // Controller not found
+    }
+
+    try {
+      Get.find<BillingController>();
+      count++;
+    } catch (e) {
+      // Controller not found
+    }
+
+    try {
+      Get.find<ScheduleController>();
+      count++;
+    } catch (e) {
+      // Controller not found
+    }
+
+    try {
+      Get.find<LessonCountingService>();
+      count++;
+    } catch (e) {
+      // Controller not found
+    }
+
+    try {
+      Get.find<ConsistencyCheckerService>();
+      count++;
+    } catch (e) {
+      // Controller not found
+    }
+
+    try {
+      Get.find<FirebaseSyncService>();
+      count++;
+    } catch (e) {
+      // Controller not found
+    }
+
     return count;
   }
 }
@@ -243,14 +354,30 @@ class FirebaseSyncServiceDummy extends GetxController {
   // Dummy methods that do nothing but don't crash
   Future<void> triggerManualSync() async {
     print('⚠️ Sync not available - Firebase not initialized');
+    Get.snackbar(
+      'Sync Unavailable',
+      'Firebase sync is not available in this configuration',
+      backgroundColor: Get.theme.colorScheme.error,
+      colorText: Get.theme.colorScheme.onError,
+    );
   }
 
   Future<void> forceFullSync() async {
-    print('⚠️ Sync not available - Firebase not initialized');
+    print('⚠️ Full sync not available - Firebase not initialized');
+    await triggerManualSync();
   }
 
   Future<void> resetAndResync() async {
-    print('⚠️ Sync not available - Firebase not initialized');
+    print('⚠️ Reset sync not available - Firebase not initialized');
+    await triggerManualSync();
+  }
+
+  Future<void> initializeUserSync() async {
+    print('⚠️ User sync not available - Firebase not initialized');
+  }
+
+  void listenToRealtimeChanges() {
+    print('⚠️ Real-time sync not available - Firebase not initialized');
   }
 
   Map<String, dynamic> getSyncStats() {
@@ -259,57 +386,10 @@ class FirebaseSyncServiceDummy extends GetxController {
       'isSyncing': false,
       'syncStatus': 'Firebase Not Available',
       'lastSyncTime': DateTime.now(),
+      'isFirebaseAuthenticated': false,
+      'currentUser': null,
+      'firebaseUserId': null,
       'syncTables': <String>[],
     };
-  }
-}
-
-/// Emergency controller initializer for missing controllers
-class EmergencyBindings {
-  static void initializeMissingControllers() {
-    print('🚨 Emergency: Initializing missing controllers...');
-
-    // Check and initialize missing core controllers
-    if (!Get.isRegistered<AuthController>()) {
-      Get.put<AuthController>(AuthController(), permanent: true);
-      print('🔧 Emergency: AuthController initialized');
-    }
-
-    if (!Get.isRegistered<NavigationController>()) {
-      Get.put<NavigationController>(NavigationController(), permanent: true);
-      print('🔧 Emergency: NavigationController initialized');
-    }
-
-    if (!Get.isRegistered<UserController>()) {
-      Get.put<UserController>(UserController(), permanent: true);
-      print('🔧 Emergency: UserController initialized');
-    }
-
-    if (!Get.isRegistered<CourseController>()) {
-      Get.put<CourseController>(CourseController(), permanent: true);
-      print('🔧 Emergency: CourseController initialized');
-    }
-
-    if (!Get.isRegistered<FleetController>()) {
-      Get.put<FleetController>(FleetController(), permanent: true);
-      print('🔧 Emergency: FleetController initialized');
-    }
-
-    if (!Get.isRegistered<ScheduleController>()) {
-      Get.put<ScheduleController>(ScheduleController(), permanent: true);
-      print('🔧 Emergency: ScheduleController initialized');
-    }
-
-    if (!Get.isRegistered<BillingController>()) {
-      Get.put<BillingController>(BillingController(), permanent: true);
-      print('🔧 Emergency: BillingController initialized');
-    }
-
-    if (!Get.isRegistered<SettingsController>()) {
-      Get.put<SettingsController>(SettingsController(), permanent: true);
-      print('🔧 Emergency: SettingsController initialized');
-    }
-
-    print('🚨 Emergency initialization complete');
   }
 }

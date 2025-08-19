@@ -182,16 +182,13 @@ class _SettingsScreenState extends State<SettingsScreen>
         if (authController.hasAnyRole(['admin', 'instructor']))
           ElevatedButton(
             onPressed: () async {
-              final syncService = Get.find<FirebaseSyncService>();
-              await syncService.emergencyDeduplication();
+              final authController = Get.find<AuthController>();
+              await authController.testFirebaseConnection();
 
-              Get.snackbar(
-                'Deduplication Complete',
-                'Duplicate users have been removed',
-                backgroundColor: Colors.green,
-              );
+              final syncService = Get.find<FirebaseSyncService>();
+              await syncService.testFirebaseConnection();
             },
-            child: Text('Fix Duplicate Users'),
+            child: Text('Test Firebase Connection'),
           ),
         if (authController.hasAnyRole(['admin', 'instructor']))
           _buildQuickActionButton(
