@@ -697,6 +697,11 @@ class FirebaseSyncService extends GetxController {
       try {
         final data = doc.data() as Map<String, dynamic>;
         final firebaseId = doc.id;
+        if (!doc.exists) continue;
+
+        if (data == null) continue;
+
+        await _mergeDownloadedRecord(table, doc.id, data);
         final sqliteData = _convertFirestoreToSqlite(data);
 
         // Use the document ID as the local ID
@@ -1242,32 +1247,6 @@ class FirebaseSyncService extends GetxController {
       }
     }
   }
-
-  /// Handle real-time changes
-  Future<void> _handleRealtimeChanges(
-      String table, QuerySnapshot snapshot) async {
-    try {
-      print(
-          '⚡ Processing real-time changes for $table: ${snapshot.docChanges.length} changes');
-
-      for (final change in snapshot.docChanges) {
-        if (change.type == DocumentChangeType.added ||
-            change.type == DocumentChangeType.modified) {
-          // Convert DocumentSnapshot to QueryDocumentSnapshot
-          final queryDocSnapshot =
-              change.doc as QueryDocumentSnapshot<Map<String, dynamic>>;
-          await _mergeDownloadedRecords(table, [queryDocSnapshot]);
-        } else if (change.type == DocumentChangeType.removed) {
-          // Handle deletions
-          await _handleRecordDeletion(table, change.doc.id);
-        }
-      }
-    } catch (e) {
-      print('❌ Error handling real-time changes: $e');
-    }
-  }
-
-  // Add these debug methods to your FirebaseSyncService class
 
   /// Debug what data exists locally and in Firebase
   Future<void> debugDataFlow() async {
@@ -2070,5 +2049,90 @@ class FirebaseSyncService extends GetxController {
       colorText: Colors.white,
       duration: const Duration(seconds: 2),
     );
+  }
+
+  /// Handle real-time changes - FIXED VERSION
+  Future<void> _handleRealtimeChanges(
+      String table, QuerySnapshot snapshot) async {
+    try {
+      print(
+          '⚡ Processing real-time changes for $table: ${snapshot.docChanges.length} changes');
+
+      for (final change in snapshot.docChanges) {
+        if (change.type == DocumentChangeType.added ||
+            change.type == DocumentChangeType.modified) {
+          // FIX: Use the document directly instead of casting
+          final docSnapshot = change.doc;
+
+          // Check if document exists and has data
+          if (docSnapshot.exists) {
+            final data = docSnapshot.data() as Map<String, dynamic>?;
+            if (data != null) {
+              // Create a mock QueryDocumentSnapshot for the merge function
+              await _mergeDownloadedRecord(table, docSnapshot.id, data);
+            }
+          }
+        } else if (change.type == DocumentChangeType.removed) {
+          // Handle deletions
+          await _handleRecordDeletion(table, change.doc.id);
+        }
+      }
+    } catch (e) {
+      print('❌ Error handling real-time changes: $e');
+    }
+  }
+
+  /// New method to handle individual record merging
+  Future<void> _mergeDownloadedRecord(
+      String table, String docId, Map<String, dynamic> data) async {
+    final db = await DatabaseHelper.instance.database;
+
+    try {
+      final sqliteData = _convertFirestoreToSqlite(data);
+
+      // Use the document ID as the local ID
+      final localId = int.tryParse(docId);
+      if (localId == null) {
+        print('⚠️ Skipping record with invalid ID: $docId');
+        return;
+      }
+
+      // Check if record exists locally
+      final existing = await db.query(
+        table,
+        where: 'id = ?',
+        whereArgs: [localId],
+        limit: 1,
+      );
+
+      if (existing.isNotEmpty) {
+        // Update existing record
+        final localLastModified = existing.first['last_modified'] as int? ?? 0;
+        final remoteLastModified = sqliteData['last_modified'] as int? ?? 0;
+
+        if (remoteLastModified >= localLastModified) {
+          // Remote is newer or same - update local
+          sqliteData['firebase_synced'] = 1;
+          sqliteData.remove('id'); // Don't overwrite ID
+
+          await db.update(
+            table,
+            sqliteData,
+            where: 'id = ?',
+            whereArgs: [localId],
+          );
+          print('📝 Updated local record ID: $localId in $table (real-time)');
+        }
+      } else {
+        // Insert new record
+        sqliteData['id'] = localId;
+        sqliteData['firebase_synced'] = 1;
+
+        await db.insert(table, sqliteData);
+        print('➕ Inserted new record ID: $localId in $table (real-time)');
+      }
+    } catch (e) {
+      print('❌ Error merging real-time record for $table: $e');
+    }
   }
 }
