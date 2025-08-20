@@ -156,7 +156,7 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
                   splashRadius: 24,
                 ),
               ),
-              SyncStatusWidget(showFullStatus: false),
+              const SyncStatusWidget(),
             ],
           ),
         ),
@@ -200,8 +200,7 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
               navController.navigateToPage('quick_search');
             },
           ),
-          SyncStatusWidget(showFullStatus: false),
-
+          const SyncStatusWidget(),
           // User menu dropdown
           PopupMenuButton<String>(
             onSelected: (value) {

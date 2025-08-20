@@ -13,7 +13,7 @@ class SyncSettingsScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Sync Settings'),
         actions: [
-          SyncIndicator(),
+          const SyncStatusWidget(),
         ],
       ),
       body: SingleChildScrollView(
@@ -21,10 +21,7 @@ class SyncSettingsScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SyncStatusWidget(
-              showFullStatus: true,
-              showLastSyncTime: true,
-            ),
+            const SyncStatusWidget(),
             const SizedBox(height: 24),
             _buildSyncStatistics(),
             const SizedBox(height: 24),

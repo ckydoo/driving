@@ -1,5 +1,6 @@
 // Updated DatabaseHelper with Firebase sync integration
 import 'dart:async';
+import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/models/billing.dart';
 import 'package:driving/models/billing_record.dart';
 import 'package:driving/models/course.dart';
@@ -1380,6 +1381,259 @@ class DatabaseHelper {
       } catch (e) {
         print('Could not reset sync status for $table: $e');
       }
+    }
+  }
+
+  // Add this method to your DatabaseHelper class
+
+  /// Safe migration that doesn't conflict with existing columns
+  Future<void> addFirebaseSyncSupport() async {
+    final db = await database;
+
+    print('🔧 === ADDING FIREBASE SYNC SUPPORT (SAFE) ===');
+
+    final tables = [
+      'users',
+      'schedules',
+      'invoices',
+      'payments',
+      'attachments',
+      'notes',
+      'notifications',
+      'billing_records',
+      'timeline',
+      'usermessages'
+    ];
+
+    for (String table in tables) {
+      print('🔧 Processing table: $table');
+
+      try {
+        // Add firebase_user_id column (separate from existing userId/user columns)
+        try {
+          await db
+              .execute('ALTER TABLE $table ADD COLUMN firebase_user_id TEXT');
+          print('  ✅ Added firebase_user_id column to $table');
+        } catch (e) {
+          if (e.toString().contains('duplicate column name')) {
+            print('  ✅ firebase_user_id column already exists in $table');
+          } else {
+            print('  ⚠️ Could not add firebase_user_id to $table: $e');
+          }
+        }
+
+        // Add firebase_synced column
+        try {
+          await db.execute(
+              'ALTER TABLE $table ADD COLUMN firebase_synced INTEGER DEFAULT 0');
+          print('  ✅ Added firebase_synced column to $table');
+        } catch (e) {
+          if (e.toString().contains('duplicate column name')) {
+            print('  ✅ firebase_synced column already exists in $table');
+          } else {
+            print('  ⚠️ Could not add firebase_synced to $table: $e');
+          }
+        }
+
+        // Add last_modified column
+        try {
+          await db.execute(
+              'ALTER TABLE $table ADD COLUMN last_modified INTEGER DEFAULT ${DateTime.now().millisecondsSinceEpoch}');
+          print('  ✅ Added last_modified column to $table');
+        } catch (e) {
+          if (e.toString().contains('duplicate column name')) {
+            print('  ✅ last_modified column already exists in $table');
+          } else {
+            print('  ⚠️ Could not add last_modified to $table: $e');
+          }
+        }
+
+        // Add deleted column for soft deletes
+        try {
+          await db.execute(
+              'ALTER TABLE $table ADD COLUMN deleted INTEGER DEFAULT 0');
+          print('  ✅ Added deleted column to $table');
+        } catch (e) {
+          if (e.toString().contains('duplicate column name')) {
+            print('  ✅ deleted column already exists in $table');
+          } else {
+            print('  ⚠️ Could not add deleted to $table: $e');
+          }
+        }
+      } catch (e) {
+        print('  ❌ Error processing $table: $e');
+      }
+    }
+
+    print('🔧 === FIREBASE SYNC COLUMNS ADDED ===\n');
+  }
+
+  /// Assign Firebase user ID to all existing records
+  Future<void> setFirebaseUserForAllRecords(String firebaseUserId) async {
+    final db = await database;
+
+    print('🔧 === SETTING FIREBASE USER FOR ALL RECORDS ===');
+    print('🔑 Firebase User ID: $firebaseUserId');
+
+    final tables = [
+      'users',
+      'schedules',
+      'invoices',
+      'payments',
+      'attachments',
+      'notes',
+      'notifications'
+    ];
+
+    for (String table in tables) {
+      try {
+        // Update all existing records to have the current firebase_user_id
+        await db.execute('''
+        UPDATE $table 
+        SET firebase_user_id = ?, 
+            firebase_synced = 0,
+            last_modified = ?
+        WHERE firebase_user_id IS NULL OR firebase_user_id = ''
+      ''', [firebaseUserId, DateTime.now().millisecondsSinceEpoch]);
+
+        // Count how many records were updated
+        final countResult = await db.rawQuery('''
+        SELECT COUNT(*) as count FROM $table 
+        WHERE firebase_user_id = ?
+      ''', [firebaseUserId]);
+
+        final count = countResult.first['count'] as int;
+        print('  ✅ $table: Set firebase_user_id for $count records');
+      } catch (e) {
+        print('  ❌ Error updating $table: $e');
+      }
+    }
+
+    print('🔧 === FIREBASE USER ASSIGNMENT COMPLETE ===\n');
+  }
+
+  /// Complete safe migration
+  Future<void> completeSafeMigration() async {
+    print('\n🚀 === COMPLETE SAFE MIGRATION ===');
+
+    try {
+      // Step 1: Add sync columns (using firebase_user_id instead of user_id)
+      await addFirebaseSyncSupport();
+
+      // Step 2: Get Firebase user ID
+      final authController = Get.find<AuthController>();
+      final firebaseUserId = authController.currentFirebaseUserId;
+
+      if (firebaseUserId == null) {
+        print('❌ No Firebase user ID found. Please ensure you are logged in.');
+        return;
+      }
+
+      // Step 3: Assign firebase_user_id to existing records
+      await setFirebaseUserForAllRecords(firebaseUserId);
+
+      print('🚀 === SAFE MIGRATION COMPLETE ===');
+      print('✅ Database is ready for sync!');
+      print(
+          '⚠️  Next step: Update FirebaseSync to use firebase_user_id column');
+    } catch (e) {
+      print('❌ Error during safe migration: $e');
+    }
+  }
+
+  // Replace your existing DatabaseHelperSyncExtension methods with these:
+
+  /// Enhanced insert method with debounced sync
+  static Future<int> insertWithSync(
+      Database db, String table, Map<String, dynamic> values) async {
+    // Add sync tracking data
+    values['last_modified'] = DateTime.now().millisecondsSinceEpoch;
+    values['firebase_synced'] = 0;
+
+    // Add firebase_user_id if not present and user is authenticated
+    if (values['firebase_user_id'] == null) {
+      try {
+        final authController = Get.find<AuthController>();
+        if (authController.isFirebaseAuthenticated) {
+          values['firebase_user_id'] = authController.currentFirebaseUserId;
+        }
+      } catch (e) {
+        print('⚠️ Could not get Firebase user ID: $e');
+      }
+    }
+
+    final result = await db.insert(table, values);
+
+    // Trigger debounced sync instead of immediate sync
+    _triggerSmartSync();
+
+    return result;
+  }
+
+  /// Enhanced update method with debounced sync
+  static Future<int> updateWithSync(
+      Database db,
+      String table,
+      Map<String, dynamic> values,
+      String where,
+      List<dynamic> whereArgs) async {
+    // Add sync tracking data
+    values['last_modified'] = DateTime.now().millisecondsSinceEpoch;
+    values['firebase_synced'] = 0;
+
+    final result =
+        await db.update(table, values, where: where, whereArgs: whereArgs);
+
+    // Trigger debounced sync
+    _triggerSmartSync();
+
+    return result;
+  }
+
+  /// Enhanced delete method with debounced sync
+  static Future<int> deleteWithSync(
+      Database db, String table, String where, List<dynamic> whereArgs) async {
+    try {
+      // Try to mark as deleted first (soft delete)
+      final result = await db.update(
+          table,
+          {
+            'deleted': 1,
+            'last_modified': DateTime.now().millisecondsSinceEpoch,
+            'firebase_synced': 0,
+          },
+          where: where,
+          whereArgs: whereArgs);
+
+      // Trigger debounced sync
+      _triggerSmartSync();
+
+      return result;
+    } catch (e) {
+      // If table doesn't have deleted column, do actual delete
+      final result = await db.delete(table, where: where, whereArgs: whereArgs);
+      _triggerSmartSync();
+      return result;
+    }
+  }
+
+  /// Smart sync triggering with debouncing
+  static void _triggerSmartSync() {
+    try {
+      final syncService = Get.find<FirebaseSyncService>();
+
+      if (syncService.isOnline.value &&
+          !syncService.isSyncing.value &&
+          syncService.firebaseAvailable.value) {
+        // Use debounced sync to prevent too frequent syncs
+        syncService.triggerDebouncedSync(delay: const Duration(seconds: 3));
+
+        print('🔄 Smart sync triggered (debounced)');
+      } else {
+        print('⏸️ Smart sync skipped - conditions not met');
+      }
+    } catch (e) {
+      print('⚠️ Could not trigger smart sync: $e');
     }
   }
 }

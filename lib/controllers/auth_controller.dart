@@ -122,21 +122,66 @@ class AuthController extends GetxController {
     );
   }
 
-  /// Handle Firebase Authentication state changes (with error handling)
-  void _onFirebaseAuthStateChanged(firebase_auth.User? user) {
+  /// Enhanced Firebase Authentication state change handler
+  void _onFirebaseAuthStateChanged(firebase_auth.User? user) async {
     try {
       firebaseUser.value = user;
       print(
           '🔥 Firebase Auth State Changed: ${user?.email ?? 'Not authenticated'}');
 
       if (user != null) {
-        _handleFirebaseUserSignedIn(user);
+        await _handleFirebaseUserSignedIn(user);
+
+        // NEW: Auto-sync local auth if not already logged in
+        if (!isLoggedIn.value && user.email != null) {
+          print(
+              '🔄 Firebase user found but local not logged in - attempting auto-sync...');
+          await _autoSyncLocalAuth(user.email!);
+        }
       } else {
         _handleFirebaseUserSignedOut();
       }
     } catch (e) {
       print('❌ Error in auth state change handler: $e');
       _handleFirebaseError(e);
+    }
+  }
+
+  /// Auto-sync local authentication when Firebase user is detected
+  Future<void> _autoSyncLocalAuth(String firebaseEmail) async {
+    try {
+      // Find local user by Firebase email
+      final allUsers = await DatabaseHelper.instance.getUsers();
+      final localUserData = allUsers.firstWhereOrNull(
+        (user) =>
+            user['email'].toString().toLowerCase() ==
+            firebaseEmail.toLowerCase(),
+      );
+
+      if (localUserData != null) {
+        // Set local authentication state
+        final userObj = User.fromJson(localUserData);
+        currentUser.value = userObj;
+        isLoggedIn.value = true;
+
+        print(
+            '✅ Auto-synced local auth for: ${userObj.fname} ${userObj.lname}');
+
+        // Trigger sync now that both auth states are aligned
+        try {
+          final syncService = Get.find<FirebaseSyncService>();
+          Future.delayed(const Duration(seconds: 1), () {
+            syncService.triggerManualSync();
+          });
+        } catch (e) {
+          print('⚠️ Could not trigger sync after auto-sync: $e');
+        }
+      } else {
+        print('❌ No local user found for Firebase email: $firebaseEmail');
+        // You could show a dialog here asking user to create local account
+      }
+    } catch (e) {
+      print('❌ Error in auto-sync local auth: $e');
     }
   }
 

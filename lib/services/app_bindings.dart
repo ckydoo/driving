@@ -1,4 +1,6 @@
 // lib/services/app_bindings.dart - Updated with proper Firebase integration
+import 'dart:async';
+
 import 'package:get/get.dart';
 import 'package:firebase_core/firebase_core.dart';
 import '../controllers/auth_controller.dart';
@@ -34,6 +36,39 @@ class AppBindings extends Bindings {
 
     // STEP 3: Initialize Firebase Sync Service with proper integration
     await _initializeFirebaseSyncService();
+    Future<void> initializeAppSyncSystem() async {
+      print('🚀 === INITIALIZING APP SYNC SYSTEM ===');
+
+      try {
+        // Wait for services to be ready
+        await Future.delayed(const Duration(seconds: 2));
+
+        // Set up enhanced automatic sync
+        final syncService = Get.find<FirebaseSyncService>();
+        await syncService.setupAutomaticSync();
+
+        // If user is already authenticated, trigger initial sync
+        final authController = Get.find<AuthController>();
+        if (authController.isLoggedIn.value &&
+            authController.isFirebaseAuthenticated) {
+          print('🔐 User already authenticated - scheduling initial sync');
+
+          // Schedule initial sync after a short delay
+          Timer(const Duration(seconds: 5), () async {
+            try {
+              await syncService.triggerManualSync();
+              print('✅ Initial app sync completed');
+            } catch (e) {
+              print('⚠️ Initial app sync failed: $e');
+            }
+          });
+        }
+
+        print('🚀 === APP SYNC SYSTEM INITIALIZED ===');
+      } catch (e) {
+        print('❌ Error initializing app sync system: $e');
+      }
+    }
 
     // STEP 4: Initialize NavigationController (depends on AuthController)
     Get.put<NavigationController>(NavigationController(), permanent: true);
@@ -62,7 +97,6 @@ class AppBindings extends Bindings {
     // STEP 7: Initialize service controllers
     Get.put<LessonCountingService>(LessonCountingService(), permanent: true);
     print('✅ LessonCountingService initialized');
-    Get.put(FirebaseSyncService());
     Get.put<ConsistencyCheckerService>(ConsistencyCheckerService(),
         permanent: true);
     print('✅ ConsistencyCheckerService initialized');

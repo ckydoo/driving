@@ -182,11 +182,8 @@ class _SettingsScreenState extends State<SettingsScreen>
         if (authController.hasAnyRole(['admin', 'instructor']))
           ElevatedButton(
             onPressed: () async {
-              final authController = Get.find<AuthController>();
-              await authController.testFirebaseConnection();
-
               final syncService = Get.find<FirebaseSyncService>();
-              await syncService.testFirebaseConnection();
+              await syncService.forceCompleteSync();
             },
             child: Text('Test Firebase Connection'),
           ),

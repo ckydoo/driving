@@ -1,9 +1,11 @@
 // lib/services/firebase_sync_service.dart - Fixed with proper error handling
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../services/database_helper.dart';
 import '../controllers/auth_controller.dart';
 import 'dart:async';
@@ -60,8 +62,6 @@ class FirebaseSyncService extends GetxController {
   /// Initialize sync service with robust error handling
   Future<void> _initializeSync() async {
     try {
-      print('🔄 Initializing Firebase Sync Service...');
-
       // Test Firebase availability
       print('1. Testing Firebase availability...');
       await _testFirebaseAvailability();
@@ -588,74 +588,6 @@ class FirebaseSyncService extends GetxController {
     print('📤 Upload phase complete. Total uploaded: $totalUploaded records');
   }
 
-  /// Upload table records with proper collection structure
-  Future<void> _uploadTableRecords(
-      String table, List<Map<String, dynamic>> records) async {
-    if (_firestore == null) {
-      throw Exception('Firestore not available');
-    }
-
-    try {
-      print('📤 Uploading ${records.length} records to $table...');
-
-      // Get the correct collection path
-      final collectionPath = _getCorrectCollectionPath(table);
-      final collection = _firestore!.collection(collectionPath);
-
-      int successCount = 0;
-      int errorCount = 0;
-
-      // Upload records
-      for (final record in records) {
-        try {
-          final firestoreData = _convertSqliteToFirestore(record);
-
-          // Use record ID as document ID for consistency
-          final docId = record['id'].toString();
-
-          // For shared data, don't include user-specific fields
-          if ([
-            'users',
-            'schedules',
-            'invoices',
-            'payments',
-            'attachments',
-            'notes',
-            'notifications',
-            'billing_records'
-          ].contains(table)) {
-            firestoreData['user_id'] = _authController.currentFirebaseUserId;
-            firestoreData['sync_device_id'] = await _getDeviceId();
-            print('👤 Uploading user-specific data to: $collectionPath');
-          } else {
-            print('🌍 Uploading shared data to: $collectionPath');
-          }
-
-          await collection
-              .doc(docId)
-              .set(firestoreData, SetOptions(merge: true));
-          successCount++;
-
-          print('✅ Uploaded $table record $docId to $collectionPath');
-        } catch (e) {
-          print('❌ Error uploading record ${record['id']}: $e');
-          errorCount++;
-        }
-      }
-
-      print(
-          '📤 Upload complete for $table - Success: $successCount, Errors: $errorCount');
-
-      // Mark successfully uploaded records as synced
-      if (successCount > 0) {
-        await _markRecordsAsSynced(table, records);
-      }
-    } catch (e) {
-      print('❌ Error uploading $table records: $e');
-      // Don't throw - continue with other tables
-    }
-  }
-
   /// Download remote changes from Firebase with comprehensive logging
   Future<void> _downloadRemoteChanges() async {
     int totalDownloaded = 0;
@@ -675,88 +607,6 @@ class FirebaseSyncService extends GetxController {
         '📥 Download phase complete. Total downloaded: $totalDownloaded records');
   }
 
-  // Updated _downloadTableChanges method to avoid composite index requirement
-
-  /// Download changes for a specific table with user filtering (NO INDEX REQUIRED)
-  Future<int> _downloadTableChanges(String table) async {
-    if (_firestore == null) {
-      throw Exception('Firestore not available');
-    }
-
-    try {
-      final collectionPath = _getCorrectCollectionPath(table);
-      final collection = _firestore!.collection(collectionPath);
-
-      Query query = collection;
-
-      // For user-specific data, only download records belonging to current user
-      final userSpecificTables = [
-        'users',
-        'schedules',
-        'invoices',
-        'payments',
-        'attachments',
-        'notes',
-        'notifications',
-        'billing_records'
-      ];
-
-      if (userSpecificTables.contains(table)) {
-        final userId = _authController.currentFirebaseUserId;
-        if (userId != null) {
-          query = query.where('user_id', isEqualTo: userId);
-          print('📥 Filtering $table for user: $userId');
-        }
-      }
-
-      // MODIFIED: Don't use compound query to avoid index requirement
-      // Instead of filtering by last_modified in Firestore, we'll filter in memory
-
-      print('📥 Downloading all $table records and filtering locally');
-
-      final snapshot = await query.get();
-      print('📥 Downloaded ${snapshot.docs.length} total records from $table');
-
-      // Filter by last_modified locally to avoid needing composite index
-      final filteredDocs = <QueryDocumentSnapshot>[];
-
-      if (lastSyncTime.value.millisecondsSinceEpoch > 0) {
-        final lastSyncTimestamp = Timestamp.fromDate(lastSyncTime.value);
-
-        for (final doc in snapshot.docs) {
-          final data = doc.data() as Map<String, dynamic>;
-          final docLastModified = data['last_modified'];
-
-          if (docLastModified is Timestamp) {
-            if (docLastModified.compareTo(lastSyncTimestamp) > 0) {
-              filteredDocs.add(doc);
-            }
-          } else {
-            // If no last_modified or invalid format, include it
-            filteredDocs.add(doc);
-          }
-        }
-
-        print(
-            '📥 Found ${filteredDocs.length} records modified since ${lastSyncTime.value}');
-      } else {
-        // First sync - take all records
-        filteredDocs.addAll(snapshot.docs);
-        print('📥 First sync - taking all ${filteredDocs.length} records');
-      }
-
-      if (filteredDocs.isNotEmpty) {
-        await _mergeDownloadedRecords(table, filteredDocs);
-      }
-
-      return filteredDocs.length;
-    } catch (e) {
-      print('❌ Error downloading $table changes: $e');
-      return 0;
-    }
-  }
-
-// Alternative approach: Separate queries to avoid compound index
   /// Alternative: Use separate queries to avoid composite index
   Future<int> _downloadTableChangesSeparateQueries(String table) async {
     if (_firestore == null) {
@@ -947,56 +797,6 @@ class FirebaseSyncService extends GetxController {
     } catch (e) {
       print('❌ Error handling deletion for $table record $docId: $e');
     }
-  }
-
-  /// Convert SQLite data to Firestore format
-  Map<String, dynamic> _convertSqliteToFirestore(Map<String, dynamic> data) {
-    final result = Map<String, dynamic>.from(data);
-
-    // Remove SQLite-specific fields
-    result.remove('firebase_synced');
-    result.remove('firebase_uid');
-
-    // Convert timestamps
-    if (result['created_at'] is String) {
-      try {
-        result['created_at'] = DateTime.parse(result['created_at']);
-      } catch (e) {
-        result['created_at'] = DateTime.now();
-      }
-    }
-
-    if (result['last_modified'] is int) {
-      result['last_modified'] =
-          DateTime.fromMillisecondsSinceEpoch(result['last_modified']);
-    }
-
-    // Remove null values
-    result.removeWhere((key, value) => value == null);
-
-    return result;
-  }
-
-  /// Convert Firestore data to SQLite format
-  Map<String, dynamic> _convertFirestoreToSqlite(Map<String, dynamic> data) {
-    final result = Map<String, dynamic>.from(data);
-
-    // Convert timestamps
-    if (result['created_at'] is Timestamp) {
-      result['created_at'] =
-          (result['created_at'] as Timestamp).toDate().toIso8601String();
-    }
-
-    if (result['last_modified'] is Timestamp) {
-      result['last_modified'] =
-          (result['last_modified'] as Timestamp).millisecondsSinceEpoch;
-    }
-
-    // Remove Firestore-specific fields
-    result.remove('user_id');
-    result.remove('sync_device_id');
-
-    return result;
   }
 
   /// Mark records as synced in local database
@@ -1260,74 +1060,6 @@ class FirebaseSyncService extends GetxController {
     }
   }
 
-  /// Debug method to check sync status and data
-  Future<void> debugSyncStatus() async {
-    print('\n🔍 === SYNC DEBUG INFO ===');
-    print('📊 Firebase Available: ${firebaseAvailable.value}');
-    print('🌐 Online: ${isOnline.value}');
-    print(
-        '🔐 Firebase Authenticated: ${_authController.isFirebaseAuthenticated}');
-    print('👤 Firebase User ID: ${_authController.currentFirebaseUserId}');
-    print('⏰ Last Sync: ${lastSyncTime.value}');
-    print('📋 Sync Tables: ${_syncTables.join(', ')}');
-
-    if (_authController.isFirebaseAuthenticated) {
-      // Check each table for unsynced records
-      final db = await DatabaseHelper.instance.database;
-
-      for (String table in _syncTables) {
-        try {
-          final totalRecords = await db.query(table);
-          final unsyncedRecords = await db.query(
-            table,
-            where: 'firebase_synced = ? OR firebase_synced IS NULL',
-            whereArgs: [0],
-          );
-
-          print(
-              '📋 $table: ${totalRecords.length} total, ${unsyncedRecords.length} unsynced');
-
-          // Show sample unsynced record
-          if (unsyncedRecords.isNotEmpty) {
-            final sample = unsyncedRecords.first;
-            print(
-                '   Sample unsynced: ID=${sample['id']}, firebase_synced=${sample['firebase_synced']}');
-          }
-        } catch (e) {
-          print('❌ Error checking $table: $e');
-        }
-      }
-    }
-
-    print('=========================\n');
-  }
-
-  /// Force mark all records as unsynced (for debugging)
-  Future<void> markAllRecordsAsUnsynced() async {
-    print('🔧 Marking all records as unsynced...');
-
-    final db = await DatabaseHelper.instance.database;
-
-    for (String table in _syncTables) {
-      try {
-        await db.execute('''
-          UPDATE $table 
-          SET firebase_synced = 0, 
-              last_modified = ${DateTime.now().millisecondsSinceEpoch}
-        ''');
-        print('✅ Marked all $table records as unsynced');
-      } catch (e) {
-        print('❌ Error marking $table: $e');
-      }
-    }
-
-    // Reset sync time
-    lastSyncTime.value = DateTime.fromMillisecondsSinceEpoch(0);
-    await _saveLastSyncTime();
-
-    print('🔧 All records marked as unsynced. Ready for sync.');
-  }
-
   /// Auto-create missing Firestore collections with initial data
   Future<void> _createMissingCollections() async {
     if (_firestore == null) return;
@@ -1533,5 +1265,810 @@ class FirebaseSyncService extends GetxController {
     } catch (e) {
       print('❌ Error handling real-time changes: $e');
     }
+  }
+
+  // Add these debug methods to your FirebaseSyncService class
+
+  /// Debug what data exists locally and in Firebase
+  Future<void> debugDataFlow() async {
+    print('\n🔍 === COMPREHENSIVE DATA DEBUG ===');
+
+    await debugLocalData();
+    await debugFirebaseData();
+    await debugSyncStatus();
+
+    print('🔍 === END COMPREHENSIVE DEBUG ===\n');
+  }
+
+  /// Debug local data in SQLite
+  Future<void> debugLocalData() async {
+    print('\n📱 LOCAL DATABASE DEBUG:');
+
+    final db = await DatabaseHelper.instance.database;
+    final userSpecificTables = [
+      'users',
+      'schedules',
+      'invoices',
+      'payments',
+      'attachments',
+      'notes',
+      'notifications',
+      'billing_records'
+    ];
+
+    for (String table in userSpecificTables) {
+      try {
+        // Check total records
+        final totalResult = await db.rawQuery('''
+        SELECT COUNT(*) as count FROM $table 
+        WHERE deleted IS NULL OR deleted = 0
+      ''');
+        final total = totalResult.first['count'] as int;
+
+        // Check unsynced records
+        final unsyncedResult = await db.rawQuery('''
+        SELECT COUNT(*) as count FROM $table 
+        WHERE (deleted IS NULL OR deleted = 0) 
+        AND (firebase_synced IS NULL OR firebase_synced = 0)
+      ''');
+        final unsynced = unsyncedResult.first['count'] as int;
+
+        print('  📊 $table: $total total, $unsynced unsynced');
+
+        // Check if user_id column exists and sample data
+        if (total > 0) {
+          try {
+            final sampleResult = await db.rawQuery('''
+            SELECT id, firebase_user_id, firebase_synced, created_at 
+            FROM $table 
+            WHERE deleted IS NULL OR deleted = 0 
+            LIMIT 3
+          ''');
+
+            print('    Sample records:');
+            for (var record in sampleResult) {
+              print(
+                  '      ID: ${record['id']}, firebase_user_id: ${record['firebase_user_id'] ?? 'NULL'}, synced: ${record['firebase_synced']}');
+            }
+          } catch (e) {
+            print('    ❌ Error getting sample data: $e');
+          }
+        } else {
+          print('    📭 No records found');
+        }
+      } catch (e) {
+        print('  ❌ $table: Error - $e');
+      }
+    }
+  }
+
+  /// Debug Firebase data
+  Future<void> debugFirebaseData() async {
+    if (_firestore == null) {
+      print('\n❌ FIREBASE DEBUG: Firestore not available');
+      return;
+    }
+
+    print('\n☁️ FIREBASE DATABASE DEBUG:');
+
+    final userId = _authController.currentFirebaseUserId;
+    print('🔑 Searching for firebase_user_id: $userId');
+
+    final userSpecificTables = [
+      'users',
+      'schedules',
+      'invoices',
+      'payments',
+      'attachments',
+      'notes',
+      'notifications',
+      'billing_records'
+    ];
+
+    for (String table in userSpecificTables) {
+      try {
+        // Check total documents in collection
+        final totalSnapshot =
+            await _firestore!.collection(table).limit(10).get();
+        print('  📊 $table: ${totalSnapshot.docs.length} total documents');
+
+        if (totalSnapshot.docs.isNotEmpty) {
+          print('    Sample document user_ids:');
+          for (var doc in totalSnapshot.docs.take(3)) {
+            final data = doc.data();
+            print(
+                '      Doc ${doc.id}: firebase_user_id = ${data['firebase_user_id'] ?? 'NOT SET'}');
+          }
+        }
+
+        // Check documents for your specific user
+        if (userId != null) {
+          final userSnapshot = await _firestore!
+              .collection(table)
+              .where('firebase_user_id', isEqualTo: userId)
+              .limit(10)
+              .get();
+
+          print(
+              '    🎯 Documents for your user ($userId): ${userSnapshot.docs.length}');
+
+          if (userSnapshot.docs.isNotEmpty) {
+            for (var doc in userSnapshot.docs.take(3)) {
+              final data = doc.data();
+              print(
+                  '      Your doc ${doc.id}: created_at = ${data['created_at']}, last_modified = ${data['last_modified']}');
+            }
+          }
+        }
+      } catch (e) {
+        print('  ❌ $table: Error - $e');
+      }
+    }
+  }
+
+  /// Debug sync status for each table
+  Future<void> debugSyncStatus() async {
+    print('\n🔄 SYNC STATUS DEBUG:');
+
+    final db = await DatabaseHelper.instance.database;
+    final userSpecificTables = [
+      'users',
+      'schedules',
+      'invoices',
+      'payments',
+      'attachments',
+      'notes',
+      'notifications',
+      'billing_records'
+    ];
+
+    print('Last Sync Time: ${lastSyncTime.value}');
+    print('Is Syncing: ${isSyncing.value}');
+    print('Is Online: ${isOnline.value}');
+    print('Firebase Available: ${firebaseAvailable.value}');
+
+    for (String table in userSpecificTables) {
+      try {
+        // Check records that should be uploaded
+        final toUploadResult = await db.rawQuery('''
+        SELECT COUNT(*) as count FROM $table 
+        WHERE (deleted IS NULL OR deleted = 0) 
+        AND (firebase_synced IS NULL OR firebase_synced = 0)
+      ''');
+        final toUpload = toUploadResult.first['count'] as int;
+
+        // Check records that are synced
+        final syncedResult = await db.rawQuery('''
+        SELECT COUNT(*) as count FROM $table 
+        WHERE (deleted IS NULL OR deleted = 0) 
+        AND firebase_synced = 1
+      ''');
+        final synced = syncedResult.first['count'] as int;
+
+        print('  📤 $table: $toUpload to upload, $synced synced');
+      } catch (e) {
+        print('  ❌ $table: Error - $e');
+      }
+    }
+  }
+
+  /// Force upload all local data (for testing)
+  Future<void> forceUploadAllLocalData() async {
+    print('\n🚀 FORCE UPLOADING ALL LOCAL DATA...');
+
+    // Mark all records as unsynced
+    await markAllRecordsAsUnsynced();
+
+    // Trigger sync
+    await triggerManualSync();
+
+    print('🚀 Force upload complete');
+  }
+
+  /// Mark all records as unsynced (helper method)
+  Future<void> markAllRecordsAsUnsynced() async {
+    print('🔧 Marking all records as unsynced...');
+
+    final db = await DatabaseHelper.instance.database;
+
+    for (String table in _syncTables) {
+      try {
+        await db.execute('''
+        UPDATE $table 
+        SET firebase_synced = 0, 
+            last_modified = ${DateTime.now().millisecondsSinceEpoch}
+      ''');
+        print('✅ Marked all $table records as unsynced');
+      } catch (e) {
+        print('❌ Error marking $table: $e');
+      }
+    }
+
+    // Reset sync time to force full sync
+    lastSyncTime.value = DateTime.fromMillisecondsSinceEpoch(0);
+    await _saveLastSyncTime();
+  }
+
+  // Update these methods in your FirebaseSyncService class
+
+  /// Updated upload method to use firebase_user_id
+  Future<void> _uploadTableRecords(
+      String table, List<Map<String, dynamic>> records) async {
+    if (_firestore == null) {
+      throw Exception('Firestore not available');
+    }
+
+    try {
+      print('📤 Uploading ${records.length} records to $table...');
+
+      // Get the correct collection path
+      final collectionPath = _getCorrectCollectionPath(table);
+      final collection = _firestore!.collection(collectionPath);
+
+      int successCount = 0;
+      int errorCount = 0;
+
+      // Upload records
+      for (final record in records) {
+        try {
+          final firestoreData = _convertSqliteToFirestore(record);
+
+          // Use record ID as document ID for consistency
+          final docId = record['id'].toString();
+
+          // For user-specific data, use firebase_user_id from the record
+          if ([
+            'users',
+            'schedules',
+            'invoices',
+            'payments',
+            'attachments',
+            'notes',
+            'notifications',
+            'billing_records'
+          ].contains(table)) {
+            // Use firebase_user_id from record, or current user as fallback
+            final recordFirebaseUserId = record['firebase_user_id'] ??
+                _authController.currentFirebaseUserId;
+            firestoreData['firebase_user_id'] =
+                recordFirebaseUserId; // Firebase expects 'firebase_user_id'
+            firestoreData['sync_device_id'] = await _getDeviceId();
+            print(
+                '👤 Uploading user-specific data to: $collectionPath with firebase_user_id: $recordFirebaseUserId');
+          } else {
+            print('🌍 Uploading shared data to: $collectionPath');
+          }
+
+          await collection
+              .doc(docId)
+              .set(firestoreData, SetOptions(merge: true));
+          successCount++;
+
+          print('✅ Uploaded $table record $docId to $collectionPath');
+        } catch (e) {
+          print('❌ Error uploading record ${record['id']}: $e');
+          errorCount++;
+        }
+      }
+
+      print(
+          '📤 Upload complete for $table - Success: $successCount, Errors: $errorCount');
+
+      // Mark successfully uploaded records as synced
+      if (successCount > 0) {
+        await _markRecordsAsSynced(table, records);
+      }
+    } catch (e) {
+      print('❌ Error uploading $table records: $e');
+      // Don't throw - continue with other tables
+    }
+  }
+
+  /// Updated download method to filter by firebase_user_id (Firebase) and map to firebase_user_id (local)
+  Future<int> _downloadTableChanges(String table) async {
+    if (_firestore == null) {
+      throw Exception('Firestore not available');
+    }
+
+    try {
+      final collectionPath = _getCorrectCollectionPath(table);
+      final collection = _firestore!.collection(collectionPath);
+
+      Query query = collection;
+
+      // For user-specific data, only download records belonging to current user
+      final userSpecificTables = [
+        'users',
+        'schedules',
+        'invoices',
+        'payments',
+        'attachments',
+        'notes',
+        'notifications',
+        'billing_records'
+      ];
+
+      if (userSpecificTables.contains(table)) {
+        final userId = _authController.currentFirebaseUserId;
+        if (userId != null) {
+          // Filter by firebase_user_id in Firebase (which stores the Firebase UID)
+          query = query.where('firebase_user_id', isEqualTo: userId);
+          print('📥 Filtering $table for user: $userId');
+        }
+      }
+
+      print('📥 Downloading all $table records and filtering locally');
+
+      final snapshot = await query.get();
+      print('📥 Downloaded ${snapshot.docs.length} total records from $table');
+
+      // Filter by last_modified locally to avoid needing composite index
+      final filteredDocs = <QueryDocumentSnapshot>[];
+
+      if (lastSyncTime.value.millisecondsSinceEpoch > 0) {
+        final lastSyncTimestamp = Timestamp.fromDate(lastSyncTime.value);
+
+        for (final doc in snapshot.docs) {
+          final data = doc.data() as Map<String, dynamic>;
+          final docLastModified = data['last_modified'];
+
+          if (docLastModified is Timestamp) {
+            if (docLastModified.compareTo(lastSyncTimestamp) > 0) {
+              filteredDocs.add(doc);
+            }
+          } else {
+            // If no last_modified or invalid format, include it
+            filteredDocs.add(doc);
+          }
+        }
+
+        print(
+            '📥 Found ${filteredDocs.length} records modified since ${lastSyncTime.value}');
+      } else {
+        // First sync - take all records
+        filteredDocs.addAll(snapshot.docs);
+        print('📥 First sync - taking all ${filteredDocs.length} records');
+      }
+
+      if (filteredDocs.isNotEmpty) {
+        await _mergeDownloadedRecords(table, filteredDocs);
+      }
+
+      return filteredDocs.length;
+    } catch (e) {
+      print('❌ Error downloading $table changes: $e');
+      return 0;
+    }
+  }
+
+  /// Force complete bidirectional sync
+  Future<void> forceCompleteSync() async {
+    print('\n🚀 === FORCING COMPLETE SYNC ===');
+
+    try {
+      final syncService = Get.find<FirebaseSyncService>();
+      final authController = Get.find<AuthController>();
+
+      // Check prerequisites
+      if (!authController.isLoggedIn.value) {
+        print('❌ Not logged in locally');
+        return;
+      }
+
+      if (!authController.isFirebaseAuthenticated) {
+        print('❌ Not authenticated with Firebase');
+        return;
+      }
+
+      if (!syncService.isOnline.value) {
+        print('❌ Not online');
+        return;
+      }
+
+      print('✅ Prerequisites met - starting sync');
+      print('🔑 Firebase User ID: ${authController.currentFirebaseUserId}');
+
+      // Step 1: Reset sync time to force full sync
+      print('🔄 Step 1: Resetting sync time for full sync');
+      syncService.lastSyncTime.value = DateTime.fromMillisecondsSinceEpoch(0);
+
+      // Step 2: Mark all local records as unsynced to force upload
+      print('🔄 Step 2: Marking all records for upload');
+      await markAllLocalRecordsForSync();
+
+      // Step 3: Trigger manual sync
+      print('🔄 Step 3: Triggering manual sync');
+      await syncService.triggerManualSync();
+
+      // Step 4: Verify results
+      print('🔄 Step 4: Verifying sync results');
+      await Future.delayed(Duration(seconds: 5)); // Wait for sync to complete
+      await verifySyncResults();
+
+      print('🚀 === COMPLETE SYNC FINISHED ===');
+    } catch (e) {
+      print('❌ Error during complete sync: $e');
+    }
+  }
+
+  /// Mark all local records as needing sync
+  Future<void> markAllLocalRecordsForSync() async {
+    final db = await DatabaseHelper.instance.database;
+
+    final tables = [
+      'users',
+      'schedules',
+      'invoices',
+      'payments',
+      'attachments',
+      'notes',
+      'notifications',
+      'billing_records'
+    ];
+
+    for (String table in tables) {
+      try {
+        await db.execute('''
+        UPDATE $table 
+        SET firebase_synced = 0, 
+            last_modified = ?
+        WHERE firebase_user_id IS NOT NULL
+      ''', [DateTime.now().millisecondsSinceEpoch]);
+
+        print('  ✅ Marked $table records for sync');
+      } catch (e) {
+        print('  ❌ Error marking $table: $e');
+      }
+    }
+  }
+
+  /// Verify sync results
+  Future<void> verifySyncResults() async {
+    final db = await DatabaseHelper.instance.database;
+
+    print('\n📊 === SYNC VERIFICATION ===');
+
+    final tables = ['users', 'schedules', 'invoices', 'payments'];
+
+    for (String table in tables) {
+      try {
+        // Check local synced records
+        final syncedResult = await db.rawQuery('''
+        SELECT COUNT(*) as count FROM $table 
+        WHERE firebase_synced = 1 AND firebase_user_id IS NOT NULL
+      ''');
+        final synced = syncedResult.first['count'] as int;
+
+        // Check local unsynced records
+        final unsyncedResult = await db.rawQuery('''
+        SELECT COUNT(*) as count FROM $table 
+        WHERE firebase_synced = 0 AND firebase_user_id IS NOT NULL
+      ''');
+        final unsynced = unsyncedResult.first['count'] as int;
+
+        // Check total local records
+        final totalResult = await db.rawQuery('''
+        SELECT COUNT(*) as count FROM $table 
+        WHERE firebase_user_id IS NOT NULL
+      ''');
+        final total = totalResult.first['count'] as int;
+
+        print('  📊 $table: $total total, $synced synced, $unsynced unsynced');
+
+        if (unsynced > 0) {
+          print(
+              '    ⚠️ Still has unsynced records - sync may not have completed');
+        } else if (synced > 0) {
+          print('    ✅ All records synced successfully');
+        }
+      } catch (e) {
+        print('  ❌ Error checking $table: $e');
+      }
+    }
+
+    print('📊 === END VERIFICATION ===\n');
+  }
+
+  /// Debug what's happening during sync
+  Future<void> debugSyncProcess() async {
+    print('\n🔍 === DEBUGGING SYNC PROCESS ===');
+
+    final syncService = Get.find<FirebaseSyncService>();
+
+    print('📊 Sync Service Status:');
+    print('  Is Syncing: ${syncService.isSyncing.value}');
+    print('  Is Online: ${syncService.isOnline.value}');
+    print('  Firebase Available: ${syncService.firebaseAvailable.value}');
+    print('  Sync Status: ${syncService.syncStatus.value}');
+    print('  Last Sync: ${syncService.lastSyncTime.value}');
+
+    // Check if sync is actually running
+    if (syncService.isSyncing.value) {
+      print('🔄 Sync is currently running...');
+    } else {
+      print('⏸️ Sync is not running');
+    }
+
+    // Try to trigger sync and watch for errors
+    try {
+      print('🧪 Testing sync trigger...');
+      await syncService.triggerManualSync();
+      print('✅ Sync trigger completed');
+    } catch (e) {
+      print('❌ Sync trigger failed: $e');
+    }
+
+    print('🔍 === END SYNC DEBUG ===\n');
+  }
+
+  /// Updated convert method to properly map Firebase user_id to local firebase_user_id
+  Map<String, dynamic> _convertFirestoreToSqlite(Map<String, dynamic> data) {
+    final result = Map<String, dynamic>.from(data);
+
+    // Convert timestamps
+    if (result['created_at'] is Timestamp) {
+      result['created_at'] =
+          (result['created_at'] as Timestamp).toDate().toIso8601String();
+    }
+
+    if (result['last_modified'] is Timestamp) {
+      result['last_modified'] =
+          (result['last_modified'] as Timestamp).millisecondsSinceEpoch;
+    }
+
+    // CRITICAL FIX: Map Firebase user_id to local firebase_user_id column
+    if (result['user_id'] != null) {
+      result['firebase_user_id'] = result['user_id'];
+      print(
+          '🔄 Mapping Firebase user_id (${result['user_id']}) to local firebase_user_id');
+    }
+
+    // Remove Firebase-specific fields that don't exist in local schema
+    result.remove('user_id'); // Remove this - it conflicts with local schema
+    result.remove('sync_device_id');
+
+    // Ensure firebase_synced is set for downloaded records
+    result['firebase_synced'] = 1;
+
+    return result;
+  }
+
+  /// Also update the upload conversion method
+  Map<String, dynamic> _convertSqliteToFirestore(Map<String, dynamic> data) {
+    final result = Map<String, dynamic>.from(data);
+
+    // Remove SQLite-specific fields
+    result.remove('firebase_synced');
+    result.remove('firebase_uid');
+
+    // CRITICAL FIX: Map local firebase_user_id to Firebase user_id
+    if (result['firebase_user_id'] != null) {
+      result['user_id'] = result['firebase_user_id'];
+      print(
+          '🔄 Mapping local firebase_user_id (${result['firebase_user_id']}) to Firebase user_id');
+    }
+
+    // Remove the local column name from Firebase data
+    result.remove('firebase_user_id');
+
+    // Convert timestamps
+    if (result['created_at'] is String) {
+      try {
+        result['created_at'] = DateTime.parse(result['created_at']);
+      } catch (e) {
+        result['created_at'] = DateTime.now();
+      }
+    }
+
+    if (result['last_modified'] is int) {
+      result['last_modified'] =
+          DateTime.fromMillisecondsSinceEpoch(result['last_modified']);
+    }
+
+    // Remove null values
+    result.removeWhere((key, value) => value == null);
+
+    return result;
+  }
+
+  // Add these methods to your FirebaseSyncService class to enhance automatic sync
+
+  /// Enhanced setup for automatic sync with multiple triggers
+  Future<void> setupAutomaticSync() async {
+    print('🔄 === SETTING UP AUTOMATIC SYNC ===');
+
+    try {
+      // 1. Set up periodic sync (already exists, but let's enhance it)
+      _setupEnhancedPeriodicSync();
+
+      // 2. Set up auth state sync triggers
+      _setupAuthSyncTriggers();
+
+      // 3. Set up data change sync triggers
+      _setupDataChangeSyncTriggers();
+
+      // 4. Set up app lifecycle sync triggers
+      _setupAppLifecycleSyncTriggers();
+
+      print('✅ Automatic sync setup complete');
+    } catch (e) {
+      print('❌ Error setting up automatic sync: $e');
+    }
+  }
+
+  /// Enhanced periodic sync with more frequent checks
+  void _setupEnhancedPeriodicSync() {
+    // Cancel existing timer
+    _syncTimer?.cancel();
+
+    // Set up new timer with shorter interval for more responsive sync
+    _syncTimer = Timer.periodic(const Duration(minutes: 2), (timer) {
+      if (_shouldAutoSync()) {
+        print('⏰ Automatic periodic sync triggered');
+        _triggerSync();
+      }
+    });
+
+    print('✅ Enhanced periodic sync set up (every 2 minutes)');
+  }
+
+  /// Enhanced sync condition checking
+  bool _shouldAutoSync() {
+    // Basic conditions
+    if (!isOnline.value ||
+        isSyncing.value ||
+        !firebaseAvailable.value ||
+        !_authController.isFirebaseAuthenticated) {
+      return false;
+    }
+
+    // Check if there's local data to upload
+    final hasUnsyncedData = _hasUnsyncedLocalData();
+
+    // Check time since last sync
+    final timeSinceLastSync = DateTime.now().difference(lastSyncTime.value);
+    final timeCondition = timeSinceLastSync.inMinutes >= 2;
+
+    // Sync if there's unsynced data OR it's been more than 2 minutes
+    final shouldSync = hasUnsyncedData || timeCondition;
+
+    if (shouldSync) {
+      print(
+          '⏰ Auto-sync conditions met - Unsynced data: $hasUnsyncedData, Time: ${timeSinceLastSync.inMinutes}m');
+    }
+
+    return shouldSync;
+  }
+
+  /// Check if there's unsynced local data
+  bool _hasUnsyncedLocalData() {
+    // This is a quick check - you could make it more sophisticated
+    // For now, we'll assume there might be unsynced data if last sync was recent
+    final timeSinceLastSync = DateTime.now().difference(lastSyncTime.value);
+    return timeSinceLastSync.inSeconds <
+        10; // Recent activity suggests unsynced data
+  }
+
+  /// Set up authentication state sync triggers
+  void _setupAuthSyncTriggers() {
+    // Listen for authentication state changes
+    ever(_authController.isLoggedIn, (bool isLoggedIn) {
+      if (isLoggedIn && _authController.isFirebaseAuthenticated) {
+        print('🔐 User logged in - triggering sync');
+        Future.delayed(const Duration(seconds: 3), () {
+          if (_shouldAutoSync()) {
+            _triggerSync();
+          }
+        });
+      }
+    });
+
+    ever(_authController.firebaseUser, (firebaseUser) {
+      if (firebaseUser != null && _authController.isLoggedIn.value) {
+        print('🔥 Firebase user authenticated - triggering sync');
+        Future.delayed(const Duration(seconds: 3), () {
+          if (_shouldAutoSync()) {
+            _triggerSync();
+          }
+        });
+      }
+    });
+
+    print('✅ Auth sync triggers set up');
+  }
+
+  /// Set up data change sync triggers (enhance existing database helpers)
+  void _setupDataChangeSyncTriggers() {
+    // The DatabaseHelperSyncExtension already has some of this
+    // We'll enhance it with better timing
+    print(
+        '✅ Data change sync triggers already configured in DatabaseHelperSyncExtension');
+  }
+
+  /// Set up app lifecycle sync triggers
+  void _setupAppLifecycleSyncTriggers() {
+    // Listen for connectivity changes (this already exists, but let's enhance it)
+    ever(isOnline, (bool online) {
+      if (online &&
+          firebaseAvailable.value &&
+          _authController.isFirebaseAuthenticated) {
+        print('🌐 Connection restored - scheduling sync');
+        Future.delayed(const Duration(seconds: 5), () {
+          if (_shouldAutoSync()) {
+            _triggerSync();
+          }
+        });
+      }
+    });
+
+    print('✅ App lifecycle sync triggers set up');
+  }
+
+  /// Trigger sync with debouncing to prevent too frequent syncs
+  Timer? _syncDebounceTimer;
+  void triggerDebouncedSync({Duration delay = const Duration(seconds: 5)}) {
+    // Cancel existing timer
+    _syncDebounceTimer?.cancel();
+
+    // Set new timer
+    _syncDebounceTimer = Timer(delay, () {
+      if (_shouldAutoSync()) {
+        print('🔄 Debounced sync triggered');
+        _triggerSync();
+      }
+    });
+  }
+
+  /// Enhanced database helper methods that trigger debounced sync
+  /// Update your DatabaseHelperSyncExtension to use this:
+
+  /// Enhanced insert method with smarter sync triggering
+  static Future<int> insertWithSmartSync(
+      Database db, String table, Map<String, dynamic> values) async {
+    // Add sync tracking data
+    values['last_modified'] = DateTime.now().millisecondsSinceEpoch;
+    values['firebase_synced'] = 0;
+
+    final result = await db.insert(table, values);
+
+    // Trigger debounced sync instead of immediate sync
+    if (FirebaseSyncService.instance.isOnline.value &&
+        !FirebaseSyncService.instance.isSyncing.value) {
+      FirebaseSyncService.instance.triggerDebouncedSync();
+    }
+
+    return result;
+  }
+
+  /// Show sync status to users
+  void showSyncStatus() {
+    final stats = getSyncStats();
+
+    String message;
+    Color backgroundColor;
+
+    if (stats['isSyncing']) {
+      message = 'Syncing data...';
+      backgroundColor = Colors.blue;
+    } else if (!stats['isOnline']) {
+      message = 'Offline - will sync when connected';
+      backgroundColor = Colors.orange;
+    } else if (!stats['isFirebaseAuthenticated']) {
+      message = 'Sign in required for sync';
+      backgroundColor = Colors.red;
+    } else {
+      final lastSync = stats['lastSyncTime'] as DateTime;
+      final minutesAgo = DateTime.now().difference(lastSync).inMinutes;
+      message = 'Last synced $minutesAgo minutes ago';
+      backgroundColor = Colors.green;
+    }
+
+    Get.snackbar(
+      'Sync Status',
+      message,
+      backgroundColor: backgroundColor,
+      colorText: Colors.white,
+      duration: const Duration(seconds: 2),
+    );
   }
 }

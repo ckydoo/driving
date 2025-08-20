@@ -25,6 +25,8 @@ class AppInitialization {
       await DatabaseMigration.instance.runFullMigration();
       print('Enhanced schedules table created');
       await ScheduleStatusMigration.instance.runStatusMigration();
+      await DatabaseHelper.instance.completeSafeMigration();
+      print('Database migration completed successfully');
       print('Schedule status migration completed');
       // Initialize controllers in proper order
       await _initializeControllers();
