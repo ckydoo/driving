@@ -227,76 +227,6 @@ class AuthController extends GetxController {
     }
   }
 
-  /// Enhanced login with optional Firebase Authentication
-  Future<bool> login(String email, String password) async {
-    try {
-      isLoading(true);
-      error('');
-
-      print('\n🔐 === LOGIN ATTEMPT ===');
-      print('📧 Email: $email');
-
-      if (email.isEmpty || password.isEmpty) {
-        error('Email and password are required');
-        return false;
-      }
-
-      // Step 1: Authenticate locally first (this is the primary auth)
-      final localAuthSuccess = await _authenticateLocally(email, password);
-      if (!localAuthSuccess) {
-        return false;
-      }
-
-      // Step 2: Try to authenticate with Firebase (optional)
-      if (firebaseAvailable.value) {
-        try {
-          await _authenticateWithFirebase(email, password);
-          print('✅ Firebase authentication successful');
-
-          Get.snackbar(
-            'Cloud Sync Enabled',
-            'Your data will be synchronized across devices',
-            backgroundColor: Colors.green,
-            colorText: Colors.white,
-            duration: const Duration(seconds: 2),
-          );
-          if (firebaseAvailable.value && isFirebaseAuthenticated) {
-            // Trigger sync to get shared data
-            final syncService = Get.find<FirebaseSyncService>();
-            await syncService.triggerManualSync();
-          }
-        } catch (e) {
-          print('⚠️ Firebase authentication failed: $e');
-          // Continue with local auth only
-          Get.snackbar(
-            'Local Login Successful',
-            'Cloud sync unavailable - running in offline mode',
-            backgroundColor: Colors.blue,
-            colorText: Colors.white,
-            duration: const Duration(seconds: 2),
-          );
-        }
-      } else {
-        print('⚠️ Firebase not available - using local authentication only');
-        Get.snackbar(
-          'Offline Mode',
-          'Running in offline mode - data will sync when connection is restored',
-          backgroundColor: Colors.orange,
-          colorText: Colors.white,
-          duration: const Duration(seconds: 2),
-        );
-      }
-
-      return true;
-    } catch (e) {
-      print('❌ Login error: $e');
-      error('Login failed: ${e.toString()}');
-      return false;
-    } finally {
-      isLoading(false);
-    }
-  }
-
   /// Authenticate locally (existing logic - this is the primary authentication)
   Future<bool> _authenticateLocally(String email, String password) async {
     try {
@@ -346,97 +276,6 @@ class AuthController extends GetxController {
       error('Local authentication failed: ${e.toString()}');
       return false;
     }
-  }
-
-  /// Authenticate with Firebase (optional - for sync only)
-  Future<void> _authenticateWithFirebase(String email, String password) async {
-    if (!firebaseAvailable.value || _firebaseAuth == null) {
-      throw Exception('Firebase not available');
-    }
-
-    try {
-      // Always try to create account first, since local users don't exist in Firebase
-      await _createFirebaseAccount(email, password);
-    } on firebase_auth.FirebaseAuthException catch (e) {
-      if (e.code == 'email-already-in-use') {
-        // Email exists, try to sign in
-        try {
-          final credential = await _firebaseAuth!.signInWithEmailAndPassword(
-            email: email,
-            password: password,
-          );
-          print('✅ Firebase sign-in successful for ${credential.user?.email}');
-        } on firebase_auth.FirebaseAuthException catch (signInError) {
-          if (signInError.code == 'wrong-password') {
-            // Password mismatch - the user exists in Firebase but with different password
-            // We need to use password reset or recreate account
-            print('⚠️ Password mismatch for existing Firebase user');
-            await _handlePasswordMismatch(email, password);
-          } else {
-            throw Exception('Firebase sign-in error: ${signInError.message}');
-          }
-        }
-      } else if (e.code == 'weak-password') {
-        throw Exception(
-            'Password is too weak. Please use a stronger password.');
-      } else if (e.code == 'invalid-email') {
-        throw Exception('Invalid email address format.');
-      } else {
-        throw Exception('Firebase Auth Error: ${e.message}');
-      }
-    } catch (e) {
-      throw Exception('Firebase connection error: $e');
-    }
-  }
-
-  /// Handle password mismatch between local and Firebase
-  Future<void> _handlePasswordMismatch(String email, String password) async {
-    // Show user a choice: reset Firebase password or use different credentials
-    final action = await _showPasswordMismatchDialog();
-
-    if (action == 'reset') {
-      // Send password reset email
-      await _firebaseAuth!.sendPasswordResetEmail(email: email);
-      Get.snackbar(
-        'Password Reset Sent',
-        'Check your email for password reset instructions',
-        backgroundColor: Colors.blue,
-        colorText: Colors.white,
-      );
-    } else if (action == 'recreate') {
-      // Delete and recreate account (if user confirms)
-      final confirmed = await _showRecreateAccountDialog();
-      if (confirmed) {
-        await _recreateFirebaseAccount(email, password);
-      }
-    }
-  }
-
-  /// Show password mismatch dialog
-  Future<String?> _showPasswordMismatchDialog() async {
-    return await Get.dialog<String>(
-      AlertDialog(
-        title: const Text('Password Mismatch'),
-        content: const Text(
-            'Your local password doesn\'t match your Firebase password. Would you like to:\n\n'
-            '1. Reset your Firebase password (recommended)\n'
-            '2. Recreate your Firebase account with current password'),
-        actions: [
-          TextButton(
-            onPressed: () => Get.back(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Get.back(result: 'reset'),
-            child: const Text('Reset Password'),
-          ),
-          TextButton(
-            onPressed: () => Get.back(result: 'recreate'),
-            child: const Text('Recreate Account'),
-          ),
-        ],
-      ),
-    );
   }
 
   /// Show recreate account confirmation dialog
@@ -745,7 +584,7 @@ class AuthController extends GetxController {
       await _createAccountWithModifiedEmail(email);
     } else if (action == 'manual') {
       // Show manual password entry
-      await _showManualPasswordEntry();
+      await _showManualPasswordEntry(email);
     }
   }
 
@@ -805,36 +644,6 @@ class AuthController extends GetxController {
       );
     } catch (e) {
       throw Exception('Failed to create modified account: $e');
-    }
-  }
-
-  /// Show manual password entry dialog
-  Future<void> _showManualPasswordEntry() async {
-    final password = await _showPasswordDialog();
-    if (password != null) {
-      final email = currentUser.value!.email;
-
-      try {
-        // Try to sign in with the provided password
-        await _firebaseAuth!.signInWithEmailAndPassword(
-          email: email,
-          password: password,
-        );
-
-        Get.snackbar(
-          'Cloud Sync Enabled',
-          'Successfully connected to existing Firebase account',
-          backgroundColor: Colors.green,
-          colorText: Colors.white,
-        );
-      } catch (e) {
-        Get.snackbar(
-          'Authentication Failed',
-          'The password you entered is incorrect',
-          backgroundColor: Colors.red,
-          colorText: Colors.white,
-        );
-      }
     }
   }
 
@@ -1228,6 +1037,368 @@ class AuthController extends GetxController {
           userEmail: currentUser.value!.email);
     }
     return await _pinController.setupPin(pin);
+  }
+
+  /// Smart Firebase authentication - tries sign in first, then create if needed
+  Future<void> _authenticateWithFirebase(String email, String password) async {
+    if (!firebaseAvailable.value || _firebaseAuth == null) {
+      throw Exception('Firebase not available');
+    }
+
+    try {
+      // FIRST: Try to sign in with existing account
+      print('🔑 Attempting Firebase sign-in for: $email');
+      final credential = await _firebaseAuth!.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      print('✅ Firebase sign-in successful for ${credential.user?.email}');
+
+      // Sync user data after successful sign-in
+      await _syncAfterFirebaseAuth(credential.user!);
+      return;
+    } on firebase_auth.FirebaseAuthException catch (e) {
+      print('⚠️ Firebase sign-in failed: ${e.code} - ${e.message}');
+
+      switch (e.code) {
+        case 'user-not-found':
+          // User doesn't exist in Firebase, create new account
+          print('👤 User not found in Firebase, creating new account...');
+          await _createFirebaseAccountSafely(email, password);
+          break;
+
+        case 'wrong-password':
+          // Password mismatch - handle this intelligently
+          print('🔐 Password mismatch detected');
+          await _handlePasswordMismatch(email, password);
+          break;
+
+        case 'invalid-email':
+          throw Exception('Invalid email address format.');
+
+        case 'user-disabled':
+          throw Exception('This account has been disabled.');
+
+        case 'too-many-requests':
+          throw Exception('Too many failed attempts. Please try again later.');
+
+        default:
+          throw Exception('Firebase authentication error: ${e.message}');
+      }
+    }
+  }
+
+  /// Handle password mismatch with user options
+  Future<void> _handlePasswordMismatch(String email, String password) async {
+    final action = await _showPasswordMismatchDialog();
+
+    switch (action) {
+      case 'reset':
+        await _sendPasswordReset(email);
+        break;
+      case 'try_different':
+        await _showManualPasswordEntry(email);
+        break;
+      case 'create_new':
+        await _createAccountWithModifiedEmail(email);
+        break;
+      case 'skip':
+        print('⏭️ User chose to skip Firebase sync');
+        _showSkipSyncMessage();
+        break;
+    }
+  }
+
+  /// Show password mismatch dialog with options
+  Future<String?> _showPasswordMismatchDialog() async {
+    return await Get.dialog<String>(
+      AlertDialog(
+        title: const Text('Password Mismatch'),
+        content: const Text(
+            'Your local password doesn\'t match your cloud account password. What would you like to do?'),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back(result: 'reset'),
+            child: const Text('Reset Password'),
+          ),
+          TextButton(
+            onPressed: () => Get.back(result: 'try_different'),
+            child: const Text('Enter Different Password'),
+          ),
+          TextButton(
+            onPressed: () => Get.back(result: 'create_new'),
+            child: const Text('Create New Sync Account'),
+          ),
+          TextButton(
+            onPressed: () => Get.back(result: 'skip'),
+            child: const Text('Skip Cloud Sync'),
+          ),
+        ],
+      ),
+      barrierDismissible: false,
+    );
+  }
+
+  /// Send password reset email
+  Future<void> _sendPasswordReset(String email) async {
+    try {
+      await _firebaseAuth!.sendPasswordResetEmail(email: email);
+      Get.snackbar(
+        'Password Reset Sent',
+        'Check your email for password reset instructions',
+        backgroundColor: Colors.blue,
+        colorText: Colors.white,
+        duration: const Duration(seconds: 5),
+      );
+    } catch (e) {
+      Get.snackbar(
+        'Reset Failed',
+        'Unable to send password reset email: ${e.toString()}',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    }
+  }
+
+  /// Show manual password entry dialog
+  Future<void> _showManualPasswordEntry(String email) async {
+    final TextEditingController passwordController = TextEditingController();
+
+    final password = await Get.dialog<String>(
+      AlertDialog(
+        title: const Text('Enter Cloud Password'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Enter your cloud account password for:\n$email'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: passwordController,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: 'Cloud Password',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back(result: null),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Get.back(result: passwordController.text),
+            child: const Text('Sign In'),
+          ),
+        ],
+      ),
+    );
+
+    if (password != null && password.isNotEmpty) {
+      try {
+        await _firebaseAuth!.signInWithEmailAndPassword(
+          email: email,
+          password: password,
+        );
+
+        Get.snackbar(
+          'Cloud Sync Enabled',
+          'Successfully connected to your cloud account',
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+        );
+      } catch (e) {
+        Get.snackbar(
+          'Sign In Failed',
+          'Incorrect password. Please try again.',
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+        );
+      }
+    }
+  }
+
+  /// Create Firebase account safely with better error handling
+  Future<void> _createFirebaseAccountSafely(
+      String email, String password) async {
+    try {
+      final credential = await _firebaseAuth!.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      print('✅ New Firebase account created for $email');
+      await _syncAfterFirebaseAuth(credential.user!);
+
+      Get.snackbar(
+        'Cloud Account Created',
+        'Your account has been set up for cloud synchronization',
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
+    } on firebase_auth.FirebaseAuthException catch (e) {
+      if (e.code == 'email-already-in-use') {
+        // This shouldn't happen if we checked first, but handle it
+        print('🔄 Email became in-use during creation, trying sign-in...');
+        await _authenticateWithFirebase(email, password);
+      } else if (e.code == 'weak-password') {
+        // Generate a stronger password
+        final strongPassword = _generateSecurePassword();
+        await _createFirebaseAccountSafely(email, strongPassword);
+        await _saveFirebasePassword(strongPassword);
+      } else {
+        throw Exception('Failed to create Firebase account: ${e.message}');
+      }
+    }
+  }
+
+  /// Sync user data after Firebase authentication
+  Future<void> _syncAfterFirebaseAuth(firebase_auth.User user) async {
+    try {
+      // Set the Firebase user in your reactive variable
+      firebaseUser.value = user;
+
+      // Create or update user document in Firestore
+      await _createFirebaseUserDocument(user);
+
+      // Initialize sync service if available
+      try {
+        final syncService = Get.find<FirebaseSyncService>();
+        await syncService.initializeUserSync();
+      } catch (e) {
+        print('⚠️ Sync service not available: $e');
+      }
+    } catch (e) {
+      print('❌ Error in post-auth sync: $e');
+    }
+  }
+
+  /// Show message when user skips sync
+  void _showSkipSyncMessage() {
+    Get.snackbar(
+      'Local Mode',
+      'You\'re logged in locally. Cloud sync is disabled.',
+      backgroundColor: Colors.orange,
+      colorText: Colors.white,
+      duration: const Duration(seconds: 3),
+    );
+  }
+
+  /// Enhanced login method with better Firebase handling
+  Future<bool> login(String email, String password) async {
+    try {
+      isLoading(true);
+      error('');
+
+      print('\n🔐 === ENHANCED LOGIN ATTEMPT ===');
+      print('📧 Email: $email');
+
+      if (email.isEmpty || password.isEmpty) {
+        error('Email and password are required');
+        return false;
+      }
+
+      // Step 1: Authenticate locally first (primary authentication)
+      final localAuthSuccess = await _authenticateLocally(email, password);
+      if (!localAuthSuccess) {
+        return false;
+      }
+
+      // Step 2: Try Firebase authentication (for sync)
+      if (firebaseAvailable.value) {
+        try {
+          await _authenticateWithFirebase(email, password);
+          print('✅ Complete authentication successful (local + Firebase)');
+        } catch (e) {
+          print('⚠️ Firebase authentication failed, continuing with local: $e');
+
+          // Show option to retry Firebase later
+          _showFirebaseRetryOption();
+        }
+      } else {
+        print('ℹ️ Firebase unavailable, using local authentication only');
+      }
+
+      return true;
+    } catch (e) {
+      print('❌ Login error: $e');
+      error('Login failed: ${e.toString()}');
+      return false;
+    } finally {
+      isLoading(false);
+    }
+  }
+
+  /// Show option to retry Firebase authentication later
+  void _showFirebaseRetryOption() {
+    Get.snackbar(
+      'Local Login Successful',
+      'Cloud sync unavailable. Tap to retry sync.',
+      backgroundColor: Colors.orange,
+      colorText: Colors.white,
+      duration: const Duration(seconds: 5),
+      onTap: (snack) => forceFirebaseAuthentication(),
+      mainButton: TextButton(
+        onPressed: () {
+          Get.back();
+          forceFirebaseAuthentication();
+        },
+        child: const Text('Retry', style: TextStyle(color: Colors.white)),
+      ),
+    );
+  }
+
+  /// Alternative approach: Check if account exists before attempting authentication
+  Future<bool> _checkIfFirebaseAccountExists(String email) async {
+    try {
+      final signInMethods =
+          await _firebaseAuth!.fetchSignInMethodsForEmail(email);
+      return signInMethods.isNotEmpty;
+    } catch (e) {
+      print('❌ Error checking if account exists: $e');
+      return false;
+    }
+  }
+
+  /// Simplified authentication flow that handles existing accounts properly
+  Future<void> authenticateWithFirebaseSimple(
+      String email, String password) async {
+    if (!firebaseAvailable.value || _firebaseAuth == null) {
+      throw Exception('Firebase not available');
+    }
+
+    try {
+      // Check if account exists first
+      final accountExists = await _checkIfFirebaseAccountExists(email);
+
+      if (accountExists) {
+        // Account exists - try to sign in
+        print('🔑 Account exists, attempting sign-in...');
+        final credential = await _firebaseAuth!.signInWithEmailAndPassword(
+          email: email,
+          password: password,
+        );
+        print('✅ Successfully signed in to existing account');
+        await _syncAfterFirebaseAuth(credential.user!);
+      } else {
+        // Account doesn't exist - create new one
+        print('👤 No account found, creating new account...');
+        final credential = await _firebaseAuth!.createUserWithEmailAndPassword(
+          email: email,
+          password: password,
+        );
+        print('✅ Successfully created new account');
+        await _syncAfterFirebaseAuth(credential.user!);
+      }
+    } on firebase_auth.FirebaseAuthException catch (e) {
+      if (e.code == 'wrong-password') {
+        // Handle password mismatch
+        await _handlePasswordMismatch(email, password);
+      } else {
+        throw Exception('Firebase error: ${e.message}');
+      }
+    }
   }
 
   bool get isAdmin => hasRole('admin');
