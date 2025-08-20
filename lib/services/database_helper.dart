@@ -453,23 +453,7 @@ class DatabaseHelper {
 
   Future<List<Map<String, dynamic>>> getSchedules() async {
     final db = await database;
-    final localSchedules =
-        await DatabaseHelperSyncExtension.queryWithoutDeleted(db, 'schedules');
-    if (localSchedules.isEmpty && Get.isRegistered<FirebaseSyncService>()) {
-      try {
-        final syncService = Get.find<FirebaseSyncService>();
-        if (syncService.isOnline.value && syncService.firebaseAvailable.value) {
-          await syncService.triggerManualSync();
-          // Query again after sync
-          return await DatabaseHelperSyncExtension.queryWithoutDeleted(
-              db, 'schedules');
-        }
-        print('Schedules synced from Firebase');
-      } catch (e) {
-        print('⚠️ Could not sync schedules: $e');
-      }
-    }
-    return localSchedules;
+    return DatabaseHelperSyncExtension.queryWithoutDeleted(db, 'schedules');
   }
 
   // ================ COURSES TABLE ================
@@ -493,26 +477,7 @@ class DatabaseHelper {
   Future<List<Map<String, dynamic>>> getCourses() async {
     final db = await database;
 
-    // First check if we have local courses
-    final localCourses =
-        await DatabaseHelperSyncExtension.queryWithoutDeleted(db, 'courses');
-
-    // If no local courses, try to sync from Firebase
-    if (localCourses.isEmpty && Get.isRegistered<FirebaseSyncService>()) {
-      try {
-        final syncService = Get.find<FirebaseSyncService>();
-        if (syncService.isOnline.value && syncService.firebaseAvailable.value) {
-          await syncService.triggerManualSync();
-          // Query again after sync
-          return await DatabaseHelperSyncExtension.queryWithoutDeleted(
-              db, 'courses');
-        }
-      } catch (e) {
-        print('⚠️ Could not sync courses: $e');
-      }
-    }
-
-    return localCourses;
+    return DatabaseHelperSyncExtension.queryWithoutDeleted(db, 'courses');
   }
 
   // ================ INVOICES TABLE ================
@@ -536,24 +501,7 @@ class DatabaseHelper {
 
   Future<List<Map<String, dynamic>>> getInvoices() async {
     final db = await database;
-    final localInvoices =
-        await DatabaseHelperSyncExtension.queryWithoutDeleted(db, 'invoices');
-    // If no local invoices, try to sync from Firebase
-    if (localInvoices.isEmpty && Get.isRegistered<FirebaseSyncService>()) {
-      try {
-        final syncService = Get.find<FirebaseSyncService>();
-        if (syncService.isOnline.value && syncService.firebaseAvailable.value) {
-          await syncService.triggerManualSync();
-          // Query again after sync
-          return await DatabaseHelperSyncExtension.queryWithoutDeleted(
-              db, 'invoices');
-        }
-        print('Invoices synced from Firebase');
-      } catch (e) {
-        print('⚠️ Could not sync invoices: $e');
-      }
-    }
-    return localInvoices;
+    return DatabaseHelperSyncExtension.queryWithoutDeleted(db, 'invoices');
   }
 
   // ================ PAYMENTS TABLE ================
@@ -576,24 +524,7 @@ class DatabaseHelper {
 
   Future<List<Map<String, dynamic>>> getPayments() async {
     final db = await database;
-    final localPayments =
-        await DatabaseHelperSyncExtension.queryWithoutDeleted(db, 'payments');
-    // If no local courses, try to sync from Firebase
-    if (localPayments.isEmpty && Get.isRegistered<FirebaseSyncService>()) {
-      try {
-        final syncService = Get.find<FirebaseSyncService>();
-        if (syncService.isOnline.value && syncService.firebaseAvailable.value) {
-          await syncService.triggerManualSync();
-          // Query again after sync
-          return await DatabaseHelperSyncExtension.queryWithoutDeleted(
-              db, 'payments');
-        }
-        print('Payments synced from Firebase');
-      } catch (e) {
-        print('⚠️ Could not sync invoices: $e');
-      }
-    }
-    return localPayments;
+    return DatabaseHelperSyncExtension.queryWithoutDeleted(db, 'payments');
   }
 
   // ================ FLEET TABLE ================
@@ -616,23 +547,7 @@ class DatabaseHelper {
 
   Future<List<Map<String, dynamic>>> getFleet() async {
     final db = await database;
-    final localFleet =
-        await DatabaseHelperSyncExtension.queryWithoutDeleted(db, 'fleet');
-    if (localFleet.isEmpty && Get.isRegistered<FirebaseSyncService>()) {
-      try {
-        final syncService = Get.find<FirebaseSyncService>();
-        if (syncService.isOnline.value && syncService.firebaseAvailable.value) {
-          await syncService.triggerManualSync();
-          // Query again after sync
-          return await DatabaseHelperSyncExtension.queryWithoutDeleted(
-              db, 'fleet');
-        }
-        print('Fleet synced from Firebase');
-      } catch (e) {
-        print('⚠️ Could not sync fleet: $e');
-      }
-    }
-    return localFleet;
+    return DatabaseHelperSyncExtension.queryWithoutDeleted(db, 'fleet');
   }
 
   // ================ ATTACHMENTS TABLE ================

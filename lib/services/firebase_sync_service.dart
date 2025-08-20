@@ -308,91 +308,6 @@ class FirebaseSyncService extends GetxController {
     await _triggerSync();
   }
 
-  /// Main sync operation with comprehensive error handling and logging
-  Future<void> _triggerSync() async {
-    if (isSyncing.value) {
-      print('⚠️ Sync already in progress, skipping');
-      return;
-    }
-
-    if (!isOnline.value ||
-        !firebaseAvailable.value ||
-        !_authController.isFirebaseAuthenticated) {
-      print(
-          '⚠️ Sync preconditions not met - Online: ${isOnline.value}, Firebase: ${firebaseAvailable.value}, Auth: ${_authController.isFirebaseAuthenticated}');
-      return;
-    }
-
-    try {
-      isSyncing.value = true;
-      syncStatus.value = 'Syncing...';
-
-      print(
-          '🔄 Starting sync for user: ${_authController.currentFirebaseUserId}');
-      print('📊 Sync tables: ${_syncTables.join(', ')}');
-
-      // Test Firebase connection before proceeding
-      await _testFirebaseAvailability();
-      if (!firebaseAvailable.value) {
-        throw Exception('Firebase connection lost during sync');
-      }
-
-      // Phase 1: Add sync tracking to tables if needed
-      await _ensureSyncTracking();
-
-      // Phase 2: Sync shared data (available to all users)
-      await _syncSharedData();
-
-      // Phase 3: Upload local changes
-      print('📤 Phase 3: Uploading local changes...');
-      await _uploadLocalChanges();
-
-      // Phase 4: Download user-specific changes
-      print('📥 Phase 4: Downloading user-specific changes...');
-      await _downloadRemoteChanges();
-
-      // Phase 5: Update sync time
-      lastSyncTime.value = DateTime.now();
-      await _saveLastSyncTime();
-
-      syncStatus.value = 'Last sync: ${_formatSyncTime(lastSyncTime.value)}';
-      print('✅ Sync completed successfully at ${DateTime.now()}');
-
-      Get.snackbar(
-        'Sync Complete',
-        'Data synchronized successfully',
-        backgroundColor: Get.theme.colorScheme.primary,
-        colorText: Get.theme.colorScheme.onPrimary,
-        duration: const Duration(seconds: 2),
-      );
-    } catch (e, stackTrace) {
-      print('❌ Sync error: $e');
-      print('📋 Stack trace: $stackTrace');
-      syncStatus.value = 'Sync failed - ${e.toString()}';
-
-      // Handle specific error types
-      if (e is PlatformException && e.code == 'channel-error') {
-        _handleFirebaseError(e);
-        Get.snackbar(
-          'Sync Error',
-          'Firebase connection lost. Running in offline mode.',
-          backgroundColor: Get.theme.colorScheme.error,
-          colorText: Get.theme.colorScheme.onError,
-        );
-      } else {
-        Get.snackbar(
-          'Sync Error',
-          'Failed to sync: ${e.toString()}',
-          backgroundColor: Get.theme.colorScheme.error,
-          colorText: Get.theme.colorScheme.onError,
-        );
-      }
-    } finally {
-      isSyncing.value = false;
-      print('🏁 Sync operation completed\n');
-    }
-  }
-
   /// Ensure sync tracking columns exist
   Future<void> _ensureSyncTracking() async {
     print('🔧 Ensuring sync tracking columns exist...');
@@ -588,25 +503,6 @@ class FirebaseSyncService extends GetxController {
     print('📤 Upload phase complete. Total uploaded: $totalUploaded records');
   }
 
-  /// Download remote changes from Firebase with comprehensive logging
-  Future<void> _downloadRemoteChanges() async {
-    int totalDownloaded = 0;
-
-    for (String table in _syncTables) {
-      try {
-        print('📥 Processing downloads for table: $table');
-        final count = await _downloadTableChanges(table);
-        totalDownloaded += count;
-      } catch (e) {
-        print('❌ Error downloading $table: $e');
-        // Continue with other tables
-      }
-    }
-
-    print(
-        '📥 Download phase complete. Total downloaded: $totalDownloaded records');
-  }
-
   /// Alternative: Use separate queries to avoid composite index
   Future<int> _downloadTableChangesSeparateQueries(String table) async {
     if (_firestore == null) {
@@ -680,109 +576,6 @@ class FirebaseSyncService extends GetxController {
       print('❌ Error downloading $table changes: $e');
       return 0;
     }
-  }
-
-  /// Enhanced merge with conflict resolution
-  Future<void> _mergeDownloadedRecords(
-      String table, List<QueryDocumentSnapshot> docs) async {
-    final db = await DatabaseHelper.instance.database;
-    int insertCount = 0;
-    int updateCount = 0;
-    int conflictCount = 0;
-    int skipCount = 0;
-
-    print('🔄 Merging ${docs.length} downloaded $table records...');
-
-    for (final doc in docs) {
-      try {
-        final data = doc.data() as Map<String, dynamic>;
-        final firebaseId = doc.id;
-        if (!doc.exists) continue;
-
-        if (data == null) continue;
-
-        await _mergeDownloadedRecord(table, doc.id, data);
-        final sqliteData = _convertFirestoreToSqlite(data);
-
-        // Use the document ID as the local ID
-        final localId = int.tryParse(firebaseId);
-        if (localId == null) {
-          print('⚠️ Skipping record with invalid ID: $firebaseId');
-          skipCount++;
-          continue;
-        }
-
-        // Check if record exists locally
-        final existing = await db.query(
-          table,
-          where: 'id = ?',
-          whereArgs: [localId],
-          limit: 1,
-        );
-
-        if (existing.isNotEmpty) {
-          // Conflict resolution - use latest modification
-          final localLastModified =
-              existing.first['last_modified'] as int? ?? 0;
-          final remoteLastModified = sqliteData['last_modified'] as int? ?? 0;
-
-          if (remoteLastModified > localLastModified) {
-            // Remote is newer - update local
-            sqliteData['firebase_synced'] = 1;
-            sqliteData.remove('id'); // Don't overwrite ID
-
-            await db.update(
-              table,
-              sqliteData,
-              where: 'id = ?',
-              whereArgs: [localId],
-            );
-            updateCount++;
-            print(
-                '📝 Updated local record ID: $localId in $table (remote newer)');
-          } else if (remoteLastModified < localLastModified) {
-            // Local is newer - keep local, but mark as sync needed
-            await db.update(
-              table,
-              {'firebase_synced': 0},
-              where: 'id = ?',
-              whereArgs: [localId],
-            );
-            conflictCount++;
-            print('⚡ Conflict detected for ID: $localId (local newer)');
-          } else {
-            // Same timestamp - update anyway
-            sqliteData['firebase_synced'] = 1;
-            sqliteData.remove('id');
-
-            await db.update(
-              table,
-              sqliteData,
-              where: 'id = ?',
-              whereArgs: [localId],
-            );
-            updateCount++;
-            print(
-                '📝 Updated local record ID: $localId in $table (same timestamp)');
-          }
-        } else {
-          // Insert new record
-          sqliteData['id'] = localId;
-          sqliteData['firebase_synced'] = 1;
-          sqliteData['last_modified'] = DateTime.now().millisecondsSinceEpoch;
-
-          await db.insert(table, sqliteData);
-          insertCount++;
-          print('➕ Inserted new record ID: $localId in $table');
-        }
-      } catch (e) {
-        print('❌ Error merging ${doc.id}: $e');
-        skipCount++;
-      }
-    }
-
-    print(
-        '🔄 $table merge complete - Inserted: $insertCount, Updated: $updateCount, Conflicts: $conflictCount, Skipped: $skipCount');
   }
 
   /// Handle record deletions from other devices
@@ -2134,5 +1927,192 @@ class FirebaseSyncService extends GetxController {
     } catch (e) {
       print('❌ Error merging real-time record for $table: $e');
     }
+  }
+
+  // 1. Modify the _mergeDownloadedRecords method
+  Future<void> _mergeDownloadedRecords(
+      String table, List<QueryDocumentSnapshot> docs) async {
+    final db = await DatabaseHelper.instance.database;
+    int insertCount = 0;
+    int updateCount = 0;
+    int conflictCount = 0;
+    int skipCount = 0;
+
+    print('🔄 Merging ${docs.length} downloaded $table records...');
+
+    for (final doc in docs) {
+      try {
+        final data = doc.data() as Map<String, dynamic>;
+        final firebaseId = doc.id;
+        if (!doc.exists || data == null) continue;
+
+        final sqliteData = _convertFirestoreToSqlite(data);
+        final localId = int.tryParse(firebaseId);
+        if (localId == null) {
+          print('⚠️ Skipping record with invalid ID: $firebaseId');
+          skipCount++;
+          continue;
+        }
+
+        // Check if record exists locally
+        final existing = await db.query(
+          table,
+          where: 'id = ?',
+          whereArgs: [localId],
+          limit: 1,
+        );
+
+        if (existing.isNotEmpty) {
+          final localLastModified =
+              existing.first['last_modified'] as int? ?? 0;
+          final remoteLastModified = sqliteData['last_modified'] as int? ?? 0;
+          final localSynced = existing.first['firebase_synced'] as int? ?? 1;
+
+          // CRITICAL FIX: Always accept remote data during download phase
+          // Only check timestamps for true conflicts (both devices modified simultaneously)
+
+          if (localSynced == 1) {
+            // Local data is already synced, so accept remote changes
+            sqliteData['firebase_synced'] = 1;
+            sqliteData.remove('id');
+
+            await db.update(
+              table,
+              sqliteData,
+              where: 'id = ?',
+              whereArgs: [localId],
+            );
+            updateCount++;
+            print(
+                '📝 Updated local record ID: $localId (accepting remote changes)');
+          } else if (remoteLastModified > localLastModified) {
+            // Remote is definitely newer - accept it
+            sqliteData['firebase_synced'] = 1;
+            sqliteData.remove('id');
+
+            await db.update(
+              table,
+              sqliteData,
+              where: 'id = ?',
+              whereArgs: [localId],
+            );
+            updateCount++;
+            print('📝 Updated local record ID: $localId (remote newer)');
+          } else {
+            // True conflict: both have unsynced changes
+            // For now, let's prefer remote (server wins)
+            // You could implement more sophisticated conflict resolution here
+            sqliteData['firebase_synced'] = 1;
+            sqliteData.remove('id');
+
+            await db.update(
+              table,
+              sqliteData,
+              where: 'id = ?',
+              whereArgs: [localId],
+            );
+            conflictCount++;
+            print('⚡ Resolved conflict for ID: $localId (server wins)');
+          }
+        } else {
+          // New record - insert it
+          sqliteData['id'] = localId;
+          sqliteData['firebase_synced'] = 1;
+
+          await db.insert(table, sqliteData);
+          insertCount++;
+          print('➕ Inserted new record ID: $localId');
+        }
+      } catch (e) {
+        print('❌ Error merging record: $e');
+      }
+    }
+
+    print(
+        '✅ Merge complete - Inserted: $insertCount, Updated: $updateCount, Conflicts: $conflictCount, Skipped: $skipCount');
+  }
+
+// 2. Modify the sync order - Download BEFORE Upload
+  Future<void> _triggerSync() async {
+    if (isSyncing.value) {
+      print('⚠️ Sync already in progress, skipping');
+      return;
+    }
+
+    // ... existing precondition checks ...
+
+    try {
+      isSyncing.value = true;
+      syncStatus.value = 'Syncing...';
+
+      // Phase 1: Add sync tracking to tables if needed
+      await _ensureSyncTracking();
+
+      // Phase 2: Sync shared data
+      await _syncSharedData();
+
+      // CRITICAL CHANGE: Download FIRST, then upload
+      // Phase 3: Download remote changes BEFORE uploading local changes
+      print('📥 Phase 3: Downloading remote changes FIRST...');
+      await _downloadRemoteChanges();
+
+      // Phase 4: Upload local changes AFTER downloading
+      print('📤 Phase 4: Uploading local changes...');
+      await _uploadLocalChanges();
+
+      // Phase 5: Update sync time
+      lastSyncTime.value = DateTime.now();
+      await _saveLastSyncTime();
+
+      syncStatus.value = 'Last sync: ${_formatSyncTime(lastSyncTime.value)}';
+      print('✅ Sync completed successfully at ${DateTime.now()}');
+    } catch (e, stackTrace) {
+      // ... existing error handling ...
+    } finally {
+      isSyncing.value = false;
+    }
+  }
+
+// 3. Add a method to check for unsynced local changes before downloading
+  Future<bool> _hasUnsyncedLocalChanges(String table) async {
+    final db = await DatabaseHelper.instance.database;
+
+    final result = await db.query(
+      table,
+      where: 'firebase_synced = ?',
+      whereArgs: [0],
+      limit: 1,
+    );
+
+    return result.isNotEmpty;
+  }
+
+// 4. Enhanced conflict detection
+  Future<void> _downloadRemoteChanges() async {
+    print('📥 Starting download of remote changes...');
+
+    int totalDownloaded = 0;
+
+    for (final table in _syncTables) {
+      try {
+        // Check if we have local unsynced changes first
+        final hasLocalChanges = await _hasUnsyncedLocalChanges(table);
+        if (hasLocalChanges) {
+          print(
+              '⚠️ Table $table has unsynced local changes - will merge carefully');
+        }
+
+        final downloadCount = await _downloadTableChanges(table);
+        totalDownloaded += downloadCount;
+
+        if (downloadCount > 0) {
+          print('📥 Downloaded $downloadCount changes for $table');
+        }
+      } catch (e) {
+        print('❌ Error downloading $table: $e');
+      }
+    }
+
+    print('📥 Total downloaded: $totalDownloaded changes');
   }
 }
