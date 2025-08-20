@@ -260,6 +260,11 @@ class AuthController extends GetxController {
             colorText: Colors.white,
             duration: const Duration(seconds: 2),
           );
+          if (firebaseAvailable.value && isFirebaseAuthenticated) {
+            // Trigger sync to get shared data
+            final syncService = Get.find<FirebaseSyncService>();
+            await syncService.triggerManualSync();
+          }
         } catch (e) {
           print('⚠️ Firebase authentication failed: $e');
           // Continue with local auth only

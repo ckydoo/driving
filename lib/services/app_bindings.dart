@@ -62,7 +62,7 @@ class AppBindings extends Bindings {
     // STEP 7: Initialize service controllers
     Get.put<LessonCountingService>(LessonCountingService(), permanent: true);
     print('✅ LessonCountingService initialized');
-
+    Get.put(FirebaseSyncService());
     Get.put<ConsistencyCheckerService>(ConsistencyCheckerService(),
         permanent: true);
     print('✅ ConsistencyCheckerService initialized');
