@@ -355,7 +355,7 @@ class AuthController extends GetxController {
 
       // Generate a temporary email
       final tempEmail =
-          'temp_${DateTime.now().millisecondsSinceEpoch}@temp.com';
+          'temp_${DateTime.now().toUtc().millisecondsSinceEpoch}@temp.com';
 
       // Create temporary account
       final tempCredential =
@@ -694,7 +694,7 @@ class AuthController extends GetxController {
 
   /// Generate a secure password for Firebase
   String _generateSecurePassword() {
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final timestamp = DateTime.now().toUtc().millisecondsSinceEpoch;
     final userId = currentUser.value?.id ?? 'unknown';
     final base = 'sync_${userId}_$timestamp';
     return _hashPassword(base).substring(0, 20); // Use first 20 chars of hash

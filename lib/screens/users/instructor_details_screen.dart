@@ -2223,7 +2223,7 @@ class _InstructorDetailsScreenState extends State<InstructorDetailsScreen>
 
     setState(() {
       _instructorNotes.insert(0, {
-        'id': DateTime.now().millisecondsSinceEpoch,
+        'id': DateTime.now().toUtc().millisecondsSinceEpoch,
         'content': _noteController.text.trim(),
         'created_at': DateTime.now(),
         'author': authController.currentUser.value?.fname ?? 'Admin',
@@ -2251,7 +2251,7 @@ class _InstructorDetailsScreenState extends State<InstructorDetailsScreen>
       if (result != null) {
         setState(() {
           _instructorAttachments.insert(0, {
-            'id': DateTime.now().millisecondsSinceEpoch,
+            'id': DateTime.now().toUtc().millisecondsSinceEpoch,
             'file_name': result.files.first.name,
             'file_size':
                 '${(result.files.first.size / 1024 / 1024).toStringAsFixed(1)} MB',

@@ -1573,7 +1573,8 @@ class _AddUserScreenState extends State<AddUserScreen> {
           final totalAmount = lessons * pricePerLesson;
 
           final invoice = Invoice(
-            invoiceNumber: 'INV-${DateTime.now().millisecondsSinceEpoch}',
+            invoiceNumber:
+                'INV-${DateTime.now().toUtc().millisecondsSinceEpoch}',
             studentId: user.id!,
             courseId: _selectedCourse!.id!,
             lessons: lessons,

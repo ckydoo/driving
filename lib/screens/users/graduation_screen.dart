@@ -549,7 +549,7 @@ class _GraduationScreenState extends State<GraduationScreen> {
           amount: paymentAmount,
           paymentDate: DateTime.now(),
           method: method,
-          reference: 'GRAD-${DateTime.now().millisecondsSinceEpoch}',
+          reference: 'GRAD-${DateTime.now().toUtc().millisecondsSinceEpoch}',
           notes: 'Graduation payment - remaining balance',
         );
 

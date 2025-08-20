@@ -340,7 +340,7 @@ class FirebaseSyncService extends GetxController {
         if (!hasLastModified || !hasFirebaseSynced) {
           await db.execute('''
             UPDATE $table 
-            SET last_modified = ${DateTime.now().millisecondsSinceEpoch}, 
+            SET last_modified = ${DateTime.now().toUtc().millisecondsSinceEpoch}, 
                 firebase_synced = 0 
             WHERE last_modified IS NULL OR last_modified = 0
           ''');
@@ -923,7 +923,7 @@ class FirebaseSyncService extends GetxController {
     String? deviceName = prefs.getString('device_name');
 
     if (deviceId == null) {
-      deviceId = 'device_${DateTime.now().millisecondsSinceEpoch}';
+      deviceId = 'device_${DateTime.now().toUtc().millisecondsSinceEpoch}';
       await prefs.setString('device_id', deviceId);
 
       // Get device name
@@ -943,7 +943,8 @@ class FirebaseSyncService extends GetxController {
 
       if (deviceName == null) {
         // Create a simple device identifier
-        deviceName = 'Device-${DateTime.now().millisecondsSinceEpoch ~/ 1000}';
+        deviceName =
+            'Device-${DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000}';
         await prefs.setString('device_name', deviceName);
       }
 
@@ -1248,7 +1249,7 @@ class FirebaseSyncService extends GetxController {
         await db.execute('''
         UPDATE $table 
         SET firebase_synced = 0, 
-            last_modified = ${DateTime.now().millisecondsSinceEpoch}
+            last_modified = ${DateTime.now().toUtc().millisecondsSinceEpoch}
       ''');
         print('✅ Marked all $table records as unsynced');
       } catch (e) {
@@ -1259,81 +1260,6 @@ class FirebaseSyncService extends GetxController {
     // Reset sync time to force full sync
     lastSyncTime.value = DateTime.fromMillisecondsSinceEpoch(0);
     await _saveLastSyncTime();
-  }
-
-  // Update these methods in your FirebaseSyncService class
-
-  /// Updated upload method to use firebase_user_id
-  Future<void> _uploadTableRecords(
-      String table, List<Map<String, dynamic>> records) async {
-    if (_firestore == null) {
-      throw Exception('Firestore not available');
-    }
-
-    try {
-      print('📤 Uploading ${records.length} records to $table...');
-
-      // Get the correct collection path
-      final collectionPath = _getCorrectCollectionPath(table);
-      final collection = _firestore!.collection(collectionPath);
-
-      int successCount = 0;
-      int errorCount = 0;
-
-      // Upload records
-      for (final record in records) {
-        try {
-          final firestoreData = _convertSqliteToFirestore(record);
-
-          // Use record ID as document ID for consistency
-          final docId = record['id'].toString();
-
-          // For user-specific data, use firebase_user_id from the record
-          if ([
-            'users',
-            'schedules',
-            'invoices',
-            'payments',
-            'attachments',
-            'notes',
-            'notifications',
-            'billing_records'
-          ].contains(table)) {
-            // Use firebase_user_id from record, or current user as fallback
-            final recordFirebaseUserId = record['firebase_user_id'] ??
-                _authController.currentFirebaseUserId;
-            firestoreData['firebase_user_id'] =
-                recordFirebaseUserId; // Firebase expects 'firebase_user_id'
-            firestoreData['sync_device_id'] = await _getDeviceId();
-            print(
-                '👤 Uploading user-specific data to: $collectionPath with firebase_user_id: $recordFirebaseUserId');
-          } else {
-            print('🌍 Uploading shared data to: $collectionPath');
-          }
-
-          await collection
-              .doc(docId)
-              .set(firestoreData, SetOptions(merge: true));
-          successCount++;
-
-          print('✅ Uploaded $table record $docId to $collectionPath');
-        } catch (e) {
-          print('❌ Error uploading record ${record['id']}: $e');
-          errorCount++;
-        }
-      }
-
-      print(
-          '📤 Upload complete for $table - Success: $successCount, Errors: $errorCount');
-
-      // Mark successfully uploaded records as synced
-      if (successCount > 0) {
-        await _markRecordsAsSynced(table, records);
-      }
-    } catch (e) {
-      print('❌ Error uploading $table records: $e');
-      // Don't throw - continue with other tables
-    }
   }
 
   /// Updated download method to filter by firebase_user_id (Firebase) and map to firebase_user_id (local)
@@ -1485,7 +1411,7 @@ class FirebaseSyncService extends GetxController {
         SET firebase_synced = 0, 
             last_modified = ?
         WHERE firebase_user_id IS NOT NULL
-      ''', [DateTime.now().millisecondsSinceEpoch]);
+      ''', [DateTime.now().toUtc().millisecondsSinceEpoch]);
 
         print('  ✅ Marked $table records for sync');
       } catch (e) {
@@ -1798,7 +1724,7 @@ class FirebaseSyncService extends GetxController {
   static Future<int> insertWithSmartSync(
       Database db, String table, Map<String, dynamic> values) async {
     // Add sync tracking data
-    values['last_modified'] = DateTime.now().millisecondsSinceEpoch;
+    values['last_modified'] = DateTime.now().toUtc().millisecondsSinceEpoch;
     values['firebase_synced'] = 0;
 
     final result = await db.insert(table, values);
@@ -1844,203 +1770,11 @@ class FirebaseSyncService extends GetxController {
     );
   }
 
-  /// Handle real-time changes - FIXED VERSION
-  Future<void> _handleRealtimeChanges(
-      String table, QuerySnapshot snapshot) async {
-    try {
-      print(
-          '⚡ Processing real-time changes for $table: ${snapshot.docChanges.length} changes');
-
-      for (final change in snapshot.docChanges) {
-        if (change.type == DocumentChangeType.added ||
-            change.type == DocumentChangeType.modified) {
-          // FIX: Use the document directly instead of casting
-          final docSnapshot = change.doc;
-
-          // Check if document exists and has data
-          if (docSnapshot.exists) {
-            final data = docSnapshot.data() as Map<String, dynamic>?;
-            if (data != null) {
-              // Create a mock QueryDocumentSnapshot for the merge function
-              await _mergeDownloadedRecord(table, docSnapshot.id, data);
-            }
-          }
-        } else if (change.type == DocumentChangeType.removed) {
-          // Handle deletions
-          await _handleRecordDeletion(table, change.doc.id);
-        }
-      }
-    } catch (e) {
-      print('❌ Error handling real-time changes: $e');
-    }
-  }
-
-  /// New method to handle individual record merging
-  Future<void> _mergeDownloadedRecord(
-      String table, String docId, Map<String, dynamic> data) async {
-    final db = await DatabaseHelper.instance.database;
-
-    try {
-      final sqliteData = _convertFirestoreToSqlite(data);
-
-      // Use the document ID as the local ID
-      final localId = int.tryParse(docId);
-      if (localId == null) {
-        print('⚠️ Skipping record with invalid ID: $docId');
-        return;
-      }
-
-      // Check if record exists locally
-      final existing = await db.query(
-        table,
-        where: 'id = ?',
-        whereArgs: [localId],
-        limit: 1,
-      );
-
-      if (existing.isNotEmpty) {
-        // Update existing record
-        final localLastModified = existing.first['last_modified'] as int? ?? 0;
-        final remoteLastModified = sqliteData['last_modified'] as int? ?? 0;
-
-        if (remoteLastModified >= localLastModified) {
-          // Remote is newer or same - update local
-          sqliteData['firebase_synced'] = 1;
-          sqliteData.remove('id'); // Don't overwrite ID
-
-          await db.update(
-            table,
-            sqliteData,
-            where: 'id = ?',
-            whereArgs: [localId],
-          );
-          print('📝 Updated local record ID: $localId in $table (real-time)');
-        }
-      } else {
-        // Insert new record
-        sqliteData['id'] = localId;
-        sqliteData['firebase_synced'] = 1;
-
-        await db.insert(table, sqliteData);
-        print('➕ Inserted new record ID: $localId in $table (real-time)');
-      }
-    } catch (e) {
-      print('❌ Error merging real-time record for $table: $e');
-    }
-  }
-
-  // 1. Modify the _mergeDownloadedRecords method
-  Future<void> _mergeDownloadedRecords(
-      String table, List<QueryDocumentSnapshot> docs) async {
-    final db = await DatabaseHelper.instance.database;
-    int insertCount = 0;
-    int updateCount = 0;
-    int conflictCount = 0;
-    int skipCount = 0;
-
-    print('🔄 Merging ${docs.length} downloaded $table records...');
-
-    for (final doc in docs) {
-      try {
-        final data = doc.data() as Map<String, dynamic>;
-        final firebaseId = doc.id;
-        if (!doc.exists || data == null) continue;
-
-        final sqliteData = _convertFirestoreToSqlite(data);
-        final localId = int.tryParse(firebaseId);
-        if (localId == null) {
-          print('⚠️ Skipping record with invalid ID: $firebaseId');
-          skipCount++;
-          continue;
-        }
-
-        // Check if record exists locally
-        final existing = await db.query(
-          table,
-          where: 'id = ?',
-          whereArgs: [localId],
-          limit: 1,
-        );
-
-        if (existing.isNotEmpty) {
-          final localLastModified =
-              existing.first['last_modified'] as int? ?? 0;
-          final remoteLastModified = sqliteData['last_modified'] as int? ?? 0;
-          final localSynced = existing.first['firebase_synced'] as int? ?? 1;
-
-          // CRITICAL FIX: Always accept remote data during download phase
-          // Only check timestamps for true conflicts (both devices modified simultaneously)
-
-          if (localSynced == 1) {
-            // Local data is already synced, so accept remote changes
-            sqliteData['firebase_synced'] = 1;
-            sqliteData.remove('id');
-
-            await db.update(
-              table,
-              sqliteData,
-              where: 'id = ?',
-              whereArgs: [localId],
-            );
-            updateCount++;
-            print(
-                '📝 Updated local record ID: $localId (accepting remote changes)');
-          } else if (remoteLastModified > localLastModified) {
-            // Remote is definitely newer - accept it
-            sqliteData['firebase_synced'] = 1;
-            sqliteData.remove('id');
-
-            await db.update(
-              table,
-              sqliteData,
-              where: 'id = ?',
-              whereArgs: [localId],
-            );
-            updateCount++;
-            print('📝 Updated local record ID: $localId (remote newer)');
-          } else {
-            // True conflict: both have unsynced changes
-            // For now, let's prefer remote (server wins)
-            // You could implement more sophisticated conflict resolution here
-            sqliteData['firebase_synced'] = 1;
-            sqliteData.remove('id');
-
-            await db.update(
-              table,
-              sqliteData,
-              where: 'id = ?',
-              whereArgs: [localId],
-            );
-            conflictCount++;
-            print('⚡ Resolved conflict for ID: $localId (server wins)');
-          }
-        } else {
-          // New record - insert it
-          sqliteData['id'] = localId;
-          sqliteData['firebase_synced'] = 1;
-
-          await db.insert(table, sqliteData);
-          insertCount++;
-          print('➕ Inserted new record ID: $localId');
-        }
-      } catch (e) {
-        print('❌ Error merging record: $e');
-      }
-    }
-
-    print(
-        '✅ Merge complete - Inserted: $insertCount, Updated: $updateCount, Conflicts: $conflictCount, Skipped: $skipCount');
-  }
-
-// 2. Modify the sync order - Download BEFORE Upload
   Future<void> _triggerSync() async {
     if (isSyncing.value) {
       print('⚠️ Sync already in progress, skipping');
       return;
     }
-
-    // ... existing precondition checks ...
-
     try {
       isSyncing.value = true;
       syncStatus.value = 'Syncing...';
@@ -2114,5 +1848,483 @@ class FirebaseSyncService extends GetxController {
     }
 
     print('📥 Total downloaded: $totalDownloaded changes');
+  }
+
+// Enhanced method to ensure proper timestamp handling in database operations
+  Future<void> _ensureTimestampConsistency() async {
+    final db = await DatabaseHelper.instance.database;
+
+    for (final table in _syncTables) {
+      try {
+        // Find records with invalid or missing timestamps
+        final invalidRecords = await db.query(
+          table,
+          where: 'last_modified IS NULL OR last_modified <= 0',
+        );
+
+        if (invalidRecords.isNotEmpty) {
+          print(
+              '🔧 Fixing ${invalidRecords.length} records with invalid timestamps in $table');
+
+          for (final record in invalidRecords) {
+            final id = record['id'];
+            final now = DateTime.now().toUtc().millisecondsSinceEpoch;
+
+            await db.update(
+              table,
+              {
+                'last_modified': now,
+                'firebase_synced': 0, // Mark as needing sync
+              },
+              where: 'id = ?',
+              whereArgs: [id],
+            );
+          }
+        }
+      } catch (e) {
+        print('⚠️ Could not fix timestamps for $table: $e');
+      }
+    }
+  }
+
+  Future<void> _uploadTableRecords(
+      String table, List<Map<String, dynamic>> records) async {
+    if (_firestore == null) {
+      throw Exception('Firestore not available');
+    }
+
+    try {
+      print('📤 Uploading ${records.length} records to $table...');
+
+      // Get the correct collection path
+      final collectionPath = _getCorrectCollectionPath(table);
+      final collection = _firestore!.collection(collectionPath);
+
+      int successCount = 0;
+      int errorCount = 0;
+      int skippedCount = 0;
+
+      // Upload records with timestamp checking
+      for (final record in records) {
+        try {
+          final docId = record['id'].toString();
+          final localLastModified = record['last_modified'] as int? ?? 0;
+
+          // CRITICAL FIX: Check if remote data is newer before uploading
+          final existingDoc = await collection.doc(docId).get();
+
+          if (existingDoc.exists) {
+            final existingData = existingDoc.data() as Map<String, dynamic>?;
+            if (existingData != null) {
+              // Convert remote timestamp to int for comparison
+              final remoteLastModified =
+                  _getTimestampAsInt(existingData['last_modified']);
+
+              if (remoteLastModified != null &&
+                  remoteLastModified > localLastModified) {
+                // Remote is newer - DON'T upload, UPDATE LOCAL with remote data
+                final db = await DatabaseHelper.instance.database;
+
+                // Convert remote data to local format
+                final localData = _convertFirestoreToSqlite(existingData);
+                localData['firebase_synced'] = 1; // Mark as synced
+                localData.remove('id'); // Don't overwrite the ID
+
+                // UPDATE LOCAL DATABASE with newer remote data
+                await db.update(
+                  table,
+                  localData,
+                  where: 'id = ?',
+                  whereArgs: [record['id']],
+                );
+
+                skippedCount++;
+                print(
+                    '⚠️ UPLOAD SKIPPED & LOCAL UPDATED: Remote newer for ID $docId');
+                print(
+                    '   Local timestamp:  ${DateTime.fromMillisecondsSinceEpoch(localLastModified)}');
+                print(
+                    '   Remote timestamp: ${DateTime.fromMillisecondsSinceEpoch(remoteLastModified)}');
+                print('   → Local database updated with newer remote data');
+                continue; // Skip this upload
+              }
+            }
+          }
+
+          // Proceed with upload if local is newer or equal
+          final firestoreData = _convertSqliteToFirestore(record);
+
+          // For user-specific data, ensure user_id is set
+          if ([
+            'users',
+            'schedules',
+            'invoices',
+            'payments',
+            'attachments',
+            'notes',
+            'notifications',
+            'billing_records'
+          ].contains(table)) {
+            // Use firebase_user_id from record, or current user as fallback
+            final recordFirebaseUserId = record['firebase_user_id'] ??
+                _authController.currentFirebaseUserId;
+
+            if (recordFirebaseUserId != null) {
+              firestoreData['user_id'] = recordFirebaseUserId;
+            } else {
+              print('⚠️ No firebase_user_id for $table record ${record['id']}');
+              errorCount++;
+              continue;
+            }
+          }
+
+          // Upload to Firebase
+          await collection.doc(docId).set(firestoreData);
+
+          // Mark as synced locally
+          final db = await DatabaseHelper.instance.database;
+          await db.update(
+            table,
+            {'firebase_synced': 1},
+            where: 'id = ?',
+            whereArgs: [record['id']],
+          );
+
+          successCount++;
+          print('📤 Uploaded ID: $docId to $table');
+        } catch (e) {
+          errorCount++;
+          print('❌ Failed to upload ${record['id']} to $table: $e');
+        }
+      }
+
+      print('📤 Upload complete for $table:');
+      print('   ✅ Successful uploads: $successCount');
+      print('   🔄 Skipped & local updated: $skippedCount');
+      print('   ❌ Errors: $errorCount');
+    } catch (e) {
+      print('❌ Error uploading $table: $e');
+      throw e;
+    }
+  }
+
+// Add this helper method if you don't have it already
+  int? _getTimestampAsInt(dynamic timestamp) {
+    if (timestamp == null) return null;
+
+    if (timestamp is int) {
+      return timestamp;
+    } else if (timestamp is Timestamp) {
+      return timestamp.millisecondsSinceEpoch;
+    } else if (timestamp is DateTime) {
+      return timestamp.millisecondsSinceEpoch;
+    } else if (timestamp is String) {
+      try {
+        final dateTime = DateTime.parse(timestamp);
+        return dateTime.millisecondsSinceEpoch;
+      } catch (e) {
+        print('⚠️ Could not parse timestamp string: $timestamp');
+        return null;
+      }
+    }
+
+    print('⚠️ Unknown timestamp format: ${timestamp.runtimeType}');
+    return null;
+  }
+
+  /// FIXED: Real-time record merge with proper constraint handling
+  Future<void> _mergeDownloadedRecord(
+      String table, String docId, Map<String, dynamic> data) async {
+    final db = await DatabaseHelper.instance.database;
+
+    try {
+      final sqliteData = _convertFirestoreToSqlite(data);
+
+      // Use the document ID as the local ID
+      final localId = int.tryParse(docId);
+      if (localId == null) {
+        print('⚠️ Skipping record with invalid ID: $docId');
+        return;
+      }
+
+      // CRITICAL FIX: Use INSERT OR REPLACE to handle constraint violations
+      // This ensures we don't get primary key constraint errors
+
+      // Check if record exists locally (for logging/conflict detection)
+      final existing = await db.query(
+        table,
+        where: 'id = ?',
+        whereArgs: [localId],
+        limit: 1,
+      );
+
+      if (existing.isNotEmpty) {
+        // Record exists - check for conflicts
+        final localLastModified = existing.first['last_modified'] as int? ?? 0;
+        final remoteLastModified = sqliteData['last_modified'] as int? ?? 0;
+        final localSynced = existing.first['firebase_synced'] as int? ?? 1;
+
+        // Apply Last-Modified-Wins for real-time updates
+        if (localSynced == 0 && localLastModified > remoteLastModified) {
+          // Local has unsynced changes that are newer - keep local
+          print(
+              '⚡ Real-time conflict: Local wins for ID $localId (newer unsynced changes)');
+          print(
+              '   Local timestamp:  ${DateTime.fromMillisecondsSinceEpoch(localLastModified)}');
+          print(
+              '   Remote timestamp: ${DateTime.fromMillisecondsSinceEpoch(remoteLastModified)}');
+          return; // Don't update, keep local changes
+        }
+
+        // Remote wins or local is synced - safe to update
+        sqliteData['firebase_synced'] = 1;
+        sqliteData.remove('id'); // Don't overwrite ID
+
+        await db.update(
+          table,
+          sqliteData,
+          where: 'id = ?',
+          whereArgs: [localId],
+        );
+        print('📝 Real-time update: ID $localId in $table');
+
+        if (localSynced == 0) {
+          print('   ⚡ Real-time conflict: Remote wins (newer timestamp)');
+        }
+      } else {
+        // Record doesn't exist locally - insert it
+        // FIX: Use INSERT OR REPLACE to handle any constraint issues
+        sqliteData['id'] = localId;
+        sqliteData['firebase_synced'] = 1;
+
+        try {
+          await db.insert(table, sqliteData);
+          print('➕ Real-time insert: ID $localId in $table');
+        } catch (e) {
+          if (e.toString().contains('UNIQUE constraint failed') ||
+              e.toString().contains('PRIMARY KEY constraint')) {
+            print(
+                '⚠️ Primary key constraint on insert, using INSERT OR REPLACE for ID $localId');
+
+            // FIX: Use raw SQL with INSERT OR REPLACE
+            final columns = sqliteData.keys.join(', ');
+            final placeholders = List.filled(sqliteData.length, '?').join(', ');
+
+            await db.rawInsert(
+              'INSERT OR REPLACE INTO $table ($columns) VALUES ($placeholders)',
+              sqliteData.values.toList(),
+            );
+            print('✅ Real-time insert/replace: ID $localId in $table');
+          } else {
+            rethrow; // Re-throw if it's a different error
+          }
+        }
+      }
+    } catch (e) {
+      print('❌ Error merging real-time record for $table: $e');
+
+      // ADDITIONAL FIX: If all else fails, try a force update
+      if (e.toString().contains('UNIQUE constraint failed') ||
+          e.toString().contains('PRIMARY KEY constraint')) {
+        try {
+          final localId = int.tryParse(docId);
+          if (localId != null) {
+            final sqliteData = _convertFirestoreToSqlite(data);
+            sqliteData['firebase_synced'] = 1;
+            sqliteData.remove('id');
+
+            // Force update existing record
+            final updateResult = await db.update(
+              table,
+              sqliteData,
+              where: 'id = ?',
+              whereArgs: [localId],
+            );
+
+            if (updateResult > 0) {
+              print('🔧 Force updated existing record ID $localId in $table');
+            } else {
+              print('⚠️ No record found to update for ID $localId in $table');
+            }
+          }
+        } catch (forceError) {
+          print('❌ Force update also failed: $forceError');
+        }
+      }
+    }
+  }
+
+// ADDITIONAL FIX: Enhanced real-time change handler with better error handling
+  Future<void> _handleRealtimeChanges(
+      String table, QuerySnapshot snapshot) async {
+    try {
+      print(
+          '⚡ Processing real-time changes for $table: ${snapshot.docChanges.length} changes');
+
+      for (final change in snapshot.docChanges) {
+        try {
+          if (change.type == DocumentChangeType.added ||
+              change.type == DocumentChangeType.modified) {
+            final docSnapshot = change.doc;
+
+            // Check if document exists and has data
+            if (docSnapshot.exists) {
+              final data = docSnapshot.data() as Map<String, dynamic>?;
+
+              if (data != null) {
+                // Process this specific change with better error handling
+                await _mergeDownloadedRecord(table, docSnapshot.id, data);
+              } else {
+                print('⚠️ Document ${docSnapshot.id} has no data');
+              }
+            } else {
+              print('⚠️ Document ${docSnapshot.id} does not exist');
+            }
+          } else if (change.type == DocumentChangeType.removed) {
+            // Handle deletions
+            await _handleRecordDeletion(table, change.doc.id);
+          }
+        } catch (changeError) {
+          // Don't let one failed change break the entire batch
+          print('❌ Error processing individual change in $table: $changeError');
+          print('   Document ID: ${change.doc.id}');
+          print('   Change type: ${change.type}');
+          // Continue processing other changes
+        }
+      }
+    } catch (e) {
+      print('❌ Error handling real-time changes batch for $table: $e');
+    }
+  }
+
+// ENHANCED: Batch merge method with better constraint handling
+  Future<void> _mergeDownloadedRecords(
+      String table, List<QueryDocumentSnapshot> docs) async {
+    final db = await DatabaseHelper.instance.database;
+    int insertCount = 0;
+    int updateCount = 0;
+    int conflictCount = 0;
+    int skipCount = 0;
+    int constraintErrorCount = 0;
+
+    print('🔄 Merging ${docs.length} downloaded $table records...');
+
+    for (final doc in docs) {
+      try {
+        final data = doc.data() as Map<String, dynamic>;
+        final firebaseId = doc.id;
+        if (!doc.exists || data == null) continue;
+
+        final sqliteData = _convertFirestoreToSqlite(data);
+        final localId = int.tryParse(firebaseId);
+        if (localId == null) {
+          print('⚠️ Skipping record with invalid ID: $firebaseId');
+          skipCount++;
+          continue;
+        }
+
+        // Check if record exists locally
+        final existing = await db.query(
+          table,
+          where: 'id = ?',
+          whereArgs: [localId],
+          limit: 1,
+        );
+
+        if (existing.isNotEmpty) {
+          final localLastModified =
+              existing.first['last_modified'] as int? ?? 0;
+          final remoteLastModified = sqliteData['last_modified'] as int? ?? 0;
+          final localSynced = existing.first['firebase_synced'] as int? ?? 1;
+
+          if (localSynced == 1) {
+            // Local data is already synced, safe to accept remote changes
+            sqliteData['firebase_synced'] = 1;
+            sqliteData.remove('id');
+
+            await db.update(
+              table,
+              sqliteData,
+              where: 'id = ?',
+              whereArgs: [localId],
+            );
+            updateCount++;
+            print('📝 Updated local record ID: $localId (local was synced)');
+          } else {
+            // Local has unsynced changes - use Last-Modified-Wins strategy
+            if (remoteLastModified > localLastModified) {
+              // Remote is newer - accept remote changes
+              sqliteData['firebase_synced'] = 1;
+              sqliteData.remove('id');
+
+              await db.update(
+                table,
+                sqliteData,
+                where: 'id = ?',
+                whereArgs: [localId],
+              );
+              conflictCount++;
+              print(
+                  '⚡ CONFLICT: Remote wins for ID $localId (newer timestamp)');
+            } else {
+              // Local is newer or equal - keep local changes
+              skipCount++;
+              print(
+                  '⚡ CONFLICT: Local wins for ID $localId (newer local changes)');
+              continue; // Skip this remote update
+            }
+          }
+        } else {
+          // New record - insert it with constraint handling
+          sqliteData['id'] = localId;
+          sqliteData['firebase_synced'] = 1;
+
+          try {
+            await db.insert(table, sqliteData);
+            insertCount++;
+            print('➕ Inserted new record ID: $localId');
+          } catch (insertError) {
+            if (insertError.toString().contains('UNIQUE constraint failed') ||
+                insertError.toString().contains('PRIMARY KEY constraint')) {
+              constraintErrorCount++;
+              print(
+                  '⚠️ Constraint error on insert, attempting INSERT OR REPLACE for ID $localId');
+
+              try {
+                // Use INSERT OR REPLACE as fallback
+                final columns = sqliteData.keys.join(', ');
+                final placeholders =
+                    List.filled(sqliteData.length, '?').join(', ');
+
+                await db.rawInsert(
+                  'INSERT OR REPLACE INTO $table ($columns) VALUES ($placeholders)',
+                  sqliteData.values.toList(),
+                );
+                insertCount++;
+                print('✅ Insert/replace successful for ID $localId');
+              } catch (replaceError) {
+                print(
+                    '❌ Insert/replace also failed for ID $localId: $replaceError');
+                skipCount++;
+              }
+            } else {
+              print(
+                  '❌ Non-constraint error inserting ID $localId: $insertError');
+              skipCount++;
+            }
+          }
+        }
+      } catch (e) {
+        print('❌ Error merging record: $e');
+        skipCount++;
+      }
+    }
+
+    print('✅ Merge complete for $table:');
+    print('   📥 Inserted: $insertCount');
+    print('   📝 Updated: $updateCount');
+    print('   ⚡ Conflicts: $conflictCount');
+    print('   ⚠️ Constraint errors handled: $constraintErrorCount');
+    print('   ⏭️ Skipped: $skipCount');
   }
 }

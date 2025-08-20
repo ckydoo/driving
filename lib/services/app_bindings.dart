@@ -1,5 +1,7 @@
 // lib/services/app_bindings.dart - FIXED VERSION
 import 'dart:async';
+import 'package:driving/controllers/firebase_sync_service.dart';
+import 'package:driving/settings/sync_settings_screen.dart';
 import 'package:get/get.dart';
 import 'package:firebase_core/firebase_core.dart';
 import '../controllers/auth_controller.dart';
@@ -44,6 +46,8 @@ class AppBindings extends Bindings {
     Get.put<SettingsController>(SettingsController(), permanent: true);
     print('✅ SettingsController initialized');
 
+    // AUTO-SYNC CONTROLLER - Add this AFTER FirebaseSyncService
+    Get.put(AutoSyncController(), permanent: true);
     // STEP 6: Initialize business logic controllers
     Get.put<UserController>(UserController(), permanent: true);
     print('✅ UserController initialized');

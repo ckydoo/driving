@@ -28,7 +28,7 @@ class DatabaseHelperSyncExtension {
       try {
         // Add sync columns if they don't exist
         await db.execute('''
-          ALTER TABLE $table ADD COLUMN last_modified INTEGER DEFAULT ${DateTime.now().millisecondsSinceEpoch}
+          ALTER TABLE $table ADD COLUMN last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch}
         ''');
       } catch (e) {
         // Column might already exist
@@ -50,7 +50,7 @@ class DatabaseHelperSyncExtension {
         AFTER UPDATE ON $table
         BEGIN
           UPDATE $table SET 
-            last_modified = ${DateTime.now().millisecondsSinceEpoch},
+            last_modified = ${DateTime.now().toUtc().millisecondsSinceEpoch},
             firebase_synced = 0
           WHERE id = NEW.id;
         END;
@@ -62,7 +62,7 @@ class DatabaseHelperSyncExtension {
         AFTER INSERT ON $table
         BEGIN
           UPDATE $table SET 
-            last_modified = ${DateTime.now().millisecondsSinceEpoch},
+            last_modified = ${DateTime.now().toUtc().millisecondsSinceEpoch},
             firebase_synced = 0
           WHERE id = NEW.id;
         END;
@@ -74,7 +74,7 @@ class DatabaseHelperSyncExtension {
   static Future<int> insertWithSync(
       Database db, String table, Map<String, dynamic> values) async {
     // Add sync tracking data
-    values['last_modified'] = DateTime.now().millisecondsSinceEpoch;
+    values['last_modified'] = DateTime.now().toUtc().millisecondsSinceEpoch;
     values['firebase_synced'] = 0;
 
     final result = await db.insert(table, values);
@@ -98,7 +98,7 @@ class DatabaseHelperSyncExtension {
       String where,
       List<dynamic> whereArgs) async {
     // Add sync tracking data
-    values['last_modified'] = DateTime.now().millisecondsSinceEpoch;
+    values['last_modified'] = DateTime.now().toUtc().millisecondsSinceEpoch;
     values['firebase_synced'] = 0;
 
     final result =
@@ -127,7 +127,7 @@ class DatabaseHelperSyncExtension {
           table,
           {
             'deleted': 1,
-            'last_modified': DateTime.now().millisecondsSinceEpoch,
+            'last_modified': DateTime.now().toUtc().millisecondsSinceEpoch,
             'firebase_synced': 0,
           },
           where: where,

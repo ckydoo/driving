@@ -270,7 +270,7 @@ class DatabaseHelper {
     courseIds TEXT,
     status TEXT NOT NULL DEFAULT 'Active',
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    last_modified INTEGER DEFAULT ${DateTime.now().millisecondsSinceEpoch},
+    last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
     firebase_synced INTEGER DEFAULT 0,
     deleted INTEGER DEFAULT 0,
     firebase_uid TEXT UNIQUE     
@@ -1088,7 +1088,7 @@ class DatabaseHelper {
         await db.execute('''
           UPDATE $table 
           SET firebase_synced = 0, 
-              last_modified = ${DateTime.now().millisecondsSinceEpoch}
+              last_modified = ${DateTime.now().toUtc().millisecondsSinceEpoch}
           WHERE deleted IS NULL OR deleted = 0
         ''');
         print('Marked $table records for sync');
@@ -1290,7 +1290,7 @@ class DatabaseHelper {
         await db.execute('''
           UPDATE $table 
           SET firebase_synced = 0, 
-              last_modified = ${DateTime.now().millisecondsSinceEpoch}
+              last_modified = ${DateTime.now().toUtc().millisecondsSinceEpoch}
         ''');
         print('Reset sync status for $table');
       } catch (e) {
@@ -1353,7 +1353,7 @@ class DatabaseHelper {
         // Add last_modified column
         try {
           await db.execute(
-              'ALTER TABLE $table ADD COLUMN last_modified INTEGER DEFAULT ${DateTime.now().millisecondsSinceEpoch}');
+              'ALTER TABLE $table ADD COLUMN last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch}');
           print('  ✅ Added last_modified column to $table');
         } catch (e) {
           if (e.toString().contains('duplicate column name')) {
@@ -1409,7 +1409,7 @@ class DatabaseHelper {
             firebase_synced = 0,
             last_modified = ?
         WHERE firebase_user_id IS NULL OR firebase_user_id = ''
-      ''', [firebaseUserId, DateTime.now().millisecondsSinceEpoch]);
+      ''', [firebaseUserId, DateTime.now().toUtc().millisecondsSinceEpoch]);
 
         // Count how many records were updated
         final countResult = await db.rawQuery('''
@@ -1462,7 +1462,7 @@ class DatabaseHelper {
   static Future<int> insertWithSync(
       Database db, String table, Map<String, dynamic> values) async {
     // Add sync tracking data
-    values['last_modified'] = DateTime.now().millisecondsSinceEpoch;
+    values['last_modified'] = DateTime.now().toUtc().millisecondsSinceEpoch;
     values['firebase_synced'] = 0;
 
     // Add firebase_user_id if not present and user is authenticated
@@ -1493,7 +1493,7 @@ class DatabaseHelper {
       String where,
       List<dynamic> whereArgs) async {
     // Add sync tracking data
-    values['last_modified'] = DateTime.now().millisecondsSinceEpoch;
+    values['last_modified'] = DateTime.now().toUtc().millisecondsSinceEpoch;
     values['firebase_synced'] = 0;
 
     final result =
@@ -1514,7 +1514,7 @@ class DatabaseHelper {
           table,
           {
             'deleted': 1,
-            'last_modified': DateTime.now().millisecondsSinceEpoch,
+            'last_modified': DateTime.now().toUtc().millisecondsSinceEpoch,
             'firebase_synced': 0,
           },
           where: where,

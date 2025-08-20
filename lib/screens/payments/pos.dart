@@ -2046,7 +2046,7 @@ class _POSScreenState extends State<POSScreen> with TickerProviderStateMixin {
       final invoice = Invoice(
         studentId: _selectedStudent!.id!,
         courseId: _selectedCourse!.id!,
-        invoiceNumber: 'INV-${DateTime.now().millisecondsSinceEpoch}',
+        invoiceNumber: 'INV-${DateTime.now().toUtc().millisecondsSinceEpoch}',
         totalAmount: _selectedCourse!.price * lessons.toDouble(),
         pricePerLesson: _selectedCourse!.price.toDouble(),
         amountPaid: 0.0,

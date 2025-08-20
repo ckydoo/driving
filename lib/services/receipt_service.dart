@@ -598,7 +598,8 @@ class ReceiptService {
     if (await file.exists()) {
       await Printing.sharePdf(
         bytes: await file.readAsBytes(),
-        filename: 'receipt_${DateTime.now().millisecondsSinceEpoch}.pdf',
+        filename:
+            'receipt_${DateTime.now().toUtc().millisecondsSinceEpoch}.pdf',
       );
     }
   }

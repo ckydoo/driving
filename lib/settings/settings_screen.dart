@@ -1,6 +1,7 @@
 // lib/settings/enhanced_settings_screen.dart
 import 'package:driving/services/firebase_sync_service.dart';
 import 'package:driving/settings/sync_settings_screen.dart';
+import 'package:driving/widgets/sync_status_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
@@ -171,7 +172,7 @@ class _SettingsScreenState extends State<SettingsScreen>
         if (authController.hasAnyRole(['admin', 'instructor']))
           ElevatedButton(
             onPressed: () {
-              Get.to(() => SyncSettingsScreen());
+              Get.to(() => AutoSyncSettingsWidget());
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red.shade600,
@@ -179,14 +180,14 @@ class _SettingsScreenState extends State<SettingsScreen>
             ),
             child: Text('Sync Settings'),
           ),
-        if (authController.hasAnyRole(['admin', 'instructor']))
-          ElevatedButton(
-            onPressed: () async {
-              final syncService = Get.find<FirebaseSyncService>();
-              await syncService.forceCompleteSync();
-            },
-            child: Text('Test Firebase Connection'),
-          ),
+        // if (authController.hasAnyRole(['admin', 'instructor']))
+        //   ElevatedButton(
+        //     onPressed: () async {
+        //       final syncService = Get.find<FirebaseSyncService>();
+        //       await syncService.forceCompleteSync();
+        //     },
+        //     child: Text('Test Firebase Connection'),
+        //   ),
         if (authController.hasAnyRole(['admin', 'instructor']))
           _buildQuickActionButton(
             icon: Icons.download,
