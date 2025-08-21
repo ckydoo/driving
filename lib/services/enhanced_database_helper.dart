@@ -3,6 +3,7 @@
 // Add these methods to your existing database_helper.dart file
 
 import 'dart:async';
+import 'package:driving/services/multi_tenant_firebase_sync_service.dart';
 import 'package:sqflite/sqflite.dart';
 import 'firebase_sync_service.dart';
 
@@ -80,10 +81,10 @@ class DatabaseHelperSyncExtension {
     final result = await db.insert(table, values);
 
     // Trigger sync if online
-    if (FirebaseSyncService.instance.isOnline.value &&
-        !FirebaseSyncService.instance.isSyncing.value) {
+    if (MultiTenantFirebaseSyncService.instance.isOnline.value &&
+        !MultiTenantFirebaseSyncService.instance.isSyncing.value) {
       Timer(const Duration(seconds: 2), () {
-        FirebaseSyncService.instance.triggerManualSync();
+        MultiTenantFirebaseSyncService.instance.triggerManualSync();
       });
     }
 
@@ -105,10 +106,10 @@ class DatabaseHelperSyncExtension {
         await db.update(table, values, where: where, whereArgs: whereArgs);
 
     // Trigger sync if online
-    if (FirebaseSyncService.instance.isOnline.value &&
-        !FirebaseSyncService.instance.isSyncing.value) {
+    if (MultiTenantFirebaseSyncService.instance.isOnline.value &&
+        !MultiTenantFirebaseSyncService.instance.isSyncing.value) {
       Timer(const Duration(seconds: 2), () {
-        FirebaseSyncService.instance.triggerManualSync();
+        MultiTenantFirebaseSyncService.instance.triggerManualSync();
       });
     }
 
@@ -134,10 +135,10 @@ class DatabaseHelperSyncExtension {
           whereArgs: whereArgs);
 
       // Trigger sync if online
-      if (FirebaseSyncService.instance.isOnline.value &&
-          !FirebaseSyncService.instance.isSyncing.value) {
+      if (MultiTenantFirebaseSyncService.instance.isOnline.value &&
+          !MultiTenantFirebaseSyncService.instance.isSyncing.value) {
         Timer(const Duration(seconds: 2), () {
-          FirebaseSyncService.instance.triggerManualSync();
+          MultiTenantFirebaseSyncService.instance.triggerManualSync();
         });
       }
 

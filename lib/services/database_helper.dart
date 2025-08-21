@@ -8,6 +8,7 @@ import 'package:driving/models/fleet.dart';
 import 'package:driving/models/payment.dart';
 import 'package:driving/models/user.dart';
 import 'package:driving/services/firebase_sync_service.dart';
+import 'package:driving/services/multi_tenant_firebase_sync_service.dart';
 import 'package:get/get.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite_common/sqlite_api.dart';
@@ -1535,7 +1536,7 @@ class DatabaseHelper {
   /// Smart sync triggering with debouncing
   static void _triggerSmartSync() {
     try {
-      final syncService = Get.find<FirebaseSyncService>();
+      final syncService = Get.find<MultiTenantFirebaseSyncService>();
 
       if (syncService.isOnline.value &&
           !syncService.isSyncing.value &&

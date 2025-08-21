@@ -16,6 +16,7 @@ import 'package:driving/screens/users/alumni_screen.dart';
 import 'package:driving/screens/users/enhanced_users_screen.dart';
 import 'package:driving/screens/users/graduation_screen.dart';
 import 'package:driving/settings/settings_screen.dart';
+import 'package:driving/widgets/school_info_widget.dart';
 import 'package:driving/widgets/sync_status_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -156,7 +157,6 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
                   splashRadius: 24,
                 ),
               ),
-              const SyncStatusWidget(),
             ],
           ),
         ),
@@ -200,7 +200,7 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
               navController.navigateToPage('quick_search');
             },
           ),
-          const SyncStatusWidget(),
+
           // User menu dropdown
           PopupMenuButton<String>(
             onSelected: (value) {

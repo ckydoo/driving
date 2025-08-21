@@ -4,6 +4,7 @@ import 'package:driving/models/user.dart';
 import 'package:driving/services/database_helper.dart';
 import 'package:driving/controllers/pin_controller.dart';
 import 'package:driving/services/firebase_sync_service.dart';
+import 'package:driving/services/multi_tenant_firebase_sync_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
@@ -61,7 +62,7 @@ class AuthController extends GetxController {
       await _syncLocalUserWithFirebase(user);
 
       // Trigger data sync for this authenticated user
-      final syncService = Get.find<FirebaseSyncService>();
+      final syncService = Get.find<MultiTenantFirebaseSyncService>();
       await syncService.triggerManualSync();
     } catch (e) {
       print('❌ Error handling Firebase user sign-in: $e');

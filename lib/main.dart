@@ -1,10 +1,12 @@
-// lib/main.dart - Fixed version preserving all your original code + PIN authentication
+// lib/main.dart - Enhanced with Multi-Tenant Architecture
 import 'package:driving/routes/protected_routes.dart';
 import 'package:driving/screens/auth/login_screen.dart';
 import 'package:driving/services/app_bindings.dart';
+
 import 'package:driving/services/app_initialization.dart';
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/controllers/pin_controller.dart';
+import 'package:driving/services/school_config_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -21,8 +23,26 @@ void main() async {
     databaseFactory = databaseFactoryFfi;
   }
 
-  // FIXED: Initialize Firebase with proper options and error handling
+  print('🚀 === STARTING MULTI-TENANT DRIVING SCHOOL APP ===');
+
+  // STEP 1: Initialize Firebase with proper options and error handling
+  await _initializeFirebase();
+
+  // STEP 2: Initialize core services
+  await _initializeCoreServices();
+
+  // STEP 3: Initialize multi-tenant app bindings
+  await _initializeMultiTenantBindings();
+
+  print('✅ === APP INITIALIZATION COMPLETED ===');
+
+  runApp(MultiTenantDrivingSchoolApp());
+}
+
+/// Initialize Firebase
+Future<void> _initializeFirebase() async {
   try {
+    print('🔥 Initializing Firebase...');
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
@@ -32,33 +52,51 @@ void main() async {
     print('⚠️ App will continue in offline-only mode');
     // Don't rethrow - let app continue without Firebase
   }
+}
 
-  // Initialize PIN Controller early (before other controllers that might depend on it)
-  Get.put(PinController(), permanent: true);
-  print('✅ PinController initialized');
-
-  // Initialize app bindings AFTER Firebase
+/// Initialize core services
+Future<void> _initializeCoreServices() async {
   try {
-    await AppBindings().dependencies();
-    print('✅ App bindings completed');
+    print('⚙️ Initializing core services...');
 
-    // Note: AppInitialization might duplicate some controller initialization
-    // Comment out if you get duplicate controller errors
-    await AppInitialization.initialize();
-    print('✅ App initialization completed');
+    // Initialize PIN Controller early (before other controllers that might depend on it)
+    Get.put(PinController(), permanent: true);
+    print('✅ PinController initialized');
   } catch (e) {
-    print('❌ App initialization failed: $e');
+    print('❌ Core services initialization failed: $e');
+    print('🚨 Attempting emergency initialization...');
+
+    // Emergency fallback - initialize critical controllers
+    EmergencyBindings.initializeMissingControllers();
+  }
+}
+
+/// Initialize multi-tenant app bindings
+Future<void> _initializeMultiTenantBindings() async {
+  try {
+    print('🏫 Initializing multi-tenant app bindings...');
+
+    // Use enhanced app bindings with multi-tenant support
+    await EnhancedAppBindings().dependencies();
+    print('✅ Multi-tenant app bindings completed');
+
+    // Optional: Run additional app initialization if needed
+    // Note: AppInitialization might duplicate some controller initialization
+    // Uncomment only if you need additional initialization steps
+    // await AppInitialization.initialize();
+    // print('✅ Additional app initialization completed');
+  } catch (e) {
+    print('❌ Multi-tenant app bindings failed: $e');
     print('🚨 Attempting emergency controller initialization...');
 
     // Emergency fallback - initialize critical controllers
     EmergencyBindings.initializeMissingControllers();
   }
-
-  runApp(MyApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+/// Multi-Tenant Driving School App
+class MultiTenantDrivingSchoolApp extends StatelessWidget {
+  const MultiTenantDrivingSchoolApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -249,23 +287,44 @@ class _AuthenticationWrapperState extends State<AuthenticationWrapper> {
   }
 }
 
-// Emergency fallback for missing controllers
-class EmergencyBindings {
-  static void initializeMissingControllers() {
-    try {
-      // Ensure PinController exists
-      if (!Get.isRegistered<PinController>()) {
-        Get.put(PinController(), permanent: true);
-        print('🔧 Emergency: PinController initialized');
-      }
+class MultiTenantRouteObserver extends NavigatorObserver {
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    super.didPush(route, previousRoute);
+    _logRouteChange('PUSH', route);
+  }
 
-      // Ensure AuthController exists
-      if (!Get.isRegistered<AuthController>()) {
-        Get.put(AuthController(), permanent: true);
-        print('🔧 Emergency: AuthController initialized');
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    super.didPop(route, previousRoute);
+    _logRouteChange('POP', route);
+  }
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    super.didReplace(newRoute: newRoute, oldRoute: oldRoute);
+    if (newRoute != null) {
+      _logRouteChange('REPLACE', newRoute);
+    }
+  }
+
+  void _logRouteChange(String action, Route<dynamic> route) {
+    try {
+      String? routeName = route.settings.name;
+      if (routeName != null) {
+        print('🧭 Route $action: $routeName');
+
+        // Log with school context if available
+        if (Get.isRegistered<SchoolConfigService>()) {
+          final schoolConfig = Get.find<SchoolConfigService>();
+          if (schoolConfig.isValidConfiguration()) {
+            print(
+                '   School: ${schoolConfig.schoolName.value} (${schoolConfig.schoolId.value})');
+          }
+        }
       }
     } catch (e) {
-      print('🚨 Emergency initialization failed: $e');
+      // Ignore errors in logging
     }
   }
 }

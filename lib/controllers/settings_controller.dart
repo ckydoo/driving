@@ -1,5 +1,6 @@
 // lib/controllers/enhanced_settings_controller.dart
 import 'package:driving/services/database_helper.dart';
+import 'package:driving/services/school_config_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -111,6 +112,8 @@ class SettingsController extends GetxController {
     _tempLowLessonThreshold.value = lowLessonThreshold.value;
     _tempAutoSaveInterval.value = autoSaveInterval.value;
     loadSettingsFromDatabase();
+    // Set up business information change listeners for school config updates
+    _setupBusinessInfoListeners();
   }
 
   // Enhanced methods for smooth slider experience
@@ -553,102 +556,6 @@ class SettingsController extends GetxController {
     };
   }
 
-  Future<void> loadSettingsFromDatabase() async {
-    try {
-      final db = await _dbHelper.database;
-      final settings = await db.query('settings');
-
-      if (settings.isNotEmpty) {
-        final settingsMap = {
-          for (var setting in settings) setting['key']: setting['value']
-        };
-
-        // Business Information
-        businessName.value = (settingsMap['business_name'] as String?) ?? '';
-        businessAddress.value =
-            (settingsMap['business_address'] as String?) ?? '';
-        businessCity.value = (settingsMap['business_city'] as String?) ?? '';
-        businessCountry.value =
-            (settingsMap['business_country'] as String?) ?? 'Zimbabwe';
-
-        // Contact Information
-        businessPhone.value = (settingsMap['business_phone'] as String?) ?? '';
-        businessEmail.value = (settingsMap['business_email'] as String?) ?? '';
-        businessWebsite.value =
-            (settingsMap['business_website'] as String?) ?? '';
-
-        // Operating Schedule
-        businessStartTime.value =
-            (settingsMap['business_start_time'] as String?) ?? '09:00';
-        businessEndTime.value =
-            (settingsMap['business_end_time'] as String?) ?? '17:00';
-
-        // Operating Days (stored as comma-separated string)
-        final operatingDaysString =
-            (settingsMap['operating_days'] as String?) ?? '';
-        if (operatingDaysString.isNotEmpty) {
-          operatingDays.value = operatingDaysString.split(',');
-        }
-      }
-    } catch (e) {
-      print('Error loading settings: $e');
-    }
-  }
-
-// Save business settings to database
-  Future<void> saveBusinessSettings() async {
-    try {
-      print('Starting to save business settings...');
-      final db = await _dbHelper.database;
-      print('Database connection established');
-
-      final businessSettingsMap = {
-        'business_name': businessName.value,
-        'business_address': businessAddress.value,
-        'business_city': businessCity.value,
-        'business_country': businessCountry.value,
-        'business_phone': businessPhone.value,
-        'business_email': businessEmail.value,
-        'business_website': businessWebsite.value,
-        'business_start_time': businessStartTime.value,
-        'business_end_time': businessEndTime.value,
-        'operating_days': operatingDays.join(','),
-      };
-
-      print('Settings to save: $businessSettingsMap');
-
-      for (final entry in businessSettingsMap.entries) {
-        print('Saving: ${entry.key} = ${entry.value}');
-        await db.insert(
-          'settings',
-          {'key': entry.key, 'value': entry.value},
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
-      }
-
-      print('All business settings saved successfully');
-    } catch (e) {
-      print('Error saving business settings: $e');
-      rethrow; // Re-throw to be caught by calling method
-    }
-  }
-
-// Enhanced save method that ensures all current values are saved
-// Enhanced save method that ensures all current values are saved
-  Future<void> saveAllBusinessSettings() async {
-    try {
-      print('Starting saveAllBusinessSettings...');
-      await saveBusinessSettings();
-      print('Business settings saved successfully');
-
-      // Don't show snackbar here - let the UI handle it
-      // This prevents conflicts with the loading dialog
-    } catch (e) {
-      print('Error in saveAllBusinessSettings: $e');
-      rethrow; // Re-throw so the UI can handle it
-    }
-  }
-
 // Individual setters for text fields
   void setBusinessName(String name) {
     businessName.value = name;
@@ -672,5 +579,277 @@ class SettingsController extends GetxController {
 
   void setBusinessWebsite(String website) {
     businessWebsite.value = website;
+  }
+
+  // NEW: Multi-tenant specific settings
+  final RxBool enableMultiTenant = true.obs;
+  final RxBool enableCloudSync = true.obs;
+  final RxString schoolId = ''.obs;
+  final RxString schoolDisplayName = ''.obs;
+  final RxBool schoolConfigComplete = false.obs;
+
+  /// Set up listeners for business information changes
+  void _setupBusinessInfoListeners() {
+    // Listen to critical business fields that affect school identity
+    ever(businessName,
+        (String name) => _onBusinessInfoChanged('businessName', name));
+    ever(businessAddress,
+        (String address) => _onBusinessInfoChanged('businessAddress', address));
+    ever(businessPhone,
+        (String phone) => _onBusinessInfoChanged('businessPhone', phone));
+    ever(businessEmail,
+        (String email) => _onBusinessInfoChanged('businessEmail', email));
+  }
+
+  /// Handle business information changes
+  void _onBusinessInfoChanged(String field, String value) {
+    print('📝 Business info changed: $field = $value');
+
+    // Update school configuration status
+    _updateSchoolConfigStatus();
+
+    // Notify school config service if it's registered
+    try {
+      if (Get.isRegistered<SchoolConfigService>()) {
+        final schoolConfig = Get.find<SchoolConfigService>();
+        schoolConfig.updateSchoolConfig();
+      }
+    } catch (e) {
+      print('⚠️ Could not update school config: $e');
+    }
+  }
+
+  /// Update school configuration status
+  void _updateSchoolConfigStatus() {
+    final isComplete = businessName.value.isNotEmpty &&
+        businessAddress.value.isNotEmpty &&
+        businessPhone.value.isNotEmpty;
+
+    schoolConfigComplete.value = isComplete;
+
+    if (isComplete) {
+      schoolDisplayName.value = businessName.value;
+      print('✅ School configuration is complete');
+    } else {
+      print('⚠️ School configuration is incomplete');
+    }
+  }
+
+  /// Enhanced save business settings with multi-tenant support
+  Future<void> saveBusinessSettings() async {
+    try {
+      print('💾 Starting to save enhanced business settings...');
+      final db = await _dbHelper.database;
+      print('📁 Database connection established');
+
+      final businessSettingsMap = {
+        'business_name': businessName.value,
+        'business_address': businessAddress.value,
+        'business_city': businessCity.value,
+        'business_country': businessCountry.value,
+        'business_phone': businessPhone.value,
+        'business_email': businessEmail.value,
+        'business_website': businessWebsite.value,
+        'business_start_time': businessStartTime.value,
+        'business_end_time': businessEndTime.value,
+        'operating_days': operatingDays.join(','),
+        // Multi-tenant settings
+        'enable_multi_tenant': enableMultiTenant.value ? '1' : '0',
+        'enable_cloud_sync': enableCloudSync.value ? '1' : '0',
+        'school_id': schoolId.value,
+        'school_display_name': schoolDisplayName.value,
+      };
+
+      print('📋 Settings to save: $businessSettingsMap');
+
+      for (final entry in businessSettingsMap.entries) {
+        print('💾 Saving: ${entry.key} = ${entry.value}');
+        await db.insert(
+          'settings',
+          {'key': entry.key, 'value': entry.value},
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+
+      // Update school configuration status
+      _updateSchoolConfigStatus();
+
+      print('✅ All enhanced business settings saved successfully');
+    } catch (e) {
+      print('❌ Error saving enhanced business settings: $e');
+      rethrow;
+    }
+  }
+
+  /// Enhanced load settings with multi-tenant support
+  Future<void> loadSettingsFromDatabase() async {
+    try {
+      print('📖 Loading enhanced settings from database...');
+      final db = await _dbHelper.database;
+      final settings = await db.query('settings');
+
+      if (settings.isNotEmpty) {
+        final settingsMap = {
+          for (var setting in settings) setting['key']: setting['value']
+        };
+
+        // Load existing business information
+        businessName.value = (settingsMap['business_name'] as String?) ?? '';
+        businessAddress.value =
+            (settingsMap['business_address'] as String?) ?? '';
+        businessCity.value = (settingsMap['business_city'] as String?) ?? '';
+        businessCountry.value =
+            (settingsMap['business_country'] as String?) ?? 'Zimbabwe';
+        businessPhone.value = (settingsMap['business_phone'] as String?) ?? '';
+        businessEmail.value = (settingsMap['business_email'] as String?) ?? '';
+        businessWebsite.value =
+            (settingsMap['business_website'] as String?) ?? '';
+        businessStartTime.value =
+            (settingsMap['business_start_time'] as String?) ?? '09:00';
+        businessEndTime.value =
+            (settingsMap['business_end_time'] as String?) ?? '17:00';
+
+        // Load operating days
+        final operatingDaysString =
+            (settingsMap['operating_days'] as String?) ?? '';
+        if (operatingDaysString.isNotEmpty) {
+          operatingDays.value = operatingDaysString.split(',');
+        }
+
+        // Load multi-tenant settings
+        enableMultiTenant.value =
+            (settingsMap['enable_multi_tenant'] as String?) == '1';
+        enableCloudSync.value =
+            (settingsMap['enable_cloud_sync'] as String?) == '1';
+        schoolId.value = (settingsMap['school_id'] as String?) ?? '';
+        schoolDisplayName.value =
+            (settingsMap['school_display_name'] as String?) ?? '';
+
+        // Load all other existing settings (scheduling, billing, etc.)
+        _loadExistingSettings(Map<String, dynamic>.from(settingsMap));
+
+        // Update school configuration status
+        _updateSchoolConfigStatus();
+
+        print('✅ Enhanced settings loaded successfully');
+        print(
+            '🏫 School: ${schoolDisplayName.value.isNotEmpty ? schoolDisplayName.value : "Not configured"}');
+        print(
+            '🔄 Multi-tenant: ${enableMultiTenant.value ? "Enabled" : "Disabled"}');
+        print(
+            '☁️ Cloud sync: ${enableCloudSync.value ? "Enabled" : "Disabled"}');
+      }
+    } catch (e) {
+      print('❌ Error loading enhanced settings: $e');
+    }
+  }
+
+  /// Load existing settings (your current implementation)
+  void _loadExistingSettings(Map<String, dynamic> settingsMap) {
+    // Scheduling Settings
+    enforceBillingValidation.value =
+        (settingsMap['enforce_billing_validation'] as String?) == '1';
+    checkInstructorAvailability.value =
+        (settingsMap['check_instructor_availability'] as String?) == '1';
+    enforceWorkingHours.value =
+        (settingsMap['enforce_working_hours'] as String?) == '1';
+    autoAssignVehicles.value =
+        (settingsMap['auto_assign_vehicles'] as String?) == '1';
+
+    final durationStr = settingsMap['default_lesson_duration'] as String?;
+    if (durationStr != null) {
+      defaultLessonDuration.value = double.tryParse(durationStr) ?? 1.5;
+    }
+
+    // Billing Settings
+    showLowLessonWarning.value =
+        (settingsMap['show_low_lesson_warning'] as String?) == '1';
+
+    final thresholdStr = settingsMap['low_lesson_threshold'] as String?;
+    if (thresholdStr != null) {
+      lowLessonThreshold.value = int.tryParse(thresholdStr) ?? 3;
+    }
+
+    preventOverScheduling.value =
+        (settingsMap['prevent_over_scheduling'] as String?) == '1';
+    autoCreateBillingRecords.value =
+        (settingsMap['auto_create_billing_records'] as String?) == '1';
+    countScheduledLessons.value =
+        (settingsMap['count_scheduled_lessons'] as String?) == '1';
+
+    // Continue with other settings...
+    // (Include all your existing setting loading logic here)
+  }
+
+  /// Enhanced save all business settings
+  Future<void> saveAllBusinessSettings() async {
+    try {
+      print('💾 Starting saveAllBusinessSettings (enhanced)...');
+      await saveBusinessSettings();
+      print('✅ Enhanced business settings saved successfully');
+
+      // Trigger school config update if service is available
+      try {
+        if (Get.isRegistered<SchoolConfigService>()) {
+          final schoolConfig = Get.find<SchoolConfigService>();
+          await schoolConfig.updateSchoolConfig();
+          print('🏫 School configuration updated');
+        }
+      } catch (e) {
+        print('⚠️ Could not update school configuration: $e');
+      }
+    } catch (e) {
+      print('❌ Error in saveAllBusinessSettings (enhanced): $e');
+      rethrow;
+    }
+  }
+
+  /// Check if business information is complete for multi-tenant setup
+  bool isBusinessInfoComplete() {
+    return businessName.value.isNotEmpty &&
+        businessAddress.value.isNotEmpty &&
+        businessPhone.value.isNotEmpty &&
+        businessEmail.value.isNotEmpty;
+  }
+
+  /// Get business information summary for school configuration
+  Map<String, String> getBusinessInfoSummary() {
+    return {
+      'name': businessName.value,
+      'address': businessAddress.value,
+      'city': businessCity.value,
+      'country': businessCountry.value,
+      'phone': businessPhone.value,
+      'email': businessEmail.value,
+      'website': businessWebsite.value,
+    };
+  }
+
+  /// Toggle multi-tenant mode
+  void toggleMultiTenant(bool enabled) {
+    enableMultiTenant.value = enabled;
+    saveBusinessSettings();
+
+    if (enabled) {
+      print('🏫 Multi-tenant mode enabled');
+      // Trigger school config initialization if needed
+      try {
+        if (Get.isRegistered<SchoolConfigService>()) {
+          Get.find<SchoolConfigService>().initializeSchoolConfig();
+        }
+      } catch (e) {
+        print('⚠️ Could not initialize school config: $e');
+      }
+    } else {
+      print('🏫 Multi-tenant mode disabled');
+    }
+  }
+
+  /// Toggle cloud sync
+  void toggleCloudSync(bool enabled) {
+    enableCloudSync.value = enabled;
+    saveBusinessSettings();
+
+    print('☁️ Cloud sync ${enabled ? "enabled" : "disabled"}');
   }
 }

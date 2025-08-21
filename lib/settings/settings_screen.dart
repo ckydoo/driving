@@ -1,6 +1,8 @@
 // lib/settings/enhanced_settings_screen.dart
 import 'package:driving/services/firebase_sync_service.dart';
+import 'package:driving/services/multi_tenant_firebase_sync_service.dart';
 import 'package:driving/settings/sync_settings_screen.dart';
+import 'package:driving/widgets/school_info_widget.dart';
 import 'package:driving/widgets/sync_status_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -172,7 +174,7 @@ class _SettingsScreenState extends State<SettingsScreen>
         if (authController.hasAnyRole(['admin', 'instructor']))
           ElevatedButton(
             onPressed: () {
-              Get.to(() => AutoSyncSettingsWidget());
+              Get.to(() => SchoolInfoWidget());
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red.shade600,
@@ -183,7 +185,7 @@ class _SettingsScreenState extends State<SettingsScreen>
         // if (authController.hasAnyRole(['admin', 'instructor']))
         //   ElevatedButton(
         //     onPressed: () async {
-        //       final syncService = Get.find<FirebaseSyncService>();
+        //       final syncService = Get.find<MultiTenantFirebaseSyncService>();
         //       await syncService.forceCompleteSync();
         //     },
         //     child: Text('Test Firebase Connection'),

@@ -4,6 +4,7 @@
 import 'dart:async';
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/services/firebase_sync_service.dart';
+import 'package:driving/services/multi_tenant_firebase_sync_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -26,13 +27,13 @@ class AutoSyncController extends GetxController {
   final Rx<DateTime> lastAutoSync = DateTime.fromMillisecondsSinceEpoch(0).obs;
 
   // Dependencies
-  late FirebaseSyncService _syncService;
+  late MultiTenantFirebaseSyncService _syncService;
   late AuthController _authController;
 
   @override
   void onInit() {
     super.onInit();
-    _syncService = Get.find<FirebaseSyncService>();
+    _syncService = Get.find<MultiTenantFirebaseSyncService>();
     _authController = Get.find<AuthController>();
 
     // Load saved settings
@@ -441,7 +442,7 @@ class DatabaseHelperSyncExtension {
       print('⚠️ Auto-sync controller not available: $e');
       // Fallback to manual sync service
       try {
-        final syncService = Get.find<FirebaseSyncService>();
+        final syncService = Get.find<MultiTenantFirebaseSyncService>();
         syncService.triggerDebouncedSync(delay: const Duration(seconds: 10));
       } catch (e2) {
         print('⚠️ Could not trigger any sync: $e2');

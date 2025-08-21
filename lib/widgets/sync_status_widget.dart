@@ -1,6 +1,7 @@
 // Enhanced Clickable Sync Status Widget
 // Replace your existing SyncStatusWidget with this improved version
 
+import 'package:driving/services/multi_tenant_firebase_sync_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -19,7 +20,7 @@ class SyncStatusWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GetX<FirebaseSyncService>(
+    return GetX<MultiTenantFirebaseSyncService>(
       builder: (syncService) {
         if (!syncService.firebaseAvailable.value) {
           return const SizedBox.shrink(); // Hide if Firebase unavailable
@@ -95,7 +96,7 @@ class SyncStatusWidget extends StatelessWidget {
     );
   }
 
-  void _handleSyncTap(FirebaseSyncService syncService) async {
+  void _handleSyncTap(MultiTenantFirebaseSyncService syncService) async {
     final authController = Get.find<AuthController>();
 
     // Don't allow sync if already syncing
@@ -172,7 +173,7 @@ class SyncStatusWidget extends StatelessWidget {
     }
   }
 
-  Color _getSyncStatusColor(FirebaseSyncService syncService) {
+  Color _getSyncStatusColor(MultiTenantFirebaseSyncService syncService) {
     if (syncService.isSyncing.value) {
       return Colors.blue;
     } else if (!syncService.isOnline.value) {
@@ -184,7 +185,7 @@ class SyncStatusWidget extends StatelessWidget {
     }
   }
 
-  IconData _getSyncStatusIcon(FirebaseSyncService syncService) {
+  IconData _getSyncStatusIcon(MultiTenantFirebaseSyncService syncService) {
     if (syncService.isSyncing.value) {
       return Icons.sync;
     } else if (!syncService.isOnline.value) {
@@ -196,7 +197,7 @@ class SyncStatusWidget extends StatelessWidget {
     }
   }
 
-  String _getSyncStatusText(FirebaseSyncService syncService) {
+  String _getSyncStatusText(MultiTenantFirebaseSyncService syncService) {
     if (syncService.isSyncing.value) {
       return 'Syncing...';
     } else if (!syncService.isOnline.value) {
@@ -217,7 +218,7 @@ class SyncStatusWidget extends StatelessWidget {
     }
   }
 
-  String _getTooltipMessage(FirebaseSyncService syncService) {
+  String _getTooltipMessage(MultiTenantFirebaseSyncService syncService) {
     if (syncService.isSyncing.value) {
       return 'Sync in progress... Please wait';
     } else if (!syncService.isOnline.value) {
@@ -249,7 +250,7 @@ class SyncFABWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GetX<FirebaseSyncService>(
+    return GetX<MultiTenantFirebaseSyncService>(
       builder: (syncService) {
         if (!syncService.firebaseAvailable.value) {
           return const SizedBox.shrink();
@@ -277,7 +278,7 @@ class SyncFABWidget extends StatelessWidget {
     );
   }
 
-  void _handleSyncTap(FirebaseSyncService syncService) async {
+  void _handleSyncTap(MultiTenantFirebaseSyncService syncService) async {
     // Same logic as main widget
     final authController = Get.find<AuthController>();
 
@@ -349,7 +350,7 @@ class SyncFABWidget extends StatelessWidget {
     }
   }
 
-  Color _getSyncStatusColor(FirebaseSyncService syncService) {
+  Color _getSyncStatusColor(MultiTenantFirebaseSyncService syncService) {
     if (syncService.isSyncing.value) {
       return Colors.blue;
     } else if (!syncService.isOnline.value) {
@@ -361,7 +362,7 @@ class SyncFABWidget extends StatelessWidget {
     }
   }
 
-  IconData _getSyncStatusIcon(FirebaseSyncService syncService) {
+  IconData _getSyncStatusIcon(MultiTenantFirebaseSyncService syncService) {
     if (syncService.isSyncing.value) {
       return Icons.sync;
     } else if (!syncService.isOnline.value) {

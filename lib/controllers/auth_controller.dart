@@ -4,6 +4,7 @@ import 'package:driving/models/user.dart';
 import 'package:driving/services/database_helper.dart';
 import 'package:driving/controllers/pin_controller.dart';
 import 'package:driving/services/firebase_sync_service.dart';
+import 'package:driving/services/multi_tenant_firebase_sync_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
@@ -169,7 +170,7 @@ class AuthController extends GetxController {
 
         // Trigger sync now that both auth states are aligned
         try {
-          final syncService = Get.find<FirebaseSyncService>();
+          final syncService = Get.find<MultiTenantFirebaseSyncService>();
           Future.delayed(const Duration(seconds: 1), () {
             syncService.triggerManualSync();
           });
@@ -193,7 +194,7 @@ class AuthController extends GetxController {
 
       // Trigger data sync for this authenticated user
       try {
-        final syncService = Get.find<FirebaseSyncService>();
+        final syncService = Get.find<MultiTenantFirebaseSyncService>();
         await syncService.triggerManualSync();
       } catch (e) {
         print('⚠️ Could not trigger sync after Firebase sign-in: $e');
@@ -1309,7 +1310,7 @@ class AuthController extends GetxController {
 
       // Initialize sync service if available
       try {
-        final syncService = Get.find<FirebaseSyncService>();
+        final syncService = Get.find<MultiTenantFirebaseSyncService>();
         await syncService.initializeUserSync();
       } catch (e) {
         print('⚠️ Sync service not available: $e');
