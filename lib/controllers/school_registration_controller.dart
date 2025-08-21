@@ -244,7 +244,7 @@ class SchoolRegistrationController extends GetxController {
         phone: phoneController.text.trim(),
         address: addressController.text.trim(),
         gender: 'Not Specified', // Can be updated later in profile
-        idnumber: 'ADMIN001', // Generate unique ID
+        idnumber: '', // Generate unique ID
         role: 'admin',
         status: 'Active',
         date_of_birth: DateTime.now().subtract(const Duration(days: 25 * 365)),

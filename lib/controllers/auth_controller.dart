@@ -937,34 +937,153 @@ class AuthController extends GetxController {
 
   Future<bool> authenticateWithPin(String pin) async {
     try {
+      print('🔐 Starting PIN authentication...');
+
+      // Step 1: Verify the PIN itself
       final isValid = await _pinController.verifyPin(pin);
-      if (isValid) {
-        final pinUserEmail = await _pinController.getPinUserEmail();
+      print('🔑 PIN verification result: $isValid');
 
-        if (pinUserEmail != null) {
-          final users = await DatabaseHelper.instance.getUsers();
-          final userData = users.firstWhereOrNull(
-            (user) =>
-                user['email'].toString().toLowerCase() ==
-                pinUserEmail.toLowerCase(),
-          );
+      if (!isValid) {
+        print('❌ PIN verification failed');
+        return false;
+      }
 
-          if (userData != null) {
-            final userObj = User.fromJson(userData);
-            currentUser.value = userObj;
-            isLoggedIn(true);
+      // Step 2: Get the email associated with this PIN
+      final pinUserEmail = await _pinController.getPinUserEmail();
+      print('📧 PIN user email: $pinUserEmail');
 
-            // Try to authenticate with Firebase using stored credentials (if available)
-            _tryFirebaseAuthFromPin(userObj.email);
+      if (pinUserEmail == null || pinUserEmail.isEmpty) {
+        print('❌ No email associated with PIN');
+        return false;
+      }
 
-            return true;
-          }
+      // Step 3: Get all users from database
+      final users = await DatabaseHelper.instance.getUsers();
+      print('👥 Found ${users.length} users in database');
+
+      if (users.isEmpty) {
+        print('❌ No users found in database');
+        return false;
+      }
+
+      // Step 4: Find user by email (safe method)
+      Map<String, dynamic>? userData;
+      for (var user in users) {
+        final userEmail = user['email']?.toString()?.toLowerCase() ?? '';
+        if (userEmail == pinUserEmail.toLowerCase()) {
+          userData = user;
+          break;
         }
       }
-      return false;
+
+      // Alternative safer method using where instead of firstWhereOrNull
+      if (userData == null) {
+        final matchingUsers = users
+            .where(
+              (user) =>
+                  user['email']?.toString()?.toLowerCase() ==
+                  pinUserEmail.toLowerCase(),
+            )
+            .toList();
+
+        if (matchingUsers.isNotEmpty) {
+          userData = matchingUsers.first;
+        }
+      }
+
+      if (userData == null) {
+        print('❌ User not found for email: $pinUserEmail');
+        // Debug: Print all available emails
+        print('📋 Available emails in database:');
+        for (var user in users) {
+          print('  - ${user['email']}');
+        }
+        return false;
+      }
+
+      // Step 5: Create user object and set as current user
+      try {
+        final userObj = User.fromJson(userData);
+        currentUser.value = userObj;
+        isLoggedIn(true);
+
+        print('✅ PIN authentication successful for ${userObj.email}');
+
+        // Step 6: Try Firebase authentication (optional)
+        try {
+          await _tryFirebaseAuthFromPin(userObj.email);
+        } catch (e) {
+          print('⚠️ Firebase auth from PIN failed: $e');
+          // Continue without Firebase - local auth is successful
+        }
+
+        return true;
+      } catch (e) {
+        print('❌ Error creating User object: $e');
+        print('📋 User data: $userData');
+        return false;
+      }
     } catch (e) {
       print('❌ PIN authentication error: $e');
+      print('📍 Error stack trace: ${StackTrace.current}');
       return false;
+    }
+  }
+
+// Also add this debug method to check the current state:
+  Future<void> debugPinAuthentication() async {
+    try {
+      print('\n🔍 === PIN AUTHENTICATION DEBUG ===');
+
+      // Check PIN controller state
+      final pinInfo = await _pinController.getPinInfo();
+      print('📱 PIN Info: $pinInfo');
+
+      // Check database state
+      final users = await DatabaseHelper.instance.getUsers();
+      print('👥 Users in database: ${users.length}');
+
+      for (var user in users) {
+        print('  - ${user['email']} (${user['role']})');
+      }
+
+      // Check PIN user email
+      final pinUserEmail = await _pinController.getPinUserEmail();
+      print('📧 PIN associated with email: $pinUserEmail');
+
+      // Check if user exists for PIN email
+      if (pinUserEmail != null) {
+        final matchingUsers = users
+            .where(
+              (user) =>
+                  user['email']?.toString()?.toLowerCase() ==
+                  pinUserEmail.toLowerCase(),
+            )
+            .toList();
+        print('🔍 Matching users for PIN email: ${matchingUsers.length}');
+      }
+
+      print('=== END DEBUG ===\n');
+    } catch (e) {
+      print('❌ Debug error: $e');
+    }
+  }
+
+// Safe method for finding users without firstWhereOrNull
+  Map<String, dynamic>? findUserByEmail(
+      List<Map<String, dynamic>> users, String email) {
+    try {
+      final filteredUsers = users
+          .where(
+            (user) =>
+                user['email']?.toString()?.toLowerCase() == email.toLowerCase(),
+          )
+          .toList();
+
+      return filteredUsers.isNotEmpty ? filteredUsers.first : null;
+    } catch (e) {
+      print('❌ Error finding user by email: $e');
+      return null;
     }
   }
 

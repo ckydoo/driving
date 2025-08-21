@@ -135,7 +135,7 @@ class NavigationController extends GetxController {
 
     NavigationItem(
       title: 'Reports',
-      icon: Icons.account_balance_wallet,
+      icon: Icons.report,
       pageKey: 'reports_group',
       requiredRoles: [
         'admin',
