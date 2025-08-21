@@ -1,11 +1,13 @@
 // lib/main.dart - Enhanced with Multi-Tenant Architecture
-import 'package:driving/routes/protected_routes.dart';
+import 'package:driving/controllers/settings_controller.dart';
+import 'package:driving/routes/app_routes.dart';
 import 'package:driving/screens/auth/login_screen.dart';
 import 'package:driving/services/app_bindings.dart';
 
 import 'package:driving/services/app_initialization.dart';
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/controllers/pin_controller.dart';
+import 'package:driving/services/database_helper.dart';
 import 'package:driving/services/school_config_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
@@ -145,7 +147,7 @@ class MultiTenantDrivingSchoolApp extends StatelessWidget {
       ),
 
       // Use protected routes with middleware
-      getPages: ProtectedRoutes.routes,
+      getPages: AppRoutes.routes, // Change this line
 
       // Use AuthenticationWrapper to determine initial route with PIN support
       home: const AuthenticationWrapper(),
@@ -180,6 +182,8 @@ class _AuthenticationWrapperState extends State<AuthenticationWrapper> {
     await Future.delayed(const Duration(milliseconds: 500));
 
     try {
+      print('🔍 === DETERMINING INITIAL ROUTE ===');
+
       // Check if AuthController exists, if not initialize it
       AuthController authController;
       try {
@@ -187,30 +191,78 @@ class _AuthenticationWrapperState extends State<AuthenticationWrapper> {
       } catch (e) {
         // Initialize AuthController if not found
         authController = Get.put(AuthController());
-        await Future.delayed(
-            const Duration(milliseconds: 200)); // Give it time to initialize
+        await Future.delayed(const Duration(milliseconds: 200));
       }
 
-      // Check PIN authentication status
+      // Get required controllers for multi-school support
       final pinController = Get.find<PinController>();
-      final isUserVerified = await pinController.isUserVerified();
+
+      // Try to get school config and settings controllers
+      SchoolConfigService? schoolConfig;
+      SettingsController? settingsController;
+
+      try {
+        schoolConfig = Get.find<SchoolConfigService>();
+        settingsController = Get.find<SettingsController>();
+      } catch (e) {
+        print('⚠️ School controllers not ready: $e');
+      }
 
       String initialRoute;
 
-      if (isUserVerified && pinController.shouldUsePinAuth()) {
-        // User has previously verified and PIN is enabled
-        initialRoute = '/pin-login';
+      // Step 1: Check if school is configured
+      if (schoolConfig == null ||
+          settingsController == null ||
+          !schoolConfig.isValidConfiguration() ||
+          settingsController.businessName.value.isEmpty) {
+        print(
+            '🏫 No school configuration found - starting with school selection');
+        initialRoute = '/school-selection';
       } else {
-        // Default to email/password login
-        initialRoute = '/login';
+        print('✅ School configuration found: ${schoolConfig.schoolName.value}');
+
+        // Step 2: Check authentication status
+        if (authController.isLoggedIn.value) {
+          print('👤 User already logged in');
+          initialRoute = '/main';
+        } else {
+          // Step 3: Check PIN availability for quick login
+          final isUserVerified = await pinController.isUserVerified();
+          final shouldUsePinAuth = pinController.shouldUsePinAuth();
+          final hasUsers = await _checkIfUsersExist();
+
+          if (isUserVerified && shouldUsePinAuth && hasUsers) {
+            print('📱 PIN available - using PIN login');
+            initialRoute = '/pin-login';
+          } else if (hasUsers) {
+            print('🔐 Users exist but no PIN - using email/password login');
+            initialRoute = '/login';
+          } else {
+            print('👥 No users found - starting with school selection');
+            initialRoute = '/school-selection';
+          }
+        }
       }
+
+      print('🎯 Initial route determined: $initialRoute');
 
       // Navigate to the determined route
       Get.offAllNamed(initialRoute);
     } catch (e) {
-      // Fallback to login if there's any error
-      debugPrint('Error determining initial route: $e');
-      Get.offAllNamed('/login');
+      // Fallback to school selection if there's any error
+      debugPrint('❌ Error determining initial route: $e');
+      Get.offAllNamed('/school-selection');
+    }
+  }
+
+  // Helper method to check if users exist
+  Future<bool> _checkIfUsersExist() async {
+    try {
+      final users = await DatabaseHelper.instance.getUsers();
+      return users.isNotEmpty;
+    } catch (e) {
+      print('⚠️ Error checking users: $e');
+      return false;
     }
   }
 
@@ -273,7 +325,7 @@ class _AuthenticationWrapperState extends State<AuthenticationWrapper> {
               SizedBox(height: 16),
 
               Text(
-                'Loading...',
+                'Initializing...',
                 style: TextStyle(
                   color: Colors.white70,
                   fontSize: 14,
@@ -327,4 +379,78 @@ class MultiTenantRouteObserver extends NavigatorObserver {
       // Ignore errors in logging
     }
   }
+
+  // lib/main.dart - Updated route determination logic
+// Add this method to the LoadingScreen class
+
+// lib/main.dart - Updated route determination logic
+// Add this method to the LoadingScreen class
+
+  Future<void> _determineInitialRoute() async {
+    try {
+      print('🔍 === DETERMINING INITIAL ROUTE ===');
+
+      // Get required controllers
+      final authController = Get.find<AuthController>();
+      final pinController = Get.find<PinController>();
+      final schoolConfig = Get.find<SchoolConfigService>();
+      final settingsController = Get.find<SettingsController>();
+
+      String initialRoute;
+
+      // Step 1: Check if school is configured
+      if (!schoolConfig.isValidConfiguration() ||
+          settingsController.businessName.value.isEmpty) {
+        print(
+            '🏫 No school configuration found - starting with school selection');
+        initialRoute = '/school-selection';
+      } else {
+        print('✅ School configuration found: ${schoolConfig.schoolName.value}');
+
+        // Step 2: Check authentication status
+        if (authController.isLoggedIn.value) {
+          print('👤 User already logged in');
+          initialRoute = '/main';
+        } else {
+          // Step 3: Check PIN availability for quick login
+          final isUserVerified = await pinController.isUserVerified();
+          final shouldUsePinAuth = pinController.shouldUsePinAuth();
+          final hasUsers = await _checkIfUsersExist();
+
+          if (isUserVerified && shouldUsePinAuth && hasUsers) {
+            print('📱 PIN available - using PIN login');
+            initialRoute = '/pin-login';
+          } else if (hasUsers) {
+            print('🔐 Users exist but no PIN - using email/password login');
+            initialRoute = '/login';
+          } else {
+            print('👥 No users found - starting with school selection');
+            initialRoute = '/school-selection';
+          }
+        }
+      }
+
+      print('🎯 Initial route determined: $initialRoute');
+
+      // Navigate to the determined route
+      Get.offAllNamed(initialRoute);
+    } catch (e) {
+      // Fallback to school selection if there's any error
+      debugPrint('❌ Error determining initial route: $e');
+      Get.offAllNamed('/school-selection');
+    }
+  }
+
+// Helper method to check if users exist
+  Future<bool> _checkIfUsersExist() async {
+    try {
+      final users = await DatabaseHelper.instance.getUsers();
+      return users.isNotEmpty;
+    } catch (e) {
+      print('⚠️ Error checking users: $e');
+      return false;
+    }
+  }
 }
+// lib/main.dart - Updated AuthenticationWrapper with multi-school support
+// Replace the existing _AuthenticationWrapperState class

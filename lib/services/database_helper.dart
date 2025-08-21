@@ -321,6 +321,23 @@ class DatabaseHelper {
           FOREIGN KEY (studentId) REFERENCES users(id)
       )
     ''');
+
+    await db.execute('''
+  CREATE TABLE known_schools(
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    address TEXT,
+    phone TEXT,
+    email TEXT,
+    city TEXT,
+    country TEXT,
+    last_accessed TEXT,
+    access_count INTEGER DEFAULT 1,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  )
+''');
+
+    print('✅ Known schools table created');
   }
 
   // Your existing _createDefaultAdminUser method remains the same
@@ -1550,6 +1567,76 @@ class DatabaseHelper {
       }
     } catch (e) {
       print('⚠️ Could not trigger smart sync: $e');
+    }
+  }
+
+  // lib/services/database_helper.dart - Additional methods for school management
+// Add these methods to the DatabaseHelper class
+
+  /// Save a known school for future access
+  Future<void> saveKnownSchool(Map<String, dynamic> schoolData) async {
+    final db = await database;
+
+    try {
+      // Check if school already exists
+      final existing = await db.query(
+        'known_schools',
+        where: 'id = ?',
+        whereArgs: [schoolData['id']],
+      );
+
+      if (existing.isNotEmpty) {
+        // Update existing record
+        await db.update(
+          'known_schools',
+          {
+            ...schoolData,
+            'last_accessed': DateTime.now().toIso8601String(),
+            'access_count': (existing.first['access_count'] as int? ?? 0) + 1,
+          },
+          where: 'id = ?',
+          whereArgs: [schoolData['id']],
+        );
+      } else {
+        // Insert new record
+        await db.insert('known_schools', {
+          ...schoolData,
+          'last_accessed': DateTime.now().toIso8601String(),
+          'access_count': 1,
+        });
+      }
+
+      print('✅ Saved known school: ${schoolData['name']}');
+    } catch (e) {
+      print('❌ Error saving known school: $e');
+      throw e;
+    }
+  }
+
+  /// Get all known schools
+  Future<List<Map<String, dynamic>>> getKnownSchools() async {
+    final db = await database;
+
+    try {
+      final List<Map<String, dynamic>> schools =
+          await db.query('known_schools');
+      return schools;
+    } catch (e) {
+      print('❌ Error getting known schools: $e');
+      return [];
+    }
+  }
+
+  /// Clear all known schools
+  Future<void> clearKnownSchools() async {
+    final db = await database;
+
+    try {
+      await db.delete('known_schools');
+      print('✅ Cleared all known schools');
+    } catch (e) {
+      print('❌ Error clearing known schools: $e');
+      throw e;
     }
   }
 }

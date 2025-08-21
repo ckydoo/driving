@@ -13,6 +13,7 @@ import 'package:driving/services/database_helper.dart';
 import 'package:driving/services/lesson_counting_service.dart';
 import 'package:driving/services/school_config_service.dart';
 import 'package:driving/services/multi_tenant_firebase_sync_service.dart';
+import 'package:driving/services/school_management_service.dart';
 import 'package:get/get.dart';
 
 /// Enhanced App Bindings with Multi-Tenant Support
@@ -76,6 +77,9 @@ class EnhancedAppBindings extends Bindings {
 
   /// STEP 2: Initialize PIN authentication
   Future<void> _initializePinAuthentication() async {
+    Get.put<SchoolManagementService>(SchoolManagementService(),
+        permanent: true);
+
     print('🔐 Initializing PIN authentication...');
 
     // PIN Controller (must be first for auth dependencies)
