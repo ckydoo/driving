@@ -1,4 +1,4 @@
-// lib/screens/auth/pin_login_screen.dart - ULTRA SAFE VERSION
+// lib/screens/auth/enhanced_pin_login_screen.dart - FIXED VERSION
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
@@ -40,7 +40,7 @@ class _EnhancedPinLoginScreenState extends State<EnhancedPinLoginScreen>
     try {
       print('🔐 Initializing EnhancedPinLoginScreen...');
 
-      // Initialize animation controller
+      // Initialize animation controller first
       _shakeController = AnimationController(
         duration: const Duration(milliseconds: 500),
         vsync: this,
@@ -49,13 +49,15 @@ class _EnhancedPinLoginScreenState extends State<EnhancedPinLoginScreen>
         CurvedAnimation(parent: _shakeController, curve: Curves.elasticIn),
       );
 
-      // SAFE CONTROLLER ACCESS
+      // SAFE CONTROLLER ACCESS - with additional delays
       await _initializeControllers();
 
       // Auto focus first PIN field after controllers are ready
       if (mounted) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && _pinFocusNodes[0].canRequestFocus) {
+          if (mounted &&
+              _pinFocusNodes.isNotEmpty &&
+              _pinFocusNodes[0].canRequestFocus) {
             _pinFocusNodes[0].requestFocus();
           }
         });
@@ -68,32 +70,49 @@ class _EnhancedPinLoginScreenState extends State<EnhancedPinLoginScreen>
     }
   }
 
-  /// SAFE CONTROLLER INITIALIZATION
+  /// SAFE CONTROLLER INITIALIZATION - ENHANCED
   Future<void> _initializeControllers() async {
     try {
+      // Wait a bit for any pending operations
+      await Future.delayed(const Duration(milliseconds: 100));
+
       // Try to get existing controllers, create if not found
       try {
         _pinController = Get.find<PinController>();
         print('✅ Found existing PinController');
+
+        // Verify controller is actually working
+        await _pinController!.getPinInfo();
+        print('✅ PinController verification passed');
       } catch (e) {
-        print('⚠️ PinController not found, creating...');
+        print('⚠️ PinController not found or invalid, creating...: $e');
         _pinController = Get.put(PinController(), permanent: true);
-        await Future.delayed(const Duration(milliseconds: 200));
-        print('✅ Created PinController');
+        await Future.delayed(const Duration(milliseconds: 300));
+        print('✅ Created new PinController');
       }
 
       try {
         _authController = Get.find<AuthController>();
         print('✅ Found existing AuthController');
+
+        // Verify controller is working
+        final _ = _authController!.isLoggedIn.value;
+        print('✅ AuthController verification passed');
       } catch (e) {
-        print('⚠️ AuthController not found, creating...');
+        print('⚠️ AuthController not found or invalid, creating...: $e');
         _authController = Get.put(AuthController(), permanent: true);
-        await Future.delayed(const Duration(milliseconds: 200));
-        print('✅ Created AuthController');
+        await Future.delayed(const Duration(milliseconds: 300));
+        print('✅ Created new AuthController');
+      }
+
+      // Additional safety check
+      if (_pinController == null || _authController == null) {
+        throw Exception('Failed to initialize required controllers');
       }
 
       // Mark controllers as ready
       controllersReady.value = true;
+      print('✅ All controllers ready');
     } catch (e) {
       print('❌ Critical error initializing controllers: $e');
       _showInitializationError();
@@ -124,12 +143,16 @@ class _EnhancedPinLoginScreenState extends State<EnhancedPinLoginScreen>
 
   @override
   void dispose() {
-    _shakeController.dispose();
-    for (var controller in _pinControllers) {
-      controller.dispose();
-    }
-    for (var node in _pinFocusNodes) {
-      node.dispose();
+    try {
+      _shakeController.dispose();
+      for (var controller in _pinControllers) {
+        controller.dispose();
+      }
+      for (var node in _pinFocusNodes) {
+        node.dispose();
+      }
+    } catch (e) {
+      print('⚠️ Error during dispose: $e');
     }
     super.dispose();
   }
@@ -137,20 +160,26 @@ class _EnhancedPinLoginScreenState extends State<EnhancedPinLoginScreen>
   String get currentPin => _pinControllers.map((c) => c.text).join();
 
   void _onPinChanged(int index, String value) {
-    if (value.isNotEmpty) {
-      if (index < 3) {
-        _pinFocusNodes[index + 1].requestFocus();
-      } else {
-        _pinFocusNodes[index].unfocus();
-        if (currentPin.length == 4) {
-          _verifyPin();
+    try {
+      if (value.isNotEmpty) {
+        if (index < 3 && index < _pinFocusNodes.length - 1) {
+          _pinFocusNodes[index + 1].requestFocus();
+        } else {
+          if (index < _pinFocusNodes.length) {
+            _pinFocusNodes[index].unfocus();
+          }
+          if (currentPin.length == 4) {
+            _verifyPin();
+          }
         }
+      } else if (value.isEmpty && index > 0) {
+        _pinFocusNodes[index - 1].requestFocus();
       }
-    } else if (value.isEmpty && index > 0) {
-      _pinFocusNodes[index - 1].requestFocus();
-    }
 
-    errorMessage.value = '';
+      errorMessage.value = '';
+    } catch (e) {
+      print('❌ Error in _onPinChanged: $e');
+    }
   }
 
   /// ULTRA SAFE PIN VERIFICATION
@@ -168,6 +197,11 @@ class _EnhancedPinLoginScreenState extends State<EnhancedPinLoginScreen>
     try {
       print('🔐 Starting PIN verification...');
 
+      // Additional safety check
+      if (_authController == null) {
+        throw Exception('AuthController is null');
+      }
+
       final success = await _authController!.authenticateWithPin(currentPin);
 
       if (success) {
@@ -182,7 +216,22 @@ class _EnhancedPinLoginScreenState extends State<EnhancedPinLoginScreen>
       }
     } catch (e) {
       print('❌ PIN verification error: $e');
-      errorMessage.value = 'Verification failed. Please try again.';
+
+      // Handle specific "Bad state: No element" error
+      if (e.toString().contains('Bad state: No element')) {
+        errorMessage.value =
+            'Data inconsistency detected. Please use password login.';
+
+        // Show option to use password login
+        Future.delayed(const Duration(seconds: 2), () {
+          if (mounted) {
+            _usePasswordLogin();
+          }
+        });
+      } else {
+        errorMessage.value = 'Verification failed. Please try again.';
+      }
+
       _showError();
       _clearPin();
     } finally {
@@ -192,27 +241,37 @@ class _EnhancedPinLoginScreenState extends State<EnhancedPinLoginScreen>
 
   void _showError() {
     if (mounted) {
-      _shakeController.forward().then((_) {
-        if (mounted) {
-          _shakeController.reset();
-        }
-      });
+      try {
+        _shakeController.forward().then((_) {
+          if (mounted) {
+            _shakeController.reset();
+          }
+        });
 
-      // Haptic feedback
-      HapticFeedback.vibrate();
+        // Haptic feedback
+        HapticFeedback.vibrate();
+      } catch (e) {
+        print('⚠️ Error showing error animation: $e');
+      }
     }
   }
 
   void _clearPin() {
-    for (var controller in _pinControllers) {
-      controller.clear();
-    }
-    if (mounted) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _pinFocusNodes[0].canRequestFocus) {
-          _pinFocusNodes[0].requestFocus();
-        }
-      });
+    try {
+      for (var controller in _pinControllers) {
+        controller.clear();
+      }
+      if (mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted &&
+              _pinFocusNodes.isNotEmpty &&
+              _pinFocusNodes[0].canRequestFocus) {
+            _pinFocusNodes[0].requestFocus();
+          }
+        });
+      }
+    } catch (e) {
+      print('⚠️ Error clearing PIN: $e');
     }
   }
 
@@ -276,34 +335,41 @@ class _EnhancedPinLoginScreenState extends State<EnhancedPinLoginScreen>
   }
 
   Widget _buildPinDot(int index) {
-    final controller = _pinControllers[index];
-    final hasValue = controller.text.isNotEmpty;
+    try {
+      if (index >= _pinControllers.length) return const SizedBox();
 
-    return AnimatedBuilder(
-      animation: _shakeAnimation,
-      builder: (context, child) {
-        final shake = _shakeAnimation.value;
-        return Transform.translate(
-          offset: Offset(shake * 10 * (index % 2 == 0 ? 1 : -1), 0),
-          child: Obx(() => Container(
-                width: 20,
-                height: 20,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: hasValue ? Colors.blue.shade600 : Colors.transparent,
-                  border: Border.all(
-                    color: errorMessage.value.isNotEmpty
-                        ? Colors.red
-                        : hasValue
-                            ? Colors.blue.shade600
-                            : Colors.grey.shade400,
-                    width: 2,
+      final controller = _pinControllers[index];
+      final hasValue = controller.text.isNotEmpty;
+
+      return AnimatedBuilder(
+        animation: _shakeAnimation,
+        builder: (context, child) {
+          final shake = _shakeAnimation.value;
+          return Transform.translate(
+            offset: Offset(shake * 10 * (index % 2 == 0 ? 1 : -1), 0),
+            child: Obx(() => Container(
+                  width: 20,
+                  height: 20,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: hasValue ? Colors.blue.shade600 : Colors.transparent,
+                    border: Border.all(
+                      color: errorMessage.value.isNotEmpty
+                          ? Colors.red
+                          : hasValue
+                              ? Colors.blue.shade600
+                              : Colors.grey.shade400,
+                      width: 2,
+                    ),
                   ),
-                ),
-              )),
-        );
-      },
-    );
+                )),
+          );
+        },
+      );
+    } catch (e) {
+      print('❌ Error building PIN dot: $e');
+      return const SizedBox();
+    }
   }
 
   Widget _buildPinInput() {
@@ -323,21 +389,35 @@ class _EnhancedPinLoginScreenState extends State<EnhancedPinLoginScreen>
             return SizedBox(
               width: 50,
               child: TextField(
-                controller: _pinControllers[index],
-                focusNode: _pinFocusNodes[index],
+                controller: index < _pinControllers.length
+                    ? _pinControllers[index]
+                    : TextEditingController(),
+                focusNode: index < _pinFocusNodes.length
+                    ? _pinFocusNodes[index]
+                    : FocusNode(),
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 0), // Hide text
+                style: const TextStyle(
+                  fontSize: 24, // Changed from 0 to 24
+                  color: Colors
+                      .transparent, // Make text transparent instead of fontSize 0
+                  fontWeight: FontWeight.bold,
+                ),
                 decoration: const InputDecoration(
                   border: InputBorder.none,
                   counterText: '', // Hide counter
+                  contentPadding: EdgeInsets.zero,
                 ),
                 maxLength: 1,
                 keyboardType: TextInputType.number,
-                obscureText: true,
+                obscureText:
+                    false, // Changed to false since we're making text transparent
                 onChanged: (value) => _onPinChanged(index, value),
                 inputFormatters: [
                   FilteringTextInputFormatter.digitsOnly,
                 ],
+                // Hide cursor
+                cursorColor: Colors.transparent,
+                showCursor: false,
               ),
             );
           }),
@@ -352,7 +432,7 @@ class _EnhancedPinLoginScreenState extends State<EnhancedPinLoginScreen>
       backgroundColor: Colors.white,
       body: SafeArea(
         child: Obx(() {
-          // Show loading screen while controllers are initializing
+          // Show loading while controllers are initializing
           if (!controllersReady.value) {
             return const Center(
               child: Column(
@@ -360,47 +440,71 @@ class _EnhancedPinLoginScreenState extends State<EnhancedPinLoginScreen>
                 children: [
                   CircularProgressIndicator(),
                   SizedBox(height: 16),
-                  Text('Initializing PIN login...'),
+                  Text('Initializing...'),
                 ],
               ),
             );
           }
 
-          // Show main PIN login interface
+          // Additional safety check for reactive access
+          try {
+            // Test reactive access to make sure all observables are accessible
+            final _ = isLoading.value;
+            final __ = errorMessage.value;
+          } catch (e) {
+            print('❌ Reactive access error: $e');
+            return const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.error, color: Colors.red, size: 48),
+                  SizedBox(height: 16),
+                  Text('Error initializing PIN screen'),
+                  SizedBox(height: 8),
+                  Text('Please restart the app'),
+                ],
+              ),
+            );
+          }
+
           return Padding(
             padding: const EdgeInsets.all(24.0),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const SizedBox(height: 40),
+                const SizedBox(height: 60),
 
-                // Header
+                // App Icon/Logo
                 Container(
-                  padding: const EdgeInsets.all(16),
+                  width: 80,
+                  height: 80,
                   decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
-                    shape: BoxShape.circle,
+                    color: Colors.blue.shade600,
+                    borderRadius: BorderRadius.circular(16),
                   ),
-                  child: Icon(
-                    Icons.lock_outline,
-                    size: 48,
-                    color: Colors.blue.shade800,
+                  child: const Icon(
+                    Icons.lock,
+                    color: Colors.white,
+                    size: 40,
                   ),
                 ),
-                const SizedBox(height: 24),
 
+                const SizedBox(height: 32),
+
+                // Welcome Text
                 const Text(
-                  'Enter Your PIN',
+                  'Welcome Back',
                   style: TextStyle(
-                    fontSize: 24,
+                    fontSize: 28,
                     fontWeight: FontWeight.bold,
                     color: Colors.black87,
                   ),
                 ),
+
                 const SizedBox(height: 8),
 
                 Text(
-                  'Use your 4-digit PIN to access your account',
-                  textAlign: TextAlign.center,
+                  'Enter your 4-digit PIN to continue',
                   style: TextStyle(
                     fontSize: 16,
                     color: Colors.grey.shade600,
@@ -414,40 +518,59 @@ class _EnhancedPinLoginScreenState extends State<EnhancedPinLoginScreen>
                 const SizedBox(height: 24),
 
                 // Error Message
-                Obx(() {
-                  if (errorMessage.value.isNotEmpty) {
-                    return Container(
-                      padding: const EdgeInsets.all(12),
-                      margin: const EdgeInsets.only(bottom: 16),
-                      decoration: BoxDecoration(
-                        color: Colors.red.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.red.shade200),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.error_outline,
-                              color: Colors.red.shade600, size: 20),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              errorMessage.value,
-                              style: TextStyle(color: Colors.red.shade600),
+                Builder(
+                  builder: (context) {
+                    try {
+                      return Obx(() {
+                        if (errorMessage.value.isNotEmpty) {
+                          return Container(
+                            padding: const EdgeInsets.all(12),
+                            margin: const EdgeInsets.only(bottom: 16),
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.red.shade200),
                             ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }
-                  return const SizedBox.shrink();
-                }),
+                            child: Row(
+                              children: [
+                                Icon(Icons.error_outline,
+                                    color: Colors.red.shade600, size: 20),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    errorMessage.value,
+                                    style:
+                                        TextStyle(color: Colors.red.shade600),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      });
+                    } catch (e) {
+                      print('❌ Error in error message widget: $e');
+                      return const SizedBox.shrink();
+                    }
+                  },
+                ),
 
                 const Spacer(),
 
                 // Loading indicator
-                Obx(() => isLoading.value
-                    ? const CircularProgressIndicator()
-                    : const SizedBox.shrink()),
+                Builder(
+                  builder: (context) {
+                    try {
+                      return Obx(() => isLoading.value
+                          ? const CircularProgressIndicator()
+                          : const SizedBox.shrink());
+                    } catch (e) {
+                      print('❌ Error in loading widget: $e');
+                      return const SizedBox.shrink();
+                    }
+                  },
+                ),
 
                 const SizedBox(height: 24),
 
