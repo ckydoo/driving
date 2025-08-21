@@ -6,6 +6,7 @@ import 'package:driving/controllers/fleet_controller.dart';
 import 'package:driving/controllers/navigation_controller.dart';
 import 'package:driving/controllers/pin_controller.dart';
 import 'package:driving/controllers/schedule_controller.dart';
+import 'package:driving/controllers/school_registration_controller.dart';
 import 'package:driving/controllers/settings_controller.dart';
 import 'package:driving/controllers/user_controller.dart';
 import 'package:driving/services/consistency_checker_service.dart';
@@ -79,7 +80,9 @@ class EnhancedAppBindings extends Bindings {
   Future<void> _initializePinAuthentication() async {
     Get.put<SchoolManagementService>(SchoolManagementService(),
         permanent: true);
-
+    Get.put<SchoolRegistrationController>(SchoolRegistrationController(),
+        permanent: true);
+    print('✅ SchoolManagementService initialized');
     print('🔐 Initializing PIN authentication...');
 
     // PIN Controller (must be first for auth dependencies)

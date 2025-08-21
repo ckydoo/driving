@@ -229,29 +229,41 @@ class SchoolRegistrationController extends GetxController {
     print('   Firebase Path: ${schoolConfig.getCollectionPath("users")}');
   }
 
-  // Step 3: Create administrator account with Firebase sync ready
+  // Step 3: Create administrator account with correct method call
   Future<void> _createAdministratorAccount() async {
     print('👤 Creating administrator account for multi-tenant system...');
 
-    final adminUser = User(
-      fname: adminFirstNameController.text.trim(),
-      lname: adminLastNameController.text.trim(),
-      email: adminEmailController.text.trim().toLowerCase(),
-      password: passwordController.text, // Will be hashed by the model
-      phone: phoneController.text.trim(),
-      address: addressController.text.trim(),
-      gender: 'Not Specified', // Can be updated later in profile
-      idnumber: 'ADMIN001', // Generate unique ID
-      role: 'admin',
-      status: 'Active',
-      date_of_birth: DateTime.now().subtract(const Duration(days: 25 * 365)),
-      created_at: DateTime.now(),
-    );
+    try {
+      // Create User object with proper constructor
+      final adminUser = User(
+        fname: adminFirstNameController.text.trim(),
+        lname: adminLastNameController.text.trim(),
+        email: adminEmailController.text.trim().toLowerCase(),
+        password:
+            passwordController.text, // Will be hashed by the database layer
+        phone: phoneController.text.trim(),
+        address: addressController.text.trim(),
+        gender: 'Not Specified', // Can be updated later in profile
+        idnumber: 'ADMIN001', // Generate unique ID
+        role: 'admin',
+        status: 'Active',
+        date_of_birth: DateTime.now().subtract(const Duration(days: 25 * 365)),
+        created_at: DateTime.now(),
+      );
 
-    // Save admin user to local database
-    await DatabaseHelper.instance.insertUser(adminUser.toJson() as User);
+      print('📝 User object created successfully');
+      print('👤 Email: ${adminUser.email}');
+      print('🔑 Role: ${adminUser.role}');
 
-    print('✅ Administrator account created (ready for Firebase sync)');
+      // Pass the User object directly (NOT .toJson() or .toMap())
+      await DatabaseHelper.instance.insertUser(adminUser);
+
+      print('✅ Administrator account created successfully in database');
+    } catch (e) {
+      print('❌ Error creating administrator account: $e');
+      print('📄 Stack trace: ${StackTrace.current}');
+      throw Exception('Failed to create administrator account: $e');
+    }
   }
 
   // Step 4: Initialize Firebase sync for the new school
@@ -353,4 +365,67 @@ class SchoolRegistrationController extends GetxController {
     // Navigate to login
     Get.offAllNamed('/login');
   }
+
+  // ADD THIS DEBUG METHOD TO YOUR SCHOOL REGISTRATION CONTROLLER
+
+// Add this test method to verify user creation works
+  Future<void> debugUserCreation() async {
+    try {
+      print('🧪 === DEBUG USER CREATION TEST ===');
+
+      // Test 1: Create User object
+      print('📝 Step 1: Creating User object...');
+      final testUser = User(
+        fname: 'Test',
+        lname: 'User',
+        email: 'test@example.com',
+        password: 'test123',
+        phone: '1234567890',
+        address: 'Test Address',
+        gender: 'Not Specified',
+        idnumber: 'TEST001',
+        role: 'admin',
+        status: 'Active',
+        date_of_birth: DateTime.now().subtract(const Duration(days: 25 * 365)),
+        created_at: DateTime.now(),
+      );
+      print('✅ User object created: ${testUser.email}');
+
+      // Test 2: Check User object type
+      print('📋 Step 2: Checking User object type...');
+      print('✅ Type: ${testUser.runtimeType}');
+      print('✅ Is User: ${testUser is User}');
+
+      // Test 3: Test insertUser method
+      print('💾 Step 3: Testing insertUser method...');
+      final userId = await DatabaseHelper.instance.insertUser(testUser);
+      print('✅ User inserted successfully with ID: $userId');
+
+      // Test 4: Verify user exists
+      print('🔍 Step 4: Verifying user exists in database...');
+      final users = await DatabaseHelper.instance.getUsers();
+      final createdUser = users.firstWhere(
+        (user) => user['email'] == 'test@example.com',
+        orElse: () => {},
+      );
+
+      if (createdUser.isNotEmpty) {
+        print(
+            '✅ User found in database: ${createdUser['fname']} ${createdUser['lname']}');
+      } else {
+        print('❌ User not found in database');
+      }
+
+      print('🎉 === DEBUG TEST COMPLETED SUCCESSFULLY ===');
+    } catch (e) {
+      print('❌ DEBUG TEST FAILED: $e');
+      print('📄 Stack trace: ${StackTrace.current}');
+    }
+  }
+
+// CALL THIS METHOD IN YOUR registerSchool method at the beginning:
+// await debugUserCreation();
+
+// Or create a test button to call it independently
 }
+// This controller enhances the school registration process with Firebase sync and multi-tenant support.
