@@ -77,10 +77,6 @@ class SchoolLoginScreen extends StatelessWidget {
                                 hintText:
                                     'e.g., ABC Driving School or school_abc123',
                                 prefixIcon: const Icon(Icons.school),
-                                suffixIcon: IconButton(
-                                  icon: const Icon(Icons.search),
-                                  onPressed: controller.searchSchools,
-                                ),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
@@ -336,16 +332,6 @@ class SchoolLoginScreen extends StatelessWidget {
                             ),
 
                             const SizedBox(height: 8),
-
-                            // QR Code option
-                            TextButton.icon(
-                              onPressed: controller.showQRScanner,
-                              icon: const Icon(Icons.qr_code_scanner),
-                              label: const Text('Scan School QR Code'),
-                              style: TextButton.styleFrom(
-                                foregroundColor: Colors.blue.shade600,
-                              ),
-                            ),
                           ],
                         ),
                       ),

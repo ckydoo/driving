@@ -12,7 +12,6 @@ class User {
   final String status;
   final String idnumber;
   final DateTime created_at;
-  final List<String>? courseIds; // Add this line
 
   User({
     this.id,
@@ -28,27 +27,41 @@ class User {
     required this.status,
     required this.idnumber,
     required this.created_at,
-    this.courseIds, // Initialize it in the constructor
   });
 
-  factory User.fromJson(Map<String, dynamic> json) => User(
-        id: json['id'],
-        fname: json['fname'],
-        lname: json['lname'],
-        email: json['email'],
-        password: json['password'],
-        gender: json['gender'],
-        phone: json['phone'],
-        address: json['address'],
-        date_of_birth: DateTime.parse(json['date_of_birth']),
-        role: json['role'],
-        status: json['status'],
-        idnumber: json['idnumber'],
-        created_at: DateTime.parse(json['created_at']),
-        courseIds: json['courseIds'] != null
-            ? List<String>.from(json['courseIds'])
-            : null, // Handle null from JSON
-      );
+  factory User.fromJson(Map<String, dynamic> json) {
+    // Helper function to safely parse DateTime
+    DateTime parseDateTime(dynamic dateData, DateTime fallback) {
+      if (dateData == null) return fallback;
+
+      if (dateData is String) {
+        try {
+          return DateTime.parse(dateData);
+        } catch (e) {
+          print('Failed to parse date: $dateData, error: $e');
+          return fallback;
+        }
+      }
+
+      return fallback;
+    }
+
+    return User(
+      id: json['id'],
+      fname: json['fname']?.toString() ?? '',
+      lname: json['lname']?.toString() ?? '',
+      email: json['email']?.toString() ?? '',
+      password: json['password']?.toString() ?? '',
+      gender: json['gender']?.toString() ?? '',
+      phone: json['phone']?.toString() ?? '',
+      address: json['address']?.toString() ?? '',
+      date_of_birth: parseDateTime(json['date_of_birth'], DateTime.now()),
+      role: json['role']?.toString() ?? '',
+      status: json['status']?.toString() ?? '',
+      idnumber: json['idnumber']?.toString() ?? '',
+      created_at: parseDateTime(json['created_at'], DateTime.now()),
+    );
+  }
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -64,6 +77,5 @@ class User {
         'idnumber': idnumber,
         'status': status,
         'created_at': created_at.toIso8601String(),
-        'courseIds': courseIds,
       };
 }

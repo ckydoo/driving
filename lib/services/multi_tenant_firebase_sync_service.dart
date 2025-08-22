@@ -531,15 +531,6 @@ class MultiTenantFirebaseSyncService extends GetxService {
       // Create school metadata document
       await _createSchoolMetadata();
 
-      // Create default courses for this school
-      await _createDefaultCourses();
-
-      // Create default fleet for this school
-      await _createDefaultFleet();
-
-      // Create default currencies for this school
-      await _createDefaultCurrencies();
-
       print(
           '✅ Initial shared data created for school ${_schoolConfig.schoolId.value}');
     } catch (e) {
@@ -572,120 +563,6 @@ class MultiTenantFirebaseSyncService extends GetxService {
       print('✅ School metadata created/updated');
     } catch (e) {
       print('❌ Error creating school metadata: $e');
-    }
-  }
-
-  /// Create default courses for this school
-  Future<void> _createDefaultCourses() async {
-    try {
-      final coursesPath = _schoolConfig.getCollectionPath('courses');
-      final coursesRef = _firestore!.collection(coursesPath);
-
-      // Check if courses already exist for this school
-      final existingCourses = await coursesRef.limit(1).get();
-      if (existingCourses.docs.isNotEmpty) {
-        print(
-            '📚 Courses already exist for school ${_schoolConfig.schoolId.value}');
-        return;
-      }
-
-      final defaultCourses = [
-        {
-          'name': 'Class 1',
-          'price': 15,
-          'status': 'Active',
-          'created_at': FieldValue.serverTimestamp(),
-          'school_id': _schoolConfig.schoolId.value,
-          'school_name': _schoolConfig.schoolName.value,
-        },
-        {
-          'name': 'Class 2',
-          'price': 9,
-          'status': 'Active',
-          'created_at': FieldValue.serverTimestamp(),
-          'school_id': _schoolConfig.schoolId.value,
-          'school_name': _schoolConfig.schoolName.value,
-        },
-      ];
-
-      for (var course in defaultCourses) {
-        await coursesRef.add(course);
-      }
-
-      print('✅ Created ${defaultCourses.length} default courses');
-    } catch (e) {
-      print('❌ Error creating default courses: $e');
-    }
-  }
-
-  /// Create default fleet for this school
-  Future<void> _createDefaultFleet() async {
-    try {
-      final fleetPath = _schoolConfig.getCollectionPath('fleet');
-      final fleetRef = _firestore!.collection(fleetPath);
-
-      // Check if fleet already exists for this school
-      final existingFleet = await fleetRef.limit(1).get();
-      if (existingFleet.docs.isNotEmpty) {
-        print(
-            '🚗 Fleet already exists for school ${_schoolConfig.schoolId.value}');
-        return;
-      }
-
-      final defaultFleet = [
-        {
-          'carplate': 'SCHOOL-001',
-          'make': 'Toyota',
-          'model': 'Corolla',
-          'modelyear': '2023',
-          'status': 'Available',
-          'created_at': FieldValue.serverTimestamp(),
-          'school_id': _schoolConfig.schoolId.value,
-          'school_name': _schoolConfig.schoolName.value,
-        },
-      ];
-
-      for (var vehicle in defaultFleet) {
-        await fleetRef.add(vehicle);
-      }
-
-      print('✅ Created ${defaultFleet.length} default fleet vehicles');
-    } catch (e) {
-      print('❌ Error creating default fleet: $e');
-    }
-  }
-
-  /// Create default currencies for this school
-  Future<void> _createDefaultCurrencies() async {
-    try {
-      final currenciesPath = _schoolConfig.getCollectionPath('currencies');
-      final currenciesRef = _firestore!.collection(currenciesPath);
-
-      // Check if currencies already exist for this school
-      final existingCurrencies = await currenciesRef.limit(1).get();
-      if (existingCurrencies.docs.isNotEmpty) {
-        print(
-            '💰 Currencies already exist for school ${_schoolConfig.schoolId.value}');
-        return;
-      }
-
-      final defaultCurrencies = [
-        {
-          'name': 'US Dollar',
-          'code': 'USD',
-          'symbol': '\$',
-          'school_id': _schoolConfig.schoolId.value,
-          'school_name': _schoolConfig.schoolName.value,
-        },
-      ];
-
-      for (var currency in defaultCurrencies) {
-        await currenciesRef.add(currency);
-      }
-
-      print('✅ Created ${defaultCurrencies.length} default currencies');
-    } catch (e) {
-      print('❌ Error creating default currencies: $e');
     }
   }
 

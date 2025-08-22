@@ -273,24 +273,40 @@ class AuthController extends GetxController {
     }
   }
 
-  /// Authenticate locally (existing logic - this is the primary authentication)
+  /// Fixed authenticate locally method
   Future<bool> _authenticateLocally(String email, String password) async {
     try {
+      print('🔍 Starting local authentication for: $email');
+
       // Get all users from database
       final allUsers = await DatabaseHelper.instance.getUsers();
+      print('👥 Found ${allUsers.length} users in database');
 
-      // Find user by email
-      final userData = allUsers.firstWhereOrNull(
-        (user) => user['email'].toString().toLowerCase() == email.toLowerCase(),
-      );
+      if (allUsers.isEmpty) {
+        error('No users found in the system. Please contact administrator.');
+        return false;
+      }
+
+      // Find user by email - using traditional loop instead of firstWhereOrNull
+      Map<String, dynamic>? userData;
+      for (var user in allUsers) {
+        final userEmail = user['email']?.toString()?.toLowerCase() ?? '';
+        if (userEmail == email.toLowerCase()) {
+          userData = user;
+          break;
+        }
+      }
 
       if (userData == null) {
+        print('❌ No user found with email: $email');
         error('User not found. Please check your email address.');
         return false;
       }
 
+      print('✅ User found: ${userData['fname']} ${userData['lname']}');
+
       // Verify password
-      final storedPassword = userData['password'].toString();
+      final storedPassword = userData['password']?.toString() ?? '';
       final hashedInputPassword = _hashPassword(password);
 
       bool passwordMatch = false;
@@ -298,13 +314,16 @@ class AuthController extends GetxController {
       // Try different password comparison methods
       if (storedPassword == hashedInputPassword) {
         passwordMatch = true;
+        print('✅ Password matched (hashed)');
       } else if (storedPassword == password) {
         passwordMatch = true;
+        print('✅ Password matched (plain text) - will update to hashed');
         // Update to hashed version
         await _updatePasswordToHashed(userData, hashedInputPassword);
       }
 
       if (!passwordMatch) {
+        print('❌ Password verification failed');
         error('Invalid password. Please check your password.');
         return false;
       }
