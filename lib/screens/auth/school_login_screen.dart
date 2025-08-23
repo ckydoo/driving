@@ -1,220 +1,97 @@
-// lib/screens/auth/school_login_screen.dart
+// lib/screens/auth/simple_school_join_screen.dart
+import 'package:driving/controllers/school_login_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:driving/controllers/school_login_controller.dart';
 
 class SchoolLoginScreen extends StatelessWidget {
-  const SchoolLoginScreen({Key? key}) : super(key: key);
+  const SchoolLoginScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final controller = Get.put(SchoolLoginController());
+    final controller = Get.put(SchoolJoinController());
 
     return Scaffold(
-      backgroundColor: Colors.grey.shade50,
-      appBar: AppBar(
-        title: const Text('Join Existing School'),
-        backgroundColor: Colors.blue.shade600,
-        foregroundColor: Colors.white,
-        elevation: 0,
-      ),
-      body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return Center(
-              child: SingleChildScrollView(
-                padding: EdgeInsets.symmetric(
-                  horizontal: constraints.maxWidth > 600 ? 24.0 : 16.0,
-                  vertical: 16.0,
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.blue.shade800,
+              Colors.blue.shade600,
+              Colors.blue.shade400,
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24.0),
+              child: Card(
+                elevation: 8,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
                 ),
-                child: Card(
-                  elevation: 4,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Container(
-                    constraints: BoxConstraints(
-                      maxWidth: constraints.maxWidth > 600
-                          ? 450
-                          : constraints.maxWidth - 32,
-                    ),
-                    padding: EdgeInsets.all(
-                      constraints.maxWidth > 600 ? 32.0 : 24.0,
-                    ),
-                    child: Obx(
-                      () => Form(
+                child: Padding(
+                  padding: const EdgeInsets.all(32.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Header
+                      const Icon(
+                        Icons.school,
+                        size: 80,
+                        color: Colors.blue,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Join Your School',
+                        style:
+                            Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.blue.shade800,
+                                ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Enter your school details and credentials to get started',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: Colors.grey.shade600,
+                            ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 32),
+
+                      // Form
+                      Form(
                         key: controller.formKey,
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            // Header
-                            const Text(
-                              'Join Your School',
-                              style: TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black87,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 8),
-                            const Text(
-                              'Enter your school details and login credentials',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.black54,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-
-                            const SizedBox(height: 32),
-
-                            // School ID or Name
+                            // School Name/ID Field
                             TextFormField(
-                              controller: controller.schoolIdentifierController,
+                              controller: controller.schoolNameController,
                               decoration: InputDecoration(
                                 labelText: 'School Name or ID',
                                 hintText:
-                                    'e.g., ABC Driving School or school_abc123',
-                                prefixIcon: const Icon(Icons.school),
+                                    'e.g., ABC Driving School or abc_driving_123',
+                                prefixIcon: const Icon(Icons.business),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 filled: true,
                                 fillColor: Colors.grey.shade50,
-                                helperText:
-                                    'Ask your administrator for school details',
-                                helperMaxLines: 2,
                               ),
-                              validator: controller.validateSchoolIdentifier,
-                              onChanged: controller.onSchoolIdentifierChanged,
+                              validator: controller.validateSchoolName,
+                              textInputAction: TextInputAction.next,
                             ),
+                            const SizedBox(height: 20),
 
-                            const SizedBox(height: 8),
-
-                            // School search results
-                            if (controller.searchResults.isNotEmpty)
-                              Container(
-                                margin: const EdgeInsets.only(bottom: 16),
-                                decoration: BoxDecoration(
-                                  color: Colors.blue.shade50,
-                                  borderRadius: BorderRadius.circular(8),
-                                  border:
-                                      Border.all(color: Colors.blue.shade200),
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Padding(
-                                      padding: const EdgeInsets.all(12),
-                                      child: Text(
-                                        'Found Schools:',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                          color: Colors.blue.shade800,
-                                        ),
-                                      ),
-                                    ),
-                                    ...controller.searchResults.map(
-                                      (school) => ListTile(
-                                        dense: true,
-                                        leading:
-                                            const Icon(Icons.school, size: 20),
-                                        title: Text(school['name'] ?? ''),
-                                        subtitle: Text(school['id'] ?? ''),
-                                        onTap: () =>
-                                            controller.selectSchool(school),
-                                        tileColor:
-                                            controller.selectedSchool['id'] ==
-                                                    school['id']
-                                                ? Colors.blue.shade100
-                                                : null,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-
-                            // Selected school info
-                            if (controller.selectedSchool.isNotEmpty)
-                              Container(
-                                margin: const EdgeInsets.only(bottom: 16),
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: Colors.green.shade50,
-                                  borderRadius: BorderRadius.circular(8),
-                                  border:
-                                      Border.all(color: Colors.green.shade200),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.check_circle,
-                                        color: Colors.green.shade600),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            'Selected: ${controller.selectedSchool['name']}',
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.w600,
-                                              color: Colors.green.shade800,
-                                            ),
-                                          ),
-                                          Text(
-                                            'ID: ${controller.selectedSchool['id']}',
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              color: Colors.green.shade700,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(Icons.clear),
-                                      onPressed: controller.clearSelectedSchool,
-                                      iconSize: 20,
-                                    ),
-                                  ],
-                                ),
-                              ),
-
-                            const SizedBox(height: 16),
-
-                            // Divider
-                            Row(
-                              children: [
-                                Expanded(
-                                    child:
-                                        Divider(color: Colors.grey.shade300)),
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 16),
-                                  child: Text(
-                                    'Your Account',
-                                    style: TextStyle(
-                                      color: Colors.grey.shade600,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                                Expanded(
-                                    child:
-                                        Divider(color: Colors.grey.shade300)),
-                              ],
-                            ),
-
-                            const SizedBox(height: 16),
-
-                            // Email
+                            // Email Field
                             TextFormField(
                               controller: controller.emailController,
                               decoration: InputDecoration(
                                 labelText: 'Email Address',
-                                hintText: 'your.email@domain.com',
+                                hintText: 'your.email@example.com',
                                 prefixIcon: const Icon(Icons.email),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
@@ -224,123 +101,268 @@ class SchoolLoginScreen extends StatelessWidget {
                               ),
                               validator: controller.validateEmail,
                               keyboardType: TextInputType.emailAddress,
+                              textInputAction: TextInputAction.next,
                             ),
+                            const SizedBox(height: 20),
 
-                            const SizedBox(height: 16),
-
-                            // Password
-                            TextFormField(
-                              controller: controller.passwordController,
-                              decoration: InputDecoration(
-                                labelText: 'Password',
-                                prefixIcon: const Icon(Icons.lock),
-                                suffixIcon: IconButton(
-                                  icon: Icon(
-                                    controller.obscurePassword.value
-                                        ? Icons.visibility
-                                        : Icons.visibility_off,
-                                  ),
-                                  onPressed:
-                                      controller.togglePasswordVisibility,
-                                ),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                filled: true,
-                                fillColor: Colors.grey.shade50,
-                              ),
-                              validator: controller.validatePassword,
-                              obscureText: controller.obscurePassword.value,
-                            ),
-
-                            const SizedBox(height: 24),
-
-                            // Error message
-                            if (controller.errorMessage.isNotEmpty)
-                              Container(
-                                padding: const EdgeInsets.all(12),
-                                margin: const EdgeInsets.only(bottom: 16),
-                                decoration: BoxDecoration(
-                                  color: Colors.red.shade50,
-                                  borderRadius: BorderRadius.circular(8),
-                                  border:
-                                      Border.all(color: Colors.red.shade200),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.error,
-                                        color: Colors.red.shade600, size: 20),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        controller.errorMessage.value,
-                                        style: TextStyle(
-                                          color: Colors.red.shade700,
-                                          fontSize: 14,
-                                        ),
+                            // Password Field
+                            Obx(() => TextFormField(
+                                  controller: controller.passwordController,
+                                  decoration: InputDecoration(
+                                    labelText: 'Password',
+                                    hintText: 'Enter your password',
+                                    prefixIcon: const Icon(Icons.lock),
+                                    suffixIcon: IconButton(
+                                      icon: Icon(
+                                        controller.obscurePassword.value
+                                            ? Icons.visibility
+                                            : Icons.visibility_off,
                                       ),
+                                      onPressed:
+                                          controller.togglePasswordVisibility,
                                     ),
-                                  ],
-                                ),
-                              ),
-
-                            // Login Button
-                            SizedBox(
-                              height: 50,
-                              child: ElevatedButton(
-                                onPressed: controller.isLoading.value
-                                    ? null
-                                    : controller.loginToSchool,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.blue.shade600,
-                                  foregroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    filled: true,
+                                    fillColor: Colors.grey.shade50,
                                   ),
-                                ),
-                                child: controller.isLoading.value
-                                    ? const SizedBox(
-                                        height: 20,
-                                        width: 20,
-                                        child: CircularProgressIndicator(
-                                          valueColor:
-                                              AlwaysStoppedAnimation<Color>(
-                                                  Colors.white),
-                                          strokeWidth: 2,
-                                        ),
-                                      )
-                                    : const Text(
-                                        'Login to School',
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                              ),
-                            ),
-
-                            const SizedBox(height: 16),
-
-                            // Help text
-                            Text(
-                              'Don\'t have an account? Contact your school administrator to create one for you.',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey.shade600,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-
-                            const SizedBox(height: 8),
+                                  validator: controller.validatePassword,
+                                  obscureText: controller.obscurePassword.value,
+                                  textInputAction: TextInputAction.done,
+                                  onFieldSubmitted: (_) =>
+                                      controller.joinSchool(),
+                                )),
                           ],
                         ),
                       ),
-                    ),
+
+                      const SizedBox(height: 24),
+
+                      // Status Messages
+                      Obx(() {
+                        if (controller.statusMessage.value.isNotEmpty) {
+                          return Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12),
+                            margin: const EdgeInsets.only(bottom: 16),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade50,
+                              border: Border.all(color: Colors.blue.shade200),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              children: [
+                                SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.blue.shade600,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    controller.statusMessage.value,
+                                    style: TextStyle(
+                                      color: Colors.blue.shade800,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      }),
+
+                      // Download Progress
+                      Obx(() {
+                        if (controller.isDownloading.value) {
+                          return Container(
+                            width: double.infinity,
+                            margin: const EdgeInsets.only(bottom: 16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Downloading school data...',
+                                  style: TextStyle(
+                                    color: Colors.blue.shade800,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                LinearProgressIndicator(
+                                  value: controller.downloadProgress.value,
+                                  backgroundColor: Colors.grey.shade200,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.blue.shade600,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '${(controller.downloadProgress.value * 100).toInt()}% complete',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      }),
+
+                      // Error Message
+                      Obx(() {
+                        if (controller.errorMessage.value.isNotEmpty) {
+                          return Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12),
+                            margin: const EdgeInsets.only(bottom: 16),
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade50,
+                              border: Border.all(color: Colors.red.shade200),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.error_outline,
+                                  color: Colors.red.shade600,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    controller.errorMessage.value,
+                                    style: TextStyle(
+                                      color: Colors.red.shade800,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      }),
+
+                      // Join School Button
+                      Obx(() => SizedBox(
+                            width: double.infinity,
+                            height: 50,
+                            child: ElevatedButton(
+                              onPressed: controller.isLoading.value
+                                  ? null
+                                  : controller.joinSchool,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blue.shade600,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                elevation: 2,
+                              ),
+                              child: controller.isLoading.value
+                                  ? const Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                        SizedBox(width: 12),
+                                        Text(
+                                          'Joining School...',
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    )
+                                  : const Text(
+                                      'Join School',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                            ),
+                          )),
+
+                      const SizedBox(height: 16),
+
+                      // Retry Button (shown only when there's an error)
+                      Obx(() {
+                        if (controller.errorMessage.value.isNotEmpty &&
+                            !controller.isLoading.value) {
+                          return SizedBox(
+                            width: double.infinity,
+                            height: 50,
+                            child: OutlinedButton(
+                              onPressed: controller.retryJoin,
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.blue.shade600,
+                                side: BorderSide(color: Colors.blue.shade600),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              child: const Text(
+                                'Retry',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      }),
+
+                      const SizedBox(height: 24),
+
+                      // Help Text
+                      Text(
+                        'Don\'t have an account? Contact your school administrator.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Colors.grey.shade600,
+                            ),
+                        textAlign: TextAlign.center,
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // Back Button
+                      TextButton(
+                        onPressed: () => Get.back(),
+                        child: Text(
+                          'Back to School Selection',
+                          style: TextStyle(
+                            color: Colors.blue.shade600,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-            );
-          },
+            ),
+          ),
         ),
       ),
     );

@@ -18,6 +18,7 @@ class AuthController extends GetxController {
   final Rx<User?> currentUser = Rx<User?>(null);
   final RxBool isLoggedIn = false.obs;
   final RxBool rememberMe = false.obs;
+  final RxString userEmail = ''.obs;
 
   // Firebase Authentication with error handling
   firebase_auth.FirebaseAuth? _firebaseAuth;

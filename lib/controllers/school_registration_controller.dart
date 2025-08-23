@@ -243,8 +243,8 @@ class SchoolRegistrationController extends GetxController {
             passwordController.text, // Will be hashed by the database layer
         phone: phoneController.text.trim(),
         address: addressController.text.trim(),
-        gender: 'Not Specified', // Can be updated later in profile
-        idnumber: '', // Generate unique ID
+        gender: 'Male',
+        idnumber: '',
         role: 'admin',
         status: 'Active',
         date_of_birth: DateTime.now().subtract(const Duration(days: 25 * 365)),

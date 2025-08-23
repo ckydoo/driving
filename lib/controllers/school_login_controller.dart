@@ -1,36 +1,60 @@
-// lib/controllers/enhanced_school_login_controller.dart
-import 'package:driving/services/multi_tenant_firebase_sync_service.dart';
+// lib/controllers/simple_school_join_controller.dart
+import 'package:driving/controllers/auth_controller_extension.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/controllers/settings_controller.dart';
 import 'package:driving/services/school_config_service.dart';
 import 'package:driving/services/database_helper.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:driving/services/multi_tenant_firebase_sync_service.dart';
+import 'package:driving/models/user.dart' as app_user;
 
-class SchoolLoginController extends GetxController {
+class SchoolJoinController extends GetxController {
   // Form key
   final GlobalKey<FormState> formKey = GlobalKey<FormState>();
 
   // Text controllers
-  final schoolIdentifierController = TextEditingController();
+  final schoolNameController = TextEditingController();
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
 
   // Reactive variables
   final RxBool isLoading = false.obs;
+  final RxBool isDownloading = false.obs;
+  final RxString statusMessage = ''.obs;
   final RxString errorMessage = ''.obs;
   final RxBool obscurePassword = true.obs;
-  final RxList<Map<String, String>> searchResults = <Map<String, String>>[].obs;
-  final RxMap<String, String> selectedSchool = <String, String>{}.obs;
-  final RxString searchHint = 'Enter school name or school code'.obs;
+  final RxDouble downloadProgress = 0.0.obs;
+
+  // Firebase instances
+  FirebaseFirestore? _firestore;
+  firebase_auth.FirebaseAuth? _firebaseAuth;
+
+  @override
+  void onInit() {
+    super.onInit();
+    _initializeFirebase();
+  }
 
   @override
   void onClose() {
-    schoolIdentifierController.dispose();
+    schoolNameController.dispose();
     emailController.dispose();
     passwordController.dispose();
     super.onClose();
+  }
+
+  /// Initialize Firebase services
+  void _initializeFirebase() {
+    try {
+      _firestore = FirebaseFirestore.instance;
+      _firebaseAuth = firebase_auth.FirebaseAuth.instance;
+      print('✅ Firebase services initialized for school join');
+    } catch (e) {
+      print('❌ Firebase initialization failed: $e');
+    }
   }
 
   // Toggle password visibility
@@ -38,13 +62,13 @@ class SchoolLoginController extends GetxController {
     obscurePassword.value = !obscurePassword.value;
   }
 
-  // Enhanced validation methods
-  String? validateSchoolIdentifier(String? value) {
+  // Validation methods
+  String? validateSchoolName(String? value) {
     if (value == null || value.trim().isEmpty) {
-      return 'Please enter school name or school code';
+      return 'Please enter school name or ID';
     }
     if (value.trim().length < 3) {
-      return 'School identifier must be at least 3 characters';
+      return 'School name must be at least 3 characters';
     }
     return null;
   }
@@ -67,277 +91,206 @@ class SchoolLoginController extends GetxController {
     return null;
   }
 
-  // Enhanced school search with Firebase integration
-  void onSchoolIdentifierChanged(String value) {
-    if (value.trim().length >= 3) {
-      _performEnhancedSchoolSearch(value.trim());
-    } else {
-      searchResults.clear();
-      selectedSchool.clear();
-      _updateSearchHint(value);
-    }
-  }
-
-  void _updateSearchHint(String value) {
-    if (value.isEmpty) {
-      searchHint.value = 'Enter school name or school code';
-    } else if (value.length < 3) {
-      searchHint.value = 'Type at least 3 characters to search';
-    } else {
-      searchHint.value = 'Searching schools...';
-    }
-  }
-
-  // Enhanced school search with real Firebase integration
-  Future<void> _performEnhancedSchoolSearch(String query) async {
-    try {
-      searchHint.value = 'Searching schools...';
-
-      // Clear previous results
-      searchResults.clear();
-
-      // Search for schools in multiple ways:
-      // 1. By exact school code (highest priority)
-      // 2. By school name (partial match)
-      // 3. By business name in Firebase
-
-      final results = <Map<String, String>>[];
-
-      // Try to find exact school code match first
-      final exactCodeMatch = await _searchByExactCode(query);
-      if (exactCodeMatch != null) {
-        results.add(exactCodeMatch);
-      }
-
-      // Search by name if not exact code match
-      final nameMatches = await _searchByName(query);
-      results.addAll(nameMatches);
-
-      // Update UI
-      if (results.isNotEmpty) {
-        searchResults.value = results;
-        searchHint.value = 'Found ${results.length} school(s)';
-      } else {
-        searchResults.clear();
-        searchHint.value =
-            'No schools found. Check spelling or ask admin for school code';
-      }
-    } catch (e) {
-      searchHint.value = 'Search failed. Please try again';
-      print('❌ School search error: $e');
-    }
-  }
-
-  // Search by exact school code (priority search)
-  Future<Map<String, String>?> _searchByExactCode(String query) async {
-    try {
-      // Check if query looks like a school code (contains underscore or alphanumeric pattern)
-      if (!query.contains('_') &&
-          !RegExp(r'^[a-zA-Z0-9]{6,}$').hasMatch(query)) {
-        return null; // Not a school code format
-      }
-
-      // Try to find school by exact code in Firebase
-      final syncService = Get.find<MultiTenantFirebaseSyncService>();
-      if (!syncService.firebaseAvailable.value) return null;
-
-      // Get Firestore instance directly
-      final firestore = FirebaseFirestore.instance;
-
-      // Search in school directory
-      final schoolDoc = await firestore
-          .collection('school_directory')
-          .doc(query.toLowerCase())
-          .get();
-
-      if (schoolDoc?.exists == true) {
-        final data = schoolDoc!.data()!;
-        return {
-          'id': schoolDoc.id,
-          'name': data['name'] ?? 'Unknown School',
-          'code': schoolDoc.id,
-          'city': data['city'] ?? '',
-          'verified': '✓ Verified School',
-        };
-      }
-    } catch (e) {
-      print('⚠️ Exact code search error: $e');
-    }
-    return null;
-  }
-
-  // Search by school name
-  Future<List<Map<String, String>>> _searchByName(String query) async {
-    try {
-      final results = <Map<String, String>>[];
-
-      // Mock schools for now - replace with real Firebase search
-      final mockSchools = [
-        {
-          'id': 'smithschool_abc123',
-          'name': 'Smith Driving School',
-          'code': 'SMITH2024',
-          'city': 'Harare',
-          'verified': '✓ Verified'
-        },
-        {
-          'id': 'safedrive_def456',
-          'name': 'Safe Drive Academy',
-          'code': 'SAFE2024',
-          'city': 'Bulawayo',
-          'verified': '✓ Verified'
-        },
-        {
-          'id': 'prosschool_ghi789',
-          'name': 'Professional Driving School',
-          'code': 'PRO2024',
-          'city': 'Mutare',
-          'verified': '✓ Verified'
-        },
-      ];
-
-      // Filter by name
-      final filtered = mockSchools.where((school) {
-        final name = school['name']!.toLowerCase();
-        final code = school['code']!.toLowerCase();
-        final searchQuery = query.toLowerCase();
-
-        return name.contains(searchQuery) || code.contains(searchQuery);
-      });
-
-      results.addAll(filtered.map((school) => {
-            'id': school['id']!,
-            'name': school['name']!,
-            'code': school['code']!,
-            'city': school['city']!,
-            'verified': school['verified']!,
-          }));
-
-      return results;
-    } catch (e) {
-      print('❌ Name search error: $e');
-      return [];
-    }
-  }
-
-  // Select a school from search results
-  void selectSchool(Map<String, String> school) {
-    selectedSchool.value = school;
-    schoolIdentifierController.text = '${school['name']} (${school['code']})';
-    searchResults.clear();
-    searchHint.value = 'Selected: ${school['name']}';
-  }
-
-  // Clear selected school
-  void clearSelectedSchool() {
-    selectedSchool.clear();
-    schoolIdentifierController.clear();
-    searchResults.clear();
-    searchHint.value = 'Enter school name or school code';
-  }
-
-  // Show school code to user
-  void showSchoolCode() {
-    if (selectedSchool.isNotEmpty) {
-      Get.dialog(
-        AlertDialog(
-          title: const Text('School Code'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('School: ${selectedSchool['name']}'),
-              const SizedBox(height: 8),
-              Text('Code: ${selectedSchool['code']}',
-                  style: const TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 16),
-              const Text(
-                  'Share this code with other staff members to join this school.',
-                  style: TextStyle(fontSize: 12, color: Colors.grey)),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Get.back(),
-              child: const Text('Close'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                // Copy to clipboard
-                Get.back();
-                Get.snackbar('Copied', 'School code copied to clipboard');
-              },
-              child: const Text('Copy Code'),
-            ),
-          ],
-        ),
-      );
-    }
-  }
-
-  // Main enhanced login method
-  Future<void> loginToSchool() async {
+  /// Main method to join school - simplified flow
+  Future<void> joinSchool() async {
     if (!formKey.currentState!.validate()) {
       return;
     }
 
-    // Check if school is selected
-    if (selectedSchool.isEmpty) {
-      errorMessage.value = 'Please select a school from the search results';
+    if (_firestore == null || _firebaseAuth == null) {
+      errorMessage.value =
+          'Firebase not available. Please check your internet connection.';
       return;
     }
 
     isLoading.value = true;
+    isDownloading.value = false;
     errorMessage.value = '';
+    statusMessage.value = 'Searching for school...';
 
     try {
-      print('🏫 === STARTING ENHANCED SCHOOL LOGIN ===');
-      print('📍 School: ${selectedSchool['name']} (${selectedSchool['id']})');
-      print('👤 User: ${emailController.text.trim()}');
+      print('🏫 === STARTING SIMPLE SCHOOL JOIN ===');
 
-      // Step 1: Load school configuration from Firebase
-      await _loadSchoolFromFirebase();
+      // Step 1: Search for school in Firebase
+      final schoolData = await _searchSchoolInFirebase();
+      if (schoolData == null) {
+        throw Exception(
+            'School not found. Please check the school name or ID.');
+      }
 
-      // Step 2: Authenticate user against school's user database
-      await _authenticateUserInSchool();
+      statusMessage.value = 'School found! Checking credentials...';
 
-      // Step 3: Initialize local database with school data
-      await _initializeLocalSchoolData();
+      // Step 2: Authenticate user in Firebase
+      final userData = await _authenticateUserInFirebase(schoolData);
+      if (userData == null) {
+        throw Exception('Invalid email or password for this school.');
+      }
 
-      // Step 4: Start Firebase sync
-      await _initializeFirebaseSync();
+      statusMessage.value =
+          'Authentication successful! Setting up local environment...';
 
-      // Step 5: Show success and navigate
-      _showSuccessAndNavigate();
+      // Step 3: Set up local school configuration
+      await _setupLocalSchoolConfig(schoolData);
+
+      statusMessage.value = 'Downloading school data...';
+      isDownloading.value = true;
+
+      // Step 4: Download and sync all school data to offline database
+      await _downloadSchoolDataToOffline(schoolData, userData);
+
+      statusMessage.value = 'Finalizing setup...';
+
+      // Step 5: Set up local authentication
+      await _setupLocalAuthentication(userData);
+
+      // Step 6: Complete setup and navigate
+      await _completeSetupAndNavigate(schoolData);
     } catch (e) {
-      print('❌ Enhanced school login failed: $e');
-      errorMessage.value = _getFriendlyErrorMessage(e.toString());
+      print('❌ School join failed: $e');
+      errorMessage.value = e.toString();
     } finally {
       isLoading.value = false;
+      isDownloading.value = false;
+      statusMessage.value = '';
+      downloadProgress.value = 0.0;
     }
   }
 
-  // Step 1: Load school configuration from Firebase
-  Future<void> _loadSchoolFromFirebase() async {
-    print('🔍 Loading school configuration from Firebase...');
-
+  /// Step 1: Search for school in Firebase
+  Future<Map<String, dynamic>?> _searchSchoolInFirebase() async {
     try {
-      final schoolId = selectedSchool['id']!;
-      final schoolName = selectedSchool['name']!;
+      final searchTerm = schoolNameController.text.trim().toLowerCase();
 
-      // Update local settings with school information
+      // First try to find by exact school ID
+      QuerySnapshot schoolSnapshot = await _firestore!
+          .collection('schools')
+          .where('schoolId', isEqualTo: searchTerm)
+          .limit(1)
+          .get();
+
+      if (schoolSnapshot.docs.isNotEmpty) {
+        final schoolDoc = schoolSnapshot.docs.first;
+        return {
+          'id': schoolDoc.id,
+          'schoolId': schoolDoc.data() as Map<String, dynamic>,
+          ...schoolDoc.data() as Map<String, dynamic>,
+        };
+      }
+
+      // If not found by ID, search by school name (case-insensitive)
+      schoolSnapshot = await _firestore!
+          .collection('schools')
+          .where('schoolName_lower', isEqualTo: searchTerm)
+          .limit(1)
+          .get();
+
+      if (schoolSnapshot.docs.isNotEmpty) {
+        final schoolDoc = schoolSnapshot.docs.first;
+        return {
+          'id': schoolDoc.id,
+          'schoolId': schoolDoc.data() as Map<String, dynamic>,
+          ...schoolDoc.data() as Map<String, dynamic>,
+        };
+      }
+
+      // If still not found, try partial name matching
+      schoolSnapshot = await _firestore!
+          .collection('schools')
+          .orderBy('schoolName_lower')
+          .startAt([searchTerm])
+          .endAt([searchTerm + '\uf8ff'])
+          .limit(5)
+          .get();
+
+      if (schoolSnapshot.docs.isNotEmpty) {
+        // Return the first match
+        final schoolDoc = schoolSnapshot.docs.first;
+        return {
+          'id': schoolDoc.id,
+          'schoolId': schoolDoc.data() as Map<String, dynamic>,
+          ...schoolDoc.data() as Map<String, dynamic>,
+        };
+      }
+
+      return null;
+    } catch (e) {
+      print('❌ Error searching school in Firebase: $e');
+      throw Exception(
+          'Failed to search for school. Please check your internet connection.');
+    }
+  }
+
+  /// Step 2: Authenticate user in Firebase
+  Future<Map<String, dynamic>?> _authenticateUserInFirebase(
+      Map<String, dynamic> schoolData) async {
+    try {
+      final email = emailController.text.trim().toLowerCase();
+      final password = passwordController.text;
+      final schoolId = schoolData['schoolId'] as String;
+
+      // Check if user exists in the school's users collection
+      final usersSnapshot = await _firestore!
+          .collection('schools')
+          .doc(schoolData['id'])
+          .collection('users')
+          .where('email', isEqualTo: email)
+          .limit(1)
+          .get();
+
+      if (usersSnapshot.docs.isEmpty) {
+        return null; // User not found in this school
+      }
+
+      final userDoc = usersSnapshot.docs.first;
+      final userData = userDoc.data();
+
+      // Verify password (in real implementation, this should use proper password hashing)
+      if (userData['password'] != password) {
+        return null; // Invalid password
+      }
+
+      // Try to authenticate with Firebase Auth as well
+      try {
+        await _firebaseAuth!.signInWithEmailAndPassword(
+          email: email,
+          password: password,
+        );
+        print('✅ Firebase Auth successful');
+      } catch (authError) {
+        print(
+            '⚠️ Firebase Auth failed (continuing with document auth): $authError');
+        // Continue anyway - document authentication was successful
+      }
+
+      return {
+        'id': userDoc.id,
+        'schoolId': schoolId,
+        ...userData,
+      };
+    } catch (e) {
+      print('❌ Error authenticating user: $e');
+      throw Exception('Authentication failed. Please check your credentials.');
+    }
+  }
+
+  /// Step 3: Set up local school configuration
+  Future<void> _setupLocalSchoolConfig(Map<String, dynamic> schoolData) async {
+    try {
+      // Update settings with school information
       final settingsController = Get.find<SettingsController>();
-      settingsController.businessName.value = schoolName;
 
-      // You can load more school details from Firebase here
-      // For now, we'll use basic info
-      settingsController.businessEmail.value =
-          '${schoolName.toLowerCase().replaceAll(' ', '')}@school.com';
-      settingsController.schoolId.value = schoolId;
+      settingsController.businessName.value = schoolData['schoolName'] ?? '';
+      settingsController.businessAddress.value = schoolData['address'] ?? '';
+      settingsController.businessPhone.value = schoolData['phone'] ?? '';
+      settingsController.businessEmail.value = schoolData['email'] ?? '';
+      settingsController.businessCity.value = schoolData['city'] ?? '';
+      settingsController.businessCountry.value = schoolData['country'] ?? '';
+
+      // Enable multi-tenant features
       settingsController.enableMultiTenant.value = true;
       settingsController.enableCloudSync.value = true;
 
-      // Save settings
+      // Save all settings to local database
       await settingsController.saveAllBusinessSettings();
 
       // Reset and reinitialize school configuration
@@ -345,137 +298,207 @@ class SchoolLoginController extends GetxController {
       await schoolConfig.resetSchoolConfig();
 
       if (!schoolConfig.isValidConfiguration()) {
-        throw Exception('Failed to initialize school configuration');
+        throw Exception('Failed to set up school configuration');
       }
 
-      print('✅ School configuration loaded successfully');
+      print('✅ Local school configuration set up:');
+      print('   School ID: ${schoolConfig.schoolId.value}');
+      print('   School Name: ${schoolConfig.schoolName.value}');
     } catch (e) {
-      throw Exception('Failed to load school configuration: $e');
+      print('❌ Error setting up local school config: $e');
+      throw Exception('Failed to configure school settings.');
     }
   }
 
-  // Step 2: Authenticate user in school's Firebase database
-  Future<void> _authenticateUserInSchool() async {
-    print('🔐 Authenticating user in school database...');
-
+  /// Step 4: Download and sync all school data to offline database
+  Future<void> _downloadSchoolDataToOffline(
+      Map<String, dynamic> schoolData, Map<String, dynamic> userData) async {
     try {
-      // Use existing auth controller but with school context
+      final schoolDocId = schoolData['id'] as String;
+      final schoolRef = _firestore!.collection('schools').doc(schoolDocId);
+
+      // Collections to sync
+      final collectionsToSync = [
+        'users',
+        'courses',
+        'fleet',
+        'schedules',
+        'invoices',
+        'payments',
+        'billing_records',
+        'notes',
+        'notifications',
+        'attachments',
+        'currencies',
+        'settings'
+      ];
+
+      double progressPerCollection = 1.0 / collectionsToSync.length;
+      double currentProgress = 0.0;
+
+      for (String collectionName in collectionsToSync) {
+        statusMessage.value = 'Downloading $collectionName...';
+
+        try {
+          final collectionSnapshot =
+              await schoolRef.collection(collectionName).get();
+
+          // Process each document in the collection
+          for (var doc in collectionSnapshot.docs) {
+            final data = doc.data();
+            data['firebase_doc_id'] = doc.id; // Store Firebase document ID
+
+            // Save to local database based on collection type
+            await _saveToLocalDatabase(collectionName, data);
+          }
+
+          currentProgress += progressPerCollection;
+          downloadProgress.value = currentProgress;
+
+          print(
+              '✅ Downloaded ${collectionSnapshot.docs.length} $collectionName records');
+        } catch (e) {
+          print('⚠️ Failed to download $collectionName: $e');
+          // Continue with other collections
+        }
+      }
+
+      downloadProgress.value = 1.0;
+      statusMessage.value = 'Data download complete!';
+    } catch (e) {
+      print('❌ Error downloading school data: $e');
+      throw Exception('Failed to download school data.');
+    }
+  }
+
+  /// Save data to local database based on collection type
+  Future<void> _saveToLocalDatabase(
+      String collectionName, Map<String, dynamic> data) async {
+    try {
+      final db = DatabaseHelper.instance;
+
+      switch (collectionName) {
+        case 'users':
+          // Convert to User model and save
+          final user = app_user.User(
+            fname: data['fname'] ?? '',
+            lname: data['lname'] ?? '',
+            email: data['email'] ?? '',
+            password: data['password'] ?? '',
+            phone: data['phone'] ?? '',
+            address: data['address'] ?? '',
+            gender: data['gender'] ?? 'Not Specified',
+            idnumber: data['idnumber'] ?? '',
+            role: data['role'] ?? 'user',
+            status: data['status'] ?? 'Active',
+            date_of_birth: data['date_of_birth'] != null
+                ? DateTime.tryParse(data['date_of_birth'].toString()) ??
+                    DateTime.now()
+                : DateTime.now(),
+            created_at: data['created_at'] != null
+                ? DateTime.tryParse(data['created_at'].toString()) ??
+                    DateTime.now()
+                : DateTime.now(),
+          );
+          await db.insertUser(user);
+          break;
+
+        case 'courses':
+          await db.insertCourse(data);
+          break;
+
+        case 'fleet':
+          await db.insertFleet(data);
+          break;
+
+        case 'schedules':
+          await db.insertSchedule(data);
+          break;
+
+        case 'invoices':
+          await db.insertInvoice(data);
+          break;
+
+        case 'payments':
+          await db.insertPayment(data);
+          break;
+
+        // Add more cases as needed for other collections
+        default:
+          // For collections without specific models, save as generic data
+          print('ℹ️ Skipping $collectionName - no specific handler');
+      }
+    } catch (e) {
+      print('⚠️ Error saving $collectionName data to local DB: $e');
+      // Don't throw error - continue with other data
+    }
+  }
+
+  /// Step 5: Set up local authentication
+  Future<void> _setupLocalAuthentication(Map<String, dynamic> userData) async {
+    try {
       final authController = Get.find<AuthController>();
 
-      // First, try Firebase authentication to check if user exists in this school
-      final success = await authController.login(
-        emailController.text.trim(),
-        passwordController.text,
-      );
+      // Set current user data
+      authController.setCurrentUserFromData(userData);
 
-      if (!success) {
-        throw Exception('Invalid email or password for this school');
-      }
-
-      print('✅ User authenticated successfully in school');
+      print('✅ Local authentication set up for user: ${userData['email']}');
     } catch (e) {
-      throw Exception(
-          'Authentication failed: Please check your email and password');
+      print('❌ Error setting up local authentication: $e');
+      throw Exception('Failed to set up user authentication.');
     }
   }
 
-  // Step 3: Initialize local database with school data
-  Future<void> _initializeLocalSchoolData() async {
-    print('📱 Initializing local school data...');
-
+  /// Step 6: Complete setup and navigate
+  Future<void> _completeSetupAndNavigate(
+      Map<String, dynamic> schoolData) async {
     try {
-      // Local database should already be populated by auth controller
-      // Verify we have users
-      final users = await DatabaseHelper.instance.getUsers();
-      if (users.isEmpty) {
-        throw Exception('No user data synchronized');
-      }
-
-      print('✅ Local school data initialized (${users.length} users)');
-    } catch (e) {
-      throw Exception('Failed to initialize local data: $e');
-    }
-  }
-
-  // Step 4: Initialize Firebase sync
-  Future<void> _initializeFirebaseSync() async {
-    print('☁️ Initializing Firebase sync...');
-
-    try {
+      // Initialize Firebase sync service
       final syncService = Get.find<MultiTenantFirebaseSyncService>();
-
       if (syncService.firebaseAvailable.value) {
         await syncService.initializeUserSync();
-        // Trigger initial sync
-        Future.delayed(const Duration(seconds: 1), () {
-          syncService.triggerManualSync();
-        });
+        print('✅ Firebase sync initialized');
       }
 
-      print('✅ Firebase sync initialized');
+      // Show success message
+      Get.snackbar(
+        'Welcome!',
+        'Successfully joined ${schoolData['schoolName']}. Please set up your PIN for quick access.',
+        backgroundColor: Colors.green.shade600,
+        colorText: Colors.white,
+        icon: const Icon(Icons.check_circle, color: Colors.white),
+        duration: const Duration(seconds: 4),
+      );
+
+      // Navigate to PIN setup
+      Get.offAllNamed('/pin-setup');
     } catch (e) {
-      print('⚠️ Firebase sync initialization failed: $e');
-      // Don't fail the login for sync issues
+      print('❌ Error completing setup: $e');
+      // Still navigate to PIN setup even if sync fails
+      Get.snackbar(
+        'Almost Done!',
+        'Successfully joined ${schoolData['schoolName']}. Setting up PIN...',
+        backgroundColor: Colors.orange.shade600,
+        colorText: Colors.white,
+        duration: const Duration(seconds: 3),
+      );
+      Get.offAllNamed('/pin-setup');
     }
   }
 
-  // Step 5: Show success and navigate
-  void _showSuccessAndNavigate() {
-    final schoolName = selectedSchool['name']!;
-
-    Get.snackbar(
-      'Welcome to $schoolName!',
-      'Successfully joined school. Setting up your PIN for quick access...',
-      backgroundColor: Colors.green.shade600,
-      colorText: Colors.white,
-      icon: const Icon(Icons.check_circle, color: Colors.white),
-      duration: const Duration(seconds: 3),
-    );
-
-    // Navigate to PIN setup for future quick login
-    Get.offAllNamed('/pin-setup');
+  /// Method to retry join if failed
+  void retryJoin() {
+    errorMessage.value = '';
+    joinSchool();
   }
 
-  // Get user-friendly error messages
-  String _getFriendlyErrorMessage(String error) {
-    if (error.contains('Invalid email or password')) {
-      return 'Incorrect email or password. Please check your credentials.';
-    } else if (error.contains('school configuration')) {
-      return 'Unable to connect to this school. Please contact your administrator.';
-    } else if (error.contains('Authentication failed')) {
-      return 'Login failed. Please verify your email and password are correct.';
-    } else if (error.contains('No user data')) {
-      return 'Your account data could not be loaded. Please try again.';
-    } else {
-      return 'Login failed. Please check your internet connection and try again.';
-    }
-  }
-
-  // Help method for users
-  void showLoginHelp() {
-    Get.dialog(
-      AlertDialog(
-        title: const Text('Need Help?'),
-        content: const Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('• Ask your administrator for the school name or school code'),
-            SizedBox(height: 8),
-            Text('• Use the same email and password from your original device'),
-            SizedBox(height: 8),
-            Text('• Make sure you have internet connection'),
-            SizedBox(height: 8),
-            Text('• School codes are usually like "SMITH2024" or "SAFE2024"'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Get.back(),
-            child: const Text('Got it'),
-          ),
-        ],
-      ),
-    );
+  /// Clear all form data
+  void clearForm() {
+    schoolNameController.clear();
+    emailController.clear();
+    passwordController.clear();
+    errorMessage.value = '';
+    statusMessage.value = '';
+    downloadProgress.value = 0.0;
   }
 }
