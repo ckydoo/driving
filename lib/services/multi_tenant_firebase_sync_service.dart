@@ -26,7 +26,7 @@ class MultiTenantFirebaseSyncService extends GetxService {
   // Sync state
   final RxBool isSyncing = false.obs;
   final RxString syncStatus = 'Idle'.obs;
-  final RxBool isOnline = true.obs;
+  final RxBool isOnline = false.obs;
   final RxBool firebaseAvailable = false.obs;
   final Rx<DateTime> lastSyncTime = DateTime.fromMillisecondsSinceEpoch(0).obs;
 
