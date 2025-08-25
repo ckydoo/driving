@@ -23,6 +23,9 @@ class DatabaseHelperSyncExtension {
       'notifications',
       'timeline',
       'usermessages',
+      'currencies',
+      'billing_records',
+      'settings',
     ];
 
     for (String table in tables) {
@@ -164,6 +167,9 @@ class DatabaseHelperSyncExtension {
       'notifications',
       'timeline',
       'usermessages',
+      'currencies',
+      'billing_records',
+      'settings',
     ];
 
     for (String table in tables) {

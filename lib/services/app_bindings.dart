@@ -11,6 +11,7 @@ import 'package:driving/controllers/settings_controller.dart';
 import 'package:driving/controllers/user_controller.dart';
 import 'package:driving/services/consistency_checker_service.dart';
 import 'package:driving/services/database_helper.dart';
+import 'package:driving/services/enhanced_payment_sync_service.dart';
 import 'package:driving/services/lesson_counting_service.dart';
 import 'package:driving/services/school_config_service.dart';
 import 'package:driving/services/multi_tenant_firebase_sync_service.dart';
@@ -38,7 +39,8 @@ class EnhancedAppBindings extends Bindings {
 
       // STEP 5: Initialize multi-tenant Firebase sync
       await _initializeMultiTenantFirebaseSync();
-
+      Get.put(EnhancedPaymentSyncService(), permanent: true);
+      print('✅ EnhancedPaymentSyncService registered');
       // STEP 6: Initialize authentication controller
       await _initializeAuthController();
 
