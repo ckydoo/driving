@@ -1,4 +1,5 @@
 // lib/settings/enhanced_settings_screen.dart
+import 'package:driving/controllers/billing_controller.dart';
 import 'package:driving/controllers/school_registration_controller.dart';
 import 'package:driving/services/firebase_sync_service.dart';
 import 'package:driving/services/multi_tenant_firebase_sync_service.dart';
@@ -186,8 +187,8 @@ class _SettingsScreenState extends State<SettingsScreen>
         if (authController.hasAnyRole(['admin', 'instructor']))
           ElevatedButton(
             onPressed: () async {
-              final syncService = Get.find<SchoolRegistrationController>();
-              await syncService.debugUserCreation();
+              final syncService = Get.find<BillingController>();
+              await syncService.fixInvoicePaymentSync();
             },
             child: Text('Test Firebase Connection'),
           ),

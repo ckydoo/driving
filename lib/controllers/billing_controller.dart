@@ -205,32 +205,241 @@ class BillingController extends GetxController {
     return await db.query('payments');
   }
 
+  // Fixed fetchBillingData method in billing_controller.dart
   Future<void> fetchBillingData() async {
     try {
       isLoading(true);
       print('BillingController: fetchBillingData called');
+
+      // Get fresh data from database
       final invoicesData = await _dbHelper.getInvoices();
-      print(
-          'BillingController: Data from _dbHelper.getInvoices: $invoicesData');
       final paymentsData = await _dbHelper.getPayments();
-      print(
-          'BillingController: Data from _dbHelper.getPayments: $paymentsData');
+
+      print('BillingController: Raw invoice data: $invoicesData');
+      print('BillingController: Raw payments data: $paymentsData');
 
       List<Invoice> fetchedInvoices = [];
+
       for (var invoiceData in invoicesData) {
+        // CRITICAL: Ensure amountpaid is properly parsed from database
+        // The issue might be here - make sure amountpaid field is correctly read
+        final amountPaid =
+            (invoiceData['amountpaid'] as num?)?.toDouble() ?? 0.0;
+
+        print('Invoice ${invoiceData['id']}: amountpaid from DB = $amountPaid');
+
+        // Create invoice with explicit amountPaid value
         Invoice invoice = Invoice.fromJson(invoiceData);
+
+        // Double-check by recalculating from payments
         List<Payment> invoicePayments = paymentsData
             .map((json) => Payment.fromJson(json))
             .where((payment) => payment.invoiceId == invoice.id)
             .toList();
+
+        // Calculate total payments for this invoice
+        double calculatedAmountPaid =
+            invoicePayments.fold(0.0, (sum, payment) => sum + payment.amount);
+
+        print(
+            'Invoice ${invoice.id}: calculated amount paid from payments = $calculatedAmountPaid');
+        print('Invoice ${invoice.id}: DB amount paid = ${invoice.amountPaid}');
+
+        // If there's a mismatch, prefer the calculated value and update DB
+        if ((calculatedAmountPaid - invoice.amountPaid).abs() > 0.01) {
+          print(
+              '⚠️ MISMATCH DETECTED: Updating invoice ${invoice.id} amountpaid from ${invoice.amountPaid} to $calculatedAmountPaid');
+
+          // Update the database with correct amount
+          await _updateInvoiceAmountPaid(invoice.id!, calculatedAmountPaid);
+
+          // Create corrected invoice
+          invoice = invoice.copyWith(amountPaid: calculatedAmountPaid);
+        }
+
         invoice.payments = invoicePayments;
         fetchedInvoices.add(invoice);
+
+        print(
+            'Final invoice ${invoice.id}: amountPaid = ${invoice.amountPaid}, balance = ${invoice.balance}');
       }
 
+      // Update observable lists
       invoices.assignAll(fetchedInvoices);
       payments.assignAll(paymentsData.map((json) => Payment.fromJson(json)));
+
+      print(
+          'BillingController: Updated ${invoices.length} invoices and ${payments.length} payments');
+    } catch (e) {
+      print('ERROR in fetchBillingData: $e');
+      throw e;
     } finally {
       isLoading(false);
+    }
+  }
+
+// Add this helper method to fix amountpaid mismatches
+  Future<void> _updateInvoiceAmountPaid(
+      int invoiceId, double correctAmountPaid) async {
+    try {
+      final db = await _dbHelper.database;
+
+      // Calculate new status
+      final invoiceResults = await db.query(
+        'invoices',
+        where: 'id = ?',
+        whereArgs: [invoiceId],
+      );
+
+      if (invoiceResults.isNotEmpty) {
+        final invoiceData = invoiceResults.first;
+        final totalAmount = (invoiceData['total_amount'] as num?)?.toDouble() ??
+            ((invoiceData['lessons'] as num).toDouble() *
+                (invoiceData['price_per_lesson'] as num).toDouble());
+
+        String newStatus;
+        if (correctAmountPaid >= totalAmount) {
+          newStatus = 'paid';
+        } else if (correctAmountPaid > 0) {
+          newStatus = 'partial';
+        } else {
+          newStatus = 'unpaid';
+        }
+
+        // Update the database
+        await db.update(
+          'invoices',
+          {
+            'amountpaid': correctAmountPaid,
+            'status': newStatus,
+          },
+          where: 'id = ?',
+          whereArgs: [invoiceId],
+        );
+
+        print(
+            '✓ Fixed invoice $invoiceId: amountpaid = $correctAmountPaid, status = $newStatus');
+      }
+    } catch (e) {
+      print('ERROR updating invoice amount paid: $e');
+    }
+  }
+
+// Also add a method to verify and fix all invoice payment amounts
+  Future<void> repairAllInvoicePayments() async {
+    try {
+      print('Starting invoice payment repair...');
+
+      final invoicesData = await _dbHelper.getInvoices();
+      final paymentsData = await _dbHelper.getPayments();
+
+      for (var invoiceData in invoicesData) {
+        final invoiceId = invoiceData['id'] as int;
+        final dbAmountPaid =
+            (invoiceData['amountpaid'] as num?)?.toDouble() ?? 0.0;
+
+        // Calculate actual amount paid from payments
+        final invoicePayments = paymentsData
+            .where((payment) => payment['invoiceId'] == invoiceId)
+            .toList();
+
+        double actualAmountPaid = 0.0;
+        for (var payment in invoicePayments) {
+          actualAmountPaid += (payment['amount'] as num).toDouble();
+        }
+
+        // Check if there's a mismatch
+        if ((actualAmountPaid - dbAmountPaid).abs() > 0.01) {
+          print(
+              'Repairing invoice $invoiceId: DB shows $dbAmountPaid, actual is $actualAmountPaid');
+          await _updateInvoiceAmountPaid(invoiceId, actualAmountPaid);
+        }
+      }
+
+      // Refresh data after repair
+      await fetchBillingData();
+
+      print('Invoice payment repair completed');
+    } catch (e) {
+      print('ERROR in repairAllInvoicePayments: $e');
+    }
+  }
+
+// Add this method to your BillingController and call it once
+  Future<void> fixInvoicePaymentSync() async {
+    try {
+      print('Starting invoice payment sync fix...');
+
+      final db = await _dbHelper.database;
+
+      // Get all invoices
+      final invoices = await db.query('invoices');
+
+      for (var invoice in invoices) {
+        final invoiceId = invoice['id'] as int;
+
+        // Calculate total payments for this invoice
+        final paymentsResult = await db.query(
+          'payments',
+          where: 'invoiceId = ?',
+          whereArgs: [invoiceId],
+        );
+
+        double totalPaid = 0.0;
+        for (var payment in paymentsResult) {
+          totalPaid += (payment['amount'] as num).toDouble();
+        }
+
+        print(
+            'Invoice $invoiceId: Current amountpaid = ${invoice['amountpaid']}, Calculated = $totalPaid');
+
+        // Update if different
+        if (totalPaid != (invoice['amountpaid'] as num?)?.toDouble()) {
+          final totalAmount = (invoice['total_amount'] as num?)?.toDouble() ??
+              ((invoice['lessons'] as num).toDouble() *
+                  (invoice['price_per_lesson'] as num).toDouble());
+
+          String newStatus;
+          if (totalPaid >= totalAmount) {
+            newStatus = 'paid';
+          } else if (totalPaid > 0) {
+            newStatus = 'partial';
+          } else {
+            newStatus = 'unpaid';
+          }
+
+          await db.update(
+            'invoices',
+            {
+              'amountpaid': totalPaid,
+              'status': newStatus,
+            },
+            where: 'id = ?',
+            whereArgs: [invoiceId],
+          );
+
+          print(
+              '✓ Fixed invoice $invoiceId: amountpaid updated to $totalPaid, status: $newStatus');
+        }
+      }
+
+      // Refresh billing data
+      await fetchBillingData();
+
+      Get.snackbar(
+        'Sync Fixed',
+        'Invoice payment sync has been repaired',
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
+    } catch (e) {
+      print('Error fixing invoice payment sync: $e');
+      Get.snackbar(
+        'Error',
+        'Failed to fix sync: ${e.toString()}',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
     }
   }
 
