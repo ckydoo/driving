@@ -403,7 +403,7 @@ class MultiTenantFirebaseSyncService extends GetxService {
 
     // Remove SQLite-specific fields
     result.remove('firebase_synced');
-    result.remove('firebase_uid');
+    result.remove('firebase_user_id');
 
     // Convert timestamps
     if (result['created_at'] is String) {

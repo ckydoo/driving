@@ -1538,7 +1538,7 @@
 
 //     // Remove SQLite-specific fields
 //     result.remove('firebase_synced');
-//     result.remove('firebase_uid');
+//     result.remove('firebase_user_id');
 
 //     // CRITICAL FIX: Map local firebase_user_id to Firebase user_id
 //     if (result['firebase_user_id'] != null) {

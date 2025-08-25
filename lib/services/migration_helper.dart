@@ -31,8 +31,8 @@ class MigrationHelper {
       final localUsers = await DatabaseHelper.instance.getUsers();
       final unmigrated = localUsers
           .where((user) =>
-              user['firebase_uid'] == null ||
-              user['firebase_uid'].toString().isEmpty)
+              user['firebase_user_id'] == null ||
+              user['firebase_user_id'].toString().isEmpty)
           .toList();
 
       print('👥 Found ${unmigrated.length} users needing migration');
@@ -385,7 +385,7 @@ class MigrationHelper {
 
       // Prepare user data for Firebase
       final userData = {
-        'firebase_uid': firebaseUser.uid,
+        'firebase_user_id': firebaseUser.uid,
         'id': localUser.id,
         'fname': localUser.fname,
         'lname': localUser.lname,
@@ -446,7 +446,7 @@ class MigrationHelper {
       final db = await DatabaseHelper.instance.database;
       await db.execute('''
         UPDATE users 
-        SET firebase_uid = ?, firebase_synced = 1, last_modified = ?
+        SET firebase_user_id = ?, firebase_synced = 1, last_modified = ?
         WHERE id = ?
       ''', [firebaseUID, DateTime.now().toIso8601String(), localUser.id]);
 

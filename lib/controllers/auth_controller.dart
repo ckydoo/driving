@@ -465,7 +465,7 @@ class AuthController extends GetxController {
       final schoolId = schoolConfig.schoolId.value;
 
       // Add Firebase UID and timestamps
-      userData['firebase_uid'] = firebaseUser.uid;
+      userData['firebase_user_id'] = firebaseUser.uid;
       userData['email'] = firebaseUser.email;
       userData['created_at'] = DateTime.now().toIso8601String();
       userData['last_modified'] = DateTime.now().toIso8601String();

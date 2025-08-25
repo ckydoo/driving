@@ -482,7 +482,7 @@ class EnhancedPaymentSyncService extends GetxService {
 
     // Remove local-only fields
     data.remove('firebase_synced');
-    data.remove('firebase_uid');
+    data.remove('firebase_user_id');
 
     // Add Firebase-specific fields
     data['user_id'] = userId;

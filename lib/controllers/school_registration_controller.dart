@@ -311,7 +311,7 @@ class SchoolRegistrationController extends GetxController {
 
       // Prepare user data for Firebase
       final userData = {
-        'firebase_uid': firebaseUser.uid,
+        'firebase_user_id': firebaseUser.uid,
         'id': localUser.id ?? DateTime.now().millisecondsSinceEpoch,
         'fname': localUser.fname,
         'lname': localUser.lname,

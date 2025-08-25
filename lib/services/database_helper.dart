@@ -277,7 +277,7 @@ class DatabaseHelper {
     last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
     firebase_synced INTEGER DEFAULT 0,
     deleted INTEGER DEFAULT 0,
-    firebase_uid TEXT UNIQUE     
+    firebase_user_id TEXT UNIQUE     
   )
 ''');
     await db.execute('''
@@ -421,16 +421,71 @@ class DatabaseHelper {
   // ==================== SYNC-ENABLED CRUD METHODS ====================
 
   // ================ USERS TABLE ================
+// In your DatabaseHelper class
   Future<int> insertUser(User user) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.insertWithSync(
-        db, 'users', user.toJson());
+    try {
+      // Try normal insert first
+      return await DatabaseHelperSyncExtension.insertWithSync(
+          db, 'users', user.toJson());
+    } catch (e) {
+      // If UNIQUE constraint fails, try INSERT OR REPLACE
+      if (e.toString().contains('UNIQUE constraint failed')) {
+        print('⚠️ UNIQUE constraint failed, using INSERT OR REPLACE');
+
+        final userJson = user.toJson();
+        userJson['last_modified'] =
+            DateTime.now().toUtc().millisecondsSinceEpoch;
+        userJson['firebase_synced'] = 0;
+
+        // Add firebase_user_id if available
+        try {
+          final authController = Get.find<AuthController>();
+          if (authController.isFirebaseAuthenticated) {
+            userJson['firebase_user_id'] = authController.currentFirebaseUserId;
+          }
+        } catch (_) {}
+
+        final result = await db.insert(
+          'users',
+          userJson,
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+
+        return result;
+      } else {
+        rethrow;
+      }
+    }
   }
 
+// Also update the updateUser method for consistency
   Future<int> updateUser(User user) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.updateWithSync(
-        db, 'users', user.toJson(), 'id = ?', [user.id]);
+    try {
+      // Try normal update first
+      return await DatabaseHelperSyncExtension.updateWithSync(
+          db, 'users', user.toJson(), 'id = ?', [user.id]);
+    } catch (e) {
+      // If update fails (maybe user doesn't exist), try INSERT OR REPLACE
+      if (e.toString().contains('no such rowid') ||
+          e.toString().contains('UNIQUE constraint failed')) {
+        print('⚠️ Update failed, using INSERT OR REPLACE');
+
+        final userJson = user.toJson();
+        userJson['last_modified'] =
+            DateTime.now().toUtc().millisecondsSinceEpoch;
+        userJson['firebase_synced'] = 0;
+
+        return await db.insert(
+          'users',
+          userJson,
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      } else {
+        rethrow;
+      }
+    }
   }
 
   Future<int> deleteUser(int id) async {
@@ -1506,24 +1561,29 @@ class DatabaseHelper {
     return result;
   }
 
-  /// Enhanced update method with debounced sync
-  static Future<int> updateWithSync(
-      Database db,
-      String table,
-      Map<String, dynamic> values,
-      String where,
-      List<dynamic> whereArgs) async {
-    // Add sync tracking data
-    values['last_modified'] = DateTime.now().toUtc().millisecondsSinceEpoch;
-    values['firebase_synced'] = 0;
+// In your enhanced_database_helper.dart updateWithSync method:
+  Future<int> updateWithSync(String table, Map<String, dynamic> values,
+      {String? where, List<dynamic>? whereArgs}) async {
+    final db = await database;
 
-    final result =
-        await db.update(table, values, where: where, whereArgs: whereArgs);
+    try {
+      final result =
+          await db.update(table, values, where: where, whereArgs: whereArgs);
 
-    // Trigger debounced sync
-    _triggerSmartSync();
+      if (result == 0 && table == 'users') {
+        // No rows affected, try insert with conflict resolution
+        return await db.insert(table, values,
+            conflictAlgorithm: ConflictAlgorithm.replace);
+      }
 
-    return result;
+      return result;
+    } catch (e) {
+      if (e.toString().contains('UNIQUE constraint failed')) {
+        return await db.insert(table, values,
+            conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+      rethrow;
+    }
   }
 
   /// Enhanced delete method with debounced sync
