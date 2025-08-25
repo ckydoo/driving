@@ -155,7 +155,7 @@ class SchoolManagementService extends GetxService {
 
       // Step 1: Logout current user
       final authController = Get.find<AuthController>();
-      await authController.logout();
+      await authController.signOut();
 
       // Step 2: Update settings with new school data
       await _updateSchoolSettings(schoolData);

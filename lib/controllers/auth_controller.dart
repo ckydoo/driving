@@ -1,18 +1,18 @@
-// lib/controllers/auth_controller.dart - Robust version with Firebase error handling
+// lib/controllers/auth_controller.dart - Updated to Firebase-First with backward compatibility
 import 'package:crypto/crypto.dart';
 import 'package:driving/models/user.dart';
 import 'package:driving/services/database_helper.dart';
 import 'package:driving/controllers/pin_controller.dart';
-import 'package:driving/services/firebase_sync_service.dart';
 import 'package:driving/services/multi_tenant_firebase_sync_service.dart';
+import 'package:driving/services/school_config_service.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:convert';
 
 class AuthController extends GetxController {
+  // Core state
   final RxBool isLoading = false.obs;
   final RxString error = ''.obs;
   final Rx<User?> currentUser = Rx<User?>(null);
@@ -20,12 +20,15 @@ class AuthController extends GetxController {
   final RxBool rememberMe = false.obs;
   final RxString userEmail = ''.obs;
 
-  // Firebase Authentication with error handling
+  // Firebase - now primary auth system
   firebase_auth.FirebaseAuth? _firebaseAuth;
   FirebaseFirestore? _firestore;
   final Rx<firebase_auth.User?> firebaseUser = Rx<firebase_auth.User?>(null);
   final RxBool firebaseAvailable = false.obs;
   final RxString firebaseError = ''.obs;
+
+  // Migration flag - remove after full migration
+  final RxBool isUsingFirebaseFirst = true.obs;
 
   // Get PIN controller
   PinController get _pinController => Get.find<PinController>();
@@ -33,852 +36,614 @@ class AuthController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-
-    // Initialize PIN Controller first
     Get.lazyPut(() => PinController());
-
-    // Initialize Firebase with error handling
     _initializeFirebaseAuth();
-
-    _checkLoginStatus();
   }
 
-  /// Initialize Firebase Authentication with robust error handling
+  /// Initialize Firebase as primary auth system
   Future<void> _initializeFirebaseAuth() async {
     try {
-      print('🔥 Initializing Firebase Authentication...');
+      print('🔥 Initializing Firebase-first authentication...');
 
-      // Test Firebase availability
       _firebaseAuth = firebase_auth.FirebaseAuth.instance;
       _firestore = FirebaseFirestore.instance;
 
-      // Test the connection with a simple call
+      // Test Firebase connection
       await _testFirebaseConnection();
-
-      // If we get here, Firebase is working
       firebaseAvailable.value = true;
 
       // Set up auth state listener
-      _firebaseAuth!.authStateChanges().listen(
-        _onFirebaseAuthStateChanged,
-        onError: (error) {
-          print('❌ Firebase Auth State Listener Error: $error');
-          _handleFirebaseError(error);
-        },
-      );
+      _firebaseAuth!.authStateChanges().listen(_onFirebaseAuthStateChanged);
 
-      print('✅ Firebase Authentication initialized successfully');
+      print('✅ Firebase-first auth initialized');
+
+      // Handle initial auth state
+      await _handleInitialAuthState();
     } catch (e) {
-      print('❌ Firebase Authentication initialization failed: $e');
-      _handleFirebaseError(e);
+      print('❌ Firebase initialization failed: $e');
+      firebaseAvailable.value = false;
+      firebaseError.value =
+          'Firebase connection failed. Please check internet connection.';
+
+      // Fallback to old system temporarily during migration
+      await _checkLoginStatusLegacy();
     }
   }
 
   /// Test Firebase connection
   Future<void> _testFirebaseConnection() async {
-    try {
-      // Try a simple Firebase operation to test connectivity
-      final currentUser = _firebaseAuth?.currentUser;
-      print(
-          '🔥 Firebase connection test - Current user: ${currentUser?.email ?? 'Not signed in'}');
+    final currentFirebaseUser = _firebaseAuth?.currentUser;
+    print(
+        '🔥 Firebase connection test - Current user: ${currentFirebaseUser?.email ?? "none"}');
 
-      // Test Firestore connection
-      if (_firestore != null) {
-        await _firestore!.settings.persistenceEnabled;
-        print('🔥 Firestore connection test passed');
-      }
-    } catch (e) {
-      print('❌ Firebase connection test failed: $e');
-      throw e;
-    }
+    // Try to access Firestore
+    await _firestore?.collection('test').limit(1).get();
+    print('✅ Firebase connection test passed');
   }
 
-  /// Handle Firebase errors gracefully
-  void _handleFirebaseError(dynamic error) {
-    firebaseAvailable.value = false;
+  /// Handle initial auth state on app startup
+  Future<void> _handleInitialAuthState() async {
+    final currentFirebaseUser = _firebaseAuth?.currentUser;
 
-    String errorMessage = 'Firebase unavailable';
-
-    if (error is PlatformException) {
-      if (error.code == 'channel-error') {
-        errorMessage = 'Firebase platform connection failed';
-      } else {
-        errorMessage = 'Firebase platform error: ${error.message}';
-      }
-    } else if (error is firebase_auth.FirebaseAuthException) {
-      errorMessage = 'Firebase Auth error: ${error.message}';
+    if (currentFirebaseUser != null) {
+      print('🔥 Found existing Firebase user: ${currentFirebaseUser.email}');
+      await _syncUserDataFromFirebase(currentFirebaseUser);
     } else {
-      errorMessage = 'Firebase error: ${error.toString()}';
+      print('ℹ️ No existing Firebase user found');
     }
-
-    firebaseError.value = errorMessage;
-    print('🔥 Firebase Error Handled: $errorMessage');
-
-    // Show user-friendly message
-    Get.snackbar(
-      'Cloud Sync Unavailable',
-      'Running in offline mode. Data will sync when connection is restored.',
-      backgroundColor: Colors.orange,
-      colorText: Colors.white,
-      duration: const Duration(seconds: 3),
-    );
   }
 
-  /// Enhanced Firebase Authentication state change handler
-  void _onFirebaseAuthStateChanged(firebase_auth.User? user) async {
+  /// Firebase auth state change handler
+  Future<void> _onFirebaseAuthStateChanged(firebase_auth.User? user) async {
     try {
       firebaseUser.value = user;
-      print(
-          '🔥 Firebase Auth State Changed: ${user?.email ?? 'Not authenticated'}');
 
       if (user != null) {
-        await _handleFirebaseUserSignedIn(user);
+        print('🔥 Firebase user signed in: ${user.email}');
 
-        // NEW: Auto-sync local auth if not already logged in
-        if (!isLoggedIn.value && user.email != null) {
-          print(
-              '🔄 Firebase user found but local not logged in - attempting auto-sync...');
-          await _autoSyncLocalAuth(user.email!);
-        }
+        // CRITICAL: Always sync user data when Firebase user changes
+        await _syncUserDataFromFirebase(user);
+
+        _startSyncService();
       } else {
-        _handleFirebaseUserSignedOut();
+        print('🔥 Firebase user signed out');
+        await _handleSignOut();
       }
     } catch (e) {
-      print('❌ Error in auth state change handler: $e');
-      _handleFirebaseError(e);
+      print('❌ Auth state change error: $e');
+      error.value = 'Authentication error: ${e.toString()}';
     }
   }
 
-  /// Auto-sync local authentication when Firebase user is detected
-  Future<void> _autoSyncLocalAuth(String firebaseEmail) async {
-    try {
-      // Find local user by Firebase email
-      final allUsers = await DatabaseHelper.instance.getUsers();
-      final localUserData = allUsers.firstWhereOrNull(
-        (user) =>
-            user['email'].toString().toLowerCase() ==
-            firebaseEmail.toLowerCase(),
-      );
-
-      if (localUserData != null) {
-        // Set local authentication state
-        final userObj = User.fromJson(localUserData);
-        currentUser.value = userObj;
-        isLoggedIn.value = true;
-
-        print(
-            '✅ Auto-synced local auth for: ${userObj.fname} ${userObj.lname}');
-
-        // Trigger sync now that both auth states are aligned
-        try {
-          final syncService = Get.find<MultiTenantFirebaseSyncService>();
-          Future.delayed(const Duration(seconds: 1), () {
-            syncService.triggerManualSync();
-          });
-        } catch (e) {
-          print('⚠️ Could not trigger sync after auto-sync: $e');
-        }
-      } else {
-        print('❌ No local user found for Firebase email: $firebaseEmail');
-        // You could show a dialog here asking user to create local account
-      }
-    } catch (e) {
-      print('❌ Error in auto-sync local auth: $e');
-    }
-  }
-
-  /// Handle when Firebase user signs in
-  Future<void> _handleFirebaseUserSignedIn(firebase_auth.User user) async {
-    try {
-      print('✅ Firebase user signed in: ${user.email}');
-      await _syncLocalUserWithFirebase(user);
-
-      // Trigger data sync for this authenticated user
-      try {
-        final syncService = Get.find<MultiTenantFirebaseSyncService>();
-        await syncService.triggerManualSync();
-      } catch (e) {
-        print('⚠️ Could not trigger sync after Firebase sign-in: $e');
-      }
-    } catch (e) {
-      print('❌ Error handling Firebase user sign-in: $e');
-      _handleFirebaseError(e);
-    }
-  }
-
-  /// Handle when Firebase user signs out
-  void _handleFirebaseUserSignedOut() {
-    print('🔥 Firebase user signed out - continuing with local authentication');
-  }
-
-  /// Sync local user data with Firebase user (with error handling)
-  Future<void> _syncLocalUserWithFirebase(
+  /// Sync user data from Firebase to local cache
+  Future<void> _syncUserDataFromFirebase(
       firebase_auth.User firebaseUser) async {
     try {
-      if (currentUser.value == null || _firestore == null) return;
+      print('🔄 Syncing user data for: ${firebaseUser.email}');
 
-      // Get or create user document in Firestore
-      final userDoc =
-          await _firestore!.collection('users').doc(firebaseUser.uid).get();
+      // Get school config to know which collection to use
+      final schoolConfig = Get.find<SchoolConfigService>();
+      final schoolId = schoolConfig.schoolId.value;
+
+      if (schoolId.isEmpty) {
+        print('⚠️ No school ID found, trying to load from local cache');
+        await _loadFromLocalCache(firebaseUser.email);
+        return;
+      }
+
+      // Debug: Check if user exists locally first
+      await _debugUserInLocalDatabase(firebaseUser.email!);
+
+      // Get user data from Firebase
+      final userDoc = await _firestore!
+          .collection('schools')
+          .doc(schoolId)
+          .collection('users')
+          .doc(firebaseUser.uid)
+          .get();
 
       if (!userDoc.exists) {
-        await _createFirebaseUserDocument(firebaseUser);
+        print('⚠️ User doc not found in Firebase, trying local cache');
+        await _loadFromLocalCache(firebaseUser.email);
+        return;
+      }
+
+      final userData = userDoc.data()!;
+      print('📥 Firebase user data retrieved: ${userData.keys}');
+
+      // Create local user object
+      final user = User.fromJson(userData);
+      currentUser.value = user;
+      isLoggedIn.value = true; // IMPORTANT: Set this explicitly
+
+      // Cache user data locally for offline access
+      await _cacheUserLocally(user);
+
+      print('✅ User data synced from Firebase: ${user.email}');
+      print('✅ Local login state updated: ${isLoggedIn.value}');
+    } catch (e) {
+      print('❌ Error syncing user data from Firebase: $e');
+      // Try to load from local cache for offline access
+      await _loadFromLocalCache(firebaseUser.email);
+    }
+  }
+
+  /// Debug method to check if user exists in local database
+  Future<void> _debugUserInLocalDatabase(String email) async {
+    try {
+      final users = await DatabaseHelper.instance.getUsers();
+      print('🔍 Checking local database for user: $email');
+      print('📊 Total users in database: ${users.length}');
+
+      final matchingUser = users
+          .where((u) =>
+              u['email']?.toString().toLowerCase() == email.toLowerCase())
+          .firstOrNull;
+
+      if (matchingUser != null) {
+        print('✅ User found in local database:');
+        print('   Name: ${matchingUser['fname']} ${matchingUser['lname']}');
+        print('   Email: ${matchingUser['email']}');
+        print('   Role: ${matchingUser['role']}');
       } else {
-        await _updateLocalUserFromFirebase(userDoc.data()!);
-      }
-    } catch (e) {
-      print('❌ Error syncing local user with Firebase: $e');
-      // Don't throw error - continue with local auth
-    }
-  }
-
-  /// Create user document in Firestore (with error handling)
-  Future<void> _createFirebaseUserDocument(
-      firebase_auth.User firebaseUser) async {
-    try {
-      if (currentUser.value == null || _firestore == null) return;
-
-      final localUser = currentUser.value!;
-
-      await _firestore!.collection('users').doc(firebaseUser.uid).set({
-        'email': localUser.email,
-        'fname': localUser.fname,
-        'lname': localUser.lname,
-        'phone': localUser.phone,
-        'address': localUser.address,
-        'date_of_birth': localUser.date_of_birth,
-        'gender': localUser.gender,
-        'idnumber': localUser.idnumber,
-        'role': localUser.role,
-        'status': localUser.status,
-        'created_at': localUser.created_at,
-        'last_modified': FieldValue.serverTimestamp(),
-        'firebase_uid': firebaseUser.uid,
-      });
-
-      print('✅ Created Firebase user document for ${localUser.email}');
-    } catch (e) {
-      print('❌ Error creating Firebase user document: $e');
-      // Don't throw error - continue with local auth
-    }
-  }
-
-  /// Update local user from Firebase data
-  Future<void> _updateLocalUserFromFirebase(
-      Map<String, dynamic> firebaseData) async {
-    try {
-      print('📥 Updating local user from Firebase data');
-      // Implementation to update local user if needed
-    } catch (e) {
-      print('❌ Error updating local user from Firebase: $e');
-    }
-  }
-
-  /// Fixed authenticate locally method
-  Future<bool> _authenticateLocally(String email, String password) async {
-    try {
-      print('🔍 Starting local authentication for: $email');
-
-      // Get all users from database
-      final allUsers = await DatabaseHelper.instance.getUsers();
-      print('👥 Found ${allUsers.length} users in database');
-
-      if (allUsers.isEmpty) {
-        error('No users found in the system. Please contact administrator.');
-        return false;
-      }
-
-      // Find user by email - using traditional loop instead of firstWhereOrNull
-      Map<String, dynamic>? userData;
-      for (var user in allUsers) {
-        final userEmail = user['email']?.toString()?.toLowerCase() ?? '';
-        if (userEmail == email.toLowerCase()) {
-          userData = user;
-          break;
+        print('❌ User NOT found in local database');
+        print('📝 Available emails:');
+        for (var user in users.take(5)) {
+          print('   - ${user['email']}');
         }
       }
+    } catch (e) {
+      print('❌ Error checking local database: $e');
+    }
+  }
 
-      if (userData == null) {
-        print('❌ No user found with email: $email');
-        error('User not found. Please check your email address.');
+  /// Cache user data locally for offline access
+  Future<void> _cacheUserLocally(User user) async {
+    try {
+      final existingUsers = await DatabaseHelper.instance.getUsers();
+      final existingUser =
+          existingUsers.where((u) => u['email'] == user.email).firstOrNull;
+
+      if (existingUser == null) {
+        await DatabaseHelper.instance.insertUser(user);
+        print('✅ User cached locally for offline access');
+      } else {
+        await DatabaseHelper.instance.updateUser(user);
+        print('✅ Local user cache updated');
+      }
+    } catch (e) {
+      print('⚠️ Could not cache user locally: $e');
+    }
+  }
+
+  /// Load user from local cache (offline mode)
+  Future<void> _loadFromLocalCache(String? email) async {
+    if (email == null) return;
+
+    try {
+      final users = await DatabaseHelper.instance.getUsers();
+      final userData = users.where((u) => u['email'] == email).firstOrNull;
+
+      if (userData != null) {
+        final user = User.fromJson(userData);
+        currentUser.value = user;
+        isLoggedIn.value = true;
+        print('✅ Loaded user from offline cache: ${user.email}');
+        print('✅ Local login state set: ${isLoggedIn.value}');
+      } else {
+        print('❌ User not found in local cache for email: $email');
+      }
+    } catch (e) {
+      print('❌ Could not load from offline cache: $e');
+    }
+  }
+
+  /// Start sync service after successful authentication
+  void _startSyncService() {
+    try {
+      final syncService = Get.find<MultiTenantFirebaseSyncService>();
+      Future.delayed(const Duration(seconds: 1), () {
+        syncService.triggerManualSync();
+      });
+    } catch (e) {
+      print('⚠️ Could not start sync service: $e');
+    }
+  }
+
+  /// PRIMARY LOGIN METHOD - Firebase first, with legacy fallback during migration
+  Future<bool> login(String email, String password) async {
+    try {
+      isLoading.value = true;
+      error.value = '';
+
+      print('\n🔐 === FIREBASE-FIRST LOGIN ATTEMPT ===');
+      print('📧 Email: $email');
+
+      if (email.isEmpty || password.isEmpty) {
+        error.value = 'Email and password are required';
         return false;
       }
 
-      print('✅ User found: ${userData['fname']} ${userData['lname']}');
+      // Try Firebase authentication first
+      if (firebaseAvailable.value) {
+        try {
+          final credential = await _firebaseAuth!.signInWithEmailAndPassword(
+            email: email,
+            password: password,
+          );
+
+          if (credential.user != null) {
+            print('✅ Firebase authentication successful');
+
+            // CRITICAL: Force immediate sync of user data
+            await _syncUserDataFromFirebase(credential.user!);
+
+            print('✅ Local sync status: ${isLoggedIn.value}');
+
+            // User data sync happens automatically in auth state change
+            return true;
+          }
+        } on firebase_auth.FirebaseAuthException catch (e) {
+          print('❌ Firebase auth failed: ${e.code}');
+
+          // If user-not-found, try legacy authentication during migration period
+          if (e.code == 'user-not-found') {
+            print('🔄 User not in Firebase, trying legacy authentication...');
+            return await _authenticateLocallyDuringMigration(email, password);
+          }
+
+          _handleFirebaseAuthError(e);
+          return false;
+        }
+      } else {
+        // Firebase not available, use legacy authentication
+        print('⚠️ Firebase unavailable, using legacy authentication');
+        return await _authenticateLocallyDuringMigration(email, password);
+      }
+
+      return false;
+    } catch (e) {
+      print('❌ Login error: $e');
+      error.value = 'Login failed: ${e.toString()}';
+      return false;
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  /// Legacy authentication for migration period - REMOVE AFTER MIGRATION
+  Future<bool> _authenticateLocallyDuringMigration(
+      String email, String password) async {
+    try {
+      print('🔄 Using legacy local authentication');
+
+      // Get users from local database
+      final users = await DatabaseHelper.instance.getUsers();
+      final userData = users
+          .where((user) =>
+              user['email']?.toString().toLowerCase() == email.toLowerCase())
+          .firstOrNull;
+
+      if (userData == null) {
+        error.value = 'User not found. Please register first.';
+        return false;
+      }
 
       // Verify password
       final storedPassword = userData['password']?.toString() ?? '';
-      final hashedInputPassword = _hashPassword(password);
+      bool passwordValid = false;
 
-      bool passwordMatch = false;
-
-      // Try different password comparison methods
-      if (storedPassword == hashedInputPassword) {
-        passwordMatch = true;
-        print('✅ Password matched (hashed)');
-      } else if (storedPassword == password) {
-        passwordMatch = true;
-        print('✅ Password matched (plain text) - will update to hashed');
-        // Update to hashed version
-        await _updatePasswordToHashed(userData, hashedInputPassword);
+      // Try different password formats
+      if (storedPassword == password) {
+        passwordValid = true; // Plain text match
+      } else if (storedPassword == _hashPassword(password)) {
+        passwordValid = true; // Hashed password match
       }
 
-      if (!passwordMatch) {
-        print('❌ Password verification failed');
-        error('Invalid password. Please check your password.');
+      if (!passwordValid) {
+        error.value = 'Invalid password';
         return false;
       }
 
-      // Set current user
-      final userObj = User.fromJson(userData);
-      currentUser.value = userObj;
-      isLoggedIn(true);
+      // Set user as logged in
+      final user = User.fromJson(userData);
+      currentUser.value = user;
+      isLoggedIn.value = true;
 
-      print(
-          '✅ Local authentication successful for ${userObj.fname} ${userObj.lname}');
+      print('✅ Legacy authentication successful');
+
+      // Show migration notice
+      _showMigrationNotice(email);
+
       return true;
     } catch (e) {
-      print('❌ Local authentication error: $e');
-      error('Local authentication failed: ${e.toString()}');
+      print('❌ Legacy authentication error: $e');
+      error.value = 'Authentication failed: ${e.toString()}';
       return false;
     }
   }
 
-  /// Show recreate account confirmation dialog
-  Future<bool> _showRecreateAccountDialog() async {
-    return await Get.dialog<bool>(
-          AlertDialog(
-            title: const Text('Recreate Firebase Account'),
-            content: const Text(
-                'This will delete your existing Firebase account and create a new one. '
-                'Any data stored in Firebase will be lost. Are you sure?'),
-            actions: [
-              TextButton(
-                onPressed: () => Get.back(result: false),
-                child: const Text('Cancel'),
-              ),
-              ElevatedButton(
-                onPressed: () => Get.back(result: true),
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                child: const Text('Recreate Account'),
-              ),
-            ],
-          ),
-        ) ??
-        false;
-  }
-
-  /// Recreate Firebase account
-  Future<void> _recreateFirebaseAccount(String email, String password) async {
-    try {
-      // Note: We can't actually delete the existing account without being signed in
-      // So we'll try a workaround: create with a temporary email, then update
-
-      // Generate a temporary email
-      final tempEmail =
-          'temp_${DateTime.now().toUtc().millisecondsSinceEpoch}@temp.com';
-
-      // Create temporary account
-      final tempCredential =
-          await _firebaseAuth!.createUserWithEmailAndPassword(
-        email: tempEmail,
-        password: password,
-      );
-
-      // Update the email to the real one
-      await tempCredential.user!.updateEmail(email);
-
-      print('✅ Firebase account recreated for $email');
-
-      Get.snackbar(
-        'Account Recreated',
-        'Firebase account has been recreated successfully',
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
-      );
-    } catch (e) {
-      print('❌ Failed to recreate Firebase account: $e');
-
-      // If that fails, try the direct approach with better error handling
-      try {
-        await _createFirebaseAccount(email, password);
-      } catch (e2) {
-        throw Exception('Failed to recreate account: $e2');
-      }
-    }
-  }
-
-  /// Create Firebase account for existing local user
-  Future<void> _createFirebaseAccount(String email, String password) async {
-    if (!firebaseAvailable.value || _firebaseAuth == null) {
-      throw Exception('Firebase not available');
-    }
-
-    try {
-      final credential = await _firebaseAuth!.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-
-      print('✅ Firebase account created for ${credential.user?.email}');
-    } catch (e) {
-      throw Exception('Failed to create Firebase account: $e');
-    }
-  }
-
-  /// Enhanced logout with Firebase sign out
-  Future<void> logout() async {
-    try {
-      isLoading(true);
-
-      // Sign out from Firebase (if available)
-      if (firebaseAvailable.value && _firebaseAuth != null) {
-        try {
-          await _firebaseAuth!.signOut();
-          print('✅ Firebase sign out successful');
-        } catch (e) {
-          print('⚠️ Firebase sign out error: $e');
-          // Continue with local logout
-        }
-      }
-
-      // Clear local session
-      currentUser.value = null;
-      isLoggedIn(false);
-      firebaseUser.value = null;
-
-      // Clear PIN session if used
-
-      print('✅ Logout successful');
-      Get.offAllNamed('/login');
-    } catch (e) {
-      print('❌ Logout error: $e');
-      error('Logout failed: ${e.toString()}');
-    } finally {
-      isLoading(false);
-    }
-  }
-
-  // Change password
-  Future<bool> changePassword(
-      String currentPassword, String newPassword) async {
-    try {
-      isLoading(true);
-      error('');
-
-      if (currentUser.value == null) {
-        error('No user logged in');
-        return false;
-      }
-
-      if (newPassword.length < 6) {
-        error('New password must be at least 6 characters long');
-        return false;
-      }
-
-      // Verify current password
-      final hashedCurrentPassword = _hashPassword(currentPassword);
-      if (currentUser.value!.password != hashedCurrentPassword &&
-          currentUser.value!.password != currentPassword) {
-        error('Current password is incorrect');
-        return false;
-      }
-
-      // Hash new password
-      final hashedNewPassword = _hashPassword(newPassword);
-
-      // Update user in database
-      final updatedUser = User(
-        id: currentUser.value!.id,
-        fname: currentUser.value!.fname,
-        lname: currentUser.value!.lname,
-        email: currentUser.value!.email,
-        password: hashedNewPassword,
-        phone: currentUser.value!.phone,
-        address: currentUser.value!.address,
-        date_of_birth: currentUser.value!.date_of_birth,
-        gender: currentUser.value!.gender,
-        idnumber: currentUser.value!.idnumber,
-        role: currentUser.value!.role,
-        status: currentUser.value!.status,
-        created_at: currentUser.value!.created_at,
-      );
-
-      await DatabaseHelper.instance.updateUser(updatedUser);
-      currentUser.value = updatedUser;
-
-      Get.snackbar(
-        'Password Changed',
-        'Your password has been updated successfully',
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
-      );
-
-      return true;
-    } catch (e) {
-      error('Failed to change password: ${e.toString()}');
-      return false;
-    } finally {
-      isLoading(false);
-    }
-  }
-
-  // Debug method to check database status
-  Future<void> debugDatabase() async {
-    try {
-      final users = await DatabaseHelper.instance.getUsers();
-      print('\n=== DATABASE DEBUG INFO ===');
-      print('Total users in database: ${users.length}');
-
-      for (var user in users) {
-        print(
-            'User: ${user['email']} | Role: ${user['role']} | Status: ${user['status']} | Hash: ${user['password'].toString().substring(0, 20)}...');
-      }
-
-      // Check if default admin exists
-      final adminExists = users.any((user) =>
-          user['email'].toString().toLowerCase() == 'admin@drivingschool.com');
-      print('Default admin exists: $adminExists');
-
-      if (!adminExists) {
-        print('Creating default admin...');
-        await forceCreateTestUsers();
-      }
-    } catch (e) {
-      print('Error debugging database: $e');
-    }
-  }
-
-  // Get current user's full name
-  String get currentUserName {
-    if (currentUser.value == null) return 'Guest';
-    return '${currentUser.value!.fname} ${currentUser.value!.lname}';
-  }
-
-  // Get current user's role
-  String get currentUserRole {
-    return currentUser.value?.role ?? 'Guest';
-  }
-
-  /// Get current Firebase user ID for sync purposes
-  String? get currentFirebaseUserId => firebaseUser.value?.uid;
-
-  /// Check if user is authenticated with Firebase
-  bool get isFirebaseAuthenticated =>
-      firebaseAvailable.value && firebaseUser.value != null;
-
-  /// Force Firebase authentication for better sync (Enhanced version)
-  Future<void> forceFirebaseAuthentication() async {
-    if (currentUser.value == null) return;
-
-    if (!firebaseAvailable.value) {
-      Get.snackbar(
-        'Firebase Unavailable',
-        'Firebase services are currently unavailable. Please try again later.',
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-      );
-      return;
-    }
-
-    if (isFirebaseAuthenticated) {
-      Get.snackbar(
-        'Already Synced',
-        'Cloud synchronization is already active',
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
-      );
-      return;
-    }
-
-    try {
-      isLoading(true);
-
-      // Try a simpler approach: create account with current timestamp as password
-      // This ensures we don't have password mismatch issues
-      await _createUniqueFirebaseAccount();
-    } catch (e) {
-      print('❌ Firebase authentication failed: $e');
-
-      // Show detailed error dialog with options
-      await _showFirebaseErrorDialog(e.toString());
-    } finally {
-      isLoading(false);
-    }
-  }
-
-  /// Create a unique Firebase account for sync purposes
-  Future<void> _createUniqueFirebaseAccount() async {
-    if (currentUser.value == null || _firebaseAuth == null) return;
-
-    final email = currentUser.value!.email;
-
-    try {
-      // First, check if account already exists
-      final signInMethods =
-          await _firebaseAuth!.fetchSignInMethodsForEmail(email);
-
-      if (signInMethods.isNotEmpty) {
-        // Account exists, try to link or reset
-        await _handleExistingAccount(email);
-      } else {
-        // Account doesn't exist, create new one
-        await _createNewFirebaseAccount(email);
-      }
-    } catch (e) {
-      print('❌ Error in unique Firebase account creation: $e');
-      throw e;
-    }
-  }
-
-  /// Handle existing Firebase account
-  Future<void> _handleExistingAccount(String email) async {
-    final action = await _showExistingAccountDialog();
-
-    if (action == 'reset') {
-      // Send password reset
-      await _firebaseAuth!.sendPasswordResetEmail(email: email);
-      Get.snackbar(
-        'Password Reset Sent',
-        'Check your email at $email for reset instructions',
-        backgroundColor: Colors.blue,
-        colorText: Colors.white,
-        duration: const Duration(seconds: 5),
-      );
-    } else if (action == 'new_email') {
-      // Create account with modified email
-      await _createAccountWithModifiedEmail(email);
-    } else if (action == 'manual') {
-      // Show manual password entry
-      await _showManualPasswordEntry(email);
-    }
-  }
-
-  /// Create new Firebase account
-  Future<void> _createNewFirebaseAccount(String email) async {
-    // Create a secure password for Firebase
-    final firebasePassword = _generateSecurePassword();
-
-    try {
-      final credential = await _firebaseAuth!.createUserWithEmailAndPassword(
-        email: email,
-        password: firebasePassword,
-      );
-
-      print('✅ New Firebase account created for $email');
-
-      // Save the Firebase password locally for future use
-      await _saveFirebasePassword(firebasePassword);
-
-      Get.snackbar(
-        'Cloud Sync Enabled',
-        'Your account has been set up for cloud synchronization',
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
-      );
-    } catch (e) {
-      throw Exception('Failed to create Firebase account: $e');
-    }
-  }
-
-  /// Create account with modified email (e.g., user+sync@domain.com)
-  Future<void> _createAccountWithModifiedEmail(String originalEmail) async {
-    final parts = originalEmail.split('@');
-    if (parts.length != 2) {
-      throw Exception('Invalid email format');
-    }
-
-    final modifiedEmail = '${parts[0]}+sync@${parts[1]}';
-    final firebasePassword = _generateSecurePassword();
-
-    try {
-      final credential = await _firebaseAuth!.createUserWithEmailAndPassword(
-        email: modifiedEmail,
-        password: firebasePassword,
-      );
-
-      print('✅ Firebase account created with modified email: $modifiedEmail');
-
-      await _saveFirebasePassword(firebasePassword);
-
-      Get.snackbar(
-        'Cloud Sync Enabled',
-        'Sync account created: $modifiedEmail',
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
-        duration: const Duration(seconds: 5),
-      );
-    } catch (e) {
-      throw Exception('Failed to create modified account: $e');
-    }
-  }
-
-  /// Generate a secure password for Firebase
-  String _generateSecurePassword() {
-    final timestamp = DateTime.now().toUtc().millisecondsSinceEpoch;
-    final userId = currentUser.value?.id ?? 'unknown';
-    final base = 'sync_${userId}_$timestamp';
-    return _hashPassword(base).substring(0, 20); // Use first 20 chars of hash
-  }
-
-  /// Save Firebase password locally (encrypted)
-  Future<void> _saveFirebasePassword(String password) async {
-    // In a real app, you'd encrypt this password
-    // For now, we'll store it in a way that's not visible to users
-    print('🔐 Firebase password generated and saved locally');
-  }
-
-  /// Show existing account dialog
-  Future<String?> _showExistingAccountDialog() async {
-    return await Get.dialog<String>(
-      AlertDialog(
-        title: const Text('Account Already Exists'),
-        content: const Text(
-            'A Firebase account already exists for your email. Choose an option:\n\n'
-            '• Reset Password: Get reset email\n'
-            '• Use Alternative: Create sync-specific account\n'
-            '• Manual Login: Enter Firebase password'),
-        actions: [
-          TextButton(
-            onPressed: () => Get.back(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Get.back(result: 'reset'),
-            child: const Text('Reset Password'),
-          ),
-          TextButton(
-            onPressed: () => Get.back(result: 'new_email'),
-            child: const Text('Use Alternative'),
-          ),
-          ElevatedButton(
-            onPressed: () => Get.back(result: 'manual'),
-            child: const Text('Manual Login'),
-          ),
-        ],
+  /// Show migration notice to user
+  void _showMigrationNotice(String email) {
+    Get.snackbar(
+      'Account Migration Available',
+      'Your account can be migrated to the cloud for better sync. Tap to migrate now.',
+      backgroundColor: Colors.blue,
+      colorText: Colors.white,
+      duration: const Duration(seconds: 5),
+      mainButton: TextButton(
+        onPressed: () => _showMigrationDialog(email),
+        child: const Text('MIGRATE', style: TextStyle(color: Colors.white)),
       ),
     );
   }
 
-  /// Show Firebase error dialog with options
-  Future<void> _showFirebaseErrorDialog(String error) async {
-    await Get.dialog(
+  /// Show migration dialog
+  void _showMigrationDialog(String email) {
+    Get.dialog(
       AlertDialog(
-        title: const Text('Cloud Sync Setup Failed'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Unable to set up cloud synchronization:'),
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.red[50],
-                border: Border.all(color: Colors.red[200]!),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                error,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.red[700],
-                  fontFamily: 'monospace',
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'Options:',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const Text('• Check your internet connection'),
-            const Text('• Try again later'),
-            const Text('• Continue using offline mode'),
-          ],
+        title: const Text('Migrate to Cloud Account'),
+        content: const Text(
+          'Migrate your account to the cloud for automatic sync across devices. '
+          'You\'ll need to create a new password for security.',
         ),
         actions: [
           TextButton(
             onPressed: () => Get.back(),
-            child: const Text('Continue Offline'),
+            child: const Text('Later'),
           ),
           ElevatedButton(
             onPressed: () {
               Get.back();
-              forceFirebaseAuthentication(); // Retry
+              _startUserMigration(email);
             },
-            child: const Text('Try Again'),
+            child: const Text('Migrate Now'),
           ),
         ],
       ),
     );
   }
 
-  /// Show password dialog for Firebase authentication
-  Future<String?> _showPasswordDialog() async {
-    String? password;
-
-    return await Get.dialog<String>(
-      AlertDialog(
-        title: const Text('Enable Cloud Sync'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Enter your password to enable cloud synchronization:'),
-            const SizedBox(height: 16),
-            TextField(
-              obscureText: true,
-              onChanged: (value) => password = value,
-              decoration: const InputDecoration(
-                labelText: 'Password',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Get.back(),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Get.back(result: password),
-            child: const Text('Enable Sync'),
-          ),
-        ],
-      ),
+  /// Start user migration process
+  Future<void> _startUserMigration(String email) async {
+    // This would open a migration screen where user enters new password
+    // For now, just show coming soon
+    Get.snackbar(
+      'Migration Coming Soon',
+      'Account migration will be available in the next update.',
+      backgroundColor: Colors.orange,
+      colorText: Colors.white,
     );
   }
 
-  /// Test Firebase connection status
-  Future<void> testFirebaseConnection() async {
+  /// Register new user - Firebase first
+  Future<bool> registerWithEmailPassword(
+      String email, String password, Map<String, dynamic> userData) async {
+    if (!firebaseAvailable.value) {
+      error.value = 'Firebase not available. Please check internet connection.';
+      return false;
+    }
+
     try {
-      isLoading(true);
-      await _initializeFirebaseAuth();
+      isLoading.value = true;
+      error.value = '';
 
-      if (firebaseAvailable.value) {
-        Get.snackbar(
-          'Firebase Available',
-          'Firebase connection is working properly',
-          backgroundColor: Colors.green,
-          colorText: Colors.white,
-        );
-      } else {
-        Get.snackbar(
-          'Firebase Unavailable',
-          firebaseError.value.isNotEmpty
-              ? firebaseError.value
-              : 'Firebase connection failed',
-          backgroundColor: Colors.red,
-          colorText: Colors.white,
-        );
+      print('🔐 Firebase registration attempt: $email');
+
+      // Create Firebase user
+      final credential = await _firebaseAuth!.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      if (credential.user != null) {
+        // Save user data to Firebase
+        await _saveUserDataToFirebase(credential.user!, userData);
+        print('✅ Firebase registration successful');
+        return true;
       }
+
+      return false;
+    } on firebase_auth.FirebaseAuthException catch (e) {
+      print('❌ Firebase registration error: ${e.code}');
+      _handleFirebaseAuthError(e);
+      return false;
+    } catch (e) {
+      print('❌ Registration error: $e');
+      error.value = 'Registration failed: ${e.toString()}';
+      return false;
     } finally {
-      isLoading(false);
+      isLoading.value = false;
     }
   }
 
-  // Helper methods
+  /// Save user data to Firebase
+  Future<void> _saveUserDataToFirebase(
+      firebase_auth.User firebaseUser, Map<String, dynamic> userData) async {
+    try {
+      final schoolConfig = Get.find<SchoolConfigService>();
+      final schoolId = schoolConfig.schoolId.value;
+
+      // Add Firebase UID and timestamps
+      userData['firebase_uid'] = firebaseUser.uid;
+      userData['email'] = firebaseUser.email;
+      userData['created_at'] = DateTime.now().toIso8601String();
+      userData['last_modified'] = DateTime.now().toIso8601String();
+      userData['firebase_synced'] = 1;
+
+      // Save to school's users collection
+      await _firestore!
+          .collection('schools')
+          .doc(schoolId)
+          .collection('users')
+          .doc(firebaseUser.uid)
+          .set(userData);
+
+      print('✅ User data saved to Firebase');
+    } catch (e) {
+      print('❌ Error saving user data to Firebase: $e');
+      throw e;
+    }
+  }
+
+  /// PIN authentication for subsequent logins
+  Future<bool> authenticateWithPin(String pin) async {
+    try {
+      print('🔐 PIN authentication attempt');
+
+      // Verify PIN
+      final isValidPin = await _pinController.verifyPin(pin);
+      if (!isValidPin) {
+        return false;
+      }
+
+      // Get email associated with PIN
+      final pinUserEmail = await _pinController.getPinUserEmail();
+      if (pinUserEmail == null) {
+        error.value = 'No user associated with PIN';
+        return false;
+      }
+
+      // Try to sign in silently with cached Firebase credentials
+      final currentFirebaseUser = _firebaseAuth?.currentUser;
+
+      if (currentFirebaseUser?.email?.toLowerCase() ==
+          pinUserEmail.toLowerCase()) {
+        // Firebase user already signed in
+        await _syncUserDataFromFirebase(currentFirebaseUser!);
+        print('✅ PIN authentication successful (Firebase active)');
+        return true;
+      } else {
+        // Load from local cache for offline access
+        await _loadFromLocalCache(pinUserEmail);
+        if (isLoggedIn.value) {
+          print('✅ PIN authentication successful (offline mode)');
+          return true;
+        }
+      }
+
+      error.value =
+          'Authentication failed. Please sign in with email and password.';
+      return false;
+    } catch (e) {
+      print('❌ PIN authentication error: $e');
+      error.value = 'PIN authentication failed: ${e.toString()}';
+      return false;
+    }
+  }
+
+  /// Setup PIN after successful login
+  Future<bool> setupPinFromSettings(String pin) async {
+    if (currentUser.value?.email == null) {
+      error.value = 'No user logged in';
+      return false;
+    }
+
+    return await _pinController.setupPin(pin,
+        userEmail: currentUser.value!.email);
+  }
+
+  /// Sign out
+  Future<void> signOut() async {
+    try {
+      isLoading.value = true;
+
+      // Sign out from Firebase
+      await _firebaseAuth?.signOut();
+
+      // Clear local state happens in auth state change handler
+    } catch (e) {
+      print('❌ Sign out error: $e');
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  /// Handle sign out
+  Future<void> _handleSignOut() async {
+    currentUser.value = null;
+    isLoggedIn.value = false;
+
+    // Don't clear local cache - keep for offline access
+    print('✅ User signed out');
+  }
+
+  /// Legacy check login status - REMOVE AFTER MIGRATION
+  Future<void> _checkLoginStatusLegacy() async {
+    try {
+      await DatabaseHelper.instance.ensureDefaultUsersExist();
+      await _handleInitialAuthFlow();
+    } catch (e) {
+      print('Error checking login status: $e');
+      isLoggedIn.value = false;
+    }
+  }
+
+  /// Legacy auth flow handler - REMOVE AFTER MIGRATION
+  Future<void> _handleInitialAuthFlow() async {
+    final isUserVerified = await _pinController.isUserVerified();
+
+    if (isUserVerified) {
+      if (_pinController.shouldUsePinAuth()) {
+        isLoggedIn.value = false;
+      } else {
+        isLoggedIn.value = false;
+      }
+    } else {
+      isLoggedIn.value = false;
+    }
+  }
+
+  /// Get initial route
+  Future<String> determineInitialRoute() async {
+    // Check if user is already signed into Firebase
+    if (_firebaseAuth?.currentUser != null) {
+      if (shouldUsePinAuth) {
+        return '/pin-login';
+      } else {
+        return '/main';
+      }
+    }
+
+    // Check for school configuration
+    final schoolConfig = Get.find<SchoolConfigService>();
+    if (!schoolConfig.isValidConfiguration()) {
+      return '/school-selection';
+    }
+
+    return '/login';
+  }
+
+  /// Handle Firebase auth errors
+  void _handleFirebaseAuthError(firebase_auth.FirebaseAuthException e) {
+    switch (e.code) {
+      case 'user-not-found':
+        error.value = 'No account found with this email address.';
+        break;
+      case 'wrong-password':
+        error.value = 'Incorrect password.';
+        break;
+      case 'user-disabled':
+        error.value = 'This account has been disabled.';
+        break;
+      case 'email-already-in-use':
+        error.value = 'An account already exists with this email address.';
+        break;
+      case 'weak-password':
+        error.value = 'Password is too weak.';
+        break;
+      case 'invalid-email':
+        error.value = 'Invalid email address.';
+        break;
+      case 'network-request-failed':
+        error.value = 'Network error. Please check your internet connection.';
+        break;
+      default:
+        error.value = 'Authentication error: ${e.message}';
+    }
+  }
+
+  /// Helper methods for password hashing
   String _hashPassword(String password) {
     try {
       var bytes = utf8.encode(password);
@@ -890,703 +655,29 @@ class AuthController extends GetxController {
     }
   }
 
-  Future<void> _updatePasswordToHashed(
-      Map<String, dynamic> userData, String hashedPassword) async {
-    try {
-      final user = User.fromJson(userData);
-      final updatedUser = User(
-        id: user.id,
-        fname: user.fname,
-        lname: user.lname,
-        email: user.email,
-        password: hashedPassword,
-        phone: user.phone,
-        address: user.address,
-        date_of_birth: user.date_of_birth,
-        gender: user.gender,
-        idnumber: user.idnumber,
-        role: user.role,
-        status: user.status,
-        created_at: user.created_at,
-      );
-      await DatabaseHelper.instance.updateUser(updatedUser);
-      print('🔄 Password updated to hashed version');
-    } catch (e) {
-      print('⚠️ Could not update password: $e');
-    }
+  String get currentUserName {
+    if (currentUser.value == null) return 'Guest';
+    return '${currentUser.value!.fname} ${currentUser.value!.lname}';
   }
 
-  Future<void> _checkLoginStatus() async {
-    try {
-      await DatabaseHelper.instance.ensureDefaultUsersExist();
-      await _handleInitialAuthFlow();
-    } catch (e) {
-      print('Error checking login status: $e');
-      isLoggedIn(false);
-    }
+  // Get current user's role
+  String get currentUserRole {
+    return currentUser.value?.role ?? 'Guest';
   }
 
-  Future<void> _handleInitialAuthFlow() async {
-    final isUserVerified = await _pinController.isUserVerified();
+  /// Compatibility properties
+  bool get shouldUsePinAuth => _pinController.shouldUsePinAuth();
+  bool get hasPinSetup => _pinController.isPinSet.value;
+  bool get isFirebaseAuthenticated => firebaseUser.value != null;
+  String? get currentFirebaseUserId => firebaseUser.value?.uid;
 
-    if (isUserVerified) {
-      if (_pinController.shouldUsePinAuth()) {
-        isLoggedIn(false);
-      } else {
-        isLoggedIn(false);
-      }
-    } else {
-      isLoggedIn(false);
-    }
-  }
-
-  Future<String> determineInitialRoute() async {
-    await Future.delayed(const Duration(milliseconds: 100));
-
-    final isUserVerified = await _pinController.isUserVerified();
-    if (!isUserVerified) {
-      return '/login';
-    }
-
-    if (_pinController.shouldUsePinAuth()) {
-      return '/pin-login';
-    }
-
-    return '/login';
-  }
-
-  Future<bool> authenticateWithPin(String pin) async {
-    try {
-      print('🔐 Starting PIN authentication...');
-
-      // Step 1: Verify the PIN itself
-      final isValid = await _pinController.verifyPin(pin);
-      print('🔑 PIN verification result: $isValid');
-
-      if (!isValid) {
-        print('❌ PIN verification failed');
-        return false;
-      }
-
-      // Step 2: Get the email associated with this PIN
-      final pinUserEmail = await _pinController.getPinUserEmail();
-      print('📧 PIN user email: $pinUserEmail');
-
-      if (pinUserEmail == null || pinUserEmail.isEmpty) {
-        print('❌ No email associated with PIN');
-        return false;
-      }
-
-      // Step 3: Get all users from database
-      final users = await DatabaseHelper.instance.getUsers();
-      print('👥 Found ${users.length} users in database');
-
-      if (users.isEmpty) {
-        print('❌ No users found in database');
-        return false;
-      }
-
-      // Step 4: Find user by email (safe method)
-      Map<String, dynamic>? userData;
-      for (var user in users) {
-        final userEmail = user['email']?.toString()?.toLowerCase() ?? '';
-        if (userEmail == pinUserEmail.toLowerCase()) {
-          userData = user;
-          break;
-        }
-      }
-
-      // Alternative safer method using where instead of firstWhereOrNull
-      if (userData == null) {
-        final matchingUsers = users
-            .where(
-              (user) =>
-                  user['email']?.toString()?.toLowerCase() ==
-                  pinUserEmail.toLowerCase(),
-            )
-            .toList();
-
-        if (matchingUsers.isNotEmpty) {
-          userData = matchingUsers.first;
-        }
-      }
-
-      if (userData == null) {
-        print('❌ User not found for email: $pinUserEmail');
-        // Debug: Print all available emails
-        print('📋 Available emails in database:');
-        for (var user in users) {
-          print('  - ${user['email']}');
-        }
-        return false;
-      }
-
-      // Step 5: Create user object and set as current user
-      try {
-        final userObj = User.fromJson(userData);
-        currentUser.value = userObj;
-        isLoggedIn(true);
-
-        print('✅ PIN authentication successful for ${userObj.email}');
-
-        // Step 6: Try Firebase authentication (optional)
-        try {
-          await _tryFirebaseAuthFromPin(userObj.email);
-        } catch (e) {
-          print('⚠️ Firebase auth from PIN failed: $e');
-          // Continue without Firebase - local auth is successful
-        }
-
-        return true;
-      } catch (e) {
-        print('❌ Error creating User object: $e');
-        print('📋 User data: $userData');
-        return false;
-      }
-    } catch (e) {
-      print('❌ PIN authentication error: $e');
-      print('📍 Error stack trace: ${StackTrace.current}');
-      return false;
-    }
-  }
-
-// Also add this debug method to check the current state:
-  Future<void> debugPinAuthentication() async {
-    try {
-      print('\n🔍 === PIN AUTHENTICATION DEBUG ===');
-
-      // Check PIN controller state
-      final pinInfo = await _pinController.getPinInfo();
-      print('📱 PIN Info: $pinInfo');
-
-      // Check database state
-      final users = await DatabaseHelper.instance.getUsers();
-      print('👥 Users in database: ${users.length}');
-
-      for (var user in users) {
-        print('  - ${user['email']} (${user['role']})');
-      }
-
-      // Check PIN user email
-      final pinUserEmail = await _pinController.getPinUserEmail();
-      print('📧 PIN associated with email: $pinUserEmail');
-
-      // Check if user exists for PIN email
-      if (pinUserEmail != null) {
-        final matchingUsers = users
-            .where(
-              (user) =>
-                  user['email']?.toString()?.toLowerCase() ==
-                  pinUserEmail.toLowerCase(),
-            )
-            .toList();
-        print('🔍 Matching users for PIN email: ${matchingUsers.length}');
-      }
-
-      print('=== END DEBUG ===\n');
-    } catch (e) {
-      print('❌ Debug error: $e');
-    }
-  }
-
-// Safe method for finding users without firstWhereOrNull
-  Map<String, dynamic>? findUserByEmail(
-      List<Map<String, dynamic>> users, String email) {
-    try {
-      final filteredUsers = users
-          .where(
-            (user) =>
-                user['email']?.toString()?.toLowerCase() == email.toLowerCase(),
-          )
-          .toList();
-
-      return filteredUsers.isNotEmpty ? filteredUsers.first : null;
-    } catch (e) {
-      print('❌ Error finding user by email: $e');
-      return null;
-    }
-  }
-
-  Future<void> _tryFirebaseAuthFromPin(String email) async {
-    try {
-      // Check if already authenticated with Firebase
-      if (isFirebaseAuthenticated) return;
-
-      // For PIN login, we might not have the password
-      // Show option to enable sync later
-      if (firebaseAvailable.value) {
-        Get.snackbar(
-          'Cloud Sync Available',
-          'Tap here to enable cloud synchronization',
-          backgroundColor: Colors.blue,
-          colorText: Colors.white,
-          onTap: (_) => forceFirebaseAuthentication(),
-        );
-      }
-    } catch (e) {
-      print('⚠️ Could not auto-authenticate with Firebase from PIN: $e');
-    }
-  }
-
-  // Role checking methods
-  bool hasRole(String role) {
-    return currentUser.value?.role.toLowerCase() == role.toLowerCase();
-  }
-
+  /// Role checking methods (kept for compatibility)
   bool hasAnyRole(List<String> roles) {
-    if (currentUser.value == null) return false;
-    return roles.any((role) => hasRole(role));
+    if (!isLoggedIn.value || currentUser.value == null) return false;
+    final userRole = currentUser.value!.role.toLowerCase();
+    return roles.any((role) => role.toLowerCase() == userRole);
   }
 
-  // Force create test users with correct password hash
-  Future<void> forceCreateTestUsers() async {
-    try {
-      print('🔧 Force creating test users...');
-
-      // Generate correct hash for "admin123"
-      final correctHash = _hashPassword('admin123');
-      print('📝 Generated hash for admin123: $correctHash');
-
-      final db = await DatabaseHelper.instance.database;
-
-      // Delete existing users
-      await db.delete('users');
-      print('🗑️ Cleared existing users');
-
-      // Create admin user
-      await db.insert('users', {
-        'fname': 'System',
-        'lname': 'Administrator',
-        'email': 'admin@drivingschool.com',
-        'password': correctHash,
-        'gender': 'Male',
-        'phone': '+1234567890',
-        'address': '123 Main Street',
-        'date_of_birth': '1980-01-01',
-        'role': 'admin',
-        'status': 'Active',
-        'idnumber': 'ADMIN001',
-        'created_at': DateTime.now().toIso8601String(),
-      });
-
-      // Create instructor user
-      await db.insert('users', {
-        'fname': 'John',
-        'lname': 'Instructor',
-        'email': 'instructor@drivingschool.com',
-        'password': correctHash,
-        'gender': 'Male',
-        'phone': '+1234567891',
-        'address': '456 Oak Street',
-        'date_of_birth': '1985-05-15',
-        'role': 'instructor',
-        'status': 'Active',
-        'idnumber': 'INST001',
-        'created_at': DateTime.now().toIso8601String(),
-      });
-
-      // Create student user
-      await db.insert('users', {
-        'fname': 'Jane',
-        'lname': 'Student',
-        'email': 'student@drivingschool.com',
-        'password': correctHash,
-        'gender': 'Female',
-        'phone': '+1234567892',
-        'address': '789 Pine Street',
-        'date_of_birth': '1995-03-20',
-        'role': 'student',
-        'status': 'Active',
-        'idnumber': 'STU001',
-        'created_at': DateTime.now().toIso8601String(),
-      });
-
-      print('✅ Test users created with correct password hash');
-
-      // Verify users were created
-      final users = await DatabaseHelper.instance.getUsers();
-      print('📊 Verification: ${users.length} users in database');
-      for (var user in users) {
-        print(
-            '  - ${user['email']} (${user['role']}) - Hash: ${user['password'].toString().substring(0, 20)}...');
-      }
-    } catch (e) {
-      print('❌ Error force creating test users: $e');
-    }
-  }
-
-  // PIN Management Methods
-  Future<bool> setupPinFromSettings(String pin) async {
-    if (currentUser.value != null) {
-      return await _pinController.setupPin(pin,
-          userEmail: currentUser.value!.email);
-    }
-    return await _pinController.setupPin(pin);
-  }
-
-  /// Smart Firebase authentication - tries sign in first, then create if needed
-  Future<void> _authenticateWithFirebase(String email, String password) async {
-    if (!firebaseAvailable.value || _firebaseAuth == null) {
-      throw Exception('Firebase not available');
-    }
-
-    try {
-      // FIRST: Try to sign in with existing account
-      print('🔑 Attempting Firebase sign-in for: $email');
-      final credential = await _firebaseAuth!.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-      print('✅ Firebase sign-in successful for ${credential.user?.email}');
-
-      // Sync user data after successful sign-in
-      await _syncAfterFirebaseAuth(credential.user!);
-      return;
-    } on firebase_auth.FirebaseAuthException catch (e) {
-      print('⚠️ Firebase sign-in failed: ${e.code} - ${e.message}');
-
-      switch (e.code) {
-        case 'user-not-found':
-          // User doesn't exist in Firebase, create new account
-          print('👤 User not found in Firebase, creating new account...');
-          await _createFirebaseAccountSafely(email, password);
-          break;
-
-        case 'wrong-password':
-          // Password mismatch - handle this intelligently
-          print('🔐 Password mismatch detected');
-          await _handlePasswordMismatch(email, password);
-          break;
-
-        case 'invalid-email':
-          throw Exception('Invalid email address format.');
-
-        case 'user-disabled':
-          throw Exception('This account has been disabled.');
-
-        case 'too-many-requests':
-          throw Exception('Too many failed attempts. Please try again later.');
-
-        default:
-          throw Exception('Firebase authentication error: ${e.message}');
-      }
-    }
-  }
-
-  /// Handle password mismatch with user options
-  Future<void> _handlePasswordMismatch(String email, String password) async {
-    final action = await _showPasswordMismatchDialog();
-
-    switch (action) {
-      case 'reset':
-        await _sendPasswordReset(email);
-        break;
-      case 'try_different':
-        await _showManualPasswordEntry(email);
-        break;
-      case 'create_new':
-        await _createAccountWithModifiedEmail(email);
-        break;
-      case 'skip':
-        print('⏭️ User chose to skip Firebase sync');
-        _showSkipSyncMessage();
-        break;
-    }
-  }
-
-  /// Show password mismatch dialog with options
-  Future<String?> _showPasswordMismatchDialog() async {
-    return await Get.dialog<String>(
-      AlertDialog(
-        title: const Text('Password Mismatch'),
-        content: const Text(
-            'Your local password doesn\'t match your cloud account password. What would you like to do?'),
-        actions: [
-          TextButton(
-            onPressed: () => Get.back(result: 'reset'),
-            child: const Text('Reset Password'),
-          ),
-          TextButton(
-            onPressed: () => Get.back(result: 'try_different'),
-            child: const Text('Enter Different Password'),
-          ),
-          TextButton(
-            onPressed: () => Get.back(result: 'create_new'),
-            child: const Text('Create New Sync Account'),
-          ),
-          TextButton(
-            onPressed: () => Get.back(result: 'skip'),
-            child: const Text('Skip Cloud Sync'),
-          ),
-        ],
-      ),
-      barrierDismissible: false,
-    );
-  }
-
-  /// Send password reset email
-  Future<void> _sendPasswordReset(String email) async {
-    try {
-      await _firebaseAuth!.sendPasswordResetEmail(email: email);
-      Get.snackbar(
-        'Password Reset Sent',
-        'Check your email for password reset instructions',
-        backgroundColor: Colors.blue,
-        colorText: Colors.white,
-        duration: const Duration(seconds: 5),
-      );
-    } catch (e) {
-      Get.snackbar(
-        'Reset Failed',
-        'Unable to send password reset email: ${e.toString()}',
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-      );
-    }
-  }
-
-  /// Show manual password entry dialog
-  Future<void> _showManualPasswordEntry(String email) async {
-    final TextEditingController passwordController = TextEditingController();
-
-    final password = await Get.dialog<String>(
-      AlertDialog(
-        title: const Text('Enter Cloud Password'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Enter your cloud account password for:\n$email'),
-            const SizedBox(height: 16),
-            TextField(
-              controller: passwordController,
-              obscureText: true,
-              decoration: const InputDecoration(
-                labelText: 'Cloud Password',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Get.back(result: null),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Get.back(result: passwordController.text),
-            child: const Text('Sign In'),
-          ),
-        ],
-      ),
-    );
-
-    if (password != null && password.isNotEmpty) {
-      try {
-        await _firebaseAuth!.signInWithEmailAndPassword(
-          email: email,
-          password: password,
-        );
-
-        Get.snackbar(
-          'Cloud Sync Enabled',
-          'Successfully connected to your cloud account',
-          backgroundColor: Colors.green,
-          colorText: Colors.white,
-        );
-      } catch (e) {
-        Get.snackbar(
-          'Sign In Failed',
-          'Incorrect password. Please try again.',
-          backgroundColor: Colors.red,
-          colorText: Colors.white,
-        );
-      }
-    }
-  }
-
-  /// Create Firebase account safely with better error handling
-  Future<void> _createFirebaseAccountSafely(
-      String email, String password) async {
-    try {
-      final credential = await _firebaseAuth!.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-
-      print('✅ New Firebase account created for $email');
-      await _syncAfterFirebaseAuth(credential.user!);
-
-      Get.snackbar(
-        'Cloud Account Created',
-        'Your account has been set up for cloud synchronization',
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
-      );
-    } on firebase_auth.FirebaseAuthException catch (e) {
-      if (e.code == 'email-already-in-use') {
-        // This shouldn't happen if we checked first, but handle it
-        print('🔄 Email became in-use during creation, trying sign-in...');
-        await _authenticateWithFirebase(email, password);
-      } else if (e.code == 'weak-password') {
-        // Generate a stronger password
-        final strongPassword = _generateSecurePassword();
-        await _createFirebaseAccountSafely(email, strongPassword);
-        await _saveFirebasePassword(strongPassword);
-      } else {
-        throw Exception('Failed to create Firebase account: ${e.message}');
-      }
-    }
-  }
-
-  /// Sync user data after Firebase authentication
-  Future<void> _syncAfterFirebaseAuth(firebase_auth.User user) async {
-    try {
-      // Set the Firebase user in your reactive variable
-      firebaseUser.value = user;
-
-      // Create or update user document in Firestore
-      await _createFirebaseUserDocument(user);
-
-      // Initialize sync service if available
-      try {
-        final syncService = Get.find<MultiTenantFirebaseSyncService>();
-        await syncService.initializeUserSync();
-      } catch (e) {
-        print('⚠️ Sync service not available: $e');
-      }
-    } catch (e) {
-      print('❌ Error in post-auth sync: $e');
-    }
-  }
-
-  /// Show message when user skips sync
-  void _showSkipSyncMessage() {
-    Get.snackbar(
-      'Local Mode',
-      'You\'re logged in locally. Cloud sync is disabled.',
-      backgroundColor: Colors.orange,
-      colorText: Colors.white,
-      duration: const Duration(seconds: 3),
-    );
-  }
-
-  /// Enhanced login method with better Firebase handling
-  Future<bool> login(String email, String password) async {
-    try {
-      isLoading(true);
-      error('');
-
-      print('\n🔐 === ENHANCED LOGIN ATTEMPT ===');
-      print('📧 Email: $email');
-
-      if (email.isEmpty || password.isEmpty) {
-        error('Email and password are required');
-        return false;
-      }
-
-      // Step 1: Authenticate locally first (primary authentication)
-      final localAuthSuccess = await _authenticateLocally(email, password);
-      if (!localAuthSuccess) {
-        return false;
-      }
-
-      // Step 2: Try Firebase authentication (for sync)
-      if (firebaseAvailable.value) {
-        try {
-          await _authenticateWithFirebase(email, password);
-          print('✅ Complete authentication successful (local + Firebase)');
-        } catch (e) {
-          print('⚠️ Firebase authentication failed, continuing with local: $e');
-
-          // Show option to retry Firebase later
-          _showFirebaseRetryOption();
-        }
-      } else {
-        print('ℹ️ Firebase unavailable, using local authentication only');
-      }
-
-      return true;
-    } catch (e) {
-      print('❌ Login error: $e');
-      error('Login failed: ${e.toString()}');
-      return false;
-    } finally {
-      isLoading(false);
-    }
-  }
-
-  /// Show option to retry Firebase authentication later
-  void _showFirebaseRetryOption() {
-    Get.snackbar(
-      'Local Login Successful',
-      'Cloud sync unavailable. Tap to retry sync.',
-      backgroundColor: Colors.orange,
-      colorText: Colors.white,
-      duration: const Duration(seconds: 5),
-      onTap: (snack) => forceFirebaseAuthentication(),
-      mainButton: TextButton(
-        onPressed: () {
-          Get.back();
-          forceFirebaseAuthentication();
-        },
-        child: const Text('Retry', style: TextStyle(color: Colors.white)),
-      ),
-    );
-  }
-
-  /// Alternative approach: Check if account exists before attempting authentication
-  Future<bool> _checkIfFirebaseAccountExists(String email) async {
-    try {
-      final signInMethods =
-          await _firebaseAuth!.fetchSignInMethodsForEmail(email);
-      return signInMethods.isNotEmpty;
-    } catch (e) {
-      print('❌ Error checking if account exists: $e');
-      return false;
-    }
-  }
-
-  /// Simplified authentication flow that handles existing accounts properly
-  Future<void> authenticateWithFirebaseSimple(
-      String email, String password) async {
-    if (!firebaseAvailable.value || _firebaseAuth == null) {
-      throw Exception('Firebase not available');
-    }
-
-    try {
-      // Check if account exists first
-      final accountExists = await _checkIfFirebaseAccountExists(email);
-
-      if (accountExists) {
-        // Account exists - try to sign in
-        print('🔑 Account exists, attempting sign-in...');
-        final credential = await _firebaseAuth!.signInWithEmailAndPassword(
-          email: email,
-          password: password,
-        );
-        print('✅ Successfully signed in to existing account');
-        await _syncAfterFirebaseAuth(credential.user!);
-      } else {
-        // Account doesn't exist - create new one
-        print('👤 No account found, creating new account...');
-        final credential = await _firebaseAuth!.createUserWithEmailAndPassword(
-          email: email,
-          password: password,
-        );
-        print('✅ Successfully created new account');
-        await _syncAfterFirebaseAuth(credential.user!);
-      }
-    } on firebase_auth.FirebaseAuthException catch (e) {
-      if (e.code == 'wrong-password') {
-        // Handle password mismatch
-        await _handlePasswordMismatch(email, password);
-      } else {
-        throw Exception('Firebase error: ${e.message}');
-      }
-    }
-  }
-
-  bool get isAdmin => hasRole('admin');
-  bool get isInstructor => hasRole('instructor');
-  bool get isStudent => hasRole('student');
+  bool get isAdmin => hasAnyRole(['admin']);
+  bool get isInstructor => hasAnyRole(['admin', 'instructor']);
 }

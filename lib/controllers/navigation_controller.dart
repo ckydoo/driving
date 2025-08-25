@@ -300,7 +300,7 @@ class NavigationController extends GetxController {
   // Logout with proper cleanup
   Future<void> logout() async {
     try {
-      await authController.logout();
+      await authController.signOut();
       currentPage.value = 'login';
       expandedDropdowns.clear();
       Get.offAllNamed('/login');

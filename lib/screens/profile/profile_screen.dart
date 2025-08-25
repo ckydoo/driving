@@ -319,7 +319,7 @@ class ProfileScreen extends StatelessWidget {
           ElevatedButton(
             onPressed: () async {
               Get.back(); // Close dialog
-              await authController.logout();
+              await authController.signOut();
               Get.offAllNamed('/login');
             },
             style: ElevatedButton.styleFrom(

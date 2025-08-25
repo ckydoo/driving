@@ -29,18 +29,18 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
     super.dispose();
   }
 
-  Future<void> _handleChangePassword() async {
-    if (_formKey.currentState!.validate()) {
-      final success = await _authController.changePassword(
-        _currentPasswordController.text,
-        _newPasswordController.text,
-      );
+  // Future<void> _handleChangePassword() async {
+  //   if (_formKey.currentState!.validate()) {
+  //     final success = await _authController.(
+  //       _currentPasswordController.text,
+  //       _newPasswordController.text,
+  //     );
 
-      if (success) {
-        Get.back(); // Close dialog
-      }
-    }
-  }
+  //     if (success) {
+  //       Get.back(); // Close dialog
+  //     }
+  //   }
+  // }
 
   @override
   Widget build(BuildContext context) {
@@ -176,7 +176,6 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
                   }
                   return null;
                 },
-                onFieldSubmitted: (_) => _handleChangePassword(),
               ),
               const SizedBox(height: 16),
 
@@ -256,9 +255,7 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
           ),
         ),
         Obx(() => ElevatedButton(
-              onPressed: _authController.isLoading.value
-                  ? null
-                  : _handleChangePassword,
+              onPressed: () {},
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.blue.shade800,
                 foregroundColor: Colors.white,

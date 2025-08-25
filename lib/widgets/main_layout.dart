@@ -90,198 +90,6 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
     );
   }
 
-  Widget _buildMobileTopBar(NavigationController navController) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.2),
-            spreadRadius: 1,
-            blurRadius: 3,
-            offset: Offset(0, 2),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        child: Container(
-          height: 80, //Increased height for mobile
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-          child: Row(
-            children: [
-              // Hamburger menu - bigger touch target
-              Container(
-                width: 56,
-                height: 56,
-                child: IconButton(
-                  icon: const Icon(Icons.menu, size: 35), // Bigger icon
-                  onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-                  tooltip: 'Menu',
-                  splashRadius: 28,
-                ),
-              ),
-              // Page title with better constraints
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Obx(() => Text(
-                        navController.getCurrentPageTitle(),
-                        style: const TextStyle(
-                          fontSize: 20, // Increased font size
-                          fontWeight: FontWeight.w600,
-                          color: Colors.black87,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
-                      )),
-                ),
-              ),
-              // Action buttons with bigger touch targets
-              Container(
-                width: 56,
-                height: 56,
-                child: IconButton(
-                  onPressed: () => navController.navigateToPage('pos'),
-                  icon: const Icon(Icons.payment, size: 35), // Bigger icon
-                  tooltip: 'POS',
-                  splashRadius: 24,
-                ),
-              ),
-              Container(
-                width: 56,
-                height: 56,
-                child: IconButton(
-                  icon: const Icon(Icons.search, size: 35), // Bigger icon
-                  tooltip: 'Search',
-                  onPressed: () => navController.navigateToPage('quick_search'),
-                  splashRadius: 24,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-// Also update the desktop topbar for consistency:
-  Widget _buildDesktopTopBar(NavigationController navController) {
-    return Container(
-      height: 64, // Slightly taller for desktop
-      color: Colors.white,
-      child: Row(
-        children: [
-          // Page title
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0),
-              child: Obx(() => Text(
-                    navController.getCurrentPageTitle(),
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black87,
-                    ),
-                  )),
-            ),
-          ),
-          // Action buttons
-          IconButton(
-            onPressed: () {
-              navController.navigateToPage('pos');
-            },
-            icon: const Icon(Icons.payment),
-            tooltip: 'POS',
-          ),
-          IconButton(
-            icon: const Icon(Icons.search),
-            tooltip: 'Search',
-            onPressed: () {
-              navController.navigateToPage('quick_search');
-            },
-          ),
-
-          // User menu dropdown
-          PopupMenuButton<String>(
-            onSelected: (value) {
-              switch (value) {
-                case 'profile':
-                  // Handle profile navigation
-                  break;
-                case 'settings':
-                  navController.navigateToPage('settings');
-                  break;
-                case 'logout':
-                  // SAFE LOGOUT - Use the new method
-                  _performSafeLogout();
-                  break;
-              }
-            },
-            itemBuilder: (BuildContext context) => [
-              PopupMenuItem<String>(
-                value: 'profile',
-                child: Row(
-                  children: [
-                    Icon(Icons.person, size: 18),
-                    SizedBox(width: 8),
-                    Text('Profile'),
-                  ],
-                ),
-              ),
-              PopupMenuItem<String>(
-                value: 'settings',
-                child: Row(
-                  children: [
-                    Icon(Icons.settings, size: 18),
-                    SizedBox(width: 8),
-                    Text('Settings'),
-                  ],
-                ),
-              ),
-              PopupMenuDivider(),
-              PopupMenuItem<String>(
-                value: 'logout',
-                child: Row(
-                  children: [
-                    Icon(Icons.logout, size: 18, color: Colors.red),
-                    SizedBox(width: 8),
-                    Text('Logout', style: TextStyle(color: Colors.red)),
-                  ],
-                ),
-              ),
-            ],
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: 16,
-                    backgroundColor: Colors.blue,
-                    child: Obx(() {
-                      final AuthController authController =
-                          Get.find<AuthController>();
-                      final user = authController.currentUser.value;
-                      return Text(
-                        user?.fname?.substring(0, 1).toUpperCase() ?? 'U',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      );
-                    }),
-                  ),
-                  SizedBox(width: 8),
-                  Icon(Icons.arrow_drop_down),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   // Mobile drawer - Exact content as desktop sidebar but in drawer format
   Widget _buildMobileDrawer(
     NavigationController navController,
@@ -416,6 +224,216 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
                   backgroundColor: Colors.transparent,
                   side: const BorderSide(color: Colors.red),
                 ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+// Update your _buildMobileTopBar method in lib/widgets/main_layout.dart
+
+  Widget _buildMobileTopBar(NavigationController navController) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.2),
+            spreadRadius: 1,
+            blurRadius: 3,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        child: Container(
+          height: 80, // Increased height for mobile
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          child: Row(
+            children: [
+              // Hamburger menu - bigger touch target
+              Container(
+                width: 56,
+                height: 56,
+                child: IconButton(
+                  icon: const Icon(Icons.menu, size: 35), // Bigger icon
+                  onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+                  tooltip: 'Menu',
+                  splashRadius: 28,
+                ),
+              ),
+              // Page title with better constraints
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Obx(() => Text(
+                        navController.getCurrentPageTitle(),
+                        style: const TextStyle(
+                          fontSize: 20, // Increased font size
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black87,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      )),
+                ),
+              ),
+              // SYNC ICON - NEW ADDITION
+              Container(
+                width: 56,
+                height: 56,
+                child:
+                    const SyncIconWidget(), // Using the existing compact sync widget
+              ),
+              // POS button
+              Container(
+                width: 56,
+                height: 56,
+                child: IconButton(
+                  onPressed: () => navController.navigateToPage('pos'),
+                  icon: const Icon(Icons.payment, size: 35), // Bigger icon
+                  tooltip: 'POS',
+                  splashRadius: 24,
+                ),
+              ),
+              // Search button
+              Container(
+                width: 56,
+                height: 56,
+                child: IconButton(
+                  icon: const Icon(Icons.search, size: 35), // Bigger icon
+                  tooltip: 'Search',
+                  onPressed: () => navController.navigateToPage('quick_search'),
+                  splashRadius: 24,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+// Update your _buildDesktopTopBar method in lib/widgets/main_layout.dart
+
+  Widget _buildDesktopTopBar(NavigationController navController) {
+    return Container(
+      height: 64, // Slightly taller for desktop
+      color: Colors.white,
+      child: Row(
+        children: [
+          // Page title
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0),
+              child: Obx(() => Text(
+                    navController.getCurrentPageTitle(),
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black87,
+                    ),
+                  )),
+            ),
+          ),
+          // SYNC STATUS WIDGET - NEW ADDITION
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 8.0),
+            child: SyncStatusWidget(
+              showText: true, // Show text on desktop for more info
+              showTooltip: true,
+            ),
+          ),
+          // POS button
+          IconButton(
+            onPressed: () {
+              navController.navigateToPage('pos');
+            },
+            icon: const Icon(Icons.payment),
+            tooltip: 'POS',
+          ),
+          // Search button
+          IconButton(
+            icon: const Icon(Icons.search),
+            tooltip: 'Search',
+            onPressed: () {
+              navController.navigateToPage('quick_search');
+            },
+          ),
+
+          // User menu dropdown (your existing code)
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              switch (value) {
+                case 'profile':
+                  // Handle profile navigation
+                  break;
+                case 'settings':
+                  navController.navigateToPage('settings');
+                  break;
+                case 'logout':
+                  _performSafeLogout(); // Your existing logout method
+                  break;
+              }
+            },
+            itemBuilder: (BuildContext context) => [
+              PopupMenuItem<String>(
+                value: 'profile',
+                child: Row(
+                  children: [
+                    Icon(Icons.person, size: 18),
+                    SizedBox(width: 8),
+                    Text('Profile'),
+                  ],
+                ),
+              ),
+              PopupMenuItem<String>(
+                value: 'settings',
+                child: Row(
+                  children: [
+                    Icon(Icons.settings, size: 18),
+                    SizedBox(width: 8),
+                    Text('Settings'),
+                  ],
+                ),
+              ),
+              PopupMenuDivider(),
+              PopupMenuItem<String>(
+                value: 'logout',
+                child: Row(
+                  children: [
+                    Icon(Icons.logout, size: 18, color: Colors.red),
+                    SizedBox(width: 8),
+                    Text('Logout', style: TextStyle(color: Colors.red)),
+                  ],
+                ),
+              ),
+            ],
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 16,
+                    backgroundColor: Colors.blue,
+                    child: Obx(() {
+                      final AuthController authController =
+                          Get.find<AuthController>();
+                      final user = authController.currentUser.value;
+                      return Text(
+                        user?.fname?.substring(0, 1).toUpperCase() ?? 'U',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      );
+                    }),
+                  ),
+                  SizedBox(width: 8),
+                  Icon(Icons.arrow_drop_down),
+                ],
               ),
             ),
           ),
@@ -855,7 +873,7 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
       await Future.delayed(Duration(milliseconds: 300));
 
       // Perform logout
-      await authController.logout();
+      await authController.signOut();
 
       // Close loading dialog if still open
       if (Get.isDialogOpen ?? false) {

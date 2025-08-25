@@ -1,4 +1,7 @@
 // lib/controllers/enhanced_school_registration_controller.dart
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:driving/controllers/settings_controller.dart';
@@ -229,21 +232,44 @@ class SchoolRegistrationController extends GetxController {
     print('   Firebase Path: ${schoolConfig.getCollectionPath("users")}');
   }
 
-  // Step 3: Create administrator account with correct method call
+  // Fix for _createAdministratorAccount method in school_registration_controller.dart
+// Replace your existing _createAdministratorAccount method with this:
+
   Future<void> _createAdministratorAccount() async {
     print('👤 Creating administrator account for multi-tenant system...');
 
     try {
-      // Create User object with proper constructor
+      final email = adminEmailController.text.trim().toLowerCase();
+      final password = passwordController.text;
+
+      // Step 1: Create Firebase user first (for Firebase-first approach)
+      print('🔥 Creating Firebase user account...');
+      firebase_auth.FirebaseAuth? firebaseAuth;
+      firebase_auth.User? firebaseUser;
+
+      try {
+        firebaseAuth = firebase_auth.FirebaseAuth.instance;
+        final credential = await firebaseAuth.createUserWithEmailAndPassword(
+          email: email,
+          password: password,
+        );
+        firebaseUser = credential.user;
+        print('✅ Firebase user created: ${firebaseUser?.uid}');
+      } catch (e) {
+        print('⚠️ Firebase user creation failed: $e');
+        print('⚠️ Continuing with local-only account');
+        // Continue with local account creation
+      }
+
+      // Step 2: Create local User object
       final adminUser = User(
         fname: adminFirstNameController.text.trim(),
         lname: adminLastNameController.text.trim(),
-        email: adminEmailController.text.trim().toLowerCase(),
-        password:
-            passwordController.text, // Will be hashed by the database layer
+        email: email,
+        password: password, // Will be hashed by the database layer
         phone: phoneController.text.trim(),
         address: addressController.text.trim(),
-        gender: 'Male',
+        gender: 'Not Specified',
         idnumber: '',
         role: 'admin',
         status: 'Active',
@@ -255,14 +281,107 @@ class SchoolRegistrationController extends GetxController {
       print('👤 Email: ${adminUser.email}');
       print('🔑 Role: ${adminUser.role}');
 
-      // Pass the User object directly (NOT .toJson() or .toMap())
+      // Step 3: Insert user into local database
       await DatabaseHelper.instance.insertUser(adminUser);
+      print('✅ Administrator account created successfully in local database');
 
-      print('✅ Administrator account created successfully in database');
+      // Step 4: Save user to Firebase Firestore if Firebase user was created
+      if (firebaseUser != null) {
+        await _saveUserToFirestore(firebaseUser, adminUser);
+        print('✅ Administrator account saved to Firebase Firestore');
+      }
     } catch (e) {
       print('❌ Error creating administrator account: $e');
       print('📄 Stack trace: ${StackTrace.current}');
       throw Exception('Failed to create administrator account: $e');
+    }
+  }
+
+// Add this new method to save user to Firestore
+  Future<void> _saveUserToFirestore(
+      firebase_auth.User firebaseUser, User localUser) async {
+    try {
+      final schoolConfig = Get.find<SchoolConfigService>();
+      final schoolId = schoolConfig.schoolId.value;
+
+      if (schoolId.isEmpty) {
+        print('⚠️ No school ID found, skipping Firestore save');
+        return;
+      }
+
+      // Prepare user data for Firebase
+      final userData = {
+        'firebase_uid': firebaseUser.uid,
+        'id': localUser.id ?? DateTime.now().millisecondsSinceEpoch,
+        'fname': localUser.fname,
+        'lname': localUser.lname,
+        'email': localUser.email,
+        'phone': localUser.phone,
+        'address': localUser.address,
+        'date_of_birth': localUser.date_of_birth.toIso8601String(),
+        'gender': localUser.gender,
+        'idnumber': localUser.idnumber,
+        'role': localUser.role,
+        'status': localUser.status,
+        'created_at': localUser.created_at.toIso8601String(),
+        'last_modified': DateTime.now().toIso8601String(),
+        'firebase_synced': 1,
+        'created_during_registration': true,
+      };
+
+      // Save to Firestore
+      final firestore = FirebaseFirestore.instance;
+      await firestore
+          .collection('schools')
+          .doc(schoolId)
+          .collection('users')
+          .doc(firebaseUser.uid)
+          .set(userData);
+
+      print('✅ User data saved to Firestore successfully');
+    } catch (e) {
+      print('❌ Error saving user to Firestore: $e');
+      // Don't throw - this is not critical for local functionality
+    }
+  }
+
+// Also update your _finalizeSetupAndLogin method:
+  Future<void> _finalizeSetupAndLogin() async {
+    print('🎯 Finalizing setup and performing auto-login...');
+
+    try {
+      // Auto-login the admin user
+      final authController = Get.find<AuthController>();
+
+      final success = await authController.login(
+        adminEmailController.text.trim().toLowerCase(),
+        passwordController.text,
+      );
+
+      if (success) {
+        print('✅ Auto-login successful');
+
+        // Initialize user-specific sync
+        final syncService = Get.find<MultiTenantFirebaseSyncService>();
+        if (syncService.firebaseAvailable.value) {
+          try {
+            await syncService.initializeUserSync();
+            print('✅ User sync initialized');
+          } catch (e) {
+            print('⚠️ User sync initialization failed: $e');
+          }
+        }
+
+        _showSuccessAndNavigate();
+      } else {
+        print('⚠️ Auto-login failed, but registration was successful');
+        // Still show success but navigate to login
+        _showSuccessAndNavigateToLogin();
+      }
+    } catch (e) {
+      print('⚠️ Auto-login failed: $e');
+      // Still show success but navigate to login
+      _showSuccessAndNavigateToLogin();
     }
   }
 
@@ -302,37 +421,6 @@ class SchoolRegistrationController extends GetxController {
     } catch (e) {
       print('⚠️ Failed to create initial shared data: $e');
       // Don't fail registration for this
-    }
-  }
-
-  // Step 6: Finalize setup and auto-login
-  Future<void> _finalizeSetupAndLogin() async {
-    print('🎯 Finalizing setup and performing auto-login...');
-
-    try {
-      // Auto-login the admin user
-      final authController = Get.find<AuthController>();
-
-      final success = await authController.login(
-        adminEmailController.text.trim().toLowerCase(),
-        passwordController.text,
-      );
-
-      if (success) {
-        // Initialize user-specific sync
-        final syncService = Get.find<MultiTenantFirebaseSyncService>();
-        if (syncService.firebaseAvailable.value) {
-          await syncService.initializeUserSync();
-        }
-
-        _showSuccessAndNavigate();
-      } else {
-        throw Exception('Auto-login failed after registration');
-      }
-    } catch (e) {
-      print('⚠️ Auto-login failed: $e');
-      // Still show success but navigate to login
-      _showSuccessAndNavigateToLogin();
     }
   }
 
@@ -382,8 +470,8 @@ class SchoolRegistrationController extends GetxController {
         password: 'test123',
         phone: '1234567890',
         address: 'Test Address',
-        gender: 'Not Specified',
-        idnumber: 'TEST001',
+        gender: 'Male',
+        idnumber: '',
         role: 'admin',
         status: 'Active',
         date_of_birth: DateTime.now().subtract(const Duration(days: 25 * 365)),
