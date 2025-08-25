@@ -305,7 +305,9 @@ class MultiTenantFirebaseSyncService extends GetxService {
     }
   }
 
-  /// Download changes for a specific table
+// Replace your _downloadTableChanges method in MultiTenantFirebaseSyncService with this fixed version:
+
+  /// Download changes for a specific table - FIXED to prevent constraint violations
   Future<void> _downloadTableChanges(String table) async {
     try {
       final schoolPath = _schoolConfig.getCollectionPath(table);
@@ -339,7 +341,7 @@ class MultiTenantFirebaseSyncService extends GetxService {
 
           final localData = _convertFirestoreToSqlite(data);
 
-          // Try to update existing record first
+          // ✅ FIX: Try to update existing record first, then insert if not exists
           final existingRecords = await db.query(
             table,
             where: 'id = ?',
@@ -347,19 +349,45 @@ class MultiTenantFirebaseSyncService extends GetxService {
           );
 
           if (existingRecords.isNotEmpty) {
+            // Record exists - update it
             await db.update(
               table,
               localData,
               where: 'id = ?',
               whereArgs: [doc.id],
             );
+            print('📝 Updated existing record ${doc.id} in $table');
           } else {
-            // Insert as new record
-            localData['id'] = doc.id;
-            await db.insert(table, localData);
+            // Record doesn't exist - insert it
+            try {
+              localData['id'] = doc.id;
+              await db.insert(table, localData);
+              print('➕ Inserted new record ${doc.id} in $table');
+            } catch (insertError) {
+              if (insertError.toString().contains('UNIQUE constraint failed')) {
+                // ✅ CONSTRAINT FIX: Use INSERT OR REPLACE as fallback
+                print(
+                    '⚠️ Constraint violation detected for ${doc.id}, using INSERT OR REPLACE');
+
+                final columns = localData.keys.join(', ');
+                final placeholders =
+                    List.filled(localData.length, '?').join(', ');
+
+                await db.rawInsert(
+                  'INSERT OR REPLACE INTO $table ($columns) VALUES ($placeholders)',
+                  localData.values.toList(),
+                );
+                print(
+                    '✅ Successfully used INSERT OR REPLACE for ${doc.id} in $table');
+              } else {
+                // Re-throw other errors
+                rethrow;
+              }
+            }
           }
         } catch (e) {
           print('❌ Error processing document ${doc.id}: $e');
+          // Continue with other documents instead of failing the entire sync
         }
       }
 

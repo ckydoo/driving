@@ -5,6 +5,7 @@ import 'package:driving/controllers/billing_controller.dart';
 import 'package:driving/models/course.dart';
 import 'package:driving/models/invoice.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import '../../controllers/user_controller.dart';
@@ -52,9 +53,67 @@ class _AddUserScreenState extends State<AddUserScreen> {
       DateTime.now().add(Duration(days: 5)); // Default 30 days
 
   void _updateBillingPreview() {
+    if (!mounted) return;
+
+    // Use the safe lessons value method - this won't throw exceptions
+    final lessons = safeLessonsValue;
+
+    // Update any calculations that depend on lessons
+    if (_selectedCourse != null) {
+      final totalCost = lessons * _selectedCourse!.price;
+      print(
+          'Preview updated: $lessons lessons, total: \$${totalCost.toStringAsFixed(2)}');
+    }
+
+    // Update UI if needed
     setState(() {
-      // Trigger rebuild to update preview
+      // Update any state variables for the preview display
     });
+  }
+
+  int get safeLessonsValue {
+    try {
+      if (_lessonsController.text.isEmpty) return 1;
+
+      // Remove all non-digit characters and trim
+      final cleanText =
+          _lessonsController.text.replaceAll(RegExp(r'[^\d]'), '').trim();
+      if (cleanText.isEmpty) return 1;
+
+      final parsed = int.tryParse(cleanText);
+      return parsed != null && parsed > 0 ? parsed : 1;
+    } catch (e) {
+      print('Error parsing lessons value: $e');
+      return 1;
+    }
+  }
+
+// Use this when creating invoices:
+  Future<void> _createInvoiceForStudent(User user) async {
+    try {
+      if (_selectedCourse == null) return;
+
+      // Use the safe lessons value
+      final lessons = safeLessonsValue;
+
+      final billingController = Get.find<BillingController>();
+      await billingController.createInvoiceWithCourse(
+        user.id!,
+        _selectedCourse!,
+        lessons, // Safe parsed value
+        _invoiceDueDate ?? DateTime.now().add(Duration(days: 30)),
+      );
+
+      print('✅ Invoice created with $lessons lessons');
+    } catch (e) {
+      print('❌ Error creating invoice: $e');
+      Get.snackbar(
+        'Error',
+        'Failed to create invoice: $e',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    }
   }
 
   @override
@@ -985,7 +1044,7 @@ class _AddUserScreenState extends State<AddUserScreen> {
               _buildReviewItem('Course', _selectedCourse!.name),
               _buildReviewItem('Lessons', _lessonsController.text),
               _buildReviewItem('Total Amount',
-                  'R${(_selectedCourse!.price * int.parse(_lessonsController.text)).toStringAsFixed(2)}'),
+                  '\$${(_selectedCourse!.price * int.parse(_lessonsController.text)).toStringAsFixed(2)}'),
               _buildReviewItem('Due Date',
                   DateFormat('dd/MM/yyyy').format(_invoiceDueDate!)),
             ],
@@ -1217,7 +1276,7 @@ class _AddUserScreenState extends State<AddUserScreen> {
                   return DropdownMenuItem<Course>(
                     value: course,
                     child: Text(
-                        '${course.name} - R${course.price.toStringAsFixed(2)}'),
+                        '${course.name} - \$${course.price.toStringAsFixed(2)}'),
                   );
                 }).toList(),
                 onChanged: (Course? course) {
@@ -1243,25 +1302,45 @@ class _AddUserScreenState extends State<AddUserScreen> {
           TextFormField(
             controller: _lessonsController,
             keyboardType: TextInputType.number,
-            onChanged: (value) => _updateBillingPreview(),
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly, // Only allow digits
+              LengthLimitingTextInputFormatter(3), // Limit to 3 digits max
+            ],
             decoration: InputDecoration(
               labelText: 'Number of Lessons',
-              prefixIcon: Icon(Icons.event, color: Colors.grey[600]),
+              hintText: '1',
+              prefixIcon: Icon(Icons.numbers, color: Colors.green[600]),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
-              filled: true,
-              fillColor: Colors.white,
             ),
             validator: (value) {
-              if (value!.isEmpty) return 'Required';
-              final lessons = int.tryParse(value);
-              if (lessons == null || lessons <= 0)
-                return 'Must be a positive number';
+              if (value == null || value.isEmpty) {
+                return 'Required';
+              }
+
+              // Use the safe parsing method
+              final lessons = safeLessonsValue;
+
+              if (lessons <= 0) {
+                return 'Enter a valid number greater than 0';
+              }
+
+              if (lessons > 999) {
+                return 'Maximum 999 lessons';
+              }
+
               return null;
             },
+            onChanged: (value) {
+              // Add a small delay to avoid rapid updates during typing
+              Future.delayed(Duration(milliseconds: 100), () {
+                if (mounted) {
+                  _updateBillingPreview();
+                }
+              });
+            },
           ),
-
           SizedBox(height: 16),
 
           // Due date picker
@@ -1324,16 +1403,16 @@ class _AddUserScreenState extends State<AddUserScreen> {
                     style: TextStyle(color: Colors.blue[700]),
                   ),
                   Text(
-                    'Price per lesson: R${_selectedCourse!.price.toStringAsFixed(2)}',
+                    'Price per lesson: \$${_selectedCourse!.price.toStringAsFixed(2)}',
                     style: TextStyle(color: Colors.blue[700]),
                   ),
                   Text(
-                    'Lessons: ${_lessonsController.text}',
+                    'Lessons: ${_getSafeLessonsCount()}',
                     style: TextStyle(color: Colors.blue[700]),
                   ),
                   Divider(color: Colors.blue[300]),
                   Text(
-                    'Total: R${(_selectedCourse!.price * int.parse(_lessonsController.text.isEmpty ? '0' : _lessonsController.text)).toStringAsFixed(2)}',
+                    'Total: ${(_selectedCourse!.price * _getSafeLessonsCount()).toStringAsFixed(2)}',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       color: Colors.blue[800],
@@ -1346,6 +1425,18 @@ class _AddUserScreenState extends State<AddUserScreen> {
         ],
       ),
     );
+  }
+
+  int _getSafeLessonsCount() {
+    final lessonsText = _lessonsController.text.trim();
+    if (lessonsText.isEmpty) return 0;
+
+    try {
+      final lessons = int.parse(lessonsText);
+      return lessons > 0 ? lessons : 0;
+    } catch (e) {
+      return 0; // Return 0 if parsing fails
+    }
   }
 
   Widget _buildInstructorSpecificFields() {
@@ -1568,7 +1659,19 @@ class _AddUserScreenState extends State<AddUserScreen> {
 
         // If student with course, create invoice
         if (widget.role == 'student' && _selectedCourse != null) {
-          final lessons = int.parse(_lessonsController.text);
+          // SAFE LESSONS PARSING - FIXED
+          final lessonsText = _lessonsController.text.trim();
+          int lessons = 1; // Default value
+
+          if (lessonsText.isNotEmpty) {
+            // Remove any non-numeric characters
+            final cleanText = lessonsText.replaceAll(RegExp(r'[^0-9]'), '');
+            if (cleanText.isNotEmpty) {
+              lessons = int.parse(cleanText);
+              if (lessons <= 0) lessons = 1; // Ensure positive value
+            }
+          }
+
           final pricePerLesson = _selectedCourse!.price.toDouble();
           final totalAmount = lessons * pricePerLesson;
 
