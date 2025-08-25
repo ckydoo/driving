@@ -421,70 +421,114 @@ class DatabaseHelper {
   // ==================== SYNC-ENABLED CRUD METHODS ====================
 
   // ================ USERS TABLE ================
-// In your DatabaseHelper class
+// lib/services/database_helper.dart - Enhanced insertUser method with better error handling
+
   Future<int> insertUser(User user) async {
-    final db = await database;
     try {
-      // Try normal insert first
-      return await DatabaseHelperSyncExtension.insertWithSync(
-          db, 'users', user.toJson());
-    } catch (e) {
-      // If UNIQUE constraint fails, try INSERT OR REPLACE
-      if (e.toString().contains('UNIQUE constraint failed')) {
-        print('⚠️ UNIQUE constraint failed, using INSERT OR REPLACE');
+      final db = await database;
 
-        final userJson = user.toJson();
-        userJson['last_modified'] =
-            DateTime.now().toUtc().millisecondsSinceEpoch;
-        userJson['firebase_synced'] = 0;
+      // Prepare user data for insertion
+      final userData = user.toJson();
 
-        // Add firebase_user_id if available
-        try {
-          final authController = Get.find<AuthController>();
-          if (authController.isFirebaseAuthenticated) {
-            userJson['firebase_user_id'] = authController.currentFirebaseUserId;
-          }
-        } catch (_) {}
+      // Ensure ID is null for new users (database will auto-generate)
+      userData.remove('id');
 
-        final result = await db.insert(
-          'users',
-          userJson,
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
-
-        return result;
-      } else {
-        rethrow;
+      // Validate required fields
+      if (userData['email'] == null ||
+          userData['email'].toString().trim().isEmpty) {
+        throw Exception('Email is required');
       }
+
+      if (userData['fname'] == null ||
+          userData['fname'].toString().trim().isEmpty) {
+        throw Exception('First name is required');
+      }
+
+      if (userData['lname'] == null ||
+          userData['lname'].toString().trim().isEmpty) {
+        throw Exception('Last name is required');
+      }
+
+      // Set default values for potentially null fields
+      userData['created_at'] ??= DateTime.now().toIso8601String();
+      userData['status'] ??= 'Active';
+      userData['role'] ??= 'student';
+
+      print('📝 Inserting user data: ${userData['email']}');
+
+      // Insert user and get the generated ID
+      final insertedId = await DatabaseHelperSyncExtension.insertWithSync(
+          db, 'users', userData);
+
+      if (insertedId <= 0) {
+        throw Exception(
+            'Failed to insert user - invalid ID returned: $insertedId');
+      }
+
+      print('✅ User inserted successfully with ID: $insertedId');
+      return insertedId;
+    } catch (e) {
+      print('❌ Error inserting user: $e');
+
+      // Provide more specific error messages
+      if (e.toString().contains('UNIQUE constraint failed')) {
+        if (e.toString().contains('users.email')) {
+          throw Exception('Email address is already registered');
+        } else if (e.toString().contains('users.phone')) {
+          throw Exception('Phone number is already registered');
+        } else if (e.toString().contains('users.idnumber')) {
+          throw Exception('ID number is already registered');
+        }
+      }
+
+      // Re-throw the original error with context
+      throw Exception('Failed to save user: ${e.toString()}');
     }
   }
 
-// Also update the updateUser method for consistency
   Future<int> updateUser(User user) async {
-    final db = await database;
     try {
-      // Try normal update first
-      return await DatabaseHelperSyncExtension.updateWithSync(
-          db, 'users', user.toJson(), 'id = ?', [user.id]);
-    } catch (e) {
-      // If update fails (maybe user doesn't exist), try INSERT OR REPLACE
-      if (e.toString().contains('no such rowid') ||
-          e.toString().contains('UNIQUE constraint failed')) {
-        print('⚠️ Update failed, using INSERT OR REPLACE');
+      final db = await database;
 
-        final userJson = user.toJson();
-        userJson['last_modified'] =
-            DateTime.now().toUtc().millisecondsSinceEpoch;
-        userJson['firebase_synced'] = 0;
-
-        return await db.insert(
-          'users',
-          userJson,
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
-      } else {
-        rethrow;
+      if (user.id == null || user.id! <= 0) {
+        throw Exception('Invalid user ID for update');
       }
+
+      final userData = user.toJson();
+
+      // Validate required fields
+      if (userData['email'] == null ||
+          userData['email'].toString().trim().isEmpty) {
+        throw Exception('Email is required');
+      }
+
+      print('📝 Updating user data: ID ${user.id}, Email ${userData['email']}');
+
+      final rowsAffected = await DatabaseHelperSyncExtension.updateWithSync(
+          db, 'users', userData, 'id = ?', [user.id!]);
+
+      if (rowsAffected == 0) {
+        throw Exception('No user found with ID ${user.id}');
+      }
+
+      print('✅ User updated successfully: $rowsAffected row(s) affected');
+      return rowsAffected;
+    } catch (e) {
+      print('❌ Error updating user: $e');
+
+      // Provide more specific error messages
+      if (e.toString().contains('UNIQUE constraint failed')) {
+        if (e.toString().contains('users.email')) {
+          throw Exception(
+              'Email address is already registered by another user');
+        } else if (e.toString().contains('users.phone')) {
+          throw Exception('Phone number is already registered by another user');
+        } else if (e.toString().contains('users.idnumber')) {
+          throw Exception('ID number is already registered by another user');
+        }
+      }
+
+      throw Exception('Failed to update user: ${e.toString()}');
     }
   }
 

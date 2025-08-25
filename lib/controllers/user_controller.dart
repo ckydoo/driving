@@ -1,6 +1,7 @@
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/models/user.dart';
 import 'package:driving/services/database_helper.dart';
+import 'package:driving/services/multi_tenant_firebase_sync_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -112,128 +113,36 @@ class UserController extends GetxController {
     print('UserController: Refreshing users for role: $role');
     return await fetchUsers(role: role);
   }
-// lib/controllers/user_controller.dart - FIXED to prevent double saving
 
-  /// ENHANCED handleUser method - prevents double saving when Firebase is used
+  // lib/controllers/user_controller.dart - LOCAL FIRST approach with Firebase sync
+
+  /// ENHANCED handleUser method - LOCAL FIRST approach
   Future<void> handleUser(User user, {bool isUpdate = false}) async {
     try {
       isLoading(true);
       error('');
 
       print(
-          'UserController: ${isUpdate ? 'Updating' : 'Adding'} user: ${user.fname} ${user.lname}');
+          'UserController: ${isUpdate ? 'Updating' : 'Adding'} user (LOCAL FIRST): ${user.fname} ${user.lname}');
 
-      // Step 1: For updates, handle locally first
+      // Step 1: Handle updates (always local)
       if (isUpdate && user.id != null) {
-        await DatabaseHelper.instance.updateUser(user);
-        // Update the user in the local list
-        final index = _users.indexWhere((u) => u.id == user.id);
-        if (index != -1) {
-          _users[index] = user;
-        }
-        print('UserController: User updated successfully');
-
-        Get.snackbar(
-          'Success',
-          '${user.fname} ${user.lname} updated successfully',
-          backgroundColor: Colors.green,
-          colorText: Colors.white,
-          duration: const Duration(seconds: 3),
-        );
+        await _handleUserUpdate(user);
         return;
       }
 
-      // Step 2: For new users, try Firebase first
-      bool firebaseAuthCreated = false;
-      if (!isUpdate && _authController.firebaseAvailable.value) {
-        try {
-          print('🔥 Creating Firebase Authentication account...');
-
-          final firebaseSuccess =
-              await _authController.registerWithEmailPassword(
-            user.email,
-            user.password,
-            user.toJson(),
-          );
-
-          firebaseAuthCreated = firebaseSuccess;
-
-          if (firebaseSuccess) {
-            print('✅ Firebase user created successfully');
-            print('🔄 Firebase sync will handle local database insertion');
-
-            // ✅ KEY FIX: Don't save to local database here!
-            // The Firebase sync process will handle the local database insertion
-
-            // Just add to local list for UI purposes (sync will update with proper ID)
-            _users.add(user);
-
-            Get.snackbar(
-              'Success',
-              '${user.fname} ${user.lname} added successfully with cloud authentication',
-              backgroundColor: Colors.green,
-              colorText: Colors.white,
-              duration: const Duration(seconds: 3),
-            );
-
-            return; // Exit early - no local database save needed
-          } else {
-            print('⚠️ Firebase creation failed, falling back to local-only');
-          }
-        } catch (e) {
-          print('⚠️ Firebase error: $e');
-          if (e.toString().contains('email-already-in-use')) {
-            Get.snackbar(
-              'Error',
-              'Email ${user.email} is already registered',
-              backgroundColor: Colors.red,
-              colorText: Colors.white,
-              duration: const Duration(seconds: 4),
-            );
-            return;
-          }
-          print('⚠️ Falling back to local-only creation');
-        }
-      }
-
-      // Step 3: Local-only creation (fallback when Firebase fails or unavailable)
-      if (!firebaseAuthCreated) {
-        print('💾 Creating local-only user account');
-
-        // Check for duplicates first
-        final duplicateErrors = await checkForDuplicates(user, isUpdate: false);
-        if (duplicateErrors.isNotEmpty) {
-          final errorMessages = duplicateErrors.values.join('\n');
-          Get.snackbar(
-            'Duplicate Found',
-            errorMessages,
-            backgroundColor: Colors.orange,
-            colorText: Colors.white,
-            duration: const Duration(seconds: 4),
-          );
-          return;
-        }
-
-        final newUserId = await DatabaseHelper.instance.insertUser(user);
-        user.id = newUserId;
-        _users.add(user);
-
-        print('UserController: Local user created with ID: $newUserId');
-
-        Get.snackbar(
-          'Success',
-          '${user.fname} ${user.lname} added successfully (offline mode)',
-          backgroundColor: Colors.green,
-          colorText: Colors.white,
-          duration: const Duration(seconds: 3),
-        );
+      // Step 2: Handle new user creation - LOCAL FIRST approach
+      if (!isUpdate) {
+        await _handleNewUserCreationLocalFirst(user);
       }
     } catch (e) {
       error(e.toString());
       print(
           'UserController: Error ${isUpdate ? 'updating' : 'adding'} user - ${e.toString()}');
 
+      // Parse user-friendly error messages
       String userFriendlyError = _parseError(e.toString());
+
       Get.snackbar(
         'Error',
         userFriendlyError,
@@ -241,8 +150,250 @@ class UserController extends GetxController {
         colorText: Colors.white,
         duration: const Duration(seconds: 4),
       );
+
+      // Re-throw the error so calling code knows it failed
+      rethrow;
     } finally {
       isLoading(false);
+    }
+  }
+
+  /// Handle user updates (always local first)
+  Future<void> _handleUserUpdate(User user) async {
+    // Check for duplicates first (excluding the current user)
+    final duplicateErrors = await checkForDuplicates(user, isUpdate: true);
+    if (duplicateErrors.isNotEmpty) {
+      final errorMessage = duplicateErrors.values.first;
+      throw Exception(errorMessage);
+    }
+
+    // Update in local database FIRST
+    await DatabaseHelper.instance.updateUser(user);
+
+    // Update the user in the local observable list
+    final index = _users.indexWhere((u) => u.id == user.id);
+    if (index != -1) {
+      _users[index] = user;
+    }
+
+    print('✅ User updated locally successfully');
+
+    Get.snackbar(
+      'Success',
+      '${user.fname} ${user.lname} updated successfully',
+      backgroundColor: Colors.green,
+      colorText: Colors.white,
+      duration: const Duration(seconds: 3),
+    );
+
+    // Try to sync to Firebase in background (non-blocking)
+    _syncToFirebaseInBackground(user, isUpdate: true);
+  }
+
+  /// Handle new user creation - LOCAL FIRST approach
+  Future<void> _handleNewUserCreationLocalFirst(User user) async {
+    // Step 1: Check for duplicates first
+    final duplicateErrors = await checkForDuplicates(user, isUpdate: false);
+    if (duplicateErrors.isNotEmpty) {
+      final errorMessages = duplicateErrors.values.join('\n');
+      Get.snackbar(
+        'Duplicate Found',
+        errorMessages,
+        backgroundColor: Colors.orange,
+        colorText: Colors.white,
+        duration: const Duration(seconds: 4),
+      );
+      throw Exception(duplicateErrors.values.first);
+    }
+
+    // Step 2: Save to LOCAL database FIRST (this always succeeds)
+    print('💾 Saving to local database first...');
+
+    final newUserId = await DatabaseHelper.instance.insertUser(user);
+    final createdUser = user.copyWith(id: newUserId);
+
+    // Add to local observable list for immediate UI update
+    _users.add(createdUser);
+
+    print('✅ User saved locally with ID: $newUserId');
+
+    // Step 3: Show success message immediately (based on local save)
+    Get.snackbar(
+      'Success',
+      '${user.fname} ${user.lname} saved successfully',
+      backgroundColor: Colors.green,
+      colorText: Colors.white,
+      duration: const Duration(seconds: 3),
+    );
+
+    // Step 4: Try to sync to Firebase in background (non-blocking)
+    _syncToFirebaseInBackground(createdUser, isUpdate: false);
+  }
+
+  /// Sync user to Firebase in background (non-blocking)
+  Future<void> _syncToFirebaseInBackground(User user,
+      {required bool isUpdate}) async {
+    try {
+      // Don't block the UI - run in background
+      Future.delayed(const Duration(milliseconds: 500), () async {
+        await _attemptFirebaseSync(user, isUpdate: isUpdate);
+      });
+    } catch (e) {
+      print('⚠️ Background Firebase sync scheduling failed: $e');
+      // Don't throw - this shouldn't break the user experience
+    }
+  }
+
+  /// Attempt to sync user to Firebase (background operation)
+  Future<void> _attemptFirebaseSync(User user, {required bool isUpdate}) async {
+    try {
+      print('🔄 Attempting Firebase sync for user: ${user.email}');
+
+      // Check if Firebase is available
+      if (!_authController.firebaseAvailable.value) {
+        print('⚠️ Firebase not available - user saved locally only');
+        _showSyncStatusNotification(
+            'User saved locally. Will sync when online.',
+            isWarning: true);
+        return;
+      }
+
+      if (isUpdate) {
+        // For updates, just trigger general sync
+        await _triggerFirebaseSync();
+        print('✅ Update sync triggered');
+      } else {
+        // For new users, create Firebase auth + sync
+        await _createFirebaseAuthAndSync(user);
+      }
+    } catch (e) {
+      print('⚠️ Firebase sync failed: $e');
+      _showSyncStatusNotification(
+          'User saved locally. Sync failed: ${e.toString()}',
+          isWarning: true);
+      // Don't throw - local save already succeeded
+    }
+  }
+
+  /// Create Firebase Authentication account and sync for new users
+  Future<void> _createFirebaseAuthAndSync(User user) async {
+    try {
+      print('🔥 Creating Firebase Authentication account...');
+
+      // Try to create Firebase auth user
+      final firebaseSuccess =
+          await _authController.createFirebaseUserForExistingLocal(
+        user.email,
+        user.password,
+        user.toJson(),
+      );
+
+      if (firebaseSuccess) {
+        print('✅ Firebase user created and synced successfully');
+        _showSyncStatusNotification('User synced to cloud successfully!',
+            isWarning: false);
+
+        // Update local user to mark as Firebase synced
+        await _markUserAsSynced(user.id!);
+      } else {
+        print('⚠️ Firebase user creation failed');
+        _showSyncStatusNotification('User saved locally. Cloud sync failed.',
+            isWarning: true);
+      }
+    } catch (e) {
+      print('❌ Error creating Firebase user: $e');
+
+      if (e.toString().contains('email-already-in-use')) {
+        print('ℹ️ Email already exists in Firebase - just triggering sync');
+        await _triggerFirebaseSync();
+        _showSyncStatusNotification('User synced to existing cloud account!',
+            isWarning: false);
+      } else {
+        _showSyncStatusNotification(
+            'User saved locally. Cloud sync failed: ${e.toString()}',
+            isWarning: true);
+      }
+    }
+  }
+
+  /// Mark user as synced in local database
+  Future<void> _markUserAsSynced(int userId) async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      await db.update(
+        'users',
+        {
+          'firebase_synced': 1,
+          'last_modified': DateTime.now().toUtc().millisecondsSinceEpoch,
+        },
+        where: 'id = ?',
+        whereArgs: [userId],
+      );
+      print('✅ User marked as Firebase synced');
+    } catch (e) {
+      print('⚠️ Could not mark user as synced: $e');
+    }
+  }
+
+  /// Trigger Firebase sync service
+  Future<void> _triggerFirebaseSync() async {
+    try {
+      final syncService = Get.find<MultiTenantFirebaseSyncService>();
+      await syncService.triggerManualSync();
+      print('✅ Firebase sync triggered successfully');
+    } catch (e) {
+      print('⚠️ Could not trigger Firebase sync: $e');
+    }
+  }
+
+  /// Show sync status notification to user (non-intrusive)
+  void _showSyncStatusNotification(String message, {required bool isWarning}) {
+    // Only show sync status notifications in debug mode or for important warnings
+    if (isWarning) {
+      print('🔄 Sync Status: $message');
+
+      // Show brief, non-intrusive notification
+      Get.rawSnackbar(
+        title: 'Sync Status',
+        message: message,
+        backgroundColor: Colors.orange.shade600,
+        duration: const Duration(seconds: 2),
+        snackPosition: SnackPosition.BOTTOM,
+        margin: const EdgeInsets.all(8),
+        borderRadius: 8,
+        icon: Icon(Icons.cloud_off, color: Colors.white, size: 20),
+      );
+    } else {
+      print('✅ Sync Status: $message');
+
+      // Show success notification briefly
+      Get.rawSnackbar(
+        title: 'Cloud Sync',
+        message: message,
+        backgroundColor: Colors.green.shade600,
+        duration: const Duration(seconds: 2),
+        snackPosition: SnackPosition.BOTTOM,
+        margin: const EdgeInsets.all(8),
+        borderRadius: 8,
+        icon: Icon(Icons.cloud_done, color: Colors.white, size: 20),
+      );
+    }
+  }
+
+  /// Parse database errors to provide user-friendly messages
+  String _parseError(String error) {
+    if (error.contains('UNIQUE constraint failed: users.email')) {
+      return 'Email address already registered';
+    } else if (error.contains('UNIQUE constraint failed: users.phone')) {
+      return 'Phone number already registered';
+    } else if (error.contains('UNIQUE constraint failed: users.idnumber')) {
+      return 'ID number already registered';
+    } else if (error.toLowerCase().contains('null')) {
+      return 'Missing required information. Please fill in all required fields.';
+    } else if (error.contains('Failed to save user')) {
+      return 'Failed to save student. Please try again.';
+    } else {
+      return 'Failed to save student. Please check your information and try again.';
     }
   }
 
@@ -290,21 +441,6 @@ class UserController extends GetxController {
     } catch (e) {
       print('Error checking for duplicates: $e');
       return {};
-    }
-  }
-
-  /// Parse database errors to provide user-friendly messages
-  String _parseError(String error) {
-    if (error.contains('UNIQUE constraint failed: users.email')) {
-      return 'Email address already registered';
-    } else if (error.contains('UNIQUE constraint failed: users.phone')) {
-      return 'Phone number already registered';
-    } else if (error.contains('UNIQUE constraint failed: users.idnumber')) {
-      return 'ID number already registered';
-    } else if (error.contains('email-already-in-use')) {
-      return 'Email already registered in cloud system';
-    } else {
-      return 'Failed to save user';
     }
   }
 

@@ -373,7 +373,7 @@ class SchoolJoinController extends GetxController {
             password: data['password'] ?? '',
             phone: data['phone'] ?? '',
             address: data['address'] ?? '',
-            gender: data['gender'] ?? 'Not Specified',
+            gender: data['gender'] ?? 'Male',
             idnumber: data['idnumber'] ?? '',
             role: data['role'] ?? 'user',
             status: data['status'] ?? 'Active',

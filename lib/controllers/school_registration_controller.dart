@@ -269,7 +269,7 @@ class SchoolRegistrationController extends GetxController {
         password: password, // Will be hashed by the database layer
         phone: phoneController.text.trim(),
         address: addressController.text.trim(),
-        gender: 'Not Specified',
+        gender: 'Male',
         idnumber: '',
         role: 'admin',
         status: 'Active',

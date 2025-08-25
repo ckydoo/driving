@@ -2,6 +2,7 @@
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/controllers/billing_controller.dart';
 import 'package:driving/controllers/course_controller.dart';
+import 'package:driving/controllers/firebase_sync_service.dart';
 import 'package:driving/controllers/fleet_controller.dart';
 import 'package:driving/controllers/navigation_controller.dart';
 import 'package:driving/controllers/pin_controller.dart';
@@ -242,6 +243,8 @@ class EnhancedAppBindings extends Bindings {
         Get.put<CourseController>(CourseController(), permanent: true);
         print('✅ CourseController initialized');
       }
+
+      Get.put<AutoSyncController>(AutoSyncController(), permanent: true);
 
       // Fleet Controller
       if (!Get.isRegistered<FleetController>()) {

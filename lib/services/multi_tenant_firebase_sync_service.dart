@@ -25,6 +25,7 @@ class MultiTenantFirebaseSyncService extends GetxService {
 
   // Sync state
   final RxBool isSyncing = false.obs;
+  final RxString syncStatus = 'Idle'.obs;
   final RxBool isOnline = true.obs;
   final RxBool firebaseAvailable = false.obs;
   final Rx<DateTime> lastSyncTime = DateTime.fromMillisecondsSinceEpoch(0).obs;
@@ -185,44 +186,308 @@ class MultiTenantFirebaseSyncService extends GetxService {
     }
   }
 
-  /// Trigger manual sync
   Future<void> triggerManualSync() async {
-    if (isSyncing.value) {
-      print('⏳ Sync already in progress, skipping...');
-      return;
-    }
-
-    if (!firebaseAvailable.value || _firestore == null) {
-      print('⚠️ Firestore not available, skipping sync');
-      return;
-    }
-
-    if (!isOnline.value) {
-      print('⚠️ No internet connection, skipping sync');
+    if (isSyncing.value || !firebaseAvailable.value) {
+      print('⚠️ Sync conditions not met - skipping');
       return;
     }
 
     isSyncing.value = true;
+    syncStatus.value = 'Starting sync...';
 
     try {
-      print('🔄 === STARTING MULTI-TENANT SYNC ===');
+      print('🔄 === LOCAL FIRST SYNC STARTED ===');
 
-      await _ensureSchoolConfigInitialized();
+      // Step 1: Check connectivity
+      if (!isOnline.value) {
+        throw Exception('No internet connection');
+      }
 
-      // Upload local changes
-      await _uploadAllTables();
+      // Step 2: Push local changes to Firebase FIRST (LOCAL FIRST approach)
+      syncStatus.value = 'Uploading local changes...';
+      await _pushLocalChangesToFirebase();
 
-      // Download remote changes
-      await _downloadAllTables();
+      // Step 3: Pull any updates from Firebase
+      syncStatus.value = 'Downloading remote changes...';
+      await _pullFirebaseChanges();
 
-      // Update last sync time
       lastSyncTime.value = DateTime.now();
+      syncStatus.value = 'Sync completed successfully';
 
-      print('✅ === MULTI-TENANT SYNC COMPLETED ===');
+      print('✅ === LOCAL FIRST SYNC COMPLETED ===');
     } catch (e) {
       print('❌ Sync failed: $e');
+      syncStatus.value = 'Sync failed: ${e.toString()}';
     } finally {
       isSyncing.value = false;
+    }
+  }
+
+  /// Push local changes to Firebase (LOCAL FIRST priority)
+  Future<void> _pushLocalChangesToFirebase() async {
+    try {
+      print('📤 Pushing local changes to Firebase...');
+
+      final schoolId = _schoolConfig.schoolId.value;
+      if (schoolId.isEmpty) {
+        throw Exception('No school ID configured');
+      }
+
+      // Push users first (highest priority for local-first)
+      await _pushUsersToFirebase(schoolId);
+
+      // Push other data
+      await _pushLocalChangesToFirebase();
+
+      print('✅ Local changes pushed to Firebase');
+    } catch (e) {
+      print('❌ Error pushing local changes: $e');
+      throw e;
+    }
+  }
+
+  /// Push users to Firebase with special handling for auth creation
+  Future<void> _pushUsersToFirebase(String schoolId) async {
+    try {
+      print('👥 Pushing local users to Firebase...');
+
+      final db = await DatabaseHelper.instance.database;
+
+      // Get all local users that need syncing
+      final localUsers = await db.query(
+        'users',
+        where: 'firebase_synced = ? OR firebase_synced IS NULL',
+        whereArgs: [0],
+      );
+
+      print('📤 Found ${localUsers.length} users to sync to Firebase');
+
+      for (final userMap in localUsers) {
+        try {
+          await _syncSingleUserToFirebase(userMap, schoolId);
+        } catch (e) {
+          print('❌ Failed to sync user ${userMap['email']}: $e');
+          // Continue with other users
+        }
+      }
+
+      print('✅ Users sync to Firebase completed');
+    } catch (e) {
+      print('❌ Error pushing users to Firebase: $e');
+      throw e;
+    }
+  }
+
+  /// Sync a single user to Firebase (handles auth + Firestore)
+  Future<void> _syncSingleUserToFirebase(
+      Map<String, dynamic> userMap, String schoolId) async {
+    try {
+      final email = userMap['email'] as String;
+      final password =
+          userMap['password'] as String? ?? 'temppass123'; // Fallback password
+
+      print('🔄 Syncing user to Firebase: $email');
+
+      // Step 1: Ensure user exists in Firebase Auth
+      await _ensureFirebaseAuthUser(email, password);
+
+      // Step 2: Save/update user data in Firestore
+      final firestoreData = Map<String, dynamic>.from(userMap);
+      firestoreData.addAll({
+        'last_modified': DateTime.now().toIso8601String(),
+        'firebase_synced': 1,
+        'school_id': schoolId,
+        'local_id': userMap['id'], // Keep reference to local ID
+      });
+      firestoreData.remove('id'); // Remove for Firestore
+
+      // Check if user already exists in Firestore
+      final existingQuery = await _firestore!
+          .collection('schools')
+          .doc(schoolId)
+          .collection('users')
+          .where('email', isEqualTo: email.toLowerCase())
+          .limit(1)
+          .get();
+
+      if (existingQuery.docs.isNotEmpty) {
+        // Update existing
+        await existingQuery.docs.first.reference.update(firestoreData);
+        print('✅ Updated existing user in Firestore: $email');
+      } else {
+        // Create new
+        await _firestore!
+            .collection('schools')
+            .doc(schoolId)
+            .collection('users')
+            .add(firestoreData);
+        print('✅ Created new user in Firestore: $email');
+      }
+
+      // Step 3: Mark as synced in local database
+      await _markLocalRecordAsSynced('users', userMap['id']);
+    } catch (e) {
+      print('❌ Error syncing single user: $e');
+      // Don't throw - we want to continue with other users
+    }
+  }
+
+  /// Ensure user exists in Firebase Auth (create if needed)
+  Future<void> _ensureFirebaseAuthUser(String email, String password) async {
+    try {
+      // Try to get existing user
+      final methods = await _firebaseAuth!.fetchSignInMethodsForEmail(email);
+
+      if (methods.isEmpty) {
+        // User doesn't exist, create them
+        print('🔥 Creating new Firebase Auth user: $email');
+        await _firebaseAuth!.createUserWithEmailAndPassword(
+          email: email,
+          password: password,
+        );
+        print('✅ Firebase Auth user created');
+      } else {
+        print('ℹ️ Firebase Auth user already exists: $email');
+      }
+    } catch (e) {
+      if (e.toString().contains('email-already-in-use')) {
+        print('ℹ️ Firebase Auth user already exists: $email');
+      } else {
+        print('⚠️ Could not ensure Firebase Auth user: $e');
+        // Don't throw - continue with Firestore sync even if auth fails
+      }
+    }
+  }
+
+  /// Pull changes from Firebase to local database
+  Future<void> _pullFirebaseChanges() async {
+    try {
+      print('📥 Pulling changes from Firebase...');
+
+      final schoolId = _schoolConfig.schoolId.value;
+      if (schoolId.isEmpty) return;
+
+      // Pull updates for each table
+      await _pullTableFromFirebase('users', schoolId);
+      await _pullTableFromFirebase('courses', schoolId);
+      await _pullTableFromFirebase('schedules', schoolId);
+      await _pullTableFromFirebase('invoices', schoolId);
+      await _pullTableFromFirebase('payments', schoolId);
+
+      print('✅ Firebase changes pulled successfully');
+    } catch (e) {
+      print('❌ Error pulling Firebase changes: $e');
+      throw e;
+    }
+  }
+
+  /// Pull specific table from Firebase
+  Future<void> _pullTableFromFirebase(String tableName, String schoolId) async {
+    try {
+      print('📥 Pulling $tableName from Firebase...');
+
+      final firebaseRecords = await _firestore!
+          .collection('schools')
+          .doc(schoolId)
+          .collection(tableName)
+          .get();
+
+      final db = await DatabaseHelper.instance.database;
+      int updatedCount = 0;
+
+      for (final doc in firebaseRecords.docs) {
+        try {
+          final firebaseData = doc.data();
+          final localId = firebaseData['local_id'];
+
+          if (localId != null) {
+            // Check if local record exists and needs updating
+            final existingRecord = await db.query(
+              tableName,
+              where: 'id = ?',
+              whereArgs: [localId],
+              limit: 1,
+            );
+
+            if (existingRecord.isNotEmpty) {
+              final localRecord = existingRecord.first;
+              final localModified = localRecord['last_modified'] as int? ?? 0;
+              final firebaseModified = DateTime.parse(
+                      firebaseData['last_modified'] ??
+                          DateTime.now().toIso8601String())
+                  .millisecondsSinceEpoch;
+
+              if (firebaseModified > localModified) {
+                // Firebase data is newer, update local
+                final updateData = Map<String, dynamic>.from(firebaseData);
+                updateData['id'] = localId;
+                updateData['firebase_synced'] = 1;
+                updateData.remove('local_id');
+
+                await db.update(
+                  tableName,
+                  updateData,
+                  where: 'id = ?',
+                  whereArgs: [localId],
+                );
+                updatedCount++;
+              }
+            }
+          }
+        } catch (e) {
+          print('⚠️ Error processing $tableName record: $e');
+        }
+      }
+
+      print('✅ Updated $updatedCount $tableName records from Firebase');
+    } catch (e) {
+      print('❌ Error pulling $tableName from Firebase: $e');
+    }
+  }
+
+  /// Mark local record as synced
+  Future<void> _markLocalRecordAsSynced(
+      String tableName, dynamic recordId) async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      await db.update(
+        tableName,
+        {
+          'firebase_synced': 1,
+          'last_modified': DateTime.now().toUtc().millisecondsSinceEpoch,
+        },
+        where: 'id = ?',
+        whereArgs: [recordId],
+      );
+    } catch (e) {
+      print('⚠️ Could not mark $tableName record $recordId as synced: $e');
+    }
+  }
+
+  /// Check sync status for users
+  Future<Map<String, dynamic>> getSyncStatusSummary() async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+
+      final totalUsers =
+          await db.rawQuery('SELECT COUNT(*) as count FROM users');
+      final syncedUsers = await db.rawQuery(
+          'SELECT COUNT(*) as count FROM users WHERE firebase_synced = 1');
+      final unsyncedUsers = await db.rawQuery(
+          'SELECT COUNT(*) as count FROM users WHERE firebase_synced = 0 OR firebase_synced IS NULL');
+
+      return {
+        'total_users': totalUsers.first['count'] as int,
+        'synced_users': syncedUsers.first['count'] as int,
+        'unsynced_users': unsyncedUsers.first['count'] as int,
+        'firebase_available': firebaseAvailable.value,
+        'last_sync': lastSyncTime.value.toIso8601String(),
+        'sync_status': syncStatus.value,
+      };
+    } catch (e) {
+      return {
+        'error': e.toString(),
+      };
     }
   }
 

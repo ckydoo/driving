@@ -1625,6 +1625,8 @@ class _AddUserScreenState extends State<AddUserScreen> {
     Get.back();
   }
 
+// lib/screens/users/add_user_screen.dart - Fixed _submitForm method
+
   Future<void> _submitForm() async {
     if (!_formKey.currentState!.validate()) {
       return;
@@ -1638,138 +1640,132 @@ class _AddUserScreenState extends State<AddUserScreen> {
       final userController = Get.find<UserController>();
 
       final user = User(
-        id: widget.user?.id,
-        fname: _fnameController.text,
-        lname: _lnameController.text,
-        email: _emailController.text,
-        password: _passwordController.text,
-        phone: _phoneController.text,
-        address: _addressController.text,
-        idnumber: _idNumberController.text,
+        id: widget.user?.id, // Keep existing ID for updates, null for new users
+        fname: _fnameController.text.trim(),
+        lname: _lnameController.text.trim(),
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+        phone: _phoneController.text.trim(),
+        address: _addressController.text.trim(),
+        idnumber: _idNumberController.text.trim(),
         role: widget.role,
-        status: _status!,
-        gender: _gender!,
-        date_of_birth: _selectedDate!,
+        status: _status ?? 'Active',
+        gender: _gender ?? 'Male',
+        date_of_birth:
+            _selectedDate ?? DateTime.now().subtract(Duration(days: 18 * 365)),
         created_at: widget.user?.created_at ?? DateTime.now(),
       );
+
+      print(
+          '📝 Submitting ${widget.user == null ? 'new' : 'updated'} user: ${user.email}');
 
       if (widget.user == null) {
         // Adding new user
         await userController.handleUser(user);
+        print('✅ New user creation completed');
 
         // If student with course, create invoice
         if (widget.role == 'student' && _selectedCourse != null) {
-          // SAFE LESSONS PARSING - FIXED
-          final lessonsText = _lessonsController.text.trim();
-          int lessons = 1; // Default value
-
-          if (lessonsText.isNotEmpty) {
-            // Remove any non-numeric characters
-            final cleanText = lessonsText.replaceAll(RegExp(r'[^0-9]'), '');
-            if (cleanText.isNotEmpty) {
-              lessons = int.parse(cleanText);
-              if (lessons <= 0) lessons = 1; // Ensure positive value
-            }
-          }
-
-          final pricePerLesson = _selectedCourse!.price.toDouble();
-          final totalAmount = lessons * pricePerLesson;
-
-          final invoice = Invoice(
-            invoiceNumber:
-                'INV-${DateTime.now().toUtc().millisecondsSinceEpoch}',
-            studentId: user.id!,
-            courseId: _selectedCourse!.id!,
-            lessons: lessons,
-            pricePerLesson: pricePerLesson,
-            totalAmount: totalAmount,
-            amountPaid: 0.0,
-            dueDate: _invoiceDueDate!,
-            status: 'unpaid',
-            createdAt: DateTime.now(),
-          );
-
-          final billingController = Get.find<BillingController>();
-          await billingController.createInvoice(invoice);
+          await _createStudentInvoice(user);
         }
       } else {
         // Updating existing user
         await userController.handleUser(user, isUpdate: true);
+        print('✅ User update completed');
       }
 
+      // If we get here, the operation was successful
       _showSuccessDialog();
     } catch (e) {
-      Get.snackbar(
-        'Error',
-        'Failed to ${widget.user == null ? 'add' : 'update'} ${widget.role}: $e',
-        backgroundColor: Colors.red[100],
-        colorText: Colors.red[800],
-        icon: Icon(Icons.error, color: Colors.red),
-      );
-    } finally {
+      print('❌ Form submission failed: $e');
+
+      // The error snackbar is already shown by the controller,
+      // so we just need to handle the UI state
       setState(() {
         _isLoading = false;
       });
+
+      // Don't show additional error messages since controller already shows them
+    }
+  }
+
+// Separate method for creating student invoice
+  Future<void> _createStudentInvoice(User user) async {
+    try {
+      print('🧾 Creating invoice for new student...');
+
+      // Parse lessons safely
+      final lessonsText = _lessonsController.text.trim();
+      int lessons = 1; // Default value
+
+      if (lessonsText.isNotEmpty) {
+        final cleanText = lessonsText.replaceAll(RegExp(r'[^0-9]'), '');
+        if (cleanText.isNotEmpty) {
+          lessons = int.parse(cleanText);
+          if (lessons <= 0) lessons = 1;
+        }
+      }
+
+      // Create invoice
+      final pricePerLesson = _selectedCourse!.price.toDouble();
+      final totalAmount = lessons * pricePerLesson;
+
+      final invoice = Invoice(
+        invoiceNumber: 'INV-${DateTime.now().toUtc().millisecondsSinceEpoch}',
+        studentId:
+            user.id!, // This should be set by now from the database insert
+        courseId: _selectedCourse!.id!,
+        lessons: lessons,
+        pricePerLesson: pricePerLesson,
+        totalAmount: totalAmount,
+        amountPaid: 0.0,
+        dueDate: _invoiceDueDate ?? DateTime.now().add(Duration(days: 30)),
+        status: 'unpaid',
+        createdAt: DateTime.now(),
+      );
+
+      final billingController = Get.find<BillingController>();
+      await billingController.createInvoice(invoice);
+      print('✅ Invoice created successfully');
+    } catch (e) {
+      print('⚠️ Invoice creation failed: $e');
+      // Show warning but don't prevent success dialog
+      Get.snackbar(
+        'Warning',
+        'Student created but invoice creation failed: ${e.toString()}',
+        backgroundColor: Colors.orange,
+        colorText: Colors.white,
+        duration: Duration(seconds: 4),
+      );
     }
   }
 
   void _showSuccessDialog() {
     Get.dialog(
       AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
         title: Row(
           children: [
-            Icon(Icons.check_circle, color: Colors.green[600], size: 28),
-            SizedBox(width: 12),
-            Text(
-              'Success!',
-              style: TextStyle(
-                color: Colors.green[700],
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+            Icon(Icons.check_circle, color: Colors.green, size: 24),
+            SizedBox(width: 8),
+            Text('Success'),
           ],
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '${widget.role.capitalize} ${widget.user == null ? 'added' : 'updated'} successfully!',
-              style: TextStyle(fontSize: 16),
-            ),
-            SizedBox(height: 16),
-            Container(
-              padding: EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.green[50],
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.green[200]!),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.person, color: Colors.green[700]),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      '${_fnameController.text} ${_lnameController.text} has been ${widget.user == null ? 'added' : 'updated'} as a ${widget.role}.',
-                      style: TextStyle(color: Colors.green[700]),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+        content: Text(
+          '${widget.role.capitalize} ${widget.user == null ? 'created' : 'updated'} successfully!',
         ),
         actions: [
           TextButton(
             onPressed: () {
               Get.back(); // Close dialog
-              _goBack(); // Go back to users list
+              Get.back(); // Return to users list
+
+              // Navigate to the users screen to show the updated list
+              Get.offNamed('/users',
+                  arguments: widget.role == 'student'
+                      ? 'students'
+                      : '${widget.role}s');
             },
-            child: Text('Close'),
+            child: Text('Done'),
           ),
         ],
       ),

@@ -593,7 +593,7 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
             child: Row(
               children: [
                 const Icon(
-                  Icons.analytics,
+                  Icons.payment_outlined,
                   color: Colors.white70,
                   size: 20,
                 ),
