@@ -294,9 +294,13 @@ class FilteredDateLessonsDialog extends StatelessWidget {
 
     return InkWell(
       onTap: () {
-        Get.back(); // Close date dialog
-        Get.dialog(
-            ScheduleDetailsDialog(schedule: schedule)); // Show lesson details
+        // Close current dialog and immediately show new one
+        Get.back();
+
+        // Use a post-frame callback to ensure clean transition
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          Get.dialog(ScheduleDetailsDialog(schedule: schedule));
+        });
       },
       borderRadius: BorderRadius.circular(12),
       child: Container(

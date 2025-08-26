@@ -720,7 +720,7 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
     // Dropdown children
     if (isExpanded) {
       widgets.add(_buildDropdownChild(
-        Icons.analytics,
+        Icons.balance,
         'Financial Reports',
         'financial_reports',
         navController.currentPage.value,

@@ -647,33 +647,30 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   void _onDaySelected(DateTime selectedDay, DateTime focusedDay) {
-    if (!isSameDay(_selectedDay.value, selectedDay)) {
-      setState(() {
-        _selectedDay.value = selectedDay;
-        _focusedDay.value = focusedDay;
-      });
+    setState(() {
+      _selectedDay.value = selectedDay;
+      _focusedDay.value = focusedDay;
+    });
 
-      // Show daily lessons dialog/screen
-      final daySchedules = _getEventsForDay(selectedDay);
-      if (daySchedules.isNotEmpty) {
-        _showDayLessons(selectedDay, daySchedules);
-      }
-    }
+    // Always show dialog when a date is tapped
+    final daySchedules = _getEventsForDay(selectedDay);
+    _showDayLessons(selectedDay, daySchedules);
+  }
+
+// Update your _showDayLessons method to handle empty schedules better
+  void _showDayLessons(DateTime day, List<Schedule> schedules) {
+    Get.dialog(_ResponsiveDateLessonsDialog(
+      selectedDate: day,
+      schedules: schedules, // Can be empty list
+      filterText: _getActiveFiltersText(),
+      hasActiveFilters: _hasActiveFilters(),
+    ));
   }
 
   List<Schedule> _getEventsForDay(DateTime day) {
     return scheduleController.filteredSchedules
         .where((schedule) => isSameDay(schedule.start, day))
         .toList();
-  }
-
-  void _showDayLessons(DateTime day, List<Schedule> schedules) {
-    Get.dialog(_ResponsiveDateLessonsDialog(
-      selectedDate: day,
-      schedules: schedules,
-      filterText: _getActiveFiltersText(),
-      hasActiveFilters: _hasActiveFilters(),
-    ));
   }
 
   void _showSearchDialog() {
@@ -1100,10 +1097,7 @@ class _ResponsiveDateLessonsDialog extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       child: InkWell(
-        onTap: () {
-          Get.back(); // Close date dialog
-          Get.dialog(ScheduleDetailsDialog(schedule: schedule));
-        },
+        onTap: () => _showScheduleDetailsDialog(schedule),
         borderRadius: BorderRadius.circular(12),
         child: Container(
           padding: ResponsiveUtils.getValue(
@@ -1211,6 +1205,12 @@ class _ResponsiveDateLessonsDialog extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  void _showScheduleDetailsDialog(Schedule schedule) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Get.dialog(ScheduleDetailsDialog(schedule: schedule));
+    });
   }
 
   Widget _buildInfoRow(
