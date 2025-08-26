@@ -1,6 +1,7 @@
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/models/user.dart';
 import 'package:driving/services/database_helper.dart';
+import 'package:driving/services/fixed_local_first_sync_service.dart';
 import 'package:driving/services/multi_tenant_firebase_sync_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -158,228 +159,6 @@ class UserController extends GetxController {
     }
   }
 
-  /// Handle user updates (always local first)
-  Future<void> _handleUserUpdate(User user) async {
-    // Check for duplicates first (excluding the current user)
-    final duplicateErrors = await checkForDuplicates(user, isUpdate: true);
-    if (duplicateErrors.isNotEmpty) {
-      final errorMessage = duplicateErrors.values.first;
-      throw Exception(errorMessage);
-    }
-
-    // Update in local database FIRST
-    await DatabaseHelper.instance.updateUser(user);
-
-    // Update the user in the local observable list
-    final index = _users.indexWhere((u) => u.id == user.id);
-    if (index != -1) {
-      _users[index] = user;
-    }
-
-    print('✅ User updated locally successfully');
-
-    Get.snackbar(
-      'Success',
-      '${user.fname} ${user.lname} updated successfully',
-      backgroundColor: Colors.green,
-      colorText: Colors.white,
-      duration: const Duration(seconds: 3),
-    );
-
-    // Try to sync to Firebase in background (non-blocking)
-    _syncToFirebaseInBackground(user, isUpdate: true);
-  }
-
-  /// Handle new user creation - LOCAL FIRST approach
-  Future<void> _handleNewUserCreationLocalFirst(User user) async {
-    // Step 1: Check for duplicates first
-    final duplicateErrors = await checkForDuplicates(user, isUpdate: false);
-    if (duplicateErrors.isNotEmpty) {
-      final errorMessages = duplicateErrors.values.join('\n');
-      Get.snackbar(
-        'Duplicate Found',
-        errorMessages,
-        backgroundColor: Colors.orange,
-        colorText: Colors.white,
-        duration: const Duration(seconds: 4),
-      );
-      throw Exception(duplicateErrors.values.first);
-    }
-
-    // Step 2: Save to LOCAL database FIRST (this always succeeds)
-    print('💾 Saving to local database first...');
-
-    final newUserId = await DatabaseHelper.instance.insertUser(user);
-    final createdUser = user.copyWith(id: newUserId);
-
-    // Add to local observable list for immediate UI update
-    _users.add(createdUser);
-
-    print('✅ User saved locally with ID: $newUserId');
-
-    // Step 3: Show success message immediately (based on local save)
-    Get.snackbar(
-      'Success',
-      '${user.fname} ${user.lname} saved successfully',
-      backgroundColor: Colors.green,
-      colorText: Colors.white,
-      duration: const Duration(seconds: 3),
-    );
-
-    // Step 4: Try to sync to Firebase in background (non-blocking)
-    _syncToFirebaseInBackground(createdUser, isUpdate: false);
-  }
-
-  /// Sync user to Firebase in background (non-blocking)
-  Future<void> _syncToFirebaseInBackground(User user,
-      {required bool isUpdate}) async {
-    try {
-      // Don't block the UI - run in background
-      Future.delayed(const Duration(milliseconds: 500), () async {
-        await _attemptFirebaseSync(user, isUpdate: isUpdate);
-      });
-    } catch (e) {
-      print('⚠️ Background Firebase sync scheduling failed: $e');
-      // Don't throw - this shouldn't break the user experience
-    }
-  }
-
-  /// Attempt to sync user to Firebase (background operation)
-  Future<void> _attemptFirebaseSync(User user, {required bool isUpdate}) async {
-    try {
-      print('🔄 Attempting Firebase sync for user: ${user.email}');
-
-      // Check if Firebase is available
-      if (!_authController.firebaseAvailable.value) {
-        print('⚠️ Firebase not available - user saved locally only');
-        _showSyncStatusNotification(
-            'User saved locally. Will sync when online.',
-            isWarning: true);
-        return;
-      }
-
-      if (isUpdate) {
-        // For updates, just trigger general sync
-        await _triggerFirebaseSync();
-        print('✅ Update sync triggered');
-      } else {
-        // For new users, create Firebase auth + sync
-        await _createFirebaseAuthAndSync(user);
-      }
-    } catch (e) {
-      print('⚠️ Firebase sync failed: $e');
-      _showSyncStatusNotification(
-          'User saved locally. Sync failed: ${e.toString()}',
-          isWarning: true);
-      // Don't throw - local save already succeeded
-    }
-  }
-
-  /// Create Firebase Authentication account and sync for new users
-  Future<void> _createFirebaseAuthAndSync(User user) async {
-    try {
-      print('🔥 Creating Firebase Authentication account...');
-
-      // Try to create Firebase auth user
-      final firebaseSuccess =
-          await _authController.createFirebaseUserForExistingLocal(
-        user.email,
-        user.password,
-        user.toJson(),
-      );
-
-      if (firebaseSuccess) {
-        print('✅ Firebase user created and synced successfully');
-        _showSyncStatusNotification('User synced to cloud successfully!',
-            isWarning: false);
-
-        // Update local user to mark as Firebase synced
-        await _markUserAsSynced(user.id!);
-      } else {
-        print('⚠️ Firebase user creation failed');
-        _showSyncStatusNotification('User saved locally. Cloud sync failed.',
-            isWarning: true);
-      }
-    } catch (e) {
-      print('❌ Error creating Firebase user: $e');
-
-      if (e.toString().contains('email-already-in-use')) {
-        print('ℹ️ Email already exists in Firebase - just triggering sync');
-        await _triggerFirebaseSync();
-        _showSyncStatusNotification('User synced to existing cloud account!',
-            isWarning: false);
-      } else {
-        _showSyncStatusNotification(
-            'User saved locally. Cloud sync failed: ${e.toString()}',
-            isWarning: true);
-      }
-    }
-  }
-
-  /// Mark user as synced in local database
-  Future<void> _markUserAsSynced(int userId) async {
-    try {
-      final db = await DatabaseHelper.instance.database;
-      await db.update(
-        'users',
-        {
-          'firebase_synced': 1,
-          'last_modified': DateTime.now().toUtc().millisecondsSinceEpoch,
-        },
-        where: 'id = ?',
-        whereArgs: [userId],
-      );
-      print('✅ User marked as Firebase synced');
-    } catch (e) {
-      print('⚠️ Could not mark user as synced: $e');
-    }
-  }
-
-  /// Trigger Firebase sync service
-  Future<void> _triggerFirebaseSync() async {
-    try {
-      final syncService = Get.find<MultiTenantFirebaseSyncService>();
-      await syncService.triggerManualSync();
-      print('✅ Firebase sync triggered successfully');
-    } catch (e) {
-      print('⚠️ Could not trigger Firebase sync: $e');
-    }
-  }
-
-  /// Show sync status notification to user (non-intrusive)
-  void _showSyncStatusNotification(String message, {required bool isWarning}) {
-    // Only show sync status notifications in debug mode or for important warnings
-    if (isWarning) {
-      print('🔄 Sync Status: $message');
-
-      // Show brief, non-intrusive notification
-      Get.rawSnackbar(
-        title: 'Sync Status',
-        message: message,
-        backgroundColor: Colors.orange.shade600,
-        duration: const Duration(seconds: 2),
-        snackPosition: SnackPosition.BOTTOM,
-        margin: const EdgeInsets.all(8),
-        borderRadius: 8,
-        icon: Icon(Icons.cloud_off, color: Colors.white, size: 20),
-      );
-    } else {
-      print('✅ Sync Status: $message');
-
-      // Show success notification briefly
-      Get.rawSnackbar(
-        title: 'Cloud Sync',
-        message: message,
-        backgroundColor: Colors.green.shade600,
-        duration: const Duration(seconds: 2),
-        snackPosition: SnackPosition.BOTTOM,
-        margin: const EdgeInsets.all(8),
-        borderRadius: 8,
-        icon: Icon(Icons.cloud_done, color: Colors.white, size: 20),
-      );
-    }
-  }
-
   /// Parse database errors to provide user-friendly messages
   String _parseError(String error) {
     if (error.contains('UNIQUE constraint failed: users.email')) {
@@ -441,63 +220,6 @@ class UserController extends GetxController {
     } catch (e) {
       print('Error checking for duplicates: $e');
       return {};
-    }
-  }
-
-// Add this import at the top of your user_controller.dart file:
-  Future<void> deleteUser(int userId) async {
-    try {
-      isLoading(true);
-      error('');
-
-      final userToDelete = _users.firstWhere(
-        (user) => user.id == userId,
-        orElse: () => User(
-          fname: 'Unknown',
-          lname: 'User',
-          id: userId,
-          email: '',
-          password: '',
-          gender: '',
-          phone: '',
-          address: '',
-          date_of_birth: DateTime.now(),
-          role: '',
-          status: '',
-          idnumber: '',
-          created_at: DateTime.now(),
-        ),
-      );
-
-      print(
-          'UserController: Deleting user: ${userToDelete.fname} ${userToDelete.lname}');
-
-      await DatabaseHelper.instance.deleteUser(userId);
-      _users.removeWhere((user) => user.id == userId);
-
-      print(
-          'UserController: User deleted successfully from database and local list');
-
-      Get.snackbar(
-        'Success',
-        '${userToDelete.fname} ${userToDelete.lname != 'User' ? userToDelete.lname : 'Unknown'} deleted successfully',
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
-        duration: const Duration(seconds: 3),
-      );
-    } catch (e) {
-      error(e.toString());
-      print('UserController: Error deleting user - ${e.toString()}');
-      Get.snackbar(
-        'Error',
-        'Delete failed: ${e.toString()}',
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-        duration: const Duration(seconds: 4),
-      );
-      rethrow;
-    } finally {
-      isLoading(false);
     }
   }
 
@@ -592,6 +314,196 @@ class UserController extends GetxController {
   void goToPage(int page) {
     if (page >= 1 && page <= totalPagesForCurrentView) {
       _currentPage.value = page;
+    }
+  }
+
+  Future<void> _handleNewUserCreationLocalFirst(User user) async {
+    // Step 1: Check for duplicates first
+    final duplicateErrors = await checkForDuplicates(user, isUpdate: false);
+    if (duplicateErrors.isNotEmpty) {
+      final errorMessages = duplicateErrors.values.join('\n');
+      Get.snackbar(
+        'Duplicate Found',
+        errorMessages,
+        backgroundColor: Colors.orange,
+        colorText: Colors.white,
+        duration: const Duration(seconds: 4),
+      );
+      throw Exception(duplicateErrors.values.first);
+    }
+
+    // Step 2: Save to LOCAL database FIRST using existing method
+    print('💾 Saving to local database first (will trigger automatic sync)...');
+
+    // Your existing insertUser method already uses sync-aware extension
+    final newUserId = await DatabaseHelper.instance.insertUser(user);
+    final createdUser = user.copyWith(id: newUserId);
+
+    // Add to local observable list for immediate UI update
+    _users.add(createdUser);
+
+    print('✅ User saved locally with ID: $newUserId (marked for sync)');
+
+    // Step 3: Show success message immediately (based on local save)
+    Get.snackbar(
+      'Success',
+      '${user.fname} ${user.lname} saved successfully',
+      backgroundColor: Colors.green,
+      colorText: Colors.white,
+      duration: const Duration(seconds: 3),
+    );
+
+    // Step 4: Sync happens automatically via DatabaseHelperSyncExtension._triggerSmartSync()
+    print('🔄 Automatic sync will be triggered in background');
+  }
+
+// 3. REPLACE YOUR _handleUserUpdate METHOD:
+  /// Handle user updates - FIXED version
+  Future<void> _handleUserUpdate(User user) async {
+    // Check for duplicates first (excluding the current user)
+    final duplicateErrors = await checkForDuplicates(user, isUpdate: true);
+    if (duplicateErrors.isNotEmpty) {
+      final errorMessage = duplicateErrors.values.first;
+      throw Exception(errorMessage);
+    }
+
+    // Update in local database FIRST using existing method
+    // Your existing updateUser method already uses sync-aware extension
+    await DatabaseHelper.instance.updateUser(user);
+
+    // Update the user in the local observable list
+    final index = _users.indexWhere((u) => u.id == user.id);
+    if (index != -1) {
+      _users[index] = user;
+    }
+
+    print('✅ User updated locally successfully (marked for sync)');
+
+    Get.snackbar(
+      'Success',
+      '${user.fname} ${user.lname} updated successfully',
+      backgroundColor: Colors.green,
+      colorText: Colors.white,
+      duration: const Duration(seconds: 3),
+    );
+
+    // Sync happens automatically via DatabaseHelperSyncExtension._triggerSmartSync()
+    print('🔄 Automatic sync will be triggered in background');
+  }
+
+// 4. ADD THIS NEW METHOD FOR MANUAL SYNC TESTING:
+  /// Manually trigger sync for testing
+  Future<void> manualSyncTrigger() async {
+    try {
+      if (Get.isRegistered<FixedLocalFirstSyncService>()) {
+        final syncService = Get.find<FixedLocalFirstSyncService>();
+
+        if (syncService.isSyncing.value) {
+          Get.snackbar('Info', 'Sync already in progress...');
+          return;
+        }
+
+        Get.snackbar('Sync Started', 'Syncing data with Firebase...');
+
+        await syncService.syncWithFirebase();
+
+        Get.snackbar(
+          'Success',
+          'Sync completed successfully!',
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+        );
+      } else {
+        Get.snackbar('Error', 'Fixed sync service not available');
+      }
+    } catch (e) {
+      Get.snackbar(
+        'Error',
+        'Sync failed: $e',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    }
+  }
+
+// 5. ADD DEBUG METHODS:
+  /// Get sync status for debugging
+  Future<Map<String, dynamic>> getSyncStatus() async {
+    try {
+      return await DatabaseHelper.instance.getDetailedSyncStatus();
+    } catch (e) {
+      print('Error getting sync status: $e');
+      return {'error': e.toString()};
+    }
+  }
+
+  /// Get sync conflicts for debugging
+  Future<List<Map<String, dynamic>>> getSyncConflicts() async {
+    try {
+      return await DatabaseHelper.instance.getConflictHistory();
+    } catch (e) {
+      print('Error getting conflict history: $e');
+      return [];
+    }
+  }
+
+// 6. UPDATE YOUR deleteUser METHOD (if it exists):
+  /// Delete user - FIXED version
+  Future<void> deleteUser(int userId) async {
+    try {
+      isLoading(true);
+      error('');
+
+      final userToDelete = _users.firstWhere(
+        (user) => user.id == userId,
+        orElse: () => User(
+          fname: 'Unknown',
+          lname: 'User',
+          id: userId,
+          email: '',
+          password: '',
+          gender: '',
+          phone: '',
+          address: '',
+          date_of_birth: DateTime.now(),
+          role: '',
+          status: '',
+          idnumber: '',
+          created_at: DateTime.now(),
+        ),
+      );
+
+      print(
+          'UserController: Deleting user: ${userToDelete.fname} ${userToDelete.lname}');
+
+      // Use existing delete method (already uses sync-aware extension)
+      await DatabaseHelper.instance.deleteUser(userId);
+
+      // Remove from local observable list
+      _users.removeWhere((user) => user.id == userId);
+
+      print('UserController: User deleted successfully (marked for sync)');
+
+      Get.snackbar(
+        'Success',
+        '${userToDelete.fname} ${userToDelete.lname != 'User' ? userToDelete.lname : ''} deleted successfully',
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+        duration: const Duration(seconds: 3),
+      );
+
+      // Sync happens automatically via DatabaseHelperSyncExtension._triggerSmartSync()
+      print('🔄 Automatic sync will be triggered in background');
+    } catch (e) {
+      error(e.toString());
+      Get.snackbar(
+        'Error',
+        'Failed to delete user: ${e.toString()}',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    } finally {
+      isLoading(false);
     }
   }
 

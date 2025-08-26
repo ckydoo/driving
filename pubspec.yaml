@@ -63,7 +63,9 @@ dependencies:
   # Connectivity checking
   connectivity_plus: ^5.0.2
   flutter_secure_storage: ^9.2.4
-  local_auth: ^2.1.6              
+  local_auth: ^2.1.6    
+  device_info_plus: ^10.1.2
+          
 
 
 

@@ -1,5 +1,6 @@
 // Updated DatabaseHelper with Firebase sync integration
 import 'dart:async';
+import 'dart:convert';
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/models/billing.dart';
 import 'package:driving/models/billing_record.dart';
@@ -10,6 +11,7 @@ import 'package:driving/models/user.dart';
 import 'package:driving/services/multi_tenant_firebase_sync_service.dart';
 import 'package:get/get.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common/sqlite_api.dart';
 import 'package:path/path.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -38,17 +40,31 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 2, // Increment version to trigger upgrade
+      version: 4,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    print('🔄 Upgrading database from version $oldVersion to $newVersion');
+
     if (oldVersion < 2) {
       // Add sync tracking columns to existing tables
       await DatabaseHelperSyncExtension.addSyncTrackingTriggers(db);
       await DatabaseHelperSyncExtension.addDeletedColumn(db);
+    }
+
+    if (oldVersion < 3) {
+      // Add device tracking columns
+      await _addDeviceTrackingColumns(db);
+      await _createSyncMetadataTables(db);
+    }
+
+    if (oldVersion < 4) {
+      // Additional enhancements for fixed sync
+      await _initializeDeviceId();
+      print('✅ Database upgrade to version 4 completed');
     }
   }
 
@@ -1101,39 +1117,6 @@ class DatabaseHelper {
     }
   }
 
-  Future<void> markAllRecordsForSync() async {
-    final db = await database;
-    final tables = [
-      'users',
-      'courses',
-      'schedules',
-      'invoices',
-      'payments',
-      'fleet',
-      'attachments',
-      'notes',
-      'notifications',
-      'billing_records',
-      'timeline',
-      'usermessages',
-      //'settings'
-    ];
-
-    for (String table in tables) {
-      try {
-        await db.execute('''
-          UPDATE $table 
-          SET firebase_synced = 0, 
-              last_modified = ${DateTime.now().toUtc().millisecondsSinceEpoch}
-          WHERE deleted IS NULL OR deleted = 0
-        ''');
-        print('Marked $table records for sync');
-      } catch (e) {
-        print('Could not mark $table for sync: $e');
-      }
-    }
-  }
-
   // ==================== SYNC STATUS METHODS ====================
 
   Future<Map<String, int>> getSyncStatus() async {
@@ -1659,6 +1642,304 @@ class DatabaseHelper {
       print('✅ Cleared all known schools');
     } catch (e) {
       print('❌ Error clearing known schools: $e');
+      throw e;
+    }
+  }
+
+  /// Add device tracking columns to all sync tables
+  Future<void> _addDeviceTrackingColumns(Database db) async {
+    final tables = [
+      'users',
+      'courses',
+      'schedules',
+      'invoices',
+      'payments',
+      'fleet',
+      'attachments',
+      'notes',
+      'notifications',
+      'billing_records',
+      'timeline',
+      'usermessages'
+    ];
+
+    for (final table in tables) {
+      try {
+        await db
+            .execute('ALTER TABLE $table ADD COLUMN last_modified_device TEXT');
+        print('✅ Added last_modified_device to $table');
+      } catch (e) {
+        print('⚠️ last_modified_device column may already exist in $table');
+      }
+
+      try {
+        await db.execute(
+            'ALTER TABLE $table ADD COLUMN sync_version INTEGER DEFAULT 1');
+        print('✅ Added sync_version to $table');
+      } catch (e) {
+        print('⚠️ sync_version column may already exist in $table');
+      }
+    }
+  }
+
+  /// Create sync metadata and conflict tables
+  Future<void> _createSyncMetadataTables(Database db) async {
+    // Sync metadata table
+    await db.execute('''
+    CREATE TABLE IF NOT EXISTS sync_metadata (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      table_name TEXT NOT NULL UNIQUE,
+      last_sync_timestamp INTEGER DEFAULT 0,
+      last_sync_device TEXT,
+      total_records INTEGER DEFAULT 0,
+      synced_records INTEGER DEFAULT 0,
+      conflict_count INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  ''');
+
+    // Conflict resolution log table
+    await db.execute('''
+    CREATE TABLE IF NOT EXISTS sync_conflicts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      table_name TEXT NOT NULL,
+      record_id INTEGER NOT NULL,
+      conflict_type TEXT NOT NULL,
+      local_timestamp INTEGER,
+      remote_timestamp INTEGER,
+      local_device TEXT,
+      remote_device TEXT,
+      resolution TEXT NOT NULL,
+      local_data TEXT,
+      remote_data TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  ''');
+
+    // Insert initial metadata for sync tables
+    final tables = [
+      'users',
+      'courses',
+      'schedules',
+      'invoices',
+      'payments',
+      'fleet',
+      'attachments',
+      'notes',
+      'notifications',
+      'billing_records',
+      'timeline',
+      'usermessages'
+    ];
+
+    for (final table in tables) {
+      await db.execute('''
+      INSERT OR IGNORE INTO sync_metadata (table_name, last_sync_timestamp) 
+      VALUES (?, 0)
+    ''', [table]);
+    }
+
+    print('✅ Created sync metadata and conflict tables');
+  }
+
+  /// Initialize device ID
+  Future<void> _initializeDeviceId() async {
+    final deviceId = await getDeviceId();
+    print('✅ Device ID initialized: $deviceId');
+  }
+
+  /// Get or create device ID
+  static Future<String> getDeviceId() async {
+    final prefs = await SharedPreferences.getInstance();
+    String? deviceId = prefs.getString('device_id');
+
+    if (deviceId == null) {
+      deviceId = _generateDeviceId();
+      await prefs.setString('device_id', deviceId);
+      print('🆔 Generated new device ID: $deviceId');
+    }
+
+    return deviceId;
+  }
+
+  /// Generate unique device ID
+  static String _generateDeviceId() {
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final random = (timestamp % 10000).toString();
+    return 'device_${random}_${timestamp.toString().substring(8)}';
+  }
+
+  /// Get detailed sync status for all tables
+  Future<Map<String, dynamic>> getDetailedSyncStatus() async {
+    final db = await database;
+    final status = <String, dynamic>{};
+
+    final tables = [
+      'users',
+      'courses',
+      'schedules',
+      'invoices',
+      'payments',
+      'fleet',
+      'notes'
+    ];
+
+    for (final table in tables) {
+      try {
+        final totalResult = await db.rawQuery('''
+        SELECT COUNT(*) as count FROM $table 
+        WHERE deleted IS NULL OR deleted = 0
+      ''');
+        final total = totalResult.first['count'] as int;
+
+        final syncedResult = await db.rawQuery('''
+        SELECT COUNT(*) as count FROM $table 
+        WHERE (deleted IS NULL OR deleted = 0) 
+        AND firebase_synced = 1
+      ''');
+        final synced = syncedResult.first['count'] as int;
+
+        final unsyncedResult = await db.rawQuery('''
+        SELECT COUNT(*) as count FROM $table 
+        WHERE (deleted IS NULL OR deleted = 0) 
+        AND (firebase_synced = 0 OR firebase_synced IS NULL)
+      ''');
+        final unsynced = unsyncedResult.first['count'] as int;
+
+        status[table] = {
+          'total': total,
+          'synced': synced,
+          'unsynced': unsynced,
+          'sync_percentage': total > 0 ? (synced / total * 100).round() : 100,
+        };
+      } catch (e) {
+        print('Error getting sync status for $table: $e');
+        status[table] = {'error': e.toString()};
+      }
+    }
+
+    return status;
+  }
+
+  /// Get conflict history
+  Future<List<Map<String, dynamic>>> getConflictHistory(
+      {int limit = 50}) async {
+    try {
+      final db = await database;
+      return await db.query(
+        'sync_conflicts',
+        orderBy: 'created_at DESC',
+        limit: limit,
+      );
+    } catch (e) {
+      print('Error getting conflict history: $e');
+      return [];
+    }
+  }
+
+  /// Clear old conflict logs
+  Future<void> clearOldConflictLogs({int daysToKeep = 30}) async {
+    try {
+      final db = await database;
+      final cutoffDate =
+          DateTime.now().subtract(Duration(days: daysToKeep)).toIso8601String();
+
+      final deletedCount = await db.delete(
+        'sync_conflicts',
+        where: daysToKeep > 0 ? 'created_at < ?' : null,
+        whereArgs: daysToKeep > 0 ? [cutoffDate] : null,
+      );
+
+      print('✅ Cleared $deletedCount old conflict logs');
+    } catch (e) {
+      print('Error clearing old conflict logs: $e');
+    }
+  }
+
+  /// Mark all records for sync (force resync)
+  Future<void> markAllRecordsForSync() async {
+    final db = await database;
+    final tables = [
+      'users',
+      'courses',
+      'schedules',
+      'invoices',
+      'payments',
+      'fleet',
+      'attachments',
+      'notes',
+      'notifications',
+      'billing_records',
+      'timeline',
+      'usermessages'
+    ];
+
+    final deviceId = await getDeviceId();
+    final now = DateTime.now().toUtc().millisecondsSinceEpoch;
+
+    for (String table in tables) {
+      try {
+        final updateCount = await db.execute('''
+        UPDATE $table 
+        SET firebase_synced = 0, 
+            last_modified = ?,
+            last_modified_device = ?
+        WHERE deleted IS NULL OR deleted = 0
+      ''', [now, deviceId]);
+
+        print('✅ Marked $table records for sync');
+      } catch (e) {
+        print('Could not mark $table for sync: $e');
+      }
+    }
+  }
+
+  /// Enhanced backup with better error handling
+  Future<Map<String, dynamic>> backupDatabase() async {
+    try {
+      print('🗄️ === CREATING DATABASE BACKUP ===');
+
+      final db = await database;
+      final tables = [
+        'users',
+        'courses',
+        'schedules',
+        'invoices',
+        'payments',
+        'fleet'
+      ];
+      final backup = <String, dynamic>{
+        'timestamp': DateTime.now().toIso8601String(),
+        'device_id': await getDeviceId(),
+        'tables': <String, List<Map<String, dynamic>>>{},
+      };
+
+      for (final table in tables) {
+        try {
+          final data = await db.query(table);
+          backup['tables'][table] = data;
+          print('📦 Backed up ${data.length} records from $table');
+        } catch (e) {
+          print('⚠️ Could not backup $table: $e');
+          backup['tables'][table] = [];
+        }
+      }
+
+      // Save backup to preferences
+      final prefs = await SharedPreferences.getInstance();
+      final backupKey =
+          'database_backup_${DateTime.now().millisecondsSinceEpoch}';
+      await prefs.setString(backupKey, jsonEncode(backup));
+
+      backup['backup_key'] = backupKey;
+
+      print('✅ Database backup completed successfully');
+      print('📄 Backup key: $backupKey');
+
+      return backup;
+    } catch (e) {
+      print('❌ Database backup failed: $e');
       throw e;
     }
   }

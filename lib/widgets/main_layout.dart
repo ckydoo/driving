@@ -8,6 +8,7 @@ import 'package:driving/reports/course.dart';
 import 'package:driving/screens/billing/billing_screen.dart';
 import 'package:driving/screens/course/course_screen.dart';
 import 'package:driving/screens/fleet/fleet_screen.dart';
+import 'package:driving/screens/profile/profile_screen.dart';
 import 'package:driving/screens/receipts/receipt_management_screen.dart';
 import 'package:driving/screens/reports/financial_reports_screen.dart';
 import 'package:driving/screens/reports/users_reports_screen.dart';
@@ -370,7 +371,7 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
             onSelected: (value) {
               switch (value) {
                 case 'profile':
-                  // Handle profile navigation
+                  Get.to(ProfileScreen());
                   break;
                 case 'settings':
                   navController.navigateToPage('settings');

@@ -12,9 +12,9 @@ import 'package:driving/controllers/settings_controller.dart';
 import 'package:driving/controllers/user_controller.dart';
 import 'package:driving/services/consistency_checker_service.dart';
 import 'package:driving/services/database_helper.dart';
+import 'package:driving/services/fixed_local_first_sync_service.dart';
 import 'package:driving/services/lesson_counting_service.dart';
 import 'package:driving/services/school_config_service.dart';
-import 'package:driving/services/multi_tenant_firebase_sync_service.dart';
 import 'package:driving/services/school_management_service.dart';
 import 'package:get/get.dart';
 
@@ -182,29 +182,64 @@ class EnhancedAppBindings extends Bindings {
     }
   }
 
-  /// STEP 5: Initialize Firebase sync service
   Future<void> _initializeFirebaseSync() async {
-    print('🔄 Initializing Firebase sync service...');
+    print('🔄 Initializing FIXED Firebase sync service...');
 
     try {
-      // Multi-Tenant Firebase Sync Service (depends on school config and auth)
-      if (!Get.isRegistered<MultiTenantFirebaseSyncService>()) {
-        Get.put<MultiTenantFirebaseSyncService>(
-            MultiTenantFirebaseSyncService(),
+      // REPLACE MultiTenantFirebaseSyncService with FixedLocalFirstSyncService
+      if (!Get.isRegistered<FixedLocalFirstSyncService>()) {
+        Get.put<FixedLocalFirstSyncService>(FixedLocalFirstSyncService(),
             permanent: true);
-        print('✅ MultiTenantFirebaseSyncService initialized');
+        print('✅ FixedLocalFirstSyncService initialized');
 
-        // Set up automatic sync system
-        final syncService = Get.find<MultiTenantFirebaseSyncService>();
-        await syncService.setupAutomaticSync();
-        print('✅ Automatic sync system configured');
+        // Initialize the service
+        final syncService = Get.find<FixedLocalFirstSyncService>();
+        await syncService.onInit();
+        print('✅ Fixed sync service configured');
       }
 
-      print('✅ Firebase sync service initialization completed');
+      print('✅ FIXED Firebase sync service initialization completed');
     } catch (e) {
-      print('❌ Firebase sync service initialization failed: $e');
+      print('❌ FIXED Firebase sync service initialization failed: $e');
       print('⚠️ App will continue with local-only mode');
       // Don't throw - app can work without sync
+    }
+  }
+
+  Future<void> _setupAutomaticSync() async {
+    print('🤖 Setting up FIXED automatic sync system...');
+
+    try {
+      if (Get.isRegistered<FixedLocalFirstSyncService>()) {
+        final syncService = Get.find<FixedLocalFirstSyncService>();
+        final authController = Get.find<AuthController>();
+
+        // Only setup sync if Firebase is available
+        if (syncService.firebaseAvailable.value) {
+          print('✅ FIXED automatic sync system ready');
+          print('🔄 Sync will activate when user authenticates with Firebase');
+          print('⏰ Periodic sync configured (every 5 minutes)');
+
+          // Manual trigger for immediate sync if authenticated
+          if (authController.isFirebaseAuthenticated) {
+            Future.delayed(const Duration(seconds: 2), () {
+              syncService.syncWithFirebase().catchError((e) {
+                print('⚠️ Initial sync failed: $e');
+              });
+            });
+          }
+        } else {
+          print('⚠️ Firebase unavailable - sync system in standby mode');
+        }
+      } else {
+        print('⚠️ FIXED sync service not available - continuing without sync');
+      }
+
+      print('✅ FIXED automatic sync setup completed');
+    } catch (e) {
+      print('❌ FIXED automatic sync setup failed: $e');
+      print('⚠️ Manual sync will still be available');
+      // Don't throw - sync is not critical for basic app function
     }
   }
 
@@ -299,36 +334,6 @@ class EnhancedAppBindings extends Bindings {
     }
   }
 
-  /// STEP 9: Set up automatic sync system
-  Future<void> _setupAutomaticSync() async {
-    print('🤖 Setting up automatic sync system...');
-
-    try {
-      if (Get.isRegistered<MultiTenantFirebaseSyncService>()) {
-        final syncService = Get.find<MultiTenantFirebaseSyncService>();
-        final authController = Get.find<AuthController>();
-
-        // Only setup sync if Firebase is available and user might be authenticated
-        if (authController.firebaseAvailable.value) {
-          // Sync will be triggered automatically when user is authenticated
-          print('✅ Automatic sync system ready');
-          print('🔄 Sync will activate when user authenticates with Firebase');
-        } else {
-          print('⚠️ Firebase unavailable - sync system in standby mode');
-        }
-      } else {
-        print('⚠️ Sync service not available - continuing without sync');
-      }
-
-      print('✅ Automatic sync setup completed');
-    } catch (e) {
-      print('❌ Automatic sync setup failed: $e');
-      print('⚠️ Manual sync will still be available');
-      // Don't throw - sync is not critical for basic app function
-    }
-  }
-
-  /// Print initialization summary
   void _printInitializationSummary() {
     print('\n📊 === INITIALIZATION SUMMARY ===');
 
@@ -338,7 +343,7 @@ class EnhancedAppBindings extends Bindings {
       'SettingsController',
       'SchoolConfigService',
       'AuthController',
-      'MultiTenantFirebaseSyncService',
+      'FixedLocalFirstSyncService', // CHANGED FROM MultiTenantFirebaseSyncService
       'NavigationController',
       'UserController',
       'CourseController',
@@ -372,65 +377,51 @@ class EnhancedAppBindings extends Bindings {
     // Firebase-specific summary
     try {
       final authController = Get.find<AuthController>();
+      final syncService = Get.find<FixedLocalFirstSyncService>(); // CHANGED
       print('\n🔥 === FIREBASE STATUS ===');
       print('🔥 Firebase Available: ${authController.firebaseAvailable.value}');
+      print('🔄 Sync Service Ready: ${syncService.firebaseAvailable.value}');
       print(
           '👤 Firebase User: ${authController.firebaseUser.value?.email ?? "None"}');
-      print('🔐 Local User: ${authController.isLoggedIn.value}');
+      print('👤 Local User Logged In: ${authController.isLoggedIn.value}');
+
+      print('✅ FIXED Firebase-first authentication initialization completed');
     } catch (e) {
-      print('\n🔥 === FIREBASE STATUS ===');
-      print('❌ Could not determine Firebase status');
+      print('❌ Could not get Firebase status: $e');
     }
 
-    print('=== END SUMMARY ===\n');
+    print('\n🚀 === FIXED APP READY FOR USE ===');
   }
 
-  /// Check if service is initialized
+// 5. ADD/UPDATE HELPER METHOD:
+  /// Check if a service is initialized
   bool _isServiceInitialized(String serviceName) {
     try {
       switch (serviceName) {
         case 'DatabaseHelper':
-          Get.find<DatabaseHelper>();
-          return true;
+          return Get.isRegistered<DatabaseHelper>();
         case 'PinController':
-          Get.find<PinController>();
-          return true;
+          return Get.isRegistered<PinController>();
         case 'SettingsController':
-          Get.find<SettingsController>();
-          return true;
+          return Get.isRegistered<SettingsController>();
         case 'SchoolConfigService':
-          Get.find<SchoolConfigService>();
-          return true;
+          return Get.isRegistered<SchoolConfigService>();
         case 'AuthController':
-          Get.find<AuthController>();
-          return true;
-        case 'MultiTenantFirebaseSyncService':
-          Get.find<MultiTenantFirebaseSyncService>();
-          return true;
+          return Get.isRegistered<AuthController>();
+        case 'FixedLocalFirstSyncService': // CHANGED
+          return Get.isRegistered<FixedLocalFirstSyncService>();
         case 'NavigationController':
-          Get.find<NavigationController>();
-          return true;
+          return Get.isRegistered<NavigationController>();
         case 'UserController':
-          Get.find<UserController>();
-          return true;
+          return Get.isRegistered<UserController>();
         case 'CourseController':
-          Get.find<CourseController>();
-          return true;
+          return Get.isRegistered<CourseController>();
         case 'FleetController':
-          Get.find<FleetController>();
-          return true;
+          return Get.isRegistered<FleetController>();
         case 'ScheduleController':
-          Get.find<ScheduleController>();
-          return true;
+          return Get.isRegistered<ScheduleController>();
         case 'BillingController':
-          Get.find<BillingController>();
-          return true;
-        case 'LessonCountingService':
-          Get.find<LessonCountingService>();
-          return true;
-        case 'ConsistencyCheckerService':
-          Get.find<ConsistencyCheckerService>();
-          return true;
+          return Get.isRegistered<BillingController>();
         default:
           return false;
       }
