@@ -53,7 +53,7 @@ class SchoolSelectionScreen extends StatelessWidget {
                   const SizedBox(height: 32),
 
                   Text(
-                    'Welcome to DrivingSchool Pro',
+                    'Welcome to Driving School Pro',
                     style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
@@ -62,7 +62,7 @@ class SchoolSelectionScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Choose how you want to get started',
+                    'How do you want to get started?',
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                           color: Colors.white.withOpacity(0.9),
                         ),
@@ -111,7 +111,7 @@ class SchoolSelectionScreen extends StatelessWidget {
                                   ),
                                   const SizedBox(height: 8),
                                   Text(
-                                    'Enter your school name/ID and credentials to join',
+                                    'Enter your School ID and credentials',
                                     style: TextStyle(
                                       fontSize: 14,
                                       color: Colors.white.withOpacity(0.9),
@@ -271,7 +271,7 @@ class SchoolSelectionScreen extends StatelessWidget {
                                     const SizedBox(width: 8),
                                     Expanded(
                                       child: Text(
-                                        'Secure multi-tenant architecture',
+                                        'Secure multi-device access',
                                         style: TextStyle(
                                           color: Colors.blue.shade800,
                                           fontSize: 13,
@@ -293,7 +293,7 @@ class SchoolSelectionScreen extends StatelessWidget {
 
                   // Help text
                   Text(
-                    'Need help? Contact support at support@drivingschoolpro.com',
+                    'Need help? Contact support at codzlabzim53@gmail.com',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: Colors.white.withOpacity(0.8),
                         ),

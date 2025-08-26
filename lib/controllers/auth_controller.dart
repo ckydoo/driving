@@ -785,7 +785,6 @@ class AuthController extends GetxController {
   /// Legacy check login status - REMOVE AFTER MIGRATION
   Future<void> _checkLoginStatusLegacy() async {
     try {
-      await DatabaseHelper.instance.ensureDefaultUsersExist();
       await _handleInitialAuthFlow();
     } catch (e) {
       print('Error checking login status: $e');

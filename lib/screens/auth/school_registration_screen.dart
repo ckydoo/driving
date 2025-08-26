@@ -124,7 +124,7 @@ class SchoolRegistrationScreen extends StatelessWidget {
                               controller: controller.phoneController,
                               decoration: InputDecoration(
                                 labelText: 'Phone Number',
-                                hintText: '+1 (555) 123-4567',
+                                hintText: '0784666891',
                                 prefixIcon: const Icon(Icons.phone),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),

@@ -61,10 +61,7 @@ class DatabaseHelper {
     await DatabaseHelperSyncExtension.addSyncTrackingTriggers(db);
     await DatabaseHelperSyncExtension.addDeletedColumn(db);
 
-    // Create default admin user
-    await _createDefaultAdminUser(db);
-    print(
-        'Database tables created with sync support and default admin user inserted');
+    print('Database tables created with sync support');
   }
 
   Future<void> _createAllTables(Database db) async {
@@ -341,81 +338,6 @@ class DatabaseHelper {
 ''');
 
     print('✅ Known schools table created');
-  }
-
-  // Your existing _createDefaultAdminUser method remains the same
-  Future<void> _createDefaultAdminUser(Database db) async {
-    try {
-      // Check if any admin users exist
-      final adminCount = await db.rawQuery(
-        'SELECT COUNT(*) as count FROM users WHERE LOWER(role) = ?',
-        ['admin'],
-      );
-
-      final count = adminCount.first['count'] as int;
-
-      if (count == 0) {
-        // Hash the password: admin123
-        const hashedPassword =
-            'c7ad44cbad762a5da0a452f9e854fdc1e0e7a52a38015f23f3eab1d80b931dd472634dfac71cd34ebc35d16ab7fb8a90c81f975113d6c7538dc69dd8de9077ec';
-
-        await db.insert('users', {
-          'fname': 'System',
-          'lname': 'Administrator',
-          'email': 'admin@drivingschool.com',
-          'password': hashedPassword,
-          'gender': 'Male',
-          'phone': '+1234567890',
-          'address': '123 Main Street',
-          'date_of_birth': '1980-01-01',
-          'role': 'admin',
-          'status': 'Active',
-          'idnumber': 'ADMIN001',
-          'created_at': DateTime.now().toIso8601String(),
-        });
-
-        print('✅ Default admin user created successfully');
-        print('📧 Email: admin@drivingschool.com');
-        print('🔑 Password: admin123');
-
-        // Sample instructor and student...
-        await db.insert('users', {
-          'fname': 'John',
-          'lname': 'Instructor',
-          'email': 'instructor@drivingschool.com',
-          'password': hashedPassword,
-          'gender': 'Male',
-          'phone': '+1234567891',
-          'address': '456 Oak Street',
-          'date_of_birth': '1985-05-15',
-          'role': 'instructor',
-          'status': 'Active',
-          'idnumber': 'INST001',
-          'created_at': DateTime.now().toIso8601String(),
-        });
-
-        await db.insert('users', {
-          'fname': 'Jane',
-          'lname': 'Student',
-          'email': 'student@drivingschool.com',
-          'password': hashedPassword,
-          'gender': 'Female',
-          'phone': '+1234567892',
-          'address': '789 Pine Street',
-          'date_of_birth': '1995-03-20',
-          'role': 'student',
-          'status': 'Active',
-          'idnumber': 'STU001',
-          'created_at': DateTime.now().toIso8601String(),
-        });
-
-        print('✅ Sample users created for testing');
-      } else {
-        print('ℹ️ Admin user already exists');
-      }
-    } catch (e) {
-      print('❌ Error creating default admin user: $e');
-    }
   }
 
   // ==================== SYNC-ENABLED CRUD METHODS ====================
@@ -951,11 +873,6 @@ class DatabaseHelper {
     final db = await database;
     await DatabaseHelperSyncExtension.updateWithSync(db, 'users',
         {'last_login': DateTime.now().toIso8601String()}, 'id = ?', [userId]);
-  }
-
-  Future<void> ensureDefaultUsersExist() async {
-    final db = await database;
-    await _createDefaultAdminUser(db);
   }
 
   Future<void> createDefaultAdmin() async {

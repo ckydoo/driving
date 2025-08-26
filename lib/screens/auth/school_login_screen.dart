@@ -71,9 +71,8 @@ class SchoolLoginScreen extends StatelessWidget {
                             TextFormField(
                               controller: controller.schoolNameController,
                               decoration: InputDecoration(
-                                labelText: 'School Name or ID',
-                                hintText:
-                                    'e.g., ABC Driving School or abc_driving_123',
+                                labelText: 'School ID',
+                                hintText: 'e.g. abc_driving_123',
                                 prefixIcon: const Icon(Icons.business),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
@@ -91,7 +90,7 @@ class SchoolLoginScreen extends StatelessWidget {
                               controller: controller.emailController,
                               decoration: InputDecoration(
                                 labelText: 'Email Address',
-                                hintText: 'your.email@example.com',
+                                hintText: 'your@gmail.com',
                                 prefixIcon: const Icon(Icons.email),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
