@@ -1,6 +1,6 @@
 // lib/screens/profile/profile_screen.dart
 import 'package:driving/controllers/auth_controller.dart';
-import 'package:driving/services/multi_tenant_firebase_sync_service.dart';
+import 'package:driving/services/fixed_local_first_sync_service.dart';
 import 'package:driving/widgets/change_password_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -393,7 +393,7 @@ class ProfileScreen extends StatelessWidget {
 
             // Sync status info (if applicable)
             Obx(() {
-              final syncService = Get.find<MultiTenantFirebaseSyncService>();
+              final syncService = Get.find<FixedLocalFirstSyncService>();
               final isSyncing = syncService.isSyncing.value;
               final isOnline = syncService.isOnline.value;
 
@@ -496,7 +496,7 @@ class ProfileScreen extends StatelessWidget {
 
           // Logout Button
           Obx(() {
-            final syncService = Get.find<MultiTenantFirebaseSyncService>();
+            final syncService = Get.find<FixedLocalFirstSyncService>();
             final isSyncing = syncService.isSyncing.value;
 
             return ElevatedButton.icon(
@@ -540,7 +540,7 @@ class ProfileScreen extends StatelessWidget {
 // Enhanced logout method with proper sync handling
   Future<void> _performEnhancedLogout(
     AuthController authController,
-    MultiTenantFirebaseSyncService syncService,
+    FixedLocalFirstSyncService syncService,
   ) async {
     try {
       // Show loading dialog

@@ -1,6 +1,6 @@
 // lib/services/payment_sync_integration.dart - Integration with existing sync service
 import 'package:driving/services/enhanced_payment_sync_service.dart';
-import 'package:driving/services/multi_tenant_firebase_sync_service.dart';
+import 'package:driving/services/fixed_local_first_sync_service.dart';
 import 'package:get/get.dart';
 
 /// Service to integrate enhanced payment sync with existing sync infrastructure
@@ -10,7 +10,7 @@ class PaymentSyncIntegration extends GetxService {
 
   // Dependencies
   EnhancedPaymentSyncService? _enhancedPaymentSync;
-  MultiTenantFirebaseSyncService? _multiTenantSync;
+  FixedLocalFirstSyncService? _multiTenantSync;
 
   @override
   void onInit() {
@@ -27,8 +27,8 @@ class PaymentSyncIntegration extends GetxService {
       _enhancedPaymentSync = Get.find<EnhancedPaymentSyncService>();
 
       // Get existing multi-tenant sync service
-      if (Get.isRegistered<MultiTenantFirebaseSyncService>()) {
-        _multiTenantSync = Get.find<MultiTenantFirebaseSyncService>();
+      if (Get.isRegistered<FixedLocalFirstSyncService>()) {
+        _multiTenantSync = Get.find<FixedLocalFirstSyncService>();
       }
 
       print('✅ Payment Sync Integration initialized');
@@ -53,7 +53,7 @@ class PaymentSyncIntegration extends GetxService {
       // Step 2: Run standard multi-tenant sync for other data
       if (_multiTenantSync != null) {
         print('🏫 Running standard multi-tenant sync...');
-        await _multiTenantSync!.triggerManualSync();
+        await _multiTenantSync!.syncWithFirebase();
       } else {
         print('⚠️ Multi-tenant sync not available');
       }

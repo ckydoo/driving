@@ -1,7 +1,7 @@
 // lib/settings/enhanced_settings_screen.dart
 import 'package:driving/controllers/billing_controller.dart';
 import 'package:driving/controllers/school_registration_controller.dart';
-import 'package:driving/services/multi_tenant_firebase_sync_service.dart';
+import 'package:driving/services/fixed_local_first_sync_service.dart';
 import 'package:driving/settings/sync_settings_screen.dart';
 import 'package:driving/widgets/school_info_widget.dart';
 import 'package:driving/widgets/sync_status_widget.dart';
@@ -175,7 +175,7 @@ class _SettingsScreenState extends State<SettingsScreen>
         if (authController.hasAnyRole(['admin', 'instructor']))
           ElevatedButton(
             onPressed: () {
-              Get.to(() => SchoolInfoWidget());
+              Get.to(() => SyncManagementSection());
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red.shade600,
@@ -186,10 +186,9 @@ class _SettingsScreenState extends State<SettingsScreen>
         if (authController.hasAnyRole(['admin', 'instructor']))
           ElevatedButton(
             onPressed: () async {
-              final syncService = Get.find<BillingController>();
-              await syncService.fixInvoicePaymentSync();
+              Get.to(() => SchoolInfoWidget());
             },
-            child: Text('Test Firebase Connection'),
+            child: Text('School Info'),
           ),
         if (authController.hasAnyRole(['admin', 'instructor']))
           _buildQuickActionButton(

@@ -2,6 +2,7 @@
 // CREATE THIS NEW FILE
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:driving/controllers/settings_controller.dart';
 import 'package:driving/services/database_helper.dart';
 import 'package:driving/services/school_config_service.dart';
 import 'package:get/get.dart';
@@ -119,6 +120,10 @@ class FixedLocalFirstSyncService extends GetxService {
       }
     });
     print('⏰ Periodic sync configured (every 5 minutes)');
+  }
+
+  Future<void> triggerManualSync() async {
+    return await syncWithFirebase();
   }
 
   /// MAIN SYNC METHOD - Fixed local-first approach
@@ -566,6 +571,108 @@ class FixedLocalFirstSyncService extends GetxService {
     } catch (e) {
       print('❌ Could not get school ID: $e');
       return '';
+    }
+  }
+
+  static Timer? _syncTimer;
+
+  static void _triggerSmartSync() {
+    // Cancel previous timer to debounce rapid changes
+    _syncTimer?.cancel();
+
+    // Wait 3 seconds after last change before syncing
+    _syncTimer = Timer(const Duration(seconds: 3), () {
+      try {
+        // Use only the new fixed sync service
+        if (Get.isRegistered<FixedLocalFirstSyncService>()) {
+          final syncService = Get.find<FixedLocalFirstSyncService>();
+          if (!syncService.isSyncing.value &&
+              syncService.isOnline.value &&
+              syncService.firebaseAvailable.value) {
+            syncService.syncWithFirebase().catchError((e) {
+              print('⚠️ Smart sync failed: $e');
+            });
+          }
+        } else {
+          print('⚠️ Fixed sync service not available');
+        }
+      } catch (e) {
+        print('⚠️ Could not trigger smart sync: $e');
+      }
+    });
+  }
+
+  /// Ensure school configuration is initialized before syncing
+  Future<void> _ensureSchoolConfigInitialized() async {
+    if (!_schoolConfig.isInitialized.value) {
+      print('⏳ Waiting for school configuration to initialize...');
+      await _schoolConfig.initializeSchoolConfig();
+    }
+
+    if (!_schoolConfig.isValidConfiguration()) {
+      throw Exception(
+          'Invalid school configuration. Cannot proceed with sync.');
+    }
+  }
+
+  SchoolConfigService get _schoolConfig => SchoolConfigService.instance;
+
+  /// Create initial shared data for this school
+  Future<void> createInitialSharedData() async {
+    if (!firebaseAvailable.value) {
+      print('⚠️ Firebase not available, skipping initial data creation');
+      return;
+    }
+
+    await _ensureSchoolConfigInitialized();
+
+    if (_firestore == null) {
+      print('⚠️ Firestore not available, skipping initial data creation');
+      return;
+    }
+
+    try {
+      print(
+          '📦 Creating initial shared data for school: ${_schoolConfig.schoolName.value}');
+
+      // Create school metadata document
+      await _createSchoolMetadata();
+
+      print(
+          '✅ Initial shared data created for school ${_schoolConfig.schoolId.value}');
+    } catch (e) {
+      print('❌ Error creating initial shared data: $e');
+    }
+  }
+
+  /// Create school metadata document
+  Future<void> _createSchoolMetadata() async {
+    try {
+      final schoolMetaRef =
+          _firestore!.collection('schools').doc(_schoolConfig.schoolId.value);
+
+      final schoolMetadata = {
+        'school_id': _schoolConfig.schoolId.value,
+        'school_name': _schoolConfig.schoolName.value,
+        'business_address':
+            Get.find<SettingsController>().businessAddress.value,
+        'business_city': Get.find<SettingsController>().businessCity.value,
+        'business_country':
+            Get.find<SettingsController>().businessCountry.value,
+        'business_phone': Get.find<SettingsController>().businessPhone.value,
+        'business_email': Get.find<SettingsController>().businessEmail.value,
+        'created_at': FieldValue.serverTimestamp(),
+        'last_updated': FieldValue.serverTimestamp(),
+        'status': 'active',
+        // Additional business fields (optional but good to have)
+        'business_website': '',
+        'subscription_status': 'active',
+      };
+
+      await schoolMetaRef.set(schoolMetadata, SetOptions(merge: true));
+      print('✅ School metadata created/updated');
+    } catch (e) {
+      print('❌ Error creating school metadata: $e');
     }
   }
 

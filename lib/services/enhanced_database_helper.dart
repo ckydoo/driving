@@ -6,7 +6,7 @@ import 'dart:async';
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/services/database_helper.dart';
 import 'package:driving/services/fixed_local_first_sync_service.dart';
-import 'package:driving/services/multi_tenant_firebase_sync_service.dart';
+import 'package:driving/services/fixed_local_first_sync_service.dart';
 import 'package:get/get.dart';
 import 'package:get/get_core/src/get_main.dart';
 import 'package:sqflite/sqflite.dart';
@@ -230,6 +230,7 @@ class DatabaseHelperSyncExtension {
 
 // ✅ ADD SMART SYNC TRIGGER (REPLACES OLD IMMEDIATE SYNC):
   static Timer? _syncTimer;
+
   static void _triggerSmartSync() {
     // Cancel previous timer to debounce rapid changes
     _syncTimer?.cancel();
@@ -237,7 +238,7 @@ class DatabaseHelperSyncExtension {
     // Wait 3 seconds after last change before syncing
     _syncTimer = Timer(const Duration(seconds: 3), () {
       try {
-        // Try to use the new fixed sync service first
+        // Use only the new fixed sync service
         if (Get.isRegistered<FixedLocalFirstSyncService>()) {
           final syncService = Get.find<FixedLocalFirstSyncService>();
           if (!syncService.isSyncing.value &&
@@ -247,16 +248,8 @@ class DatabaseHelperSyncExtension {
               print('⚠️ Smart sync failed: $e');
             });
           }
-        } else if (Get.isRegistered<MultiTenantFirebaseSyncService>()) {
-          // Fallback to old sync service if new one not available
-          final syncService = Get.find<MultiTenantFirebaseSyncService>();
-          if (!syncService.isSyncing.value &&
-              syncService.isOnline.value &&
-              syncService.firebaseAvailable.value) {
-            syncService.triggerManualSync().catchError((e) {
-              print('⚠️ Legacy sync failed: $e');
-            });
-          }
+        } else {
+          print('⚠️ Fixed sync service not available');
         }
       } catch (e) {
         print('⚠️ Could not trigger smart sync: $e');

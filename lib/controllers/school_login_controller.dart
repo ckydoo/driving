@@ -11,7 +11,7 @@ import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/controllers/settings_controller.dart';
 import 'package:driving/services/school_config_service.dart';
 import 'package:driving/services/database_helper.dart';
-import 'package:driving/services/multi_tenant_firebase_sync_service.dart';
+import 'package:driving/services/fixed_local_first_sync_service.dart';
 import 'package:driving/models/user.dart' as app_user;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -440,9 +440,9 @@ class SchoolJoinController extends GetxController {
       Map<String, dynamic> schoolData) async {
     try {
       // Initialize Firebase sync service
-      final syncService = Get.find<MultiTenantFirebaseSyncService>();
+      final syncService = Get.find<FixedLocalFirstSyncService>();
       if (syncService.firebaseAvailable.value) {
-        await syncService.initializeUserSync();
+        await syncService.syncWithFirebase();
         print('✅ Firebase sync initialized');
       }
 

@@ -3,8 +3,6 @@ import 'package:driving/controllers/settings_controller.dart';
 import 'package:driving/routes/app_routes.dart';
 import 'package:driving/screens/auth/login_screen.dart';
 import 'package:driving/services/app_bindings.dart';
-
-import 'package:driving/services/app_initialization.dart';
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/controllers/pin_controller.dart';
 import 'package:driving/services/database_helper.dart';

@@ -3,7 +3,7 @@ import 'package:crypto/crypto.dart';
 import 'package:driving/models/user.dart';
 import 'package:driving/services/database_helper.dart';
 import 'package:driving/controllers/pin_controller.dart';
-import 'package:driving/services/multi_tenant_firebase_sync_service.dart';
+import 'package:driving/services/fixed_local_first_sync_service.dart';
 import 'package:driving/services/school_config_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -241,7 +241,7 @@ class AuthController extends GetxController {
   /// Start sync service after successful authentication
   void _startSyncService() {
     try {
-      final syncService = Get.find<MultiTenantFirebaseSyncService>();
+      final syncService = Get.find<FixedLocalFirstSyncService>();
       Future.delayed(const Duration(seconds: 1), () {
         syncService.triggerManualSync();
       });
@@ -625,7 +625,7 @@ class AuthController extends GetxController {
     try {
       print('🔄 Triggering sync service after Firebase creation...');
 
-      final syncService = Get.find<MultiTenantFirebaseSyncService>();
+      final syncService = Get.find<FixedLocalFirstSyncService>();
 
       // Small delay to ensure Firestore data is committed
       Future.delayed(const Duration(seconds: 1), () async {

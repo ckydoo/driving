@@ -1,6 +1,6 @@
 // lib/widgets/sync_status_widget.dart - Fixed for GetxService compatibility
 import 'package:driving/controllers/auth_controller.dart';
-import 'package:driving/services/multi_tenant_firebase_sync_service.dart';
+import 'package:driving/services/fixed_local_first_sync_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -20,7 +20,7 @@ class SyncStatusWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     // Use Obx to listen to observable properties directly
     return Obx(() {
-      final syncService = Get.find<MultiTenantFirebaseSyncService>();
+      final syncService = Get.find<FixedLocalFirstSyncService>();
       final authController = Get.find<AuthController>();
 
       final widget = GestureDetector(
@@ -94,7 +94,7 @@ class SyncStatusWidget extends StatelessWidget {
     });
   }
 
-  void _handleSyncTap(MultiTenantFirebaseSyncService syncService) async {
+  void _handleSyncTap(FixedLocalFirstSyncService syncService) async {
     final authController = Get.find<AuthController>();
 
     // Don't allow sync if already syncing
@@ -226,8 +226,8 @@ class SyncStatusWidget extends StatelessWidget {
     );
   }
 
-  Color _getSyncStatusColor(MultiTenantFirebaseSyncService syncService,
-      AuthController authController) {
+  Color _getSyncStatusColor(
+      FixedLocalFirstSyncService syncService, AuthController authController) {
     if (syncService.isSyncing.value) {
       return Colors.blue;
     } else if (!syncService.isOnline.value) {
@@ -243,8 +243,8 @@ class SyncStatusWidget extends StatelessWidget {
     }
   }
 
-  IconData _getSyncStatusIcon(MultiTenantFirebaseSyncService syncService,
-      AuthController authController) {
+  IconData _getSyncStatusIcon(
+      FixedLocalFirstSyncService syncService, AuthController authController) {
     if (syncService.isSyncing.value) {
       return Icons.sync;
     } else if (!syncService.isOnline.value) {
@@ -260,8 +260,8 @@ class SyncStatusWidget extends StatelessWidget {
     }
   }
 
-  String _getSyncStatusText(MultiTenantFirebaseSyncService syncService,
-      AuthController authController) {
+  String _getSyncStatusText(
+      FixedLocalFirstSyncService syncService, AuthController authController) {
     if (syncService.isSyncing.value) {
       return 'Syncing...';
     } else if (!syncService.isOnline.value) {
@@ -288,8 +288,8 @@ class SyncStatusWidget extends StatelessWidget {
     }
   }
 
-  String _getTooltipMessage(MultiTenantFirebaseSyncService syncService,
-      AuthController authController) {
+  String _getTooltipMessage(
+      FixedLocalFirstSyncService syncService, AuthController authController) {
     if (syncService.isSyncing.value) {
       return 'Sync in progress... Please wait';
     } else if (!syncService.isOnline.value) {
@@ -329,7 +329,7 @@ class SyncFABWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Obx(() {
-      final syncService = Get.find<MultiTenantFirebaseSyncService>();
+      final syncService = Get.find<FixedLocalFirstSyncService>();
       final authController = Get.find<AuthController>();
 
       return FloatingActionButton(
@@ -362,7 +362,7 @@ class SyncStatusBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Obx(() {
-      final syncService = Get.find<MultiTenantFirebaseSyncService>();
+      final syncService = Get.find<FixedLocalFirstSyncService>();
       final authController = Get.find<AuthController>();
       final statusColor =
           SyncStatusWidget()._getSyncStatusColor(syncService, authController);

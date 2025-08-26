@@ -11,10 +11,10 @@ import 'package:sqflite/sqflite.dart';
 import 'dart:io';
 
 /// Complete Multi-Tenant Firebase Sync Service
-class MultiTenantFirebaseSyncService extends GetxService {
+class FixedLocalFirstSyncService extends GetxService {
   // Singleton instance
-  static MultiTenantFirebaseSyncService get instance =>
-      Get.find<MultiTenantFirebaseSyncService>();
+  static FixedLocalFirstSyncService get instance =>
+      Get.find<FixedLocalFirstSyncService>();
 
   // Firebase instances
   FirebaseFirestore? _firestore;
@@ -717,7 +717,7 @@ class MultiTenantFirebaseSyncService extends GetxService {
     }
   }
 
-// Replace your _downloadTableChanges method in MultiTenantFirebaseSyncService with this fixed version:
+// Replace your _downloadTableChanges method in FixedLocalFirstSyncService with this fixed version:
 
   /// Download changes for a specific table - FIXED to prevent constraint violations
   Future<void> _downloadTableChanges(String table) async {

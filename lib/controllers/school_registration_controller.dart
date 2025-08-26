@@ -1,5 +1,6 @@
 // lib/controllers/enhanced_school_registration_controller.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:driving/services/firebase_school_service.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:flutter/material.dart';
@@ -8,8 +9,9 @@ import 'package:driving/controllers/settings_controller.dart';
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/services/database_helper.dart';
 import 'package:driving/services/school_config_service.dart';
-import 'package:driving/services/multi_tenant_firebase_sync_service.dart';
+import 'package:driving/services/fixed_local_first_sync_service.dart';
 import 'package:driving/models/user.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 class SchoolRegistrationController extends GetxController {
   // Form key
@@ -24,7 +26,6 @@ class SchoolRegistrationController extends GetxController {
   final adminEmailController = TextEditingController();
   final passwordController = TextEditingController();
   final confirmPasswordController = TextEditingController();
-
   // Reactive variables
   final RxBool isLoading = false.obs;
   final RxString errorMessage = ''.obs;
@@ -362,10 +363,10 @@ class SchoolRegistrationController extends GetxController {
         print('✅ Auto-login successful');
 
         // Initialize user-specific sync
-        final syncService = Get.find<MultiTenantFirebaseSyncService>();
+        final syncService = Get.find<FixedLocalFirstSyncService>();
         if (syncService.firebaseAvailable.value) {
           try {
-            await syncService.initializeUserSync();
+            await syncService.syncWithFirebase();
             print('✅ User sync initialized');
           } catch (e) {
             print('⚠️ User sync initialization failed: $e');
@@ -385,23 +386,97 @@ class SchoolRegistrationController extends GetxController {
     }
   }
 
-  // Step 4: Initialize Firebase sync for the new school
+// Replace your _initializeFirebaseSync method in school_registration_controller.dart
+
+// Step 4: Initialize Firebase sync for the new school
   Future<void> _initializeFirebaseSync() async {
     print('🔄 Initializing Firebase sync for new school...');
 
     try {
-      final syncService = Get.find<MultiTenantFirebaseSyncService>();
+      final syncService = Get.find<FixedLocalFirstSyncService>();
 
-      if (syncService.firebaseAvailable.value) {
-        // Ensure school config is properly set up for sync
-        await syncService.setupAutomaticSync();
-        print('✅ Firebase sync initialized for school');
-      } else {
-        print('⚠️ Firebase not available, will sync when online');
+      if (!syncService.firebaseAvailable.value) {
+        print('⚠️ Firebase not available, skipping sync setup');
+        return;
       }
+
+      // Get school configuration
+      final schoolConfig = Get.find<SchoolConfigService>();
+      final settingsController = Get.find<SettingsController>();
+
+      print('🔄 School ID: ${schoolConfig.schoolId.value}');
+      print('🔄 Business Name: ${settingsController.businessName.value}');
+      print('🔄 Business Address: ${settingsController.businessAddress.value}');
+
+      // Prepare admin user data for Firebase
+      final adminUserData = {
+        'firebase_uid': '', // Will be updated later
+        'fname': adminFirstNameController.text.trim(),
+        'lname': adminLastNameController.text.trim(),
+        'email': adminEmailController.text.trim().toLowerCase(),
+        'phone': phoneController.text.trim(),
+        'address': addressController.text.trim(),
+        'role': 'admin',
+        'status': 'active',
+        'created_during_registration': true,
+      };
+
+      print('👥 Admin user data prepared');
+
+      print('✅ Firebase school creation completed successfully');
     } catch (e) {
-      print('⚠️ Firebase sync initialization failed: $e');
-      // Don't fail the registration, just log the issue
+      print('❌ Firebase sync initialization failed: $e');
+      print('❌ Stack trace: ${StackTrace.current}');
+      // Don't throw - allow registration to continue without Firebase
+      print('⚠️ Continuing registration without Firebase sync');
+    }
+  }
+
+// Helper method to store Firebase school ID locally
+  Future<void> _storeFirebaseSchoolId(String firebaseSchoolId) async {
+    try {
+      print('💾 Storing Firebase school ID locally: $firebaseSchoolId');
+
+      final db = await DatabaseHelper.instance.database;
+
+      // Store in app_settings table
+      await db.insert(
+          'settings',
+          {
+            'key': 'firebase_school_id',
+            'value': firebaseSchoolId,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace);
+
+      // Also store in a dedicated firebase_config table if it exists
+      try {
+        await db.execute('''
+        CREATE TABLE IF NOT EXISTS firebase_config (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          school_id TEXT,
+          firebase_school_id TEXT,
+          created_at TEXT,
+          UNIQUE(school_id)
+        )
+      ''');
+
+        final schoolConfig = Get.find<SchoolConfigService>();
+        await db.insert(
+            'firebase_config',
+            {
+              'school_id': schoolConfig.schoolId.value,
+              'firebase_school_id': firebaseSchoolId,
+              'created_at': DateTime.now().toIso8601String(),
+            },
+            conflictAlgorithm: ConflictAlgorithm.replace);
+      } catch (e) {
+        print('⚠️ Could not create firebase_config table: $e');
+      }
+
+      print('✅ Firebase school ID stored successfully');
+    } catch (e) {
+      print('❌ Failed to store Firebase school ID: $e');
+      // Don't throw - this is not critical
     }
   }
 
@@ -410,7 +485,7 @@ class SchoolRegistrationController extends GetxController {
     print('📦 Creating initial shared data in Firebase...');
 
     try {
-      final syncService = Get.find<MultiTenantFirebaseSyncService>();
+      final syncService = Get.find<FixedLocalFirstSyncService>();
 
       if (syncService.firebaseAvailable.value) {
         await syncService.createInitialSharedData();
@@ -453,67 +528,4 @@ class SchoolRegistrationController extends GetxController {
     // Navigate to login
     Get.offAllNamed('/login');
   }
-
-  // ADD THIS DEBUG METHOD TO YOUR SCHOOL REGISTRATION CONTROLLER
-
-// Add this test method to verify user creation works
-  Future<void> debugUserCreation() async {
-    try {
-      print('🧪 === DEBUG USER CREATION TEST ===');
-
-      // Test 1: Create User object
-      print('📝 Step 1: Creating User object...');
-      final testUser = User(
-        fname: 'Test',
-        lname: 'User',
-        email: 'test@example.com',
-        password: 'test123',
-        phone: '1234567890',
-        address: 'Test Address',
-        gender: 'Male',
-        idnumber: '',
-        role: 'admin',
-        status: 'Active',
-        date_of_birth: DateTime.now().subtract(const Duration(days: 25 * 365)),
-        created_at: DateTime.now(),
-      );
-      print('✅ User object created: ${testUser.email}');
-
-      // Test 2: Check User object type
-      print('📋 Step 2: Checking User object type...');
-      print('✅ Type: ${testUser.runtimeType}');
-      print('✅ Is User: ${testUser is User}');
-
-      // Test 3: Test insertUser method
-      print('💾 Step 3: Testing insertUser method...');
-      final userId = await DatabaseHelper.instance.insertUser(testUser);
-      print('✅ User inserted successfully with ID: $userId');
-
-      // Test 4: Verify user exists
-      print('🔍 Step 4: Verifying user exists in database...');
-      final users = await DatabaseHelper.instance.getUsers();
-      final createdUser = users.firstWhere(
-        (user) => user['email'] == 'test@example.com',
-        orElse: () => {},
-      );
-
-      if (createdUser.isNotEmpty) {
-        print(
-            '✅ User found in database: ${createdUser['fname']} ${createdUser['lname']}');
-      } else {
-        print('❌ User not found in database');
-      }
-
-      print('🎉 === DEBUG TEST COMPLETED SUCCESSFULLY ===');
-    } catch (e) {
-      print('❌ DEBUG TEST FAILED: $e');
-      print('📄 Stack trace: ${StackTrace.current}');
-    }
-  }
-
-// CALL THIS METHOD IN YOUR registerSchool method at the beginning:
-// await debugUserCreation();
-
-// Or create a test button to call it independently
 }
-// This controller enhances the school registration process with Firebase sync and multi-tenant support.

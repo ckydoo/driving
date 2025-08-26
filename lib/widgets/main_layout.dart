@@ -16,7 +16,7 @@ import 'package:driving/screens/schedule/schedule_screen.dart';
 import 'package:driving/screens/users/alumni_screen.dart';
 import 'package:driving/screens/users/enhanced_users_screen.dart';
 import 'package:driving/screens/users/graduation_screen.dart';
-import 'package:driving/services/multi_tenant_firebase_sync_service.dart';
+import 'package:driving/services/fixed_local_first_sync_service.dart';
 import 'package:driving/settings/settings_screen.dart';
 import 'package:driving/widgets/school_info_widget.dart';
 import 'package:driving/widgets/sync_status_widget.dart';
@@ -962,7 +962,7 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
   // BUILD SYNC STATUS WARNING WIDGET
   Widget _buildSyncStatusWarning() {
     try {
-      final syncService = Get.find<MultiTenantFirebaseSyncService>();
+      final syncService = Get.find<FixedLocalFirstSyncService>();
 
       return Obx(() {
         final isSyncing = syncService.isSyncing.value;
@@ -1058,7 +1058,7 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
   // BUILD LOGOUT BUTTON WITH DYNAMIC STATE
   Widget _buildLogoutButton() {
     try {
-      final syncService = Get.find<MultiTenantFirebaseSyncService>();
+      final syncService = Get.find<FixedLocalFirstSyncService>();
 
       return Obx(() {
         final isSyncing = syncService.isSyncing.value;
@@ -1155,27 +1155,6 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
         ),
         barrierDismissible: false,
       );
-
-      // Step 1: Try to complete any pending sync (with timeout)
-      try {
-        final syncService = Get.find<MultiTenantFirebaseSyncService>();
-
-        if (syncService.firebaseAvailable.value && syncService.isOnline.value) {
-          print('🔄 Attempting final sync before logout...');
-
-          // Set a reasonable timeout for final sync
-          await syncService.triggerManualSync().timeout(
-            const Duration(seconds: 10),
-            onTimeout: () {
-              print('⚠️ Final sync timed out - proceeding with logout');
-            },
-          );
-
-          print('✅ Final sync completed');
-        }
-      } catch (e) {
-        print('⚠️ Final sync failed: $e - proceeding with logout');
-      }
 
       // Step 2: Perform the actual logout
       await authController.signOut();

@@ -25,7 +25,7 @@ class _LocalFirstStatusWidgetState extends State<LocalFirstStatusWidget> {
   Future<void> _loadSyncStatus() async {
     setState(() => _isLoading = true);
     try {
-      final syncService = Get.find<MultiTenantFirebaseSyncService>();
+      final syncService = Get.find<FixedLocalFirstSyncService>();
       final status = await syncService.getSyncStatusSummary();
       setState(() => _syncStatus = status);
     } catch (e) {
@@ -321,7 +321,7 @@ class _LocalFirstStatusWidgetState extends State<LocalFirstStatusWidget> {
         snackPosition: SnackPosition.BOTTOM,
       );
 
-      final syncService = Get.find<MultiTenantFirebaseSyncService>();
+      final syncService = Get.find<FixedLocalFirstSyncService>();
       await syncService.triggerManualSync();
 
       await _loadSyncStatus();

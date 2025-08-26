@@ -12,6 +12,7 @@ import 'package:driving/controllers/settings_controller.dart';
 import 'package:driving/controllers/user_controller.dart';
 import 'package:driving/services/consistency_checker_service.dart';
 import 'package:driving/services/database_helper.dart';
+import 'package:driving/services/firebase_school_service.dart';
 import 'package:driving/services/fixed_local_first_sync_service.dart';
 import 'package:driving/services/lesson_counting_service.dart';
 import 'package:driving/services/school_config_service.dart';
@@ -130,7 +131,10 @@ class EnhancedAppBindings extends Bindings {
         await settingsController.loadSettingsFromDatabase();
         print('✅ SettingsController initialized and loaded');
       }
+      print('🔥 Registering Firebase services...');
+      Get.put<FirebaseSchoolService>(FirebaseSchoolService(), permanent: true);
 
+      print('✅ Firebase services registered');
       // School Config Service (depends on settings)
       if (!Get.isRegistered<SchoolConfigService>()) {
         Get.put<SchoolConfigService>(SchoolConfigService(), permanent: true);
@@ -186,7 +190,7 @@ class EnhancedAppBindings extends Bindings {
     print('🔄 Initializing FIXED Firebase sync service...');
 
     try {
-      // REPLACE MultiTenantFirebaseSyncService with FixedLocalFirstSyncService
+      // REPLACE FixedLocalFirstSyncService with FixedLocalFirstSyncService
       if (!Get.isRegistered<FixedLocalFirstSyncService>()) {
         Get.put<FixedLocalFirstSyncService>(FixedLocalFirstSyncService(),
             permanent: true);
@@ -343,7 +347,7 @@ class EnhancedAppBindings extends Bindings {
       'SettingsController',
       'SchoolConfigService',
       'AuthController',
-      'FixedLocalFirstSyncService', // CHANGED FROM MultiTenantFirebaseSyncService
+      'FixedLocalFirstSyncService', // CHANGED FROM FixedLocalFirstSyncService
       'NavigationController',
       'UserController',
       'CourseController',

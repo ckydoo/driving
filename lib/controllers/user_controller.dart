@@ -2,7 +2,7 @@ import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/models/user.dart';
 import 'package:driving/services/database_helper.dart';
 import 'package:driving/services/fixed_local_first_sync_service.dart';
-import 'package:driving/services/multi_tenant_firebase_sync_service.dart';
+import 'package:driving/services/fixed_local_first_sync_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -53,8 +53,9 @@ class UserController extends GetxController {
       print('UserController: Fetching users with role: $role');
 
       // Always fetch fresh data, especially when role changes
-      final data =
-          await DatabaseHelper.instance.getUsers(role: role?.toLowerCase());
+      final data = await DatabaseHelper.instance.getUsers(
+        role: role?.toLowerCase(),
+      );
       final List<User> users = data.map((json) => User.fromJson(json)).toList();
 
       print('UserController: Fetched ${users.length} users from database');
@@ -62,9 +63,10 @@ class UserController extends GetxController {
       // If a specific role is requested, filter and return only those users
       List<User> filteredUsers;
       if (role != null) {
-        filteredUsers = users
-            .where((user) => user.role.toLowerCase() == role.toLowerCase())
-            .toList();
+        filteredUsers =
+            users
+                .where((user) => user.role.toLowerCase() == role.toLowerCase())
+                .toList();
         print('UserController: Filtered to ${filteredUsers.length} ${role}s');
       } else {
         filteredUsers = users;
@@ -83,7 +85,8 @@ class UserController extends GetxController {
       isMultiSelectionActive.value = false;
 
       print(
-          'UserController: Updated observable list with ${_users.length} total users, returning ${filteredUsers.length} filtered users');
+        'UserController: Updated observable list with ${_users.length} total users, returning ${filteredUsers.length} filtered users',
+      );
 
       return filteredUsers;
     } catch (e) {
@@ -115,8 +118,6 @@ class UserController extends GetxController {
     return await fetchUsers(role: role);
   }
 
-  // lib/controllers/user_controller.dart - LOCAL FIRST approach with Firebase sync
-
   /// ENHANCED handleUser method - LOCAL FIRST approach
   Future<void> handleUser(User user, {bool isUpdate = false}) async {
     try {
@@ -124,7 +125,8 @@ class UserController extends GetxController {
       error('');
 
       print(
-          'UserController: ${isUpdate ? 'Updating' : 'Adding'} user (LOCAL FIRST): ${user.fname} ${user.lname}');
+        'UserController: ${isUpdate ? 'Updating' : 'Adding'} user (LOCAL FIRST): ${user.fname} ${user.lname}',
+      );
 
       // Step 1: Handle updates (always local)
       if (isUpdate && user.id != null) {
@@ -139,7 +141,8 @@ class UserController extends GetxController {
     } catch (e) {
       error(e.toString());
       print(
-          'UserController: Error ${isUpdate ? 'updating' : 'adding'} user - ${e.toString()}');
+        'UserController: Error ${isUpdate ? 'updating' : 'adding'} user - ${e.toString()}',
+      );
 
       // Parse user-friendly error messages
       String userFriendlyError = _parseError(e.toString());
@@ -177,8 +180,10 @@ class UserController extends GetxController {
   }
 
   /// Check for duplicate user data before saving
-  Future<Map<String, String>> checkForDuplicates(User user,
-      {bool isUpdate = false}) async {
+  Future<Map<String, String>> checkForDuplicates(
+    User user, {
+    bool isUpdate = false,
+  }) async {
     final duplicateErrors = <String, String>{};
 
     try {
@@ -271,14 +276,17 @@ class UserController extends GetxController {
     if (query.isEmpty) {
       searchedUser.clear();
     } else {
-      final results = _users
-          .where((user) =>
-              user.fname.toLowerCase().contains(query.toLowerCase()) ||
-              user.lname.toLowerCase().contains(query.toLowerCase()) ||
-              user.email.toLowerCase().contains(query.toLowerCase()) ||
-              user.phone.contains(query) ||
-              user.idnumber.contains(query))
-          .toList();
+      final results =
+          _users
+              .where(
+                (user) =>
+                    user.fname.toLowerCase().contains(query.toLowerCase()) ||
+                    user.lname.toLowerCase().contains(query.toLowerCase()) ||
+                    user.email.toLowerCase().contains(query.toLowerCase()) ||
+                    user.phone.contains(query) ||
+                    user.idnumber.contains(query),
+              )
+              .toList();
       searchedUser.assignAll(results);
     }
   }
@@ -357,7 +365,7 @@ class UserController extends GetxController {
     print('🔄 Automatic sync will be triggered in background');
   }
 
-// 3. REPLACE YOUR _handleUserUpdate METHOD:
+  // 3. REPLACE YOUR _handleUserUpdate METHOD:
   /// Handle user updates - FIXED version
   Future<void> _handleUserUpdate(User user) async {
     // Check for duplicates first (excluding the current user)
@@ -391,7 +399,7 @@ class UserController extends GetxController {
     print('🔄 Automatic sync will be triggered in background');
   }
 
-// 4. ADD THIS NEW METHOD FOR MANUAL SYNC TESTING:
+  // 4. ADD THIS NEW METHOD FOR MANUAL SYNC TESTING:
   /// Manually trigger sync for testing
   Future<void> manualSyncTrigger() async {
     try {
@@ -426,7 +434,7 @@ class UserController extends GetxController {
     }
   }
 
-// 5. ADD DEBUG METHODS:
+  // 5. ADD DEBUG METHODS:
   /// Get sync status for debugging
   Future<Map<String, dynamic>> getSyncStatus() async {
     try {
@@ -447,7 +455,7 @@ class UserController extends GetxController {
     }
   }
 
-// 6. UPDATE YOUR deleteUser METHOD (if it exists):
+  // 6. UPDATE YOUR deleteUser METHOD (if it exists):
   /// Delete user - FIXED version
   Future<void> deleteUser(int userId) async {
     try {
@@ -456,25 +464,27 @@ class UserController extends GetxController {
 
       final userToDelete = _users.firstWhere(
         (user) => user.id == userId,
-        orElse: () => User(
-          fname: 'Unknown',
-          lname: 'User',
-          id: userId,
-          email: '',
-          password: '',
-          gender: '',
-          phone: '',
-          address: '',
-          date_of_birth: DateTime.now(),
-          role: '',
-          status: '',
-          idnumber: '',
-          created_at: DateTime.now(),
-        ),
+        orElse:
+            () => User(
+              fname: 'Unknown',
+              lname: 'User',
+              id: userId,
+              email: '',
+              password: '',
+              gender: '',
+              phone: '',
+              address: '',
+              date_of_birth: DateTime.now(),
+              role: '',
+              status: '',
+              idnumber: '',
+              created_at: DateTime.now(),
+            ),
       );
 
       print(
-          'UserController: Deleting user: ${userToDelete.fname} ${userToDelete.lname}');
+        'UserController: Deleting user: ${userToDelete.fname} ${userToDelete.lname}',
+      );
 
       // Use existing delete method (already uses sync-aware extension)
       await DatabaseHelper.instance.deleteUser(userId);

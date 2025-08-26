@@ -16,19 +16,31 @@ class SchoolInfoWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Obx(() {
-      final schoolConfig = Get.find<SchoolConfigService>();
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        title: Text('Data Sync Management'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        foregroundColor: Colors.black87,
+        leading: BackButton(),
+      ),
+      body: Obx(
+        () {
+          final schoolConfig = Get.find<SchoolConfigService>();
 
-      if (!schoolConfig.isInitialized.value) {
-        return _buildLoadingCard();
-      }
+          if (!schoolConfig.isInitialized.value) {
+            return _buildLoadingCard();
+          }
 
-      if (!schoolConfig.isValidConfiguration()) {
-        return _buildConfigurationRequiredCard();
-      }
+          if (!schoolConfig.isValidConfiguration()) {
+            return _buildConfigurationRequiredCard();
+          }
 
-      return _buildSchoolInfoCard(schoolConfig);
-    });
+          return _buildSchoolInfoCard(schoolConfig);
+        },
+      ),
+    );
   }
 
   Widget _buildLoadingCard() {
