@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:driving/controllers/settings_controller.dart';
 import 'package:driving/services/database_helper.dart';
 import 'package:driving/services/school_config_service.dart';
+import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:get/get.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -29,7 +30,7 @@ class FixedLocalFirstSyncService extends GetxService {
   // Timers
   Timer? _periodicSyncTimer;
   Timer? _connectivityTimer;
-
+  firebase_auth.FirebaseAuth? _firebaseAuth;
   // Sync tables in priority order
   final List<String> _syncTables = [
     'users', // Highest priority - needed for relationships
@@ -245,40 +246,287 @@ class FixedLocalFirstSyncService extends GetxService {
       'skipped': skipped,
     };
   }
+// Fixed _convertFirestoreToSqlite method for FixedLocalFirstSyncService
+// Replace your existing _convertFirestoreToSqlite method with this comprehensive version
 
-  /// CRITICAL: Advanced conflict resolution
+  /// COMPREHENSIVE: Convert Firestore data to SQLite format with complete timestamp handling
+  Map<String, dynamic> _convertFirestoreToSqlite(Map<String, dynamic> data) {
+    try {
+      final result = Map<String, dynamic>.from(data);
+
+      // Remove Firebase-specific fields that don't exist in local schema
+      result.remove('school_id');
+      result.remove('school_name');
+      result.remove('sync_timestamp');
+      result.remove('updatedAt');
+      result.remove('firebase_user_id'); // Remove if it exists
+
+      print('🔄 Converting Firestore data to SQLite format...');
+      print('📥 Original data keys: ${data.keys.toList()}');
+
+      // CRITICAL: Convert ALL timestamp fields comprehensively
+      _convertTimestampField(result, 'created_at', isDateString: true);
+      _convertTimestampField(result, 'last_modified', isDateString: false);
+      _convertTimestampField(result, 'date_of_birth', isDateString: true);
+      _convertTimestampField(result, 'due_date', isDateString: true);
+      _convertTimestampField(result, 'payment_date', isDateString: true);
+      _convertTimestampField(result, 'start', isDateString: true);
+      _convertTimestampField(result, 'end', isDateString: true);
+      _convertTimestampField(result, 'updated_at', isDateString: false);
+      _convertTimestampField(result, 'last_login', isDateString: false);
+
+      // Convert boolean values to integers for SQLite
+      result.forEach((key, value) {
+        if (value is bool) {
+          result[key] = value ? 1 : 0;
+          print('📄 Converted boolean $key: $value -> ${result[key]}');
+        }
+      });
+
+      // Handle any remaining Timestamp objects that might have been missed
+      result.forEach((key, value) {
+        if (value is Timestamp) {
+          print('⚠️ Found unexpected Timestamp in field $key, converting...');
+          result[key] = value.toDate().toIso8601String();
+        } else if (value is Map<String, dynamic>) {
+          // Handle nested objects that might contain Timestamps
+          result[key] = _convertNestedTimestamps(value);
+        } else if (value is List) {
+          // Handle lists that might contain Timestamps
+          result[key] = _convertListTimestamps(value);
+        }
+      });
+
+      // Mark as synced from Firebase
+      result['firebase_synced'] = 1;
+
+      print('✅ Converted data keys: ${result.keys.toList()}');
+      return result;
+    } catch (e) {
+      print('❌ Error in _convertFirestoreToSqlite: $e');
+      print('🔍 Problematic data: $data');
+      rethrow;
+    }
+  }
+
+  /// Convert a specific timestamp field with proper error handling
+  void _convertTimestampField(Map<String, dynamic> data, String fieldName,
+      {bool isDateString = true}) {
+    if (!data.containsKey(fieldName)) return;
+
+    final value = data[fieldName];
+    if (value == null) {
+      data.remove(fieldName);
+      return;
+    }
+
+    try {
+      if (value is Timestamp) {
+        final dateTime = value.toDate();
+        data[fieldName] = isDateString
+            ? dateTime.toIso8601String()
+            : dateTime.millisecondsSinceEpoch;
+        print('📅 Converted $fieldName: Timestamp -> ${data[fieldName]}');
+      } else if (value is Map<String, dynamic>) {
+        // Handle Firestore Timestamp format: {seconds: x, nanoseconds: y}
+        if (value.containsKey('seconds') && value.containsKey('nanoseconds')) {
+          final seconds = value['seconds'] as int;
+          final nanoseconds = value['nanoseconds'] as int;
+          final dateTime = DateTime.fromMillisecondsSinceEpoch(
+              seconds * 1000 + (nanoseconds / 1000000).round());
+          data[fieldName] = isDateString
+              ? dateTime.toIso8601String()
+              : dateTime.millisecondsSinceEpoch;
+          print('📅 Converted $fieldName: Map -> ${data[fieldName]}');
+        }
+      } else if (value is String) {
+        // Validate and potentially convert string dates
+        try {
+          final dateTime = DateTime.parse(value);
+          data[fieldName] = isDateString
+              ? dateTime.toIso8601String()
+              : dateTime.millisecondsSinceEpoch;
+        } catch (e) {
+          print('⚠️ Invalid date string in $fieldName: $value');
+          // Keep original string value
+        }
+      } else if (value is int && !isDateString) {
+        // Already in correct format for milliseconds
+        data[fieldName] = value;
+      } else if (value is int && isDateString) {
+        // Convert milliseconds to ISO string
+        data[fieldName] =
+            DateTime.fromMillisecondsSinceEpoch(value).toIso8601String();
+      }
+    } catch (e) {
+      print('❌ Error converting $fieldName: $e');
+      print('🔍 Value: $value (${value.runtimeType})');
+      // Remove problematic field rather than crash
+      data.remove(fieldName);
+    }
+  }
+
+  /// Convert nested objects that might contain Timestamps
+  Map<String, dynamic> _convertNestedTimestamps(Map<String, dynamic> map) {
+    final result = Map<String, dynamic>.from(map);
+
+    result.forEach((key, value) {
+      if (value is Timestamp) {
+        result[key] = value.toDate().toIso8601String();
+      } else if (value is bool) {
+        result[key] = value ? 1 : 0;
+      } else if (value is Map<String, dynamic>) {
+        result[key] = _convertNestedTimestamps(value);
+      } else if (value is List) {
+        result[key] = _convertListTimestamps(value);
+      }
+    });
+
+    return result;
+  }
+
+  /// Convert lists that might contain Timestamps
+  List<dynamic> _convertListTimestamps(List<dynamic> list) {
+    return list.map((item) {
+      if (item is Timestamp) {
+        return item.toDate().toIso8601String();
+      } else if (item is bool) {
+        return item ? 1 : 0;
+      } else if (item is Map<String, dynamic>) {
+        return _convertNestedTimestamps(item);
+      } else if (item is List) {
+        return _convertListTimestamps(item);
+      }
+      return item;
+    }).toList();
+  }
+
+  /// Enhanced merge method with better error handling
   Future<MergeResult> _mergeRecordWithConflictResolution(
     String table,
     String docId,
     Map<String, dynamic> remoteData,
   ) async {
-    final db = await DatabaseHelper.instance.database;
-    final localId = int.tryParse(docId);
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final localId = int.tryParse(docId);
 
-    if (localId == null) {
-      print('⚠️ Invalid record ID: $docId');
+      if (localId == null) {
+        print('⚠️ Invalid record ID for $table: $docId');
+        return MergeResult.skipped;
+      }
+
+      // Convert remote data to local format with comprehensive timestamp handling
+      Map<String, dynamic> localData;
+      try {
+        localData = _convertFirestoreToSqlite(remoteData);
+      } catch (e) {
+        print('❌ Failed to convert $table record $docId: $e');
+        return MergeResult.skipped;
+      }
+
+      // Ensure the record has a valid ID
+      localData['id'] = localId;
+
+      // Check if record exists locally
+      final existing = await db.query(
+        table,
+        where: 'id = ?',
+        whereArgs: [localId],
+        limit: 1,
+      );
+
+      if (existing.isEmpty) {
+        // Insert new record
+        try {
+          await db.insert(table, localData,
+              conflictAlgorithm: ConflictAlgorithm.replace);
+          print('✅ Inserted new $table record: $localId');
+          return MergeResult.inserted;
+        } catch (e) {
+          print('❌ Failed to insert $table record $localId: $e');
+          print('🔍 Data that failed: $localData');
+          return MergeResult.skipped;
+        }
+      } else {
+        // Update existing record with conflict resolution
+        final localRecord = existing.first;
+        final shouldUpdate =
+            _shouldUpdateRecord(localRecord, remoteData, table, localId);
+
+        if (shouldUpdate) {
+          try {
+            await db.update(
+              table,
+              localData,
+              where: 'id = ?',
+              whereArgs: [localId],
+            );
+            print('✅ Updated $table record: $localId');
+            return MergeResult.updated;
+          } catch (e) {
+            print('❌ Failed to update $table record $localId: $e');
+            print('🔍 Data that failed: $localData');
+            return MergeResult.skipped;
+          }
+        } else {
+          print('⏭️ Skipped $table record $localId (no update needed)');
+          return MergeResult.skipped;
+        }
+      }
+    } catch (e) {
+      print(
+          '❌ Error in _mergeRecordWithConflictResolution for $table $docId: $e');
       return MergeResult.skipped;
     }
+  }
 
-    // Convert remote data to local format
-    final localData = _convertFirestoreToSqlite(remoteData);
+  /// Determine if a record should be updated based on timestamps
+  bool _shouldUpdateRecord(
+    Map<String, dynamic> localRecord,
+    Map<String, dynamic> remoteData,
+    String table,
+    int recordId,
+  ) {
+    try {
+      // Get timestamps for comparison
+      final localTimestamp =
+          _getTimestampAsInt(localRecord['last_modified']) ?? 0;
+      final remoteTimestamp =
+          _getTimestampAsInt(remoteData['last_modified']) ?? 0;
 
-    // Check if record exists locally
-    final existing = await db.query(
-      table,
-      where: 'id = ?',
-      whereArgs: [localId],
-      limit: 1,
-    );
+      print('🔍 CONFLICT ANALYSIS for $table record $recordId:');
+      print(
+          'Local: modified=${DateTime.fromMillisecondsSinceEpoch(localTimestamp)}, synced=${localRecord['firebase_synced']}, device=${localRecord['last_modified_device']}');
+      print(
+          'Remote: modified=${DateTime.fromMillisecondsSinceEpoch(remoteTimestamp)}, device=${remoteData['last_modified_device']}');
 
-    if (existing.isEmpty) {
-      // New record - insert it
-      return await _insertNewRecord(db, table, localId, localData);
+      // If remote is newer, update
+      if (remoteTimestamp > localTimestamp) {
+        print('✅ Remote is newer, will update');
+        return true;
+      }
+
+      // If local is newer and already synced, skip
+      if (localTimestamp > remoteTimestamp &&
+          localRecord['firebase_synced'] == 1) {
+        print('⏭️ Local is newer and synced, skipping');
+        return false;
+      }
+
+      // If timestamps are equal but local isn't synced, update to mark as synced
+      if (localTimestamp == remoteTimestamp &&
+          localRecord['firebase_synced'] != 1) {
+        print('🔄 Same timestamp but not synced, will update');
+        return true;
+      }
+
+      print('⏭️ No update needed');
+      return false;
+    } catch (e) {
+      print('❌ Error comparing timestamps: $e');
+      return true; // When in doubt, update
     }
-
-    // Record exists - resolve conflict
-    return await _resolveConflict(
-        db, table, localId, existing.first, localData);
   }
 
   /// Insert new record from remote
@@ -496,31 +744,6 @@ class FixedLocalFirstSyncService extends GetxService {
     }
   }
 
-  /// Data conversion helpers
-  Map<String, dynamic> _convertFirestoreToSqlite(Map<String, dynamic> data) {
-    final result = Map<String, dynamic>.from(data);
-
-    // Convert Firestore timestamps to integers
-    if (result['last_modified'] is Timestamp) {
-      result['last_modified'] =
-          (result['last_modified'] as Timestamp).millisecondsSinceEpoch;
-    } else if (result['last_modified'] is DateTime) {
-      result['last_modified'] =
-          (result['last_modified'] as DateTime).millisecondsSinceEpoch;
-    }
-
-    if (result['created_at'] is Timestamp) {
-      result['created_at'] =
-          (result['created_at'] as Timestamp).toDate().toIso8601String();
-    } else if (result['created_at'] is DateTime) {
-      result['created_at'] =
-          (result['created_at'] as DateTime).toIso8601String();
-    }
-
-    result['firebase_synced'] = 1;
-    return result;
-  }
-
   Map<String, dynamic> _convertSqliteToFirestore(Map<String, dynamic> data) {
     final result = Map<String, dynamic>.from(data);
 
@@ -544,6 +767,115 @@ class FixedLocalFirstSyncService extends GetxService {
     // Remove null values
     result.removeWhere((key, value) => value == null);
     return result;
+  }
+
+// FIXED: Replace your _syncSingleUserToFirebase method with this
+  Future<void> _syncSingleUserToFirebase(Map<String, dynamic> localUser) async {
+    if (_firestore == null || _firebaseAuth == null) return;
+
+    try {
+      final email = localUser['email']?.toString().toLowerCase();
+      final localId = localUser['id'];
+      final existingFirebaseUid = localUser['firebase_uid'];
+
+      if (email == null || email.isEmpty) {
+        print('❌ Cannot sync user: no email found');
+        return;
+      }
+
+      // Skip if already marked as synced AND has Firebase UID
+      final alreadySynced = localUser['firebase_synced'] == 1;
+      if (alreadySynced &&
+          existingFirebaseUid != null &&
+          existingFirebaseUid.isNotEmpty) {
+        print(
+            '✅ User already synced, skipping: $email (Firebase UID: $existingFirebaseUid)');
+        return;
+      }
+
+      print('🔄 Syncing user to Firebase: $email (Local ID: $localId)');
+
+      final schoolConfig = Get.find<SchoolConfigService>();
+      final schoolId = schoolConfig.schoolId.value;
+
+      if (schoolId.isEmpty) {
+        print('❌ No school ID available for sync');
+        return;
+      }
+
+      // Check if user already exists in Firestore by email first
+      final existingByEmailQuery = await _firestore!
+          .collection('schools')
+          .doc(schoolId)
+          .collection('users')
+          .where('email', isEqualTo: email)
+          .limit(1)
+          .get();
+
+      if (existingByEmailQuery.docs.isNotEmpty) {
+        print('📋 User already exists in Firestore: $email');
+
+        // Update local record with Firebase info and mark as synced
+        final existingDoc = existingByEmailQuery.docs.first;
+        final firestoreData = existingDoc.data();
+        final firebaseUid = firestoreData['firebase_uid'];
+
+        if (firebaseUid != null) {
+          final db = await DatabaseHelper.instance.database;
+          await db.update(
+            'users',
+            {
+              'firebase_synced': 1,
+              'firebase_uid': firebaseUid,
+            },
+            where: 'id = ?',
+            whereArgs: [localId],
+          );
+          print('✅ Local user updated with existing Firebase info');
+        }
+        return;
+      }
+
+      // If we have existing Firebase UID, use it for the document
+      String? firebaseUid = existingFirebaseUid;
+
+      // If no Firebase UID, we need to create/find Firebase Auth user
+      if (firebaseUid == null || firebaseUid.isEmpty) {
+        // This would require additional logic to handle Firebase Auth creation
+        // For now, let's skip users without Firebase UID during sync
+        print('⚠️ Skipping sync for user without Firebase UID: $email');
+        return;
+      }
+
+      // Prepare Firestore data
+      final firestoreData = _convertSqliteToFirestore(localUser);
+      firestoreData['firebase_uid'] = firebaseUid;
+      firestoreData['local_id'] = localId;
+      firestoreData['last_modified'] = DateTime.now().toIso8601String();
+      firestoreData['firebase_synced'] = 1;
+      firestoreData['school_id'] = schoolId;
+
+      // Use Firebase UID as document ID for consistency
+      final userDocRef = _firestore!
+          .collection('schools')
+          .doc(schoolId)
+          .collection('users')
+          .doc(firebaseUid);
+
+      await userDocRef.set(firestoreData, SetOptions(merge: true));
+      print('✅ User synced to Firestore: $email (Doc ID: $firebaseUid)');
+
+      // Mark as synced in local database
+      final db = await DatabaseHelper.instance.database;
+      await db.update(
+        'users',
+        {'firebase_synced': 1},
+        where: 'id = ?',
+        whereArgs: [localId],
+      );
+    } catch (e) {
+      print('❌ Error syncing user to Firebase: $e');
+    }
   }
 
   int? _getTimestampAsInt(dynamic timestamp) {

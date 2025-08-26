@@ -330,21 +330,6 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           ],
                         ),
-
-                        SizedBox(height: isWideScreen ? 24 : 16),
-
-                        // School Selection Link
-                        Center(
-                          child: TextButton.icon(
-                            onPressed: () =>
-                                Get.offAllNamed('/school-selection'),
-                            icon: const Icon(Icons.school_outlined, size: 20),
-                            label: const Text('Change School'),
-                            style: TextButton.styleFrom(
-                              foregroundColor: Colors.grey[600],
-                            ),
-                          ),
-                        ),
                       ],
                     ),
                   ),

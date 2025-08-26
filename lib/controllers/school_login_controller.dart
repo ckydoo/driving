@@ -472,7 +472,9 @@ class SchoolJoinController extends GetxController {
     }
   }
 
-// Fixed authentication method that handles hashed passwords
+// Fixed authentication methods for SchoolJoinController
+
+// FIXED: _authenticateUserInFirebase method with null password handling
   Future<Map<String, dynamic>?> _authenticateUserInFirebase(
       Map<String, dynamic> schoolData) async {
     try {
@@ -500,34 +502,33 @@ class SchoolJoinController extends GetxController {
       final userData = userDoc.data();
 
       print('✅ User found in Firebase');
-      print('🔑 Stored password hash: ${userData['password']}');
 
-      // Verify password using multiple methods
-      bool passwordValid = await _verifyPassword(password, userData['password'],
-          userEmail: email);
+      // CRITICAL FIX: Handle null password from Firebase
+      final storedPassword = userData['password']?.toString();
+      print('🔑 Stored password hash: $storedPassword');
 
-      if (!passwordValid) {
-        print('❌ Password verification failed');
+      if (storedPassword == null || storedPassword.isEmpty) {
+        print('❌ No password stored in Firebase for this user');
+        print('💡 This might be a user that needs password migration');
 
-        // For debugging - let's try the original password hash method from your local system
-        final localHashAttempt = _hashPasswordLikeLocal(password);
-        print('🔍 Local hash attempt: $localHashAttempt');
+        // Option 1: Auto-migrate the password (recommended for smooth migration)
+        await _migrateUserPassword(userDoc, password);
+        print('✅ Password migrated successfully');
 
-        if (localHashAttempt == userData['password']) {
-          passwordValid = true;
-          print('✅ Password verified using local hash method!');
+        // Option 2: Reject login (uncomment if you prefer manual migration)
+        // throw Exception('User password needs to be migrated. Please contact admin.');
+      } else {
+        // Verify password using multiple methods
+        bool passwordValid =
+            await _verifyPassword(password, storedPassword, userEmail: email);
+
+        if (!passwordValid) {
+          print('❌ Password verification failed');
+          return null;
         }
-      }
 
-      if (!passwordValid) {
-        // Last resort: check if this is a development/test scenario
-        print('⚠️ All password verification methods failed');
-        print(
-            '💡 For testing, you can temporarily update the Firebase password to plain text');
-        return null;
+        print('✅ Password verified successfully');
       }
-
-      print('✅ Password verified successfully');
 
       // Try Firebase Auth (this will likely fail since the user might not be in Firebase Auth)
       try {
@@ -556,7 +557,7 @@ class SchoolJoinController extends GetxController {
         'id': userDoc.id,
         'schoolId': schoolData['schoolId'],
         'firebase_user_id': userDoc.id,
-        'email': userData['email'],
+        'email': userData['email'] ?? email,
         'fname': userData['fname'] ?? userData['firstName'] ?? '',
         'lname': userData['lname'] ?? userData['lastName'] ?? '',
         'role': userData['role'] ?? 'user',
@@ -565,6 +566,9 @@ class SchoolJoinController extends GetxController {
         'gender': userData['gender'] ?? '',
         'idnumber': userData['idnumber'] ?? userData['idNumber'] ?? '',
         'status': userData['status'] ?? 'Active',
+        'password': password, // Include the password for User model
+        'created_at': userData['created_at'] ?? FieldValue.serverTimestamp(),
+        'date_of_birth': userData['date_of_birth'] ?? '2000-01-01',
         ...userData,
       };
     } catch (e) {
@@ -573,33 +577,64 @@ class SchoolJoinController extends GetxController {
     }
   }
 
-  /// Verify password using multiple hashing methods
-  Future<bool> _verifyPassword(String plainPassword, String storedHash,
+// NEW: Auto-migrate user password method
+  Future<void> _migrateUserPassword(
+      DocumentSnapshot userDoc, String plainPassword) async {
+    try {
+      print('🔄 Auto-migrating user password...');
+
+      // Hash the password (use your preferred method)
+      final hashedPassword = _hashPasswordLikeLocal(plainPassword);
+
+      // Update the user document with the hashed password
+      await userDoc.reference.update({
+        'password': hashedPassword,
+        'password_migrated_at': FieldValue.serverTimestamp(),
+        'migration_method': 'auto_login',
+      });
+
+      print('✅ Password auto-migrated and saved to Firebase');
+    } catch (e) {
+      print('❌ Error migrating password: $e');
+      // Don't throw error - allow login to continue
+    }
+  }
+
+// FIXED: _verifyPassword method with proper null handling
+  Future<bool> _verifyPassword(String plainPassword, String? storedHash,
       {String? userEmail}) async {
     try {
+      // CRITICAL FIX: Handle null or empty stored hash
+      if (storedHash == null || storedHash.trim().isEmpty) {
+        print('❌ Stored password hash is null or empty');
+        return false;
+      }
+
+      final trimmedHash = storedHash.trim();
+
       // Method 1: Plain text comparison (in case it's not hashed)
-      if (plainPassword == storedHash) {
+      if (plainPassword == trimmedHash) {
         print('✅ Password verified: plain text match');
         return true;
       }
 
       // Method 2: SHA-256 hash (common method)
       final sha256Hash = sha256.convert(utf8.encode(plainPassword)).toString();
-      if (sha256Hash == storedHash) {
+      if (sha256Hash == trimmedHash) {
         print('✅ Password verified: SHA-256 hash');
         return true;
       }
 
       // Method 3: MD5 hash (less secure but sometimes used)
       final md5Hash = md5.convert(utf8.encode(plainPassword)).toString();
-      if (md5Hash == storedHash) {
+      if (md5Hash == trimmedHash) {
         print('✅ Password verified: MD5 hash');
         return true;
       }
 
       // Method 4: SHA-1 hash
       final sha1Hash = sha1.convert(utf8.encode(plainPassword)).toString();
-      if (sha1Hash == storedHash) {
+      if (sha1Hash == trimmedHash) {
         print('✅ Password verified: SHA-1 hash');
         return true;
       }
@@ -613,13 +648,17 @@ class SchoolJoinController extends GetxController {
       for (String salt in possibleSalts) {
         final saltedHash =
             sha256.convert(utf8.encode(plainPassword + salt)).toString();
-        if (saltedHash == storedHash) {
+        if (saltedHash == trimmedHash) {
           print('✅ Password verified: SHA-256 with salt "$salt"');
           return true;
         }
       }
 
       print('❌ All password verification methods failed');
+      print('🔍 Expected hash: $trimmedHash');
+      print('🔍 Plain password: $plainPassword');
+      print('🔍 SHA-256 attempt: $sha256Hash');
+
       return false;
     } catch (e) {
       print('❌ Error verifying password: $e');
@@ -627,19 +666,21 @@ class SchoolJoinController extends GetxController {
     }
   }
 
-  /// Hash password the same way your local system does (you'll need to match your local method)
+// IMPROVED: Hash password method with consistent implementation
   String _hashPasswordLikeLocal(String password) {
-    // This should match however your local database hashes passwords
-    // Common methods:
+    try {
+      // Use SHA-256 as default - you may need to adjust this to match your local system
+      return sha256.convert(utf8.encode(password)).toString();
 
-    // Option 1: Simple SHA-256
-    return sha256.convert(utf8.encode(password)).toString();
+      // If your local system uses MD5 (less secure):
+      // return md5.convert(utf8.encode(password)).toString();
 
-    // Option 2: MD5 (if that's what your local system uses)
-    // return md5.convert(utf8.encode(password)).toString();
-
-    // Option 3: With salt
-    // return sha256.convert(utf8.encode(password + 'your_salt_here')).toString();
+      // If your local system uses salt:
+      // return sha256.convert(utf8.encode(password + 'your_salt_here')).toString();
+    } catch (e) {
+      print('❌ Error hashing password: $e');
+      return password; // Fallback to plain text
+    }
   }
 
   /// Quick fix method - temporarily set password to plain text for testing

@@ -4,6 +4,7 @@ import 'package:driving/controllers/course_controller.dart';
 import 'package:driving/controllers/billing_controller.dart';
 import 'package:driving/models/course.dart';
 import 'package:driving/models/invoice.dart';
+import 'package:driving/services/database_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
@@ -1712,8 +1713,7 @@ class _AddUserScreenState extends State<AddUserScreen> {
 
       final invoice = Invoice(
         invoiceNumber: 'INV-${DateTime.now().toUtc().millisecondsSinceEpoch}',
-        studentId:
-            user.id!, // This should be set by now from the database insert
+        studentId: user.id ?? await _getLastInsertedUserId(),
         courseId: _selectedCourse!.id!,
         lessons: lessons,
         pricePerLesson: pricePerLesson,
@@ -1737,6 +1737,26 @@ class _AddUserScreenState extends State<AddUserScreen> {
         colorText: Colors.white,
         duration: Duration(seconds: 4),
       );
+    }
+  }
+
+  Future<int> _getLastInsertedUserId() async {
+    try {
+      final users = await DatabaseHelper.instance.getUsers();
+      if (users.isNotEmpty) {
+        // Get the most recently created user by email
+        final recentUser = users.firstWhere(
+          (u) =>
+              u['email']?.toString().toLowerCase() ==
+              _emailController.text.trim().toLowerCase(),
+          orElse: () => {'id': 1}, // fallback
+        );
+        return recentUser['id'] ?? 1;
+      }
+      return 1; // fallback ID
+    } catch (e) {
+      print('Error getting last inserted user ID: $e');
+      return 1; // fallback ID
     }
   }
 

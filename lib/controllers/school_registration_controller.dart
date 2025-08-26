@@ -32,6 +32,7 @@ class SchoolRegistrationController extends GetxController {
   final RxBool obscurePassword = true.obs;
   final RxBool obscureConfirmPassword = true.obs;
   final RxString currentStep = ''.obs;
+  FirebaseFirestore? _firestore;
 
   @override
   void onClose() {
@@ -298,7 +299,7 @@ class SchoolRegistrationController extends GetxController {
     }
   }
 
-// Add this new method to save user to Firestore
+// FIXED: Replace your existing _saveUserToFirestore method with this
   Future<void> _saveUserToFirestore(
       firebase_auth.User firebaseUser, User localUser) async {
     try {
@@ -310,39 +311,67 @@ class SchoolRegistrationController extends GetxController {
         return;
       }
 
+      print('💾 Saving user to Firestore with consistent ID strategy...');
+
       // Prepare user data for Firebase
       final userData = {
-        'firebase_user_id': firebaseUser.uid,
-        'id': localUser.id ?? DateTime.now().millisecondsSinceEpoch,
+        'firebase_uid': firebaseUser.uid,
+        'local_id': localUser.id, // Store local ID for reference
         'fname': localUser.fname,
         'lname': localUser.lname,
-        'email': localUser.email,
+        'email': localUser.email.toLowerCase(),
         'phone': localUser.phone,
         'address': localUser.address,
-        'date_of_birth': localUser.date_of_birth.toIso8601String(),
         'gender': localUser.gender,
         'idnumber': localUser.idnumber,
         'role': localUser.role,
         'status': localUser.status,
-        'created_at': localUser.created_at.toIso8601String(),
+        'date_of_birth': localUser.date_of_birth?.toIso8601String(),
+        'created_at': localUser.created_at?.toIso8601String(),
         'last_modified': DateTime.now().toIso8601String(),
         'firebase_synced': 1,
-        'created_during_registration': true,
+        'school_id': schoolId,
+        'sync_source': 'registration', // Mark as created during registration
       };
 
-      // Save to Firestore
-      final firestore = FirebaseFirestore.instance;
-      await firestore
+      // Use Firebase UID as the document ID for consistency
+      final userDocRef = _firestore!
           .collection('schools')
           .doc(schoolId)
           .collection('users')
-          .doc(firebaseUser.uid)
-          .set(userData);
+          .doc(firebaseUser
+              .uid); // CONSISTENT: Always use Firebase UID as doc ID
 
-      print('✅ User data saved to Firestore successfully');
+      // Check if document already exists
+      final existingDoc = await userDocRef.get();
+
+      if (existingDoc.exists) {
+        print('📝 Updating existing user document: ${firebaseUser.uid}');
+        await userDocRef.update(userData);
+      } else {
+        print('➕ Creating new user document: ${firebaseUser.uid}');
+        await userDocRef.set(userData);
+      }
+
+      // CRITICAL: Mark local user as synced to prevent duplicate sync
+      if (localUser.id != null) {
+        final db = await DatabaseHelper.instance.database;
+        await db.update(
+          'users',
+          {'firebase_synced': 1, 'firebase_uid': firebaseUser.uid},
+          where: 'id = ?',
+          whereArgs: [localUser.id],
+        );
+        print('✅ Local user marked as synced: ${localUser.id}');
+      }
+
+      print('✅ User saved to Firestore successfully');
+      print('   Document ID: ${firebaseUser.uid}');
+      print('   Local ID: ${localUser.id}');
+      print('   Email: ${firebaseUser.email}');
     } catch (e) {
-      print('❌ Error saving user to Firestore: $e');
-      // Don't throw - this is not critical for local functionality
+      print('❌ Error saving user data to Firestore: $e');
+      throw Exception('Failed to save user data to cloud: $e');
     }
   }
 

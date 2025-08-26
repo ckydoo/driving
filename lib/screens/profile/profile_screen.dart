@@ -1,5 +1,7 @@
 // lib/screens/profile/profile_screen.dart
 import 'package:driving/controllers/auth_controller.dart';
+import 'package:driving/screens/auth/enhanced_pin_login_screen.dart';
+import 'package:driving/screens/auth/pin_setup_screen.dart';
 import 'package:driving/services/fixed_local_first_sync_service.dart';
 import 'package:driving/widgets/change_password_dialog.dart';
 import 'package:flutter/material.dart';
@@ -212,21 +214,14 @@ class ProfileScreen extends StatelessWidget {
                       // Edit Profile Button (if you want to add this feature)
                       ListTile(
                         leading: Icon(
-                          Icons.edit,
+                          Icons.pin,
                           color: Colors.blue.shade600,
                         ),
-                        title: const Text('Edit Profile'),
-                        subtitle:
-                            const Text('Update your personal information'),
+                        title: const Text('Change Pin'),
+                        subtitle: const Text('Update your account pin'),
                         trailing: const Icon(Icons.arrow_forward_ios),
                         onTap: () {
-                          // TODO: Implement edit profile functionality
-                          Get.snackbar(
-                            'Coming Soon',
-                            'Profile editing will be available in the next update',
-                            backgroundColor: Colors.blue.shade100,
-                            colorText: Colors.blue.shade800,
-                          );
+                          Get.to(const PinSetupScreen());
                         },
                       ),
                     ],
