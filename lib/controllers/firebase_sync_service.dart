@@ -3,7 +3,6 @@
 
 import 'dart:async';
 import 'package:driving/controllers/auth_controller.dart';
-import 'package:driving/services/firebase_sync_service.dart';
 import 'package:driving/services/multi_tenant_firebase_sync_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';

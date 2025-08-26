@@ -1,7 +1,6 @@
 // lib/services/payment_sync_integration.dart - Integration with existing sync service
 import 'package:driving/services/enhanced_payment_sync_service.dart';
 import 'package:driving/services/multi_tenant_firebase_sync_service.dart';
-import 'package:driving/services/firebase_sync_service.dart';
 import 'package:get/get.dart';
 
 /// Service to integrate enhanced payment sync with existing sync infrastructure

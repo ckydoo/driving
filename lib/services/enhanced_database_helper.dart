@@ -5,7 +5,6 @@
 import 'dart:async';
 import 'package:driving/services/multi_tenant_firebase_sync_service.dart';
 import 'package:sqflite/sqflite.dart';
-import 'firebase_sync_service.dart';
 
 class DatabaseHelperSyncExtension {
   /// Add sync tracking triggers to existing tables

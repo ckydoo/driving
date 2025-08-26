@@ -1,7 +1,6 @@
 // lib/settings/enhanced_settings_screen.dart
 import 'package:driving/controllers/billing_controller.dart';
 import 'package:driving/controllers/school_registration_controller.dart';
-import 'package:driving/services/firebase_sync_service.dart';
 import 'package:driving/services/multi_tenant_firebase_sync_service.dart';
 import 'package:driving/settings/sync_settings_screen.dart';
 import 'package:driving/widgets/school_info_widget.dart';

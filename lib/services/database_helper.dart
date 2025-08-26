@@ -7,7 +7,6 @@ import 'package:driving/models/course.dart';
 import 'package:driving/models/fleet.dart';
 import 'package:driving/models/payment.dart';
 import 'package:driving/models/user.dart';
-import 'package:driving/services/firebase_sync_service.dart';
 import 'package:driving/services/multi_tenant_firebase_sync_service.dart';
 import 'package:get/get.dart';
 import 'package:path_provider/path_provider.dart';
