@@ -1200,7 +1200,7 @@ class DatabaseHelper {
       'billing_records',
       'timeline',
       'usermessages',
-      'settings'
+      //'settings'
     ];
 
     for (String table in tables) {
@@ -1235,7 +1235,7 @@ class DatabaseHelper {
       'billing_records',
       'timeline',
       'usermessages',
-      'settings'
+      //'settings'
     ];
 
     Map<String, int> syncStatus = {};
@@ -1304,7 +1304,7 @@ class DatabaseHelper {
       'reminders',
       'timeline',
       'usermessages',
-      'settings'
+      //'settings'
     ];
 
     Map<String, List<Map<String, dynamic>>> exportData = {};
@@ -1367,7 +1367,7 @@ class DatabaseHelper {
       'billing_records',
       'timeline',
       'usermessages',
-      'settings'
+      //'settings'
     ];
 
     for (String table in tables) {
@@ -1402,7 +1402,7 @@ class DatabaseHelper {
       'billing_records',
       'timeline',
       'usermessages',
-      'settings'
+      //'settings'
     ];
 
     for (String table in tables) {

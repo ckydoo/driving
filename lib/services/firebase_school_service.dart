@@ -245,7 +245,7 @@ class FirebaseSchoolService extends GetxService {
         'notifications',
         'attachments',
         'currencies',
-        'settings',
+        //'settings',
       ];
 
       for (String collection in collections) {

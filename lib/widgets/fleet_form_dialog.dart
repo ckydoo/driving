@@ -570,7 +570,6 @@ class _FleetFormDialogState extends State<FleetFormDialog>
     );
   }
 
-// CHANGE: Update your _buildSearchableInstructorDropdown method to include "No Assignment" option
   Widget _buildSearchableInstructorDropdown([bool isVerySmallScreen = false]) {
     return Container(
       decoration: BoxDecoration(
@@ -592,94 +591,100 @@ class _FleetFormDialogState extends State<FleetFormDialog>
           ),
         ),
         isExpanded: true,
-        // CHANGE: Remove validator to make it optional
-        validator:
-            null, // Was: (value) => value == null ? 'Please select an instructor' : null,
+        validator: null,
+        // FIX: Add dropdownMaxHeight to prevent overflow
+        menuMaxHeight: MediaQuery.of(context).size.height * 0.4,
+        itemHeight:
+            isVerySmallScreen ? 48 : 56, // FIX: Set consistent item height
+        style: TextStyle(
+          fontSize: isVerySmallScreen ? 13 : 14,
+        ),
         items: [
-          // CHANGE: Add "No Assignment" option at the beginning
+          // "No Assignment" option
           DropdownMenuItem<int>(
             value: 0,
-            child: Row(
-              children: [
-                Icon(
-                  Icons.remove_circle_outline,
-                  color: Colors.grey.shade600,
-                  size: isVerySmallScreen ? 18 : 20,
-                ),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'No Assignment (Available)',
-                    style: TextStyle(
-                      fontStyle: FontStyle.italic,
-                      color: Colors.grey.shade600,
-                      fontSize: isVerySmallScreen ? 13 : 14,
-                    ),
-                    overflow: TextOverflow.ellipsis,
+            child: Container(
+              constraints: BoxConstraints(
+                maxWidth: double.infinity,
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.remove_circle_outline,
+                    color: Colors.grey.shade600,
+                    size: isVerySmallScreen ? 18 : 20,
                   ),
-                ),
-              ],
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'No Assignment (Available)',
+                      style: TextStyle(
+                        fontStyle: FontStyle.italic,
+                        color: Colors.grey.shade600,
+                        fontSize: isVerySmallScreen ? 13 : 14,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-          // Add your existing instructor items
+          // Instructor items
           ..._availableInstructors.map((instructor) {
             final isAlreadyAssigned =
                 _checkIfInstructorAssigned(instructor.id!);
 
             return DropdownMenuItem<int>(
               value: instructor.id,
-              child: Row(
-                children: [
-                  Icon(
-                    isAlreadyAssigned ? Icons.warning_amber : Icons.person,
-                    color: isAlreadyAssigned
-                        ? Colors.orange.shade600
-                        : Colors.green.shade600,
-                    size: isVerySmallScreen ? 18 : 20,
-                  ),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          '${instructor.fname} ${instructor.lname}',
-                          style: TextStyle(
-                            fontWeight: isAlreadyAssigned
-                                ? FontWeight.normal
-                                : FontWeight.w500,
-                            color: isAlreadyAssigned
-                                ? Colors.orange.shade700
-                                : Colors.black87,
-                            fontSize: isVerySmallScreen ? 13 : 14,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        if (isAlreadyAssigned)
-                          Text(
-                            'Already assigned to another vehicle',
-                            style: TextStyle(
-                              fontSize: isVerySmallScreen ? 10 : 11,
-                              color: Colors.orange.shade600,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        if (instructor.email.isNotEmpty &&
-                            !isVerySmallScreen &&
-                            !isAlreadyAssigned)
-                          Text(
-                            instructor.email,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey.shade600,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                      ],
+              child: Container(
+                constraints: BoxConstraints(
+                  maxWidth: double.infinity,
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      isAlreadyAssigned ? Icons.warning_amber : Icons.person,
+                      color: isAlreadyAssigned
+                          ? Colors.orange.shade600
+                          : Colors.green.shade600,
+                      size: isVerySmallScreen ? 18 : 20,
                     ),
-                  ),
-                ],
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '${instructor.fname} ${instructor.lname}',
+                            style: TextStyle(
+                              fontWeight: isAlreadyAssigned
+                                  ? FontWeight.normal
+                                  : FontWeight.w500,
+                              color: isAlreadyAssigned
+                                  ? Colors.orange.shade700
+                                  : Colors.black87,
+                              fontSize: isVerySmallScreen ? 13 : 14,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
+                          if (isAlreadyAssigned)
+                            Text(
+                              'Already assigned to another vehicle',
+                              style: TextStyle(
+                                fontSize: isVerySmallScreen ? 10 : 11,
+                                color: Colors.orange.shade600,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             );
           }).toList(),

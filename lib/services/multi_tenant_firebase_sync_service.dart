@@ -47,7 +47,7 @@ class MultiTenantFirebaseSyncService extends GetxService {
     'notifications',
     'attachments',
     'currencies',
-    'settings'
+    // 'settings'
   ];
 
   @override
@@ -276,9 +276,6 @@ class MultiTenantFirebaseSyncService extends GetxService {
       throw e;
     }
   }
-
-// Fixed version of _syncSingleUserToFirebase method
-// Add this to your MultiTenantFirebaseSyncService class
 
   Future<void> _syncSingleUserToFirebase(Map<String, dynamic> localUser) async {
     if (_firestore == null || _firebaseAuth == null) return;

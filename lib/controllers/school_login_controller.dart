@@ -316,7 +316,7 @@ class SchoolJoinController extends GetxController {
         'notifications',
         'attachments',
         'currencies',
-        'settings'
+        //'settings'
       ];
 
       double progressPerCollection = 1.0 / collectionsToSync.length;

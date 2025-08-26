@@ -1,5 +1,7 @@
 import 'package:driving/controllers/auth_controller.dart';
+import 'package:driving/controllers/settings_controller.dart';
 import 'package:driving/screens/users/graduation_screen.dart';
+import 'package:driving/services/lesson_counting_service.dart';
 import 'package:flutter/material.dart';
 import 'package:driving/controllers/billing_controller.dart';
 import 'package:driving/controllers/course_controller.dart';
@@ -913,20 +915,6 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
     );
   }
 
-  Widget _buildProgressTab() {
-    return SingleChildScrollView(
-      padding: EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildProgressOverviewCard(),
-          SizedBox(height: 16),
-          _buildLessonHistoryCard(),
-        ],
-      ),
-    );
-  }
-
   void _navigateToGraduation() {
     if (student == null) return;
 
@@ -938,10 +926,67 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
     );
   }
 
+  final SettingsController settingsController =
+      Get.find<SettingsController>(); // ADD THIS
+  final LessonCountingService lessonService =
+      LessonCountingService.instance; // ADD THIS
+
   Widget _buildProgressOverviewCard() {
-    final completedLessons = _getCompletedLessonsCount();
-    final totalLessons = _getTotalLessonsCount();
-    final progressPercentage = _getProgressPercentage();
+    final studentInvoices = billingController.invoices
+        .where((invoice) => invoice.studentId == widget.studentId)
+        .toList();
+
+    if (studentInvoices.isEmpty) {
+      return Card(
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Padding(
+          padding: EdgeInsets.all(20),
+          child: Column(
+            children: [
+              Icon(Icons.school_outlined,
+                  size: 64, color: Colors.grey.shade400),
+              SizedBox(height: 16),
+              Text(
+                'No Course Enrollments',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Student is not enrolled in any courses yet.',
+                style: TextStyle(color: Colors.grey.shade500),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Calculate overall progress using centralized service
+    int totalLessons = 0;
+    int totalUsed = 0;
+    int totalAttended = 0;
+    int totalScheduled = 0;
+
+    for (final invoice in studentInvoices) {
+      final stats =
+          lessonService.getLessonUsageStats(widget.studentId, invoice.courseId);
+      totalLessons += stats['total']!;
+      totalUsed += stats['used']!;
+      totalAttended += stats['attended']!;
+      totalScheduled += stats['scheduled']!;
+    }
+
+    final progressPercentage =
+        totalLessons > 0 ? (totalUsed / totalLessons) : 0.0;
+    final attendanceRate = totalScheduled > 0
+        ? ((totalAttended / totalScheduled) * 100).round()
+        : 0;
 
     return Card(
       elevation: 2,
@@ -966,6 +1011,8 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
               ],
             ),
             SizedBox(height: 24),
+
+            // Progress circle
             Center(
               child: Stack(
                 alignment: Alignment.center,
@@ -992,7 +1039,7 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
                         ),
                       ),
                       Text(
-                        'Complete',
+                        _getProgressStatus(progressPercentage),
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey.shade600,
@@ -1004,21 +1051,147 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
               ),
             ),
             SizedBox(height: 24),
+
+            // Statistics row
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
+                _buildProgressStat('Used', totalUsed.toString(), Colors.blue),
+                _buildProgressStat('Remaining',
+                    (totalLessons - totalUsed).toString(), Colors.orange),
                 _buildProgressStat(
-                    'Completed', completedLessons.toString(), Colors.green),
-                _buildProgressStat(
-                    'Remaining',
-                    (totalLessons - completedLessons).toString(),
-                    Colors.orange),
-                _buildProgressStat(
-                    'Attendance', '${_getAttendanceRate()}%', Colors.purple),
+                    'Attendance', '$attendanceRate%', Colors.purple),
               ],
             ),
+
+            SizedBox(height: 16),
+
+            // Settings-aware explanation
+            Container(
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Calculation Method',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue.shade700,
+                    ),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    settingsController.countScheduledLessons.value
+                        ? 'Progress based on scheduled lessons (including future lessons)'
+                        : 'Progress based on attended/completed lessons only',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.blue.shade600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Course breakdown if multiple courses
+            if (studentInvoices.length > 1) ...[
+              SizedBox(height: 24),
+              Divider(),
+              SizedBox(height: 16),
+              Text(
+                'Course Breakdown',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+              SizedBox(height: 16),
+              ...studentInvoices
+                  .map((invoice) => _buildCourseProgressItem(invoice)),
+            ],
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildCourseProgressItem(invoice) {
+    final course = courseController.courses
+        .firstWhereOrNull((c) => c.id == invoice.courseId);
+
+    final stats =
+        lessonService.getLessonUsageStats(widget.studentId, invoice.courseId);
+    final progressPercentage =
+        stats['total']! > 0 ? (stats['used']! / stats['total']!) : 0.0;
+
+    return Container(
+      margin: EdgeInsets.only(bottom: 12),
+      padding: EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  course?.name ?? 'Unknown Course',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey.shade800,
+                  ),
+                ),
+              ),
+              Text(
+                '${(progressPercentage * 100).toInt()}%',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blue.shade600,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 8),
+          LinearProgressIndicator(
+            value: progressPercentage,
+            backgroundColor: Colors.grey.shade200,
+            valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade600),
+          ),
+          SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '${stats['used']} / ${stats['total']} lessons used',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+              Text(
+                '${stats['remaining']} remaining',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: _getRemainingLessonsColor(stats['remaining']!),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -1046,13 +1219,56 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
     );
   }
 
+  String _getProgressStatus(double progressPercentage) {
+    if (progressPercentage >= 1.0) {
+      return settingsController.countScheduledLessons.value
+          ? 'Fully Scheduled'
+          : 'Course Complete';
+    } else if (progressPercentage >= 0.8) {
+      return 'Nearly Complete';
+    } else if (progressPercentage >= 0.5) {
+      return 'In Progress';
+    } else if (progressPercentage > 0) {
+      return 'Getting Started';
+    } else {
+      return 'Not Started';
+    }
+  }
+
+  Color _getRemainingLessonsColor(int remaining) {
+    if (remaining <= 0) return Colors.red;
+    if (remaining <= settingsController.lowLessonThreshold.value)
+      return Colors.orange;
+    return Colors.green;
+  }
+
+// UPDATE the _buildProgressTab method if it exists, or ADD it:
+  Widget _buildProgressTab() {
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(16),
+      child: Column(
+        children: [
+          _buildProgressOverviewCard(),
+          SizedBox(height: 16),
+          _buildLessonHistoryCard(),
+        ],
+      ),
+    );
+  }
+
+// KEEP your existing _buildLearningStatsCard method but update the calls:
+// In _buildLearningStatsCard, you can now use the corrected calculation methods
+// The methods above will now return consistent data with your settings
+
+// UPDATE any existing _buildLessonHistoryCard method to use proper filtering:
   Widget _buildLessonHistoryCard() {
     final recentLessons = scheduleController.schedules
         .where((s) =>
             s.studentId == widget.studentId &&
-            s.status.toLowerCase() == 'completed')
-        .take(5)
-        .toList();
+            (s.status.toLowerCase() == 'completed' || s.attended))
+        .toList()
+      ..sort((a, b) => b.start.compareTo(a.start)) // Most recent first
+      ..take(5).toList();
 
     return Card(
       elevation: 2,
@@ -1064,28 +1280,24 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
           children: [
             Row(
               children: [
-                Icon(Icons.history, color: Colors.blue.shade600),
+                Icon(Icons.history, color: Colors.green.shade600),
                 SizedBox(width: 8),
                 Text(
                   'Recent Lessons',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: Colors.blue.shade800,
+                    color: Colors.green.shade800,
                   ),
                 ),
               ],
             ),
             SizedBox(height: 16),
             if (recentLessons.isEmpty)
-              Center(
-                child: Padding(
-                  padding: EdgeInsets.all(20),
-                  child: Text(
-                    'No completed lessons yet',
-                    style: TextStyle(color: Colors.grey.shade600),
-                  ),
-                ),
+              _buildEmptyState(
+                'No Completed Lessons',
+                'This student hasn\'t completed any lessons yet.',
+                Icons.schedule,
               )
             else
               ...recentLessons.map((lesson) => _buildLessonHistoryItem(lesson)),
@@ -1837,10 +2049,23 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
 
   // Helper methods for calculations
   double _getProgressPercentage() {
-    final totalLessons = _getTotalLessonsCount();
-    if (totalLessons == 0) return 0.0;
-    final completedLessons = _getCompletedLessonsCount();
-    return completedLessons / totalLessons;
+    final studentInvoices = billingController.invoices
+        .where((invoice) => invoice.studentId == widget.studentId)
+        .toList();
+
+    if (studentInvoices.isEmpty) return 0.0;
+
+    int totalLessons = 0;
+    int totalUsed = 0;
+
+    for (final invoice in studentInvoices) {
+      final stats =
+          lessonService.getLessonUsageStats(widget.studentId, invoice.courseId);
+      totalLessons += stats['total']!;
+      totalUsed += stats['used']!;
+    }
+
+    return totalLessons > 0 ? (totalUsed / totalLessons) : 0.0;
   }
 
   int _getCompletedLessonsCount() {

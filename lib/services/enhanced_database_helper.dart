@@ -25,7 +25,7 @@ class DatabaseHelperSyncExtension {
       'usermessages',
       'currencies',
       'billing_records',
-      'settings',
+      //'settings',
     ];
 
     for (String table in tables) {
@@ -169,7 +169,7 @@ class DatabaseHelperSyncExtension {
       'usermessages',
       'currencies',
       'billing_records',
-      'settings',
+      //'settings',
     ];
 
     for (String table in tables) {
