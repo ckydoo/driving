@@ -26,7 +26,7 @@ class MultiTenantFirebaseSyncService extends GetxService {
   // Sync state
   final RxBool isSyncing = false.obs;
   final RxString syncStatus = 'Idle'.obs;
-  final RxBool isOnline = false.obs;
+  final RxBool isOnline = true.obs;
   final RxBool firebaseAvailable = false.obs;
   final Rx<DateTime> lastSyncTime = DateTime.fromMillisecondsSinceEpoch(0).obs;
 
@@ -237,7 +237,6 @@ class MultiTenantFirebaseSyncService extends GetxService {
       await _pushUsersToFirebase(schoolId);
 
       // Push other data
-      await _pushLocalChangesToFirebase();
 
       print('✅ Local changes pushed to Firebase');
     } catch (e) {
@@ -264,7 +263,7 @@ class MultiTenantFirebaseSyncService extends GetxService {
 
       for (final userMap in localUsers) {
         try {
-          await _syncSingleUserToFirebase(userMap, schoolId);
+          await _syncSingleUserToFirebase(userMap);
         } catch (e) {
           print('❌ Failed to sync user ${userMap['email']}: $e');
           // Continue with other users
@@ -278,58 +277,209 @@ class MultiTenantFirebaseSyncService extends GetxService {
     }
   }
 
-  /// Sync a single user to Firebase (handles auth + Firestore)
-  Future<void> _syncSingleUserToFirebase(
-      Map<String, dynamic> userMap, String schoolId) async {
+// Fixed version of _syncSingleUserToFirebase method
+// Add this to your MultiTenantFirebaseSyncService class
+
+  Future<void> _syncSingleUserToFirebase(Map<String, dynamic> localUser) async {
+    if (_firestore == null || _firebaseAuth == null) return;
+
     try {
-      final email = userMap['email'] as String;
-      final password =
-          userMap['password'] as String? ?? 'temppass123'; // Fallback password
+      final email = localUser['email']?.toString().toLowerCase();
+      if (email == null || email.isEmpty) {
+        print('❌ Cannot sync user: no email found');
+        return;
+      }
 
       print('🔄 Syncing user to Firebase: $email');
 
-      // Step 1: Ensure user exists in Firebase Auth
-      await _ensureFirebaseAuthUser(email, password);
+      // Step 1: Check/Create Firebase Auth user
+      firebase_auth.User? firebaseUser;
 
-      // Step 2: Save/update user data in Firestore
-      final firestoreData = Map<String, dynamic>.from(userMap);
-      firestoreData.addAll({
-        'last_modified': DateTime.now().toIso8601String(),
-        'firebase_synced': 1,
-        'school_id': schoolId,
-        'local_id': userMap['id'], // Keep reference to local ID
-      });
-      firestoreData.remove('id'); // Remove for Firestore
+      try {
+        // Try to get existing Firebase Auth user
+        final userCredential = await _firebaseAuth!.signInWithEmailAndPassword(
+          email: email,
+          password: 'temp_password', // This will likely fail, but we handle it
+        );
+        firebaseUser = userCredential.user;
+        print('✅ Firebase Auth user found: $email');
+      } catch (e) {
+        if (e.toString().contains('user-not-found') ||
+            e.toString().contains('wrong-password') ||
+            e.toString().contains('invalid-credential')) {
+          try {
+            // Create new Firebase Auth user
+            print('Creating new Firebase Auth user: $email');
+            final userCredential =
+                await _firebaseAuth!.createUserWithEmailAndPassword(
+              email: email,
+              password: localUser['password'] ?? 'defaultPassword123',
+            );
+            firebaseUser = userCredential.user;
+            print('✅ Created new Firebase Auth user: $email');
+          } catch (createError) {
+            if (createError.toString().contains('email-already-in-use')) {
+              print('ℹ️ Firebase Auth user already exists: $email');
+              // User exists but we couldn't sign in - that's okay, continue with Firestore
+            } else {
+              print('❌ Error creating Firebase Auth user: $createError');
+              return;
+            }
+          }
+        } else {
+          print('ℹ️ Firebase Auth user already exists: $email');
+          // User exists but password might be different - that's okay
+        }
+      }
 
-      // Check if user already exists in Firestore
-      final existingQuery = await _firestore!
+      // Step 2: Get school config for Firestore path
+      final schoolConfig = Get.find<SchoolConfigService>();
+      final schoolId = schoolConfig.schoolId.value;
+
+      if (schoolId.isEmpty) {
+        print('❌ No school ID available for sync');
+        return;
+      }
+
+      // Step 3: Check if Firestore document exists and compare data
+      final userDocRef = _firestore!
           .collection('schools')
           .doc(schoolId)
           .collection('users')
-          .where('email', isEqualTo: email.toLowerCase())
-          .limit(1)
-          .get();
+          .doc(firebaseUser?.uid ??
+              email.replaceAll('@', '_').replaceAll('.', '_'));
 
-      if (existingQuery.docs.isNotEmpty) {
-        // Update existing
-        await existingQuery.docs.first.reference.update(firestoreData);
-        print('✅ Updated existing user in Firestore: $email');
-      } else {
-        // Create new
-        await _firestore!
-            .collection('schools')
-            .doc(schoolId)
-            .collection('users')
-            .add(firestoreData);
-        print('✅ Created new user in Firestore: $email');
+      final existingDoc = await userDocRef.get();
+
+      // Prepare Firestore data
+      final firestoreData = _convertSqliteToFirestore(localUser);
+
+      // ✅ KEY FIX: Only update if data has actually changed
+      if (existingDoc.exists) {
+        final existingData = existingDoc.data()!;
+
+        // Compare key fields to see if update is needed
+        bool needsUpdate = false;
+        final fieldsToCompare = [
+          'fname',
+          'lname',
+          'phone',
+          'address',
+          'role',
+          'status',
+          'gender',
+          'idnumber',
+          'date_of_birth'
+        ];
+
+        for (String field in fieldsToCompare) {
+          if (existingData[field]?.toString() !=
+              firestoreData[field]?.toString()) {
+            needsUpdate = true;
+            print(
+                '📝 Field changed - $field: "${existingData[field]}" -> "${firestoreData[field]}"');
+            break;
+          }
+        }
+
+        // Also check last_modified timestamp
+        if (firestoreData['last_modified'] != null &&
+            existingData['last_modified'] != null) {
+          final localTimestamp = firestoreData['last_modified'];
+          final remoteTimestamp = existingData['last_modified'];
+
+          // Convert timestamps for comparison
+          int localMs = 0;
+          int remoteMs = 0;
+
+          if (localTimestamp is DateTime) {
+            localMs = localTimestamp.millisecondsSinceEpoch;
+          } else if (localTimestamp is int) {
+            localMs = localTimestamp;
+          }
+
+          if (remoteTimestamp is Timestamp) {
+            remoteMs = remoteTimestamp.millisecondsSinceEpoch;
+          } else if (remoteTimestamp is DateTime) {
+            remoteMs = remoteTimestamp.millisecondsSinceEpoch;
+          } else if (remoteTimestamp is int) {
+            remoteMs = remoteTimestamp;
+          }
+
+          // Only update if local is newer
+          if (localMs <= remoteMs) {
+            needsUpdate = false;
+            print('⏭️ Skipping update - remote data is newer or same');
+          }
+        }
+
+        if (!needsUpdate) {
+          print(
+              '⏭️ Skipping Firestore update - no changes detected for $email');
+
+          // Mark as synced locally since no update was needed
+          final db = await DatabaseHelper.instance.database;
+          await db.update(
+            'users',
+            {'firebase_synced': 1},
+            where: 'email = ?',
+            whereArgs: [email],
+          );
+
+          return;
+        }
       }
 
-      // Step 3: Mark as synced in local database
-      await _markLocalRecordAsSynced('users', userMap['id']);
+      // Step 4: Update/Create Firestore document
+      firestoreData['updatedAt'] = FieldValue.serverTimestamp();
+
+      await userDocRef.set(firestoreData, SetOptions(merge: true));
+
+      // Step 5: Mark as synced locally
+      final db = await DatabaseHelper.instance.database;
+      await db.update(
+        'users',
+        {'firebase_synced': 1},
+        where: 'email = ?',
+        whereArgs: [email],
+      );
+
+      if (existingDoc.exists) {
+        print('✅ Updated existing user in Firestore: $email');
+      } else {
+        print('✅ Created new user in Firestore: $email');
+      }
     } catch (e) {
-      print('❌ Error syncing single user: $e');
-      // Don't throw - we want to continue with other users
+      print('❌ Error syncing user to Firebase: $e');
     }
+  }
+
+// Helper method to convert local data to Firestore format
+  Map<String, dynamic> _convertSqliteToFirestore(Map<String, dynamic> data) {
+    final result = Map<String, dynamic>.from(data);
+
+    // Remove SQLite-specific fields
+    result.remove('firebase_synced');
+    result.remove('firebase_user_id');
+
+    // Convert timestamps
+    if (result['created_at'] is String) {
+      try {
+        result['created_at'] = DateTime.parse(result['created_at']);
+      } catch (e) {
+        result['created_at'] = DateTime.now();
+      }
+    }
+
+    if (result['last_modified'] is int) {
+      result['last_modified'] =
+          DateTime.fromMillisecondsSinceEpoch(result['last_modified']);
+    }
+
+    // Remove null values
+    result.removeWhere((key, value) => value == null);
+
+    return result;
   }
 
   /// Ensure user exists in Firebase Auth (create if needed)
@@ -660,53 +810,6 @@ class MultiTenantFirebaseSyncService extends GetxService {
     } catch (e) {
       print('❌ Error in _downloadTableChanges for $table: $e');
     }
-  }
-
-  /// Convert SQLite data to Firestore format
-  Map<String, dynamic> _convertSqliteToFirestore(Map<String, dynamic> data) {
-    final result = Map<String, dynamic>.from(data);
-
-    // Remove SQLite-specific fields
-    result.remove('firebase_synced');
-    result.remove('firebase_user_id');
-
-    // Convert timestamps
-    if (result['created_at'] is String) {
-      try {
-        result['created_at'] = DateTime.parse(result['created_at']);
-      } catch (e) {
-        result['created_at'] = DateTime.now();
-      }
-    }
-
-    if (result['last_modified'] is int) {
-      result['last_modified'] =
-          DateTime.fromMillisecondsSinceEpoch(result['last_modified']);
-    }
-
-    // Convert specific integer fields back to booleans for Firestore
-    final booleanFields = [
-      'is_default',
-      'status',
-      'active',
-      'enabled',
-      'visible',
-      'required',
-      'completed',
-      'paid',
-      'confirmed'
-    ];
-
-    for (final field in booleanFields) {
-      if (result[field] is int) {
-        result[field] = result[field] == 1;
-      }
-    }
-
-    // Remove null values
-    result.removeWhere((key, value) => value == null);
-
-    return result;
   }
 
   /// Convert Firestore data to SQLite format

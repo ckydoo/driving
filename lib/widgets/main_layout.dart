@@ -15,6 +15,7 @@ import 'package:driving/screens/schedule/schedule_screen.dart';
 import 'package:driving/screens/users/alumni_screen.dart';
 import 'package:driving/screens/users/enhanced_users_screen.dart';
 import 'package:driving/screens/users/graduation_screen.dart';
+import 'package:driving/services/multi_tenant_firebase_sync_service.dart';
 import 'package:driving/settings/settings_screen.dart';
 import 'package:driving/widgets/school_info_widget.dart';
 import 'package:driving/widgets/sync_status_widget.dart';
@@ -189,8 +190,10 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
                       textAlign: TextAlign.center,
                     )),
                 const SizedBox(height: 8),
-                const Text(
-                  'Management System',
+                Text(
+                  settingsController.businessPhone.value.isNotEmpty
+                      ? settingsController.businessPhone.value
+                      : 'Management System',
                   style: TextStyle(
                     color: Colors.white70,
                     fontSize: 12,
@@ -841,59 +844,389 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
 
 // 5. ADD THIS NEW SAFE LOGOUT METHOD TO YOUR _ResponsiveMainLayoutState CLASS:
   Future<void> _performSafeLogout() async {
+    // Show the enhanced confirmation dialog first
+    _showEnhancedLogoutDialog();
+  }
+
+  // ENHANCED LOGOUT CONFIRMATION DIALOG
+  void _showEnhancedLogoutDialog() {
+    Get.dialog(
+      AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: Row(
+          children: [
+            Icon(
+              Icons.logout,
+              color: Colors.red.shade600,
+              size: 28,
+            ),
+            const SizedBox(width: 12),
+            const Text(
+              'Confirm Logout',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Are you sure you want to logout?',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Internet connectivity warning
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                border: Border.all(
+                  color: Colors.orange.shade200,
+                  width: 1,
+                ),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.wifi_off,
+                    color: Colors.orange.shade600,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Internet Required',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.orange.shade800,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'You may need internet connection to log back in to your account.',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.orange.shade700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Dynamic sync status info
+            _buildSyncStatusWarning(),
+          ],
+        ),
+        actions: [
+          // Cancel Button
+          TextButton(
+            onPressed: () => Get.back(),
+            child: Text(
+              'Cancel',
+              style: TextStyle(
+                color: Colors.grey.shade600,
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+
+          // Logout Button with dynamic state
+          _buildLogoutButton(),
+        ],
+      ),
+      barrierDismissible: false, // Prevent accidental dismissal
+    );
+  }
+
+  // BUILD SYNC STATUS WARNING WIDGET
+  Widget _buildSyncStatusWarning() {
+    try {
+      final syncService = Get.find<MultiTenantFirebaseSyncService>();
+
+      return Obx(() {
+        final isSyncing = syncService.isSyncing.value;
+        final isOnline = syncService.isOnline.value;
+
+        if (isSyncing) {
+          return Column(
+            children: [
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  border: Border.all(
+                    color: Colors.blue.shade200,
+                    width: 1,
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          Colors.blue.shade600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Data is currently syncing...',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.blue.shade700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        } else if (!isOnline) {
+          return Column(
+            children: [
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  border: Border.all(
+                    color: Colors.red.shade200,
+                    width: 1,
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.cloud_off,
+                      color: Colors.red.shade600,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Currently offline - some data may not be synced.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.red.shade700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        }
+
+        return const SizedBox.shrink();
+      });
+    } catch (e) {
+      // If sync service not available, just return empty widget
+      return const SizedBox.shrink();
+    }
+  }
+
+  // BUILD LOGOUT BUTTON WITH DYNAMIC STATE
+  Widget _buildLogoutButton() {
+    try {
+      final syncService = Get.find<MultiTenantFirebaseSyncService>();
+
+      return Obx(() {
+        final isSyncing = syncService.isSyncing.value;
+
+        return ElevatedButton.icon(
+          onPressed: isSyncing
+              ? null // Disable if syncing
+              : () async {
+                  Get.back(); // Close dialog
+                  await _executeEnhancedLogout();
+                },
+          icon: isSyncing
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                )
+              : const Icon(Icons.logout),
+          label: Text(isSyncing ? 'Syncing...' : 'Logout'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor:
+                isSyncing ? Colors.grey.shade400 : Colors.red.shade600,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(
+              horizontal: 20,
+              vertical: 12,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        );
+      });
+    } catch (e) {
+      // If sync service not available, show simple button
+      return ElevatedButton.icon(
+        onPressed: () async {
+          Get.back(); // Close dialog
+          await _executeEnhancedLogout();
+        },
+        icon: const Icon(Icons.logout),
+        label: const Text('Logout'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.red.shade600,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 12,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+      );
+    }
+  }
+
+  // ENHANCED LOGOUT EXECUTION WITH SYNC HANDLING
+  Future<void> _executeEnhancedLogout() async {
     try {
       final authController = Get.find<AuthController>();
 
       // Show loading dialog
       Get.dialog(
-        Center(
-          child: Container(
-            padding: EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CircularProgressIndicator(color: Colors.blue),
-                SizedBox(height: 16),
-                Text(
-                  'Logging out...',
-                  style: TextStyle(fontSize: 16),
+        AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              const Text(
+                'Logging out...',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Finalizing data sync',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+            ],
           ),
         ),
         barrierDismissible: false,
       );
 
-      // Small delay to ensure UI updates
-      await Future.delayed(Duration(milliseconds: 300));
+      // Step 1: Try to complete any pending sync (with timeout)
+      try {
+        final syncService = Get.find<MultiTenantFirebaseSyncService>();
 
-      // Perform logout
+        if (syncService.firebaseAvailable.value && syncService.isOnline.value) {
+          print('🔄 Attempting final sync before logout...');
+
+          // Set a reasonable timeout for final sync
+          await syncService.triggerManualSync().timeout(
+            const Duration(seconds: 10),
+            onTimeout: () {
+              print('⚠️ Final sync timed out - proceeding with logout');
+            },
+          );
+
+          print('✅ Final sync completed');
+        }
+      } catch (e) {
+        print('⚠️ Final sync failed: $e - proceeding with logout');
+      }
+
+      // Step 2: Perform the actual logout
       await authController.signOut();
 
-      // Close loading dialog if still open
+      // Step 3: Close loading dialog if still open
       if (Get.isDialogOpen ?? false) {
         Get.back();
       }
 
-      // Navigate to login
+      // Step 4: Show success message
+      Get.snackbar(
+        'Logged Out',
+        'You have been successfully logged out',
+        backgroundColor: Colors.green.shade100,
+        colorText: Colors.green.shade800,
+        icon: Icon(
+          Icons.check_circle,
+          color: Colors.green.shade600,
+        ),
+        duration: const Duration(seconds: 2),
+      );
+
+      // Step 5: Navigate to login
       Get.offAllNamed('/login');
     } catch (e) {
+      print('❌ Error during logout: $e');
+
       // Close loading dialog on error
       if (Get.isDialogOpen ?? false) {
         Get.back();
       }
 
+      // Show error message but still try to logout
       Get.snackbar(
-        'Error',
-        'Failed to logout: $e',
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
+        'Logout Warning',
+        'There was an issue during logout, but you have been signed out.',
+        backgroundColor: Colors.orange.shade100,
+        colorText: Colors.orange.shade800,
+        icon: Icon(
+          Icons.warning,
+          color: Colors.orange.shade600,
+        ),
+        duration: const Duration(seconds: 4),
       );
+
+      // Force navigation to login even on error
+      try {
+        final authController = Get.find<AuthController>();
+        await authController.signOut();
+      } catch (_) {}
+
+      Get.offAllNamed('/login');
     }
   }
 

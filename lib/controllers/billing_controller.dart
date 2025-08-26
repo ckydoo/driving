@@ -1514,7 +1514,7 @@ class BillingController extends GetxController {
                   children: [
                     pw.Divider(),
                     pw.Text(
-                      'This report was generated automatically by the Driving School Management System',
+                      'This report was generated automatically by the  System',
                       style: pw.TextStyle(
                         fontSize: 10,
                         fontStyle: pw.FontStyle.italic,
