@@ -284,12 +284,7 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
                 ),
               ),
               // SYNC ICON - NEW ADDITION
-              Container(
-                width: 56,
-                height: 56,
-                child:
-                    const SyncIconWidget(), // Using the existing compact sync widget
-              ),
+              const SyncIconWidget(),
               // POS button
               Container(
                 width: 56,

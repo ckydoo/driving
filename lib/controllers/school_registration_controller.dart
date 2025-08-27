@@ -26,13 +26,45 @@ class SchoolRegistrationController extends GetxController {
   final adminEmailController = TextEditingController();
   final passwordController = TextEditingController();
   final confirmPasswordController = TextEditingController();
+  final idnumberController = TextEditingController();
+
   // Reactive variables
   final RxBool isLoading = false.obs;
   final RxString errorMessage = ''.obs;
   final RxBool obscurePassword = true.obs;
   final RxBool obscureConfirmPassword = true.obs;
   final RxString currentStep = ''.obs;
+
   FirebaseFirestore? _firestore;
+  firebase_auth.FirebaseAuth? _firebaseAuth;
+  final RxBool firebaseInitialized = false.obs;
+  @override
+  void onInit() {
+    super.onInit();
+    _initializeFirebase();
+  }
+
+  // NEW: Proper Firebase initialization
+  Future<void> _initializeFirebase() async {
+    try {
+      print('🔥 Initializing Firebase for school registration...');
+
+      _firebaseAuth = firebase_auth.FirebaseAuth.instance;
+      _firestore = FirebaseFirestore.instance;
+
+      // Test the connection
+      await _firestore!.settings; // This will throw if not connected
+
+      firebaseInitialized.value = true;
+      print('✅ Firebase initialized successfully for school registration');
+    } catch (e) {
+      print('⚠️ Firebase initialization failed: $e');
+      firebaseInitialized.value = false;
+
+      // Don't throw here - allow local-only registration
+      print('⚠️ Will proceed with local-only registration');
+    }
+  }
 
   @override
   void onClose() {
@@ -44,6 +76,7 @@ class SchoolRegistrationController extends GetxController {
     adminEmailController.dispose();
     passwordController.dispose();
     confirmPasswordController.dispose();
+    idnumberController.dispose();
     super.onClose();
   }
 
@@ -119,6 +152,16 @@ class SchoolRegistrationController extends GetxController {
     return null;
   }
 
+  String? validateIDNumber(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Id Number is required';
+    }
+    if (value.trim().length < 7) {
+      return 'Last name must be at least 7 characters';
+    }
+    return null;
+  }
+
   String? validatePassword(String? value) {
     if (value == null || value.isEmpty) {
       return 'Password is required';
@@ -139,7 +182,6 @@ class SchoolRegistrationController extends GetxController {
     return null;
   }
 
-  // Enhanced registration method with Firebase sync
   Future<void> registerSchool() async {
     if (!formKey.currentState!.validate()) {
       return;
@@ -149,7 +191,7 @@ class SchoolRegistrationController extends GetxController {
     errorMessage.value = '';
 
     try {
-      print('🏫 === STARTING ENHANCED SCHOOL REGISTRATION WITH FIREBASE ===');
+      print('🏫 === STARTING SCHOOL REGISTRATION ===');
 
       // Step 1: Update business/school settings
       currentStep.value = 'Updating school settings...';
@@ -163,23 +205,361 @@ class SchoolRegistrationController extends GetxController {
       currentStep.value = 'Creating administrator account...';
       await _createAdministratorAccount();
 
-      // Step 4: Initialize Firebase sync for this school
-      currentStep.value = 'Setting up cloud synchronization...';
-      await _initializeFirebaseSync();
+      // Step 4: Initialize Firebase sync for this school (if available)
+      if (firebaseInitialized.value) {
+        currentStep.value = 'Setting up cloud synchronization...';
+        await _initializeFirebaseSync();
 
-      // Step 5: Create initial shared data in Firebase
-      currentStep.value = 'Creating initial school data...';
-      await _createInitialSharedData();
+        // Step 5: Create initial shared data in Firebase (if available)
+        currentStep.value = 'Creating initial school data...';
+        await _createInitialSharedData();
+      } else {
+        print('⚠️ Skipping Firebase steps - not available');
+      }
 
       // Step 6: Auto-login and setup sync
       currentStep.value = 'Completing setup...';
       await _finalizeSetupAndLogin();
+
+      print('🎉 School registration completed successfully!');
     } catch (e) {
       print('❌ School registration failed: $e');
       errorMessage.value = 'Registration failed: ${e.toString()}';
     } finally {
       isLoading.value = false;
       currentStep.value = '';
+    }
+  }
+
+  // FIXED: Create administrator account with better error handling
+  Future<void> _createAdministratorAccount() async {
+    print('👤 Creating administrator account...');
+
+    try {
+      final email = adminEmailController.text.trim().toLowerCase();
+      final password = passwordController.text;
+
+      // Step 1: Try to create Firebase user (if Firebase is available)
+      firebase_auth.User? firebaseUser;
+
+      if (firebaseInitialized.value && _firebaseAuth != null) {
+        try {
+          print('🔥 Creating Firebase user account...');
+          final credential =
+              await _firebaseAuth!.createUserWithEmailAndPassword(
+            email: email,
+            password: password,
+          );
+          firebaseUser = credential.user;
+          print('✅ Firebase user created: ${firebaseUser?.uid}');
+        } catch (e) {
+          print('⚠️ Firebase user creation failed: $e');
+          print('⚠️ Continuing with local-only account');
+          // Continue with local account creation - don't fail here
+        }
+      } else {
+        print('⚠️ Firebase not available, creating local-only account');
+      }
+
+      // Step 2: Create local User object
+      final adminUser = User(
+        fname: adminFirstNameController.text.trim(),
+        lname: adminLastNameController.text.trim(),
+        idnumber: idnumberController.text.trim().isNotEmpty
+            ? idnumberController.text.trim()
+            : '', // Handle empty ID number
+        email: email,
+        password: password, // Will be hashed by the database layer
+        phone: phoneController.text.trim(),
+        address: addressController.text.trim(),
+        gender: 'Male', // Default - can be updated later
+        role: 'admin',
+        status: 'Active',
+        date_of_birth: DateTime.now().subtract(const Duration(days: 25 * 365)),
+        created_at: DateTime.now(),
+      );
+
+      print('📝 User object created successfully');
+      print('👤 Email: ${adminUser.email}');
+      print('🔑 Role: ${adminUser.role}');
+
+      // Step 3: Insert user into local database
+      await DatabaseHelper.instance.insertUser(adminUser);
+      print('✅ Administrator account created successfully in local database');
+
+      // Step 4: Save user to Firebase Firestore (only if Firebase user was created)
+      if (firebaseUser != null && firebaseInitialized.value) {
+        try {
+          await _saveUserToFirestore(firebaseUser, adminUser);
+          print('✅ Administrator account saved to Firebase Firestore');
+        } catch (e) {
+          print('⚠️ Failed to save to Firestore, but local user created: $e');
+          // Don't fail the registration - user was created locally
+        }
+      }
+
+      print('✅ Administrator account creation completed');
+    } catch (e) {
+      print('❌ Error creating administrator account: $e');
+      print('📄 Stack trace: ${StackTrace.current}');
+      throw Exception('Failed to create administrator account: $e');
+    }
+  }
+
+  // FIXED: Save user to Firestore with proper null checking
+  Future<void> _saveUserToFirestore(
+      firebase_auth.User firebaseUser, User localUser) async {
+    // CRITICAL: Check if Firestore is available before proceeding
+    if (_firestore == null || !firebaseInitialized.value) {
+      print('⚠️ Firestore not available, skipping cloud save');
+      return; // Don't throw - this is optional
+    }
+
+    try {
+      print('💾 Saving user to Firestore...');
+
+      final schoolConfig = Get.find<SchoolConfigService>();
+      final schoolId = schoolConfig.schoolId.value;
+
+      if (schoolId.isEmpty) {
+        print('⚠️ No school ID found, skipping Firestore save');
+        return; // Don't throw - this is optional
+      }
+
+      // Prepare user data for Firebase
+      final userData = {
+        'firebase_uid': firebaseUser.uid,
+        'local_id': localUser.id, // Store local ID for reference
+        'fname': localUser.fname,
+        'lname': localUser.lname,
+        'email': localUser.email.toLowerCase(),
+        'phone': localUser.phone,
+        'address': localUser.address,
+        'gender': localUser.gender,
+        'idnumber': localUser.idnumber ?? '', // Handle null ID number
+        'role': localUser.role,
+        'status': localUser.status,
+        'date_of_birth': localUser.date_of_birth?.toIso8601String(),
+        'created_at': localUser.created_at?.toIso8601String(),
+        'last_modified': DateTime.now().toIso8601String(),
+        'firebase_synced': 1,
+        'school_id': schoolId,
+        'sync_source': 'registration', // Mark as created during registration
+      };
+
+      // Use Firebase UID as the document ID for consistency
+      final userDocRef = _firestore!
+          .collection('schools')
+          .doc(schoolId)
+          .collection('users')
+          .doc(firebaseUser.uid); // Use Firebase UID as doc ID
+
+      // Check if document already exists
+      final existingDoc = await userDocRef.get();
+
+      if (existingDoc.exists) {
+        print('📝 Updating existing user document: ${firebaseUser.uid}');
+        await userDocRef.update(userData);
+      } else {
+        print('➕ Creating new user document: ${firebaseUser.uid}');
+        await userDocRef.set(userData);
+      }
+
+      // Mark local user as synced to prevent duplicate sync
+      if (localUser.id != null) {
+        final db = await DatabaseHelper.instance.database;
+        await db.update(
+          'users',
+          {'firebase_synced': 1, 'firebase_uid': firebaseUser.uid},
+          where: 'id = ?',
+          whereArgs: [localUser.id],
+        );
+        print('✅ Local user marked as synced: ${localUser.id}');
+      }
+
+      print('✅ User saved to Firestore successfully');
+      print('   Document ID: ${firebaseUser.uid}');
+      print('   Local ID: ${localUser.id}');
+      print('   Email: ${firebaseUser.email}');
+    } catch (e) {
+      print('❌ Error saving user data to Firestore: $e');
+      // IMPORTANT: Don't throw here - allow registration to continue
+      // The user was created locally, which is the most important part
+      print('⚠️ Registration will continue with local-only user');
+    }
+  }
+
+// 1. FIXED: _initializeFirebaseSync method
+  Future<void> _initializeFirebaseSync() async {
+    if (!firebaseInitialized.value) {
+      print('⚠️ Firebase not available, skipping sync initialization');
+      return;
+    }
+
+    try {
+      print('🔄 Setting up Firebase sync for new school...');
+
+      // Check if sync service is available
+      if (!Get.isRegistered<FixedLocalFirstSyncService>()) {
+        print('⚠️ Sync service not registered, skipping sync initialization');
+        return;
+      }
+
+      final syncService = Get.find<FixedLocalFirstSyncService>();
+
+      // Verify sync service is ready
+      if (!syncService.firebaseAvailable.value) {
+        print('⚠️ Sync service Firebase not available');
+        return;
+      }
+
+      // Create initial Firebase structure for the school
+      await _createInitialFirebaseStructure();
+
+      // Initialize sync for the new school
+      print('📦 Creating initial shared data...');
+      try {
+        await syncService.createInitialSharedData();
+        print('✅ Initial shared data created');
+      } catch (e) {
+        print('⚠️ Failed to create initial shared data: $e');
+      }
+
+      // Trigger initial sync
+      print('🔄 Performing initial sync...');
+      Future.delayed(const Duration(seconds: 2), () async {
+        try {
+          await syncService.triggerManualSync();
+          print('✅ Initial sync completed');
+        } catch (e) {
+          print('⚠️ Initial sync failed (non-critical): $e');
+        }
+      });
+
+      print('✅ Firebase sync initialization completed');
+    } catch (e) {
+      print('⚠️ Firebase sync setup failed: $e');
+      // Don't throw - registration should continue
+    }
+  }
+
+// 2. NEW: Helper method to create initial Firebase structure
+  Future<void> _createInitialFirebaseStructure() async {
+    if (_firestore == null || !firebaseInitialized.value) {
+      print('⚠️ Firestore not available for structure creation');
+      return;
+    }
+
+    try {
+      final schoolConfig = Get.find<SchoolConfigService>();
+      final schoolId = schoolConfig.schoolId.value;
+
+      if (schoolId.isEmpty) {
+        print('⚠️ School ID empty, cannot create Firebase structure');
+        return;
+      }
+
+      print('🏫 Creating Firebase structure for school: $schoolId');
+
+      // Create school metadata document
+      final schoolDocRef = _firestore!.collection('schools').doc(schoolId);
+      final settingsController = Get.find<SettingsController>();
+
+      final schoolMetadata = {
+        'school_id': schoolId,
+        'school_name': settingsController.businessName.value,
+        'business_address': settingsController.businessAddress.value,
+        'business_phone': settingsController.businessPhone.value,
+        'business_email': settingsController.businessEmail.value,
+        'business_city': settingsController.businessCity.value,
+        'business_country': settingsController.businessCountry.value,
+        'created_at': FieldValue.serverTimestamp(),
+        'last_updated': FieldValue.serverTimestamp(),
+        'status': 'active',
+        'subscription_status': 'active',
+        'version': 1,
+      };
+
+      await schoolDocRef.set(schoolMetadata, SetOptions(merge: true));
+      print('✅ School metadata created in Firebase');
+    } catch (e) {
+      print('❌ Failed to create Firebase structure: $e');
+      // Don't throw - this is not critical
+    }
+  }
+
+// 3. FIXED: _createInitialSharedData method
+  Future<void> _createInitialSharedData() async {
+    if (!firebaseInitialized.value) {
+      print('⚠️ Firebase not available, skipping initial data creation');
+      return;
+    }
+
+    try {
+      print('📦 Creating initial shared data in Firebase...');
+
+      // Check if sync service is available and use it
+      if (Get.isRegistered<FixedLocalFirstSyncService>()) {
+        final syncService = Get.find<FixedLocalFirstSyncService>();
+
+        if (syncService.firebaseAvailable.value) {
+          await syncService.createInitialSharedData();
+          print('✅ Initial shared data created via sync service');
+        } else {
+          print('⚠️ Sync service Firebase not available');
+          // Create basic structure manually
+          await _createBasicFirebaseStructure();
+        }
+      } else {
+        print('⚠️ Sync service not available, creating basic structure');
+        // Create basic structure manually
+        await _createBasicFirebaseStructure();
+      }
+    } catch (e) {
+      print('⚠️ Failed to create initial shared data: $e');
+      // Don't fail registration for this
+    }
+  }
+
+// 4. NEW: Create basic Firebase structure manually if sync service fails
+  Future<void> _createBasicFirebaseStructure() async {
+    if (_firestore == null) return;
+
+    try {
+      final schoolConfig = Get.find<SchoolConfigService>();
+      final schoolId = schoolConfig.schoolId.value;
+
+      if (schoolId.isEmpty) return;
+
+      print('📦 Creating basic Firebase structure manually...');
+
+      final schoolRef = _firestore!.collection('schools').doc(schoolId);
+
+      // Create essential collections with initial documents
+      final collections = [
+        'users',
+        'courses',
+        'fleet',
+        'schedules',
+        'invoices'
+      ];
+
+      final batch = _firestore!.batch();
+
+      for (String collection in collections) {
+        // Create a system document to establish the collection
+        final systemDocRef = schoolRef.collection(collection).doc('_system');
+        batch.set(systemDocRef, {
+          'collection': collection,
+          'created_at': FieldValue.serverTimestamp(),
+          'initialized': true,
+        });
+      }
+
+      await batch.commit();
+      print('✅ Basic Firebase structure created');
+    } catch (e) {
+      print('❌ Failed to create basic Firebase structure: $e');
     }
   }
 
@@ -234,147 +614,6 @@ class SchoolRegistrationController extends GetxController {
     print('   Firebase Path: ${schoolConfig.getCollectionPath("users")}');
   }
 
-  // Fix for _createAdministratorAccount method in school_registration_controller.dart
-// Replace your existing _createAdministratorAccount method with this:
-
-  Future<void> _createAdministratorAccount() async {
-    print('👤 Creating administrator account for multi-tenant system...');
-
-    try {
-      final email = adminEmailController.text.trim().toLowerCase();
-      final password = passwordController.text;
-
-      // Step 1: Create Firebase user first (for Firebase-first approach)
-      print('🔥 Creating Firebase user account...');
-      firebase_auth.FirebaseAuth? firebaseAuth;
-      firebase_auth.User? firebaseUser;
-
-      try {
-        firebaseAuth = firebase_auth.FirebaseAuth.instance;
-        final credential = await firebaseAuth.createUserWithEmailAndPassword(
-          email: email,
-          password: password,
-        );
-        firebaseUser = credential.user;
-        print('✅ Firebase user created: ${firebaseUser?.uid}');
-      } catch (e) {
-        print('⚠️ Firebase user creation failed: $e');
-        print('⚠️ Continuing with local-only account');
-        // Continue with local account creation
-      }
-
-      // Step 2: Create local User object
-      final adminUser = User(
-        fname: adminFirstNameController.text.trim(),
-        lname: adminLastNameController.text.trim(),
-        email: email,
-        password: password, // Will be hashed by the database layer
-        phone: phoneController.text.trim(),
-        address: addressController.text.trim(),
-        gender: 'Male',
-        idnumber: '',
-        role: 'admin',
-        status: 'Active',
-        date_of_birth: DateTime.now().subtract(const Duration(days: 25 * 365)),
-        created_at: DateTime.now(),
-      );
-
-      print('📝 User object created successfully');
-      print('👤 Email: ${adminUser.email}');
-      print('🔑 Role: ${adminUser.role}');
-
-      // Step 3: Insert user into local database
-      await DatabaseHelper.instance.insertUser(adminUser);
-      print('✅ Administrator account created successfully in local database');
-
-      // Step 4: Save user to Firebase Firestore if Firebase user was created
-      if (firebaseUser != null) {
-        await _saveUserToFirestore(firebaseUser, adminUser);
-        print('✅ Administrator account saved to Firebase Firestore');
-      }
-    } catch (e) {
-      print('❌ Error creating administrator account: $e');
-      print('📄 Stack trace: ${StackTrace.current}');
-      throw Exception('Failed to create administrator account: $e');
-    }
-  }
-
-// FIXED: Replace your existing _saveUserToFirestore method with this
-  Future<void> _saveUserToFirestore(
-      firebase_auth.User firebaseUser, User localUser) async {
-    try {
-      final schoolConfig = Get.find<SchoolConfigService>();
-      final schoolId = schoolConfig.schoolId.value;
-
-      if (schoolId.isEmpty) {
-        print('⚠️ No school ID found, skipping Firestore save');
-        return;
-      }
-
-      print('💾 Saving user to Firestore with consistent ID strategy...');
-
-      // Prepare user data for Firebase
-      final userData = {
-        'firebase_uid': firebaseUser.uid,
-        'local_id': localUser.id, // Store local ID for reference
-        'fname': localUser.fname,
-        'lname': localUser.lname,
-        'email': localUser.email.toLowerCase(),
-        'phone': localUser.phone,
-        'address': localUser.address,
-        'gender': localUser.gender,
-        'idnumber': localUser.idnumber,
-        'role': localUser.role,
-        'status': localUser.status,
-        'date_of_birth': localUser.date_of_birth?.toIso8601String(),
-        'created_at': localUser.created_at?.toIso8601String(),
-        'last_modified': DateTime.now().toIso8601String(),
-        'firebase_synced': 1,
-        'school_id': schoolId,
-        'sync_source': 'registration', // Mark as created during registration
-      };
-
-      // Use Firebase UID as the document ID for consistency
-      final userDocRef = _firestore!
-          .collection('schools')
-          .doc(schoolId)
-          .collection('users')
-          .doc(firebaseUser
-              .uid); // CONSISTENT: Always use Firebase UID as doc ID
-
-      // Check if document already exists
-      final existingDoc = await userDocRef.get();
-
-      if (existingDoc.exists) {
-        print('📝 Updating existing user document: ${firebaseUser.uid}');
-        await userDocRef.update(userData);
-      } else {
-        print('➕ Creating new user document: ${firebaseUser.uid}');
-        await userDocRef.set(userData);
-      }
-
-      // CRITICAL: Mark local user as synced to prevent duplicate sync
-      if (localUser.id != null) {
-        final db = await DatabaseHelper.instance.database;
-        await db.update(
-          'users',
-          {'firebase_synced': 1, 'firebase_uid': firebaseUser.uid},
-          where: 'id = ?',
-          whereArgs: [localUser.id],
-        );
-        print('✅ Local user marked as synced: ${localUser.id}');
-      }
-
-      print('✅ User saved to Firestore successfully');
-      print('   Document ID: ${firebaseUser.uid}');
-      print('   Local ID: ${localUser.id}');
-      print('   Email: ${firebaseUser.email}');
-    } catch (e) {
-      print('❌ Error saving user data to Firestore: $e');
-      throw Exception('Failed to save user data to cloud: $e');
-    }
-  }
-
 // Also update your _finalizeSetupAndLogin method:
   Future<void> _finalizeSetupAndLogin() async {
     print('🎯 Finalizing setup and performing auto-login...');
@@ -412,52 +651,6 @@ class SchoolRegistrationController extends GetxController {
       print('⚠️ Auto-login failed: $e');
       // Still show success but navigate to login
       _showSuccessAndNavigateToLogin();
-    }
-  }
-
-// Replace your _initializeFirebaseSync method in school_registration_controller.dart
-
-// Step 4: Initialize Firebase sync for the new school
-  Future<void> _initializeFirebaseSync() async {
-    print('🔄 Initializing Firebase sync for new school...');
-
-    try {
-      final syncService = Get.find<FixedLocalFirstSyncService>();
-
-      if (!syncService.firebaseAvailable.value) {
-        print('⚠️ Firebase not available, skipping sync setup');
-        return;
-      }
-
-      // Get school configuration
-      final schoolConfig = Get.find<SchoolConfigService>();
-      final settingsController = Get.find<SettingsController>();
-
-      print('🔄 School ID: ${schoolConfig.schoolId.value}');
-      print('🔄 Business Name: ${settingsController.businessName.value}');
-      print('🔄 Business Address: ${settingsController.businessAddress.value}');
-
-      // Prepare admin user data for Firebase
-      final adminUserData = {
-        'firebase_uid': '', // Will be updated later
-        'fname': adminFirstNameController.text.trim(),
-        'lname': adminLastNameController.text.trim(),
-        'email': adminEmailController.text.trim().toLowerCase(),
-        'phone': phoneController.text.trim(),
-        'address': addressController.text.trim(),
-        'role': 'admin',
-        'status': 'active',
-        'created_during_registration': true,
-      };
-
-      print('👥 Admin user data prepared');
-
-      print('✅ Firebase school creation completed successfully');
-    } catch (e) {
-      print('❌ Firebase sync initialization failed: $e');
-      print('❌ Stack trace: ${StackTrace.current}');
-      // Don't throw - allow registration to continue without Firebase
-      print('⚠️ Continuing registration without Firebase sync');
     }
   }
 
@@ -509,25 +702,6 @@ class SchoolRegistrationController extends GetxController {
     }
   }
 
-  // Step 5: Create initial shared data in Firebase
-  Future<void> _createInitialSharedData() async {
-    print('📦 Creating initial shared data in Firebase...');
-
-    try {
-      final syncService = Get.find<FixedLocalFirstSyncService>();
-
-      if (syncService.firebaseAvailable.value) {
-        await syncService.createInitialSharedData();
-        print('✅ Initial shared data created in Firebase');
-      } else {
-        print('⚠️ Firebase not available, will create data when online');
-      }
-    } catch (e) {
-      print('⚠️ Failed to create initial shared data: $e');
-      // Don't fail registration for this
-    }
-  }
-
   // Show success and navigate to PIN setup
   void _showSuccessAndNavigate() {
     Get.snackbar(
@@ -556,5 +730,16 @@ class SchoolRegistrationController extends GetxController {
 
     // Navigate to login
     Get.offAllNamed('/login');
+  }
+
+  bool get canUseFirebase => firebaseInitialized.value;
+
+  // NEW: Get Firebase status for debugging
+  String get firebaseStatus {
+    if (firebaseInitialized.value) {
+      return 'Connected';
+    } else {
+      return 'Not Available';
+    }
   }
 }

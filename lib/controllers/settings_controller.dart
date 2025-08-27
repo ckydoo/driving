@@ -105,13 +105,16 @@ class SettingsController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-    _loadSettings();
-    // Initialize temp values
+
+    // Initialize temp values first
     _tempBreakBetweenLessons.value = breakBetweenLessons.value;
     _tempLessonStartReminder.value = lessonStartReminder.value;
     _tempLowLessonThreshold.value = lowLessonThreshold.value;
     _tempAutoSaveInterval.value = autoSaveInterval.value;
-    loadSettingsFromDatabase();
+
+    // Load settings in proper sequence
+    _initializeSettings();
+
     // Set up business information change listeners for school config updates
     _setupBusinessInfoListeners();
   }
@@ -221,35 +224,6 @@ class SettingsController extends GetxController {
     }
   }
 
-  // Save individual setting
-  Future<void> _saveSetting(String key, dynamic value) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      if (value is bool) {
-        await prefs.setBool(key, value);
-      } else if (value is int) {
-        await prefs.setInt(key, value);
-      } else if (value is double) {
-        await prefs.setDouble(key, value);
-      } else if (value is String) {
-        await prefs.setString(key, value);
-      }
-    } catch (e) {
-      print('Error saving setting $key: $e');
-    }
-  }
-
-  // Enhanced utility methods for easy setting management
-  void updateSetting(String key, dynamic value, dynamic observableValue) {
-    if (observableValue is RxList) {
-      observableValue.assignAll(value);
-    } else if (observableValue is Rx) {
-      observableValue.value = value;
-    }
-    _saveSetting(key, value);
-    _showSettingUpdatedSnackbar(key);
-  }
-
   void _showSettingUpdatedSnackbar(String key) {
     Get.snackbar(
       'Setting Updated',
@@ -260,35 +234,6 @@ class SettingsController extends GetxController {
       snackPosition: SnackPosition.BOTTOM,
     );
   }
-
-  // Scheduling Settings Methods
-  void toggleBillingValidation(bool value) => updateSetting(
-      'enforce_billing_validation', value, enforceBillingValidation);
-
-  void toggleInstructorAvailabilityCheck(bool value) => updateSetting(
-      'check_instructor_availability', value, checkInstructorAvailability);
-
-  void toggleWorkingHours(bool value) =>
-      updateSetting('enforce_working_hours', value, enforceWorkingHours);
-
-  void toggleAutoAssignVehicles(bool value) =>
-      updateSetting('auto_assign_vehicles', value, autoAssignVehicles);
-
-  // Billing Settings Methods
-  void toggleLowLessonWarning(bool value) =>
-      updateSetting('show_low_lesson_warning', value, showLowLessonWarning);
-
-  void setLowLessonThreshold(int value) =>
-      updateSetting('low_lesson_threshold', value, lowLessonThreshold);
-
-  void togglePreventOverScheduling(bool value) =>
-      updateSetting('prevent_over_scheduling', value, preventOverScheduling);
-
-  void toggleAutoCreateBillingRecords(bool value) => updateSetting(
-      'auto_create_billing_records', value, autoCreateBillingRecords);
-
-  void toggleCountScheduledLessons(bool value) =>
-      updateSetting('count_scheduled_lessons', value, countScheduledLessons);
 
   // Instructor Settings Methods
   void setWorkingHours(String startTime, String endTime) {
@@ -851,5 +796,323 @@ class SettingsController extends GetxController {
     saveBusinessSettings();
 
     print('☁️ Cloud sync ${enabled ? "enabled" : "disabled"}');
+  }
+
+  // NEW: Proper initialization sequence
+  Future<void> _initializeSettings() async {
+    try {
+      print('🔧 Initializing settings...');
+
+      // Load from SharedPreferences first (faster)
+      await _loadSettings();
+
+      // Then load from database (more complete data)
+      await loadSettingsFromDatabase();
+
+      print('✅ Settings initialized successfully');
+    } catch (e) {
+      print('❌ Error initializing settings: $e');
+      // Fallback to defaults if both fail
+      await _setDefaultSettings();
+    }
+  }
+
+// NEW: Set default settings if loading fails
+  Future<void> _setDefaultSettings() async {
+    print('⚠️ Setting default values due to loading failure');
+
+    // Set all scheduling defaults to true
+    enforceBillingValidation.value = true;
+    checkInstructorAvailability.value = true;
+    enforceWorkingHours.value = true;
+    autoAssignVehicles.value = true;
+    defaultLessonDuration.value = 1.5;
+
+    // Set all billing defaults to true
+    showLowLessonWarning.value = true;
+    lowLessonThreshold.value = 3;
+    preventOverScheduling.value = true;
+    autoCreateBillingRecords.value = true;
+    countScheduledLessons.value = true;
+
+    // Save defaults to SharedPreferences
+    await _saveAllSettingsToPreferences();
+  }
+
+// FIXED: Enhanced utility method with proper async handling
+  Future<void> updateSetting(
+      String key, dynamic value, dynamic observableValue) async {
+    try {
+      print('💾 Updating setting: $key = $value');
+
+      // Update the observable value first
+      if (observableValue is RxList) {
+        observableValue.assignAll(value);
+      } else if (observableValue is Rx) {
+        observableValue.value = value;
+      }
+
+      // Save to SharedPreferences - AWAIT this!
+      await _saveSetting(key, value);
+
+      // Also save to database for backup
+      await _saveSettingToDatabase(key, value);
+
+      _showSettingUpdatedSnackbar(key);
+
+      print('✅ Setting $key saved successfully');
+    } catch (e) {
+      print('❌ Error updating setting $key: $e');
+
+      // Show error to user
+      Get.snackbar(
+        'Settings Error',
+        'Failed to save setting: $key',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+        duration: Duration(seconds: 3),
+      );
+    }
+  }
+
+// FIXED: Proper async save method
+  Future<void> _saveSetting(String key, dynamic value) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      bool success = false;
+
+      if (value is bool) {
+        success = await prefs.setBool(key, value);
+      } else if (value is int) {
+        success = await prefs.setInt(key, value);
+      } else if (value is double) {
+        success = await prefs.setDouble(key, value);
+      } else if (value is String) {
+        success = await prefs.setString(key, value);
+      }
+
+      if (!success) {
+        throw Exception('Failed to save $key to SharedPreferences');
+      }
+
+      print('✅ Successfully saved $key = $value to SharedPreferences');
+    } catch (e) {
+      print('❌ Error saving setting $key to SharedPreferences: $e');
+      throw e; // Re-throw so updateSetting can handle it
+    }
+  }
+
+// NEW: Save setting to database as backup
+  Future<void> _saveSettingToDatabase(String key, dynamic value) async {
+    try {
+      final db = await _dbHelper.database;
+
+      await db.insert(
+        'settings',
+        {
+          'key': key,
+          'value': value.toString(),
+          'updated_at': DateTime.now().toIso8601String(),
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+
+      print('✅ Setting $key backed up to database');
+    } catch (e) {
+      print('⚠️ Failed to backup setting $key to database: $e');
+      // Don't throw - database backup is optional
+    }
+  }
+
+// NEW: Save all current settings to SharedPreferences
+  Future<void> _saveAllSettingsToPreferences() async {
+    try {
+      print('💾 Saving all settings to SharedPreferences...');
+      final prefs = await SharedPreferences.getInstance();
+
+      // Save scheduling settings
+      await prefs.setBool(
+          'enforce_billing_validation', enforceBillingValidation.value);
+      await prefs.setBool(
+          'check_instructor_availability', checkInstructorAvailability.value);
+      await prefs.setBool('enforce_working_hours', enforceWorkingHours.value);
+      await prefs.setBool('auto_assign_vehicles', autoAssignVehicles.value);
+      await prefs.setDouble(
+          'default_lesson_duration', defaultLessonDuration.value);
+
+      // Save billing settings
+      await prefs.setBool(
+          'show_low_lesson_warning', showLowLessonWarning.value);
+      await prefs.setInt('low_lesson_threshold', lowLessonThreshold.value);
+      await prefs.setBool(
+          'prevent_over_scheduling', preventOverScheduling.value);
+      await prefs.setBool(
+          'auto_create_billing_records', autoCreateBillingRecords.value);
+      await prefs.setBool(
+          'count_scheduled_lessons', countScheduledLessons.value);
+
+      // Save all other settings...
+      await prefs.setString('working_hours_start', workingHoursStart.value);
+      await prefs.setString('working_hours_end', workingHoursEnd.value);
+      await prefs.setInt('break_between_lessons', breakBetweenLessons.value);
+      await prefs.setBool(
+          'allow_back_to_back_lessons', allowBackToBackLessons.value);
+
+      // Save notification settings
+      await prefs.setBool(
+          'auto_attendance_notifications', autoAttendanceNotifications.value);
+      await prefs.setBool(
+          'schedule_conflict_alerts', scheduleConflictAlerts.value);
+      await prefs.setBool('billing_warnings', billingWarnings.value);
+      await prefs.setInt('lesson_start_reminder', lessonStartReminder.value);
+      await prefs.setString('daily_summary_time', dailySummaryTime.value);
+
+      // Save app preferences
+      await prefs.setString('theme', theme.value);
+      await prefs.setString('date_format', dateFormat.value);
+
+      print('✅ All settings saved to SharedPreferences');
+    } catch (e) {
+      print('❌ Error saving all settings: $e');
+      throw e;
+    }
+  }
+
+// FIXED: Enhanced toggle methods with better error handling
+  void toggleBillingValidation(bool value) async {
+    try {
+      print('🔧 Toggling billing validation to: $value');
+      await updateSetting(
+          'enforce_billing_validation', value, enforceBillingValidation);
+    } catch (e) {
+      print('❌ Failed to toggle billing validation: $e');
+      // Revert the UI state if save failed
+      enforceBillingValidation.value = !value;
+    }
+  }
+
+  void toggleInstructorAvailabilityCheck(bool value) async {
+    try {
+      print('🔧 Toggling instructor availability to: $value');
+      await updateSetting(
+          'check_instructor_availability', value, checkInstructorAvailability);
+    } catch (e) {
+      print('❌ Failed to toggle instructor availability: $e');
+      checkInstructorAvailability.value = !value;
+    }
+  }
+
+  void toggleWorkingHours(bool value) async {
+    try {
+      print('🔧 Toggling working hours to: $value');
+      await updateSetting('enforce_working_hours', value, enforceWorkingHours);
+    } catch (e) {
+      print('❌ Failed to toggle working hours: $e');
+      enforceWorkingHours.value = !value;
+    }
+  }
+
+  void toggleAutoAssignVehicles(bool value) async {
+    try {
+      print('🔧 Toggling auto assign vehicles to: $value');
+      await updateSetting('auto_assign_vehicles', value, autoAssignVehicles);
+    } catch (e) {
+      print('❌ Failed to toggle auto assign vehicles: $e');
+      autoAssignVehicles.value = !value;
+    }
+  }
+
+// Repeat for all other toggle methods...
+  void toggleLowLessonWarning(bool value) async {
+    try {
+      await updateSetting(
+          'show_low_lesson_warning', value, showLowLessonWarning);
+    } catch (e) {
+      showLowLessonWarning.value = !value;
+    }
+  }
+
+  void togglePreventOverScheduling(bool value) async {
+    try {
+      await updateSetting(
+          'prevent_over_scheduling', value, preventOverScheduling);
+    } catch (e) {
+      preventOverScheduling.value = !value;
+    }
+  }
+
+  void toggleAutoCreateBillingRecords(bool value) async {
+    try {
+      await updateSetting(
+          'auto_create_billing_records', value, autoCreateBillingRecords);
+    } catch (e) {
+      autoCreateBillingRecords.value = !value;
+    }
+  }
+
+  void toggleCountScheduledLessons(bool value) async {
+    try {
+      await updateSetting(
+          'count_scheduled_lessons', value, countScheduledLessons);
+    } catch (e) {
+      countScheduledLessons.value = !value;
+    }
+  }
+
+// NEW: Method to verify settings are persisted
+  Future<bool> verifySettingsPersistence() async {
+    try {
+      print('🔍 Verifying settings persistence...');
+      final prefs = await SharedPreferences.getInstance();
+
+      // Check a few key settings
+      bool billingValidation =
+          prefs.getBool('enforce_billing_validation') ?? false;
+      bool instructorAvailability =
+          prefs.getBool('check_instructor_availability') ?? false;
+      bool workingHours = prefs.getBool('enforce_working_hours') ?? false;
+
+      bool isMatch = billingValidation == enforceBillingValidation.value &&
+          instructorAvailability == checkInstructorAvailability.value &&
+          workingHours == enforceWorkingHours.value;
+
+      if (isMatch) {
+        print('✅ Settings persistence verified');
+        return true;
+      } else {
+        print('❌ Settings persistence FAILED');
+        print(
+            'Expected: billing=$billingValidation, instructor=$instructorAvailability, hours=$workingHours');
+        print(
+            'Actual: billing=${enforceBillingValidation.value}, instructor=${checkInstructorAvailability.value}, hours=${enforceWorkingHours.value}');
+        return false;
+      }
+    } catch (e) {
+      print('❌ Error verifying settings persistence: $e');
+      return false;
+    }
+  }
+
+// NEW: Debug method to check SharedPreferences contents
+  Future<void> debugSharedPreferences() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final keys = prefs.getKeys();
+
+      print('🔍 === SHARED PREFERENCES DEBUG ===');
+      print('Total keys: ${keys.length}');
+
+      for (String key in keys) {
+        if (key.contains('billing') ||
+            key.contains('scheduling') ||
+            key.contains('instructor')) {
+          final value = prefs.get(key);
+          print('$key = $value (${value.runtimeType})');
+        }
+      }
+      print('🔍 === END SHARED PREFERENCES DEBUG ===');
+    } catch (e) {
+      print('❌ Error debugging SharedPreferences: $e');
+    }
   }
 }

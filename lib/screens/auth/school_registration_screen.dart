@@ -212,6 +212,24 @@ class SchoolRegistrationScreen extends StatelessWidget {
 
                             const SizedBox(height: 16),
 
+                            // Admin Email
+                            TextFormField(
+                              controller: controller.idnumberController,
+                              decoration: InputDecoration(
+                                labelText: 'ID Number',
+                                hintText: '104545454D12',
+                                prefixIcon: const Icon(Icons.badge),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                filled: true,
+                                fillColor: Colors.grey.shade50,
+                              ),
+                              validator: controller.validateIDNumber,
+                              keyboardType: TextInputType.text,
+                            ),
+                            const SizedBox(height: 16),
+
                             // Password
                             TextFormField(
                               controller: controller.passwordController,
