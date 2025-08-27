@@ -55,11 +55,18 @@ class FixedLocalFirstSyncService extends GetxService {
     _setupPeriodicSync();
   }
 
+// Call this in your initialization
   Future<void> _initialize() async {
     try {
       _firestore = FirebaseFirestore.instance;
       _currentDeviceId = await _getOrCreateDeviceId();
       firebaseAvailable.value = true;
+
+      final schoolId = await _getSchoolId();
+      if (schoolId.isNotEmpty) {
+        _setupRealTimeListeners(schoolId); // ← ADD THIS
+      }
+
       print(
           '✅ Fixed sync service initialized with device ID: $_currentDeviceId');
     } catch (e) {
@@ -174,80 +181,144 @@ class FixedLocalFirstSyncService extends GetxService {
     int totalProcessed = 0;
     int totalInserted = 0;
     int totalUpdated = 0;
-    int totalConflicts = 0;
-    int totalSkipped = 0;
 
     for (final table in _syncTables) {
       try {
         print('📥 Processing $table...');
 
-        final results = await _pullAndMergeTable(schoolId, table);
+        // GET RECORDS WITH SERVER TIMESTAMP CHECK
+        final lastPullTime = await _getLastPullTimestamp(table);
+        print(
+            '🕐 Last pull time for $table: ${DateTime.fromMillisecondsSinceEpoch(lastPullTime)}');
 
-        totalProcessed += results['processed'] ?? 0;
-        totalInserted += results['inserted'] ?? 0;
-        totalUpdated += results['updated'] ?? 0;
-        totalConflicts += results['conflicts'] ?? 0;
-        totalSkipped += results['skipped'] ?? 0;
+        final querySnapshot = await _firestore!
+            .collection('schools')
+            .doc(schoolId)
+            .collection(table)
+            .where('last_modified', isGreaterThan: lastPullTime)
+            .get();
+
+        print(
+            '📥 Found ${querySnapshot.docs.length} updated $table records in Firebase since last pull');
+
+        for (final doc in querySnapshot.docs) {
+          // ADD DEBUG INFO HERE
+          print('📄 Processing ${table} record ${doc.id}');
+          print('   Remote data last_modified: ${doc.data()['last_modified']}');
+
+          final result = await _mergeRecordWithConflictResolution(
+              table, doc.id, doc.data());
+
+          if (result == MergeResult.inserted) totalInserted++;
+          if (result == MergeResult.updated) totalUpdated++;
+          totalProcessed++;
+        }
+
+        // Update last pull timestamp for this table
+        await _updateLastPullTimestamp(table);
       } catch (e) {
         print('❌ Error processing $table: $e');
       }
     }
 
     print(
-        '📊 PULL SUMMARY: $totalProcessed processed, $totalInserted inserted, $totalUpdated updated, $totalConflicts conflicts, $totalSkipped skipped');
+        '📊 PULL SUMMARY: $totalProcessed processed, $totalInserted inserted, $totalUpdated updated');
   }
 
-  /// Pull and merge a specific table
+  Future<int> _getLastPullTimestamp(String table) async {
+    final prefs = await SharedPreferences.getInstance();
+    final timestamp = prefs.getInt('last_pull_$table') ?? 0;
+    print(
+        '⏰ Last pull timestamp for $table: $timestamp (${DateTime.fromMillisecondsSinceEpoch(timestamp)})');
+    return timestamp;
+  }
+
+  Future<void> _updateLastPullTimestamp(String table) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(
+        'last_pull_$table', DateTime.now().millisecondsSinceEpoch);
+  }
+
   Future<Map<String, int>> _pullAndMergeTable(
       String schoolId, String table) async {
-    int processed = 0, inserted = 0, updated = 0, conflicts = 0, skipped = 0;
+    print('🔍 DEBUG: Starting pull for $table');
 
     try {
+      final oneHourAgo = DateTime.now().subtract(Duration(hours: 1));
       final snapshot = await _firestore!
           .collection('schools')
           .doc(schoolId)
           .collection(table)
+          .where('last_modified', isGreaterThan: oneHourAgo)
           .get();
 
-      print('📥 Found ${snapshot.docs.length} $table records in Firebase');
+      print(
+          '📥 DEBUG: Found ${snapshot.docs.length} $table records in Firebase');
 
       for (final doc in snapshot.docs) {
+        print('📄 DEBUG: Processing ${table} record ${doc.id}');
+        print('   Remote data: ${doc.data()}');
+
+        // Check what we have locally
+        final db = await DatabaseHelper.instance.database;
+        final localRecord = await db.query(
+          table,
+          where: 'id = ?',
+          whereArgs: [int.tryParse(doc.id)],
+          limit: 1,
+        );
+
+        if (localRecord.isNotEmpty) {
+          print('   Local data: ${localRecord.first}');
+        } else {
+          print('   No local record found');
+        }
+
         final result =
             await _mergeRecordWithConflictResolution(table, doc.id, doc.data());
-
-        processed++;
-        switch (result) {
-          case MergeResult.inserted:
-            inserted++;
-            break;
-          case MergeResult.updated:
-            updated++;
-            break;
-          case MergeResult.conflict:
-            conflicts++;
-            break;
-          case MergeResult.skipped:
-            skipped++;
-            break;
-        }
+        print('   Merge result: $result');
       }
-
-      print(
-          '✅ $table: $processed processed, $inserted inserted, $updated updated, $conflicts conflicts, $skipped skipped');
     } catch (e) {
-      print('❌ Error pulling $table: $e');
+      print('❌ DEBUG: Error pulling $table: $e');
     }
 
     return {
-      'processed': processed,
-      'inserted': inserted,
-      'updated': updated,
-      'conflicts': conflicts,
-      'skipped': skipped,
+      'processed': 0,
+      'inserted': 0,
+      'updated': 0,
+      'conflicts': 0,
+      'skipped': 0
     };
   }
-// Fixed _convertFirestoreToSqlite method for FixedLocalFirstSyncService
-// Replace your existing _convertFirestoreToSqlite method with this comprehensive version
+
+// Add this to your FixedLocalFirstSyncService
+  final Map<String, StreamSubscription> _firestoreListeners = {};
+
+  void _setupRealTimeListeners(String schoolId) {
+    for (final table in _syncTables) {
+      _firestoreListeners[table] = _firestore!
+          .collection('schools')
+          .doc(schoolId)
+          .collection(table)
+          .snapshots()
+          .listen((snapshot) {
+        print('🎯 REAL-TIME UPDATE detected for $table');
+        _processRealTimeChanges(table, snapshot);
+      });
+    }
+  }
+
+  Future<void> _processRealTimeChanges(
+      String table, QuerySnapshot snapshot) async {
+    for (final doc in snapshot.docChanges) {
+      if (doc.type == DocumentChangeType.modified ||
+          doc.type == DocumentChangeType.added) {
+        print('🔄 Real-time change detected in $table: ${doc.doc.id}');
+        await _mergeRecordWithConflictResolution(
+            table, doc.doc.id, doc.doc.data() as Map<String, dynamic>);
+      }
+    }
+  }
 
   /// COMPREHENSIVE: Convert Firestore data to SQLite format with complete timestamp handling
   Map<String, dynamic> _convertFirestoreToSqlite(Map<String, dynamic> data) {
@@ -401,13 +472,14 @@ class FixedLocalFirstSyncService extends GetxService {
     }).toList();
   }
 
-  /// Enhanced merge method with better error handling
   Future<MergeResult> _mergeRecordWithConflictResolution(
     String table,
     String docId,
     Map<String, dynamic> remoteData,
   ) async {
     try {
+      print('🔄 Attempting to merge $table $docId');
+
       final db = await DatabaseHelper.instance.database;
       final localId = int.tryParse(docId);
 
@@ -416,16 +488,8 @@ class FixedLocalFirstSyncService extends GetxService {
         return MergeResult.skipped;
       }
 
-      // Convert remote data to local format with comprehensive timestamp handling
-      Map<String, dynamic> localData;
-      try {
-        localData = _convertFirestoreToSqlite(remoteData);
-      } catch (e) {
-        print('❌ Failed to convert $table record $docId: $e');
-        return MergeResult.skipped;
-      }
-
-      // Ensure the record has a valid ID
+      // Convert remote data
+      final localData = _convertFirestoreToSqlite(remoteData);
       localData['id'] = localId;
 
       // Check if record exists locally
@@ -437,22 +501,44 @@ class FixedLocalFirstSyncService extends GetxService {
       );
 
       if (existing.isEmpty) {
-        // Insert new record
+        // INSERT NEW RECORD
         try {
           await db.insert(table, localData,
               conflictAlgorithm: ConflictAlgorithm.replace);
-          print('✅ Inserted new $table record: $localId');
+          print('✅ INSERTED new $table record: $localId');
           return MergeResult.inserted;
         } catch (e) {
           print('❌ Failed to insert $table record $localId: $e');
-          print('🔍 Data that failed: $localData');
           return MergeResult.skipped;
         }
       } else {
-        // Update existing record with conflict resolution
+        // UPDATE EXISTING RECORD - FIXED LOGIC
         final localRecord = existing.first;
-        final shouldUpdate =
-            _shouldUpdateRecord(localRecord, remoteData, table, localId);
+        final remoteTimestamp =
+            _getTimestampAsInt(remoteData['last_modified']) ?? 0;
+        final localTimestamp =
+            _getTimestampAsInt(localRecord['last_modified']) ?? 0;
+        final localSynced = localRecord['firebase_synced'] ?? 1;
+        final localDevice = localRecord['last_modified_device']?.toString();
+        final remoteDevice = remoteData['last_modified_device']?.toString();
+
+        print(
+            '🔍 Comparing: Remote=$remoteTimestamp, Local=$localTimestamp, Synced=$localSynced');
+        print(
+            '🔍 Devices: Local=$localDevice, Remote=$remoteDevice, Current=$_currentDeviceId');
+
+        // CRITICAL FIX: Update if ANY of these conditions are true:
+        // 1. Remote is newer AND local is synced (normal update)
+        // 2. Remote is newer AND local device is different (another device made changes)
+        // 3. Remote is newer AND local has no unsynced changes
+
+        final bool shouldUpdate = (remoteTimestamp > localTimestamp &&
+                localSynced == 1) || // Normal update
+            (remoteTimestamp > localTimestamp &&
+                localDevice != _currentDeviceId) || // Another device's update
+            (remoteTimestamp > localTimestamp &&
+                localSynced == 0 &&
+                localDevice == remoteDevice); // Same device, newer remote
 
         if (shouldUpdate) {
           try {
@@ -462,153 +548,38 @@ class FixedLocalFirstSyncService extends GetxService {
               where: 'id = ?',
               whereArgs: [localId],
             );
-            print('✅ Updated $table record: $localId');
+            print('✅ UPDATED $table record: $localId (remote is newer)');
             return MergeResult.updated;
           } catch (e) {
             print('❌ Failed to update $table record $localId: $e');
-            print('🔍 Data that failed: $localData');
             return MergeResult.skipped;
           }
+        } else if (remoteTimestamp == localTimestamp) {
+          // Same timestamp, just mark as synced if needed
+          if (localSynced == 0) {
+            await db.update(
+              table,
+              {'firebase_synced': 1},
+              where: 'id = ?',
+              whereArgs: [localId],
+            );
+            print('✅ MARKED SYNCED $table record: $localId (same timestamp)');
+            return MergeResult.updated;
+          }
+          print(
+              '⏭️ SKIPPED $table record $localId (same timestamp, already synced)');
         } else {
-          print('⏭️ Skipped $table record $localId (no update needed)');
-          return MergeResult.skipped;
+          print(
+              '⏭️ SKIPPED $table record $localId (local is newer or conflict)');
         }
+
+        return MergeResult.skipped;
       }
     } catch (e) {
       print(
           '❌ Error in _mergeRecordWithConflictResolution for $table $docId: $e');
       return MergeResult.skipped;
     }
-  }
-
-  /// Determine if a record should be updated based on timestamps
-  bool _shouldUpdateRecord(
-    Map<String, dynamic> localRecord,
-    Map<String, dynamic> remoteData,
-    String table,
-    int recordId,
-  ) {
-    try {
-      // Get timestamps for comparison
-      final localTimestamp =
-          _getTimestampAsInt(localRecord['last_modified']) ?? 0;
-      final remoteTimestamp =
-          _getTimestampAsInt(remoteData['last_modified']) ?? 0;
-
-      print('🔍 CONFLICT ANALYSIS for $table record $recordId:');
-      print(
-          'Local: modified=${DateTime.fromMillisecondsSinceEpoch(localTimestamp)}, synced=${localRecord['firebase_synced']}, device=${localRecord['last_modified_device']}');
-      print(
-          'Remote: modified=${DateTime.fromMillisecondsSinceEpoch(remoteTimestamp)}, device=${remoteData['last_modified_device']}');
-
-      // If remote is newer, update
-      if (remoteTimestamp > localTimestamp) {
-        print('✅ Remote is newer, will update');
-        return true;
-      }
-
-      // If local is newer and already synced, skip
-      if (localTimestamp > remoteTimestamp &&
-          localRecord['firebase_synced'] == 1) {
-        print('⏭️ Local is newer and synced, skipping');
-        return false;
-      }
-
-      // If timestamps are equal but local isn't synced, update to mark as synced
-      if (localTimestamp == remoteTimestamp &&
-          localRecord['firebase_synced'] != 1) {
-        print('🔄 Same timestamp but not synced, will update');
-        return true;
-      }
-
-      print('⏭️ No update needed');
-      return false;
-    } catch (e) {
-      print('❌ Error comparing timestamps: $e');
-      return true; // When in doubt, update
-    }
-  }
-
-  /// Insert new record from remote
-  Future<MergeResult> _insertNewRecord(Database db, String table, int localId,
-      Map<String, dynamic> localData) async {
-    try {
-      localData['id'] = localId;
-      localData['firebase_synced'] = 1;
-
-      await db.insert(table, localData);
-      print('➕ Inserted new $table record: $localId');
-      return MergeResult.inserted;
-    } catch (e) {
-      print('❌ Failed to insert $table record $localId: $e');
-      return MergeResult.skipped;
-    }
-  }
-
-  /// ADVANCED: Resolve conflicts between local and remote data
-  Future<MergeResult> _resolveConflict(
-    Database db,
-    String table,
-    int localId,
-    Map<String, dynamic> localRecord,
-    Map<String, dynamic> remoteData,
-  ) async {
-    // Extract conflict resolution data
-    final localLastModified = localRecord['last_modified'] as int? ?? 0;
-    final remoteLastModified =
-        _getTimestampAsInt(remoteData['last_modified']) ?? 0;
-    final localSynced = localRecord['firebase_synced'] as int? ?? 1;
-    final localDevice = localRecord['last_modified_device'] as String?;
-    final remoteDevice = remoteData['last_modified_device'] as String?;
-
-    print('🔍 CONFLICT ANALYSIS for $table record $localId:');
-    print(
-        '   Local: modified=${DateTime.fromMillisecondsSinceEpoch(localLastModified)}, synced=$localSynced, device=$localDevice');
-    print(
-        '   Remote: modified=${DateTime.fromMillisecondsSinceEpoch(remoteLastModified)}, device=$remoteDevice');
-
-    // RULE 1: Local has unsynced changes - check timestamps
-    if (localSynced == 0) {
-      if (localLastModified > remoteLastModified) {
-        await _logConflict(table, localId, 'LOCAL_WINS_NEWER_UNSYNCED',
-            localLastModified, remoteLastModified);
-        print('   ✅ LOCAL WINS: Newer unsynced changes');
-        return MergeResult.skipped;
-      } else if (localLastModified == remoteLastModified &&
-          localDevice == _currentDeviceId) {
-        await _logConflict(
-            table,
-            localId,
-            'LOCAL_WINS_SAME_TIMESTAMP_LOCAL_DEVICE',
-            localLastModified,
-            remoteLastModified);
-        print('   ✅ LOCAL WINS: Same timestamp, local device');
-        return MergeResult.skipped;
-      }
-    }
-
-    // RULE 2: Remote wins in most other cases
-    if (remoteLastModified >= localLastModified || localSynced == 1) {
-      remoteData['firebase_synced'] = 1;
-      remoteData.remove('id');
-
-      await db.update(
-        table,
-        remoteData,
-        where: 'id = ?',
-        whereArgs: [localId],
-      );
-
-      final reason = remoteLastModified > localLastModified
-          ? 'REMOTE_NEWER'
-          : 'LOCAL_ALREADY_SYNCED';
-      await _logConflict(
-          table, localId, reason, localLastModified, remoteLastModified);
-      print('   ✅ REMOTE WINS: $reason');
-      return localSynced == 0 ? MergeResult.conflict : MergeResult.updated;
-    }
-
-    return MergeResult.skipped;
   }
 
   /// STEP 2: Push only unsynced local changes
@@ -669,9 +640,11 @@ class FixedLocalFirstSyncService extends GetxService {
     // Convert to Firebase format
     final firebaseData = _convertSqliteToFirestore(record);
 
-    // Add/update device tracking
+    // Use milliseconds instead of server timestamp for consistent comparison
+    final now = DateTime.now().millisecondsSinceEpoch;
     firebaseData['last_modified_device'] = _currentDeviceId;
-    firebaseData['last_modified'] = FieldValue.serverTimestamp();
+    firebaseData['last_modified'] =
+        now; // ← Use milliseconds instead of FieldValue.serverTimestamp()
 
     // Push to Firebase
     await _firestore!
@@ -689,27 +662,6 @@ class FixedLocalFirstSyncService extends GetxService {
       where: 'id = ?',
       whereArgs: [int.parse(recordId)],
     );
-  }
-
-  /// Log conflicts for debugging and analysis
-  Future<void> _logConflict(String table, int recordId, String resolution,
-      int localTimestamp, int remoteTimestamp) async {
-    try {
-      final db = await DatabaseHelper.instance.database;
-      await db.insert('sync_conflicts', {
-        'table_name': table,
-        'record_id': recordId,
-        'conflict_type': resolution,
-        'local_timestamp': localTimestamp,
-        'remote_timestamp': remoteTimestamp,
-        'local_device': _currentDeviceId,
-        'remote_device': 'unknown',
-        'resolution': resolution,
-        'created_at': DateTime.now().toIso8601String(),
-      });
-    } catch (e) {
-      print('⚠️ Could not log conflict: $e');
-    }
   }
 
   /// Update sync metadata
