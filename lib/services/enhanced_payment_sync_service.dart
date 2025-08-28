@@ -671,4 +671,295 @@ class EnhancedPaymentSyncService extends GetxService {
       throw e;
     }
   }
+
+  /// Enhanced method to sync payments with cloud receipts
+  Future<void> syncPaymentsWithCloudReceipts() async {
+    print('🔄 Starting enhanced payment sync with cloud receipts...');
+
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final userId = _authController.currentFirebaseUserId!;
+
+      // Upload local payments to Firebase
+      await _uploadPaymentsWithCloudReceipts(db, userId);
+
+      // Download remote payments
+      await _downloadRemotePaymentsWithCloudReceipts(db, userId);
+
+      print('✅ Enhanced payment sync with cloud receipts completed');
+    } catch (e) {
+      print('❌ Enhanced payment sync failed: $e');
+      rethrow;
+    }
+  }
+
+  /// Upload payments with cloud receipt handling
+  Future<void> _uploadPaymentsWithCloudReceipts(
+      Database db, String userId) async {
+    final unsynced = await db.query(
+      'payments',
+      where: 'firebase_synced = 0 AND (deleted IS NULL OR deleted = 0)',
+    );
+
+    if (unsynced.isEmpty) {
+      print('📭 No unsynced payments to upload');
+      return;
+    }
+
+    print(
+        '📤 Uploading ${unsynced.length} payments with cloud receipt handling...');
+
+    int successCount = 0;
+
+    for (final payment in unsynced) {
+      try {
+        final paymentData = await _convertPaymentToFirebaseWithCloudReceipts(
+            payment, userId); // Add await
+
+        await _firestore!
+            .collection('payments')
+            .doc(payment['id'].toString())
+            .set(paymentData, SetOptions(merge: true));
+
+        // Mark as synced locally
+        await db.update(
+          'payments',
+          {'firebase_synced': 1},
+          where: 'id = ?',
+          whereArgs: [payment['id']],
+        );
+
+        successCount++;
+        print('📤 Uploaded payment ${payment['id']} with cloud receipt info');
+      } catch (e) {
+        print('❌ Failed to upload payment ${payment['id']}: $e');
+      }
+    }
+
+    print('✅ Uploaded $successCount payments with cloud receipt handling');
+  }
+
+  /// Convert payment to Firebase format with cloud receipt handling
+  Future<Map<String, dynamic>> _convertPaymentToFirebaseWithCloudReceipts(
+      Map<String, dynamic> payment, String userId) async {
+    final data = Map<String, dynamic>.from(payment);
+
+    // Remove local-only fields
+    data.remove('firebase_synced');
+    data.remove('firebase_user_id');
+
+    // Handle receipt information for cloud storage
+    if (data['receipt_type'] == 'cloud' && data['receipt_path'] != null) {
+      // Keep cloud URL - it's universal
+      data['receipt_cloud_url'] = data['receipt_path'];
+      data['receipt_storage_type'] = 'cloud';
+
+      if (data['cloud_storage_path'] != null) {
+        data['receipt_cloud_path'] = data['cloud_storage_path'];
+      }
+
+      // Remove device-specific fields
+      data.remove(
+          'receipt_path'); // Will be regenerated as cloud URL on other devices
+    } else if (data['receipt_type'] == 'local' ||
+        data['receipt_type'] == null) {
+      // Mark that receipt exists but needs cloud generation
+      data['receipt_needs_cloud_generation'] = data['receipt_generated'] == 1;
+      data['receipt_storage_type'] = 'needs_cloud';
+      data.remove('receipt_path'); // Remove local path
+    }
+
+    // Add Firebase-specific fields
+    data['user_id'] = userId;
+    data['sync_timestamp'] = FieldValue.serverTimestamp();
+    data['sync_device'] = await DatabaseHelper.getDeviceId();
+
+    // Convert timestamps
+    _convertTimestampsToFirestore(data);
+
+    return data;
+  }
+
+  /// Download remote payments with cloud receipt handling
+  Future<void> _downloadRemotePaymentsWithCloudReceipts(
+      Database db, String userId) async {
+    print('📥 Downloading remote payments with cloud receipt handling...');
+
+    try {
+      final query = _firestore!
+          .collection('payments')
+          .where('user_id', isEqualTo: userId)
+          .orderBy('payment_date', descending: false);
+
+      final snapshot = await query.get();
+
+      if (snapshot.docs.isEmpty) {
+        print('📭 No remote payments found');
+        return;
+      }
+
+      print('📥 Found ${snapshot.docs.length} remote payments');
+
+      for (final doc in snapshot.docs) {
+        try {
+          await _mergeRemotePaymentWithCloudReceipts(db, doc);
+        } catch (e) {
+          print('❌ Failed to merge payment ${doc.id}: $e');
+        }
+      }
+
+      print('✅ Downloaded payments with cloud receipt handling');
+    } catch (e) {
+      print('❌ Failed to download payments: $e');
+      rethrow;
+    }
+  }
+
+  /// Merge remote payment with cloud receipt handling
+  Future<void> _mergeRemotePaymentWithCloudReceipts(
+      Database db, QueryDocumentSnapshot doc) async {
+    final remoteData = doc.data() as Map<String, dynamic>;
+    final paymentId = int.parse(doc.id);
+
+    // Check if payment exists locally
+    final existing = await db.query(
+      'payments',
+      where: 'id = ?',
+      whereArgs: [paymentId],
+      limit: 1,
+    );
+
+    final localData = _convertFirebaseToPaymentWithCloudReceipts(remoteData);
+    localData['firebase_synced'] = 1;
+
+    if (existing.isEmpty) {
+      // Insert new payment
+      await db.insert('payments', localData);
+      print('📥 Inserted new payment $paymentId with cloud receipt info');
+    } else {
+      // Update existing payment
+      await db.update(
+        'payments',
+        localData,
+        where: 'id = ?',
+        whereArgs: [paymentId],
+      );
+      print('📥 Updated payment $paymentId with cloud receipt info');
+    }
+  }
+
+  /// Convert Firebase payment to local format with cloud receipt handling
+  Map<String, dynamic> _convertFirebaseToPaymentWithCloudReceipts(
+      Map<String, dynamic> firebase) {
+    final data = Map<String, dynamic>.from(firebase);
+
+    // Remove Firebase-specific fields
+    data.remove('user_id');
+    data.remove('sync_timestamp');
+    data.remove('sync_device');
+
+    // Handle cloud receipt information
+    if (data['receipt_storage_type'] == 'cloud' &&
+        data['receipt_cloud_url'] != null) {
+      // Use cloud URL as receipt path
+      data['receipt_path'] = data['receipt_cloud_url'];
+      data['receipt_type'] = 'cloud';
+      data['receipt_generated'] = 1;
+
+      if (data['receipt_cloud_path'] != null) {
+        data['cloud_storage_path'] = data['receipt_cloud_path'];
+      }
+
+      // Remove Firebase-specific receipt fields
+      data.remove('receipt_cloud_url');
+      data.remove('receipt_cloud_path');
+      data.remove('receipt_storage_type');
+      data.remove('receipt_needs_cloud_generation');
+    } else if (data['receipt_needs_cloud_generation'] == true) {
+      // Receipt exists but needs to be generated in cloud
+      data['receipt_generated'] = 1;
+      data['receipt_type'] = 'needs_cloud';
+      data['receipt_path'] = null; // Will be generated on demand
+
+      data.remove('receipt_needs_cloud_generation');
+      data.remove('receipt_storage_type');
+    } else {
+      // No receipt or unknown state
+      data['receipt_type'] = 'local';
+      data.remove('receipt_cloud_url');
+      data.remove('receipt_cloud_path');
+      data.remove('receipt_storage_type');
+      data.remove('receipt_needs_cloud_generation');
+    }
+
+    // Convert timestamps back
+    _convertTimestampsFromFirestore(data);
+
+    return data;
+  }
+
+// Add these methods to your EnhancedPaymentSyncService class
+
+  /// Convert timestamps to Firestore format
+  void _convertTimestampsToFirestore(Map<String, dynamic> data) {
+    if (data['payment_date'] is String) {
+      try {
+        data['payment_date'] =
+            Timestamp.fromDate(DateTime.parse(data['payment_date']));
+      } catch (e) {
+        data['payment_date'] = FieldValue.serverTimestamp();
+      }
+    }
+
+    if (data['last_modified'] is int) {
+      data['last_modified'] =
+          Timestamp.fromMillisecondsSinceEpoch(data['last_modified']);
+    } else {
+      data['last_modified'] = FieldValue.serverTimestamp();
+    }
+
+    if (data['created_at'] is String) {
+      try {
+        data['created_at'] =
+            Timestamp.fromDate(DateTime.parse(data['created_at']));
+      } catch (e) {
+        data['created_at'] = FieldValue.serverTimestamp();
+      }
+    }
+
+    if (data['receipt_generated_at'] is String) {
+      try {
+        data['receipt_generated_at'] =
+            Timestamp.fromDate(DateTime.parse(data['receipt_generated_at']));
+      } catch (e) {
+        data.remove('receipt_generated_at');
+      }
+    }
+  }
+
+  /// Convert timestamps from Firestore format
+  void _convertTimestampsFromFirestore(Map<String, dynamic> data) {
+    if (data['payment_date'] is Timestamp) {
+      data['payment_date'] =
+          (data['payment_date'] as Timestamp).toDate().toIso8601String();
+    }
+
+    if (data['last_modified'] is Timestamp) {
+      data['last_modified'] =
+          (data['last_modified'] as Timestamp).millisecondsSinceEpoch;
+    } else {
+      data['last_modified'] = DateTime.now().millisecondsSinceEpoch;
+    }
+
+    if (data['created_at'] is Timestamp) {
+      data['created_at'] =
+          (data['created_at'] as Timestamp).toDate().toIso8601String();
+    }
+
+    if (data['receipt_generated_at'] is Timestamp) {
+      data['receipt_generated_at'] = (data['receipt_generated_at'] as Timestamp)
+          .toDate()
+          .toIso8601String();
+    }
+  }
 }

@@ -15,6 +15,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:path_provider/path_provider.dart';
 import 'package:driving/widgets/responsive_text.dart';
+import 'package:printing/printing.dart';
 
 class StudentInvoiceScreen extends StatefulWidget {
   final User student;
@@ -31,6 +32,7 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
   final BillingController billingController = Get.find();
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
+  final _dbHelper = DatabaseHelper.instance;
 
   String _selectedFilter = 'all';
   String _sortBy = 'date';
@@ -125,16 +127,6 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
       SnackBar(
         content: Text(message),
         backgroundColor: Colors.red.shade600,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
-
-  void _showSuccessSnackbar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.green.shade600,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -1887,15 +1879,67 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
       ),
     );
   }
+// Add these methods to your _StudentInvoiceScreenState class
+
+  void _showLoadingSnackbar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(message),
+          ],
+        ),
+        backgroundColor: Colors.blue.shade600,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  void _showSuccessSnackbar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.green.shade600,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
 
   void _printReceipt(Payment payment) async {
-    if (payment.receiptPath == null) {
-      _showErrorSnackbar('Receipt file path not found');
-      return;
-    }
-
     try {
-      await ReceiptService.printReceipt(payment.receiptPath!);
+      _showLoadingSnackbar('Preparing receipt for printing...');
+
+      if (payment.receiptPath != null && payment.receiptPath!.isNotEmpty) {
+        if (payment.receiptPath!.startsWith('https://')) {
+          // Cloud receipt - print directly from URL
+          await ReceiptService.printReceiptFromCloud(payment.receiptPath!);
+        } else {
+          // Legacy local receipt - still supported
+          await Printing.layoutPdf(
+              onLayout: (_) => File(payment.receiptPath!).readAsBytes());
+        }
+      } else {
+        // Generate new cloud receipt
+        final downloadUrl = await ReceiptService.generateReceiptSmart(payment);
+
+        // Update payment record
+        await _updatePaymentWithCloudReceipt(payment, downloadUrl);
+
+        // Print the new receipt
+        await ReceiptService.printReceiptFromCloud(downloadUrl);
+      }
+
       _showSuccessSnackbar('Receipt sent to printer');
     } catch (e) {
       _showErrorSnackbar('Failed to print receipt: ${e.toString()}');
@@ -1903,13 +1947,37 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
   }
 
   void _shareReceipt(Payment payment) async {
-    if (payment.receiptPath == null) {
-      _showErrorSnackbar('Receipt file path not found');
-      return;
-    }
-
     try {
-      await ReceiptService.shareReceipt(payment.receiptPath!);
+      _showLoadingSnackbar('Preparing receipt for sharing...');
+
+      if (payment.receiptPath != null && payment.receiptPath!.isNotEmpty) {
+        if (payment.receiptPath!.startsWith('https://')) {
+          // Cloud receipt - share directly from URL
+          await ReceiptService.shareReceiptFromCloud(payment.receiptPath!);
+        } else {
+          // Legacy local receipt - still supported
+          final file = File(payment.receiptPath!);
+          if (await file.exists()) {
+            await Printing.sharePdf(
+              bytes: await file.readAsBytes(),
+              filename: 'receipt_${payment.id}.pdf',
+            );
+          } else {
+            throw Exception('Local receipt file not found');
+          }
+        }
+      } else {
+        // Generate new cloud receipt
+        final downloadUrl = await ReceiptService.generateReceiptSmart(payment);
+
+        // Update payment record
+        await _updatePaymentWithCloudReceipt(payment, downloadUrl);
+
+        // Share the new receipt
+        await ReceiptService.shareReceiptFromCloud(downloadUrl);
+      }
+
+      _showSuccessSnackbar('Receipt shared successfully');
     } catch (e) {
       _showErrorSnackbar('Failed to share receipt: ${e.toString()}');
     }
@@ -1917,39 +1985,342 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
 
   void _generateReceiptForPayment(Payment payment) async {
     try {
-      _showSuccessSnackbar(
-          'Generating receipt for ${payment.reference ?? 'payment'}...');
+      _showLoadingSnackbar('Generating cloud receipt...');
 
-      // Find the invoice for this payment
-      final invoice = billingController.invoices.firstWhere(
-        (inv) => inv.id == payment.invoiceId,
-      );
+      // Generate cloud receipt
+      final downloadUrl = await ReceiptService.generateReceiptSmart(payment);
 
-      // Generate receipt
-      final receiptPath = await ReceiptService.generateReceipt(
-        payment,
-        invoice,
-        widget.student, // Replace with your school name
-      );
+      // Update payment with cloud receipt URL
+      await _updatePaymentWithCloudReceipt(payment, downloadUrl);
 
-      // Update payment with receipt info
-      final db = await DatabaseHelper.instance.database;
-      await db.update(
-        'payments',
-        {
-          'receipt_path': receiptPath,
-          'receipt_generated': 1,
-        },
-        where: 'id = ?',
-        whereArgs: [payment.id],
-      );
+      // Refresh the data
+      if (mounted) {
+        await _loadData(); // For student_invoice.dart
+        // OR
+        // await billingController.fetchBillingData(); // For receipt_management_screen.dart
+        // setState(() {});
+      }
 
-      // Refresh the data after receipt generation
-      await _loadData();
-
-      _showSuccessSnackbar('Receipt generated successfully!');
+      _showSuccessSnackbar('Cloud receipt generated successfully!');
     } catch (e) {
       _showErrorSnackbar('Failed to generate receipt: ${e.toString()}');
+    }
+  }
+
+// Helper method to update payment with cloud receipt
+  Future<void> _updatePaymentWithCloudReceipt(
+      Payment payment, String downloadUrl) async {
+    final db = await DatabaseHelper.instance.database;
+    await db.update(
+      'payments',
+      {
+        'receipt_path': downloadUrl,
+        'receipt_generated': 1,
+        'receipt_type': 'cloud',
+        'receipt_generated_at': DateTime.now().toIso8601String(),
+        'last_modified': DateTime.now().millisecondsSinceEpoch,
+        'firebase_synced': 0, // Mark for sync
+      },
+      where: 'id = ?',
+      whereArgs: [payment.id],
+    );
+  }
+
+// For billing_controller.dart - Enhanced methods
+  Future<void> printReceipt(Payment payment) async {
+    try {
+      setState(() => _isLoading = true);
+
+      if (payment.receiptPath != null &&
+          payment.receiptPath!.isNotEmpty &&
+          payment.receiptPath!.startsWith('https://')) {
+        // Print existing cloud receipt
+        await ReceiptService.printReceiptFromCloud(payment.receiptPath!);
+      } else {
+        // Generate new cloud receipt
+        final downloadUrl = await ReceiptService.generateReceiptSmart(payment);
+
+        // Update payment record
+        await _dbHelper.updatePayment({
+          'id': payment.id,
+          'receipt_path': downloadUrl,
+          'receipt_generated': 1,
+          'receipt_type': 'cloud',
+          'receipt_generated_at': DateTime.now().toIso8601String(),
+          'last_modified': DateTime.now().millisecondsSinceEpoch,
+          'firebase_synced': 0,
+        });
+
+        // Print the receipt
+        await ReceiptService.printReceiptFromCloud(downloadUrl);
+      }
+
+      Get.snackbar(
+        'Receipt Sent to Printer',
+        'Receipt for ${payment.reference ?? payment.id} has been sent to printer',
+        backgroundColor: Colors.green.shade100,
+        colorText: Colors.green.shade800,
+      );
+    } catch (e) {
+      Get.snackbar(
+        'Print Failed',
+        'Failed to print receipt: ${e.toString()}',
+        backgroundColor: Colors.red.shade100,
+        colorText: Colors.red.shade800,
+      );
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> shareReceipt(Payment payment) async {
+    try {
+      setState(() => _isLoading = true);
+
+      if (payment.receiptPath != null &&
+          payment.receiptPath!.isNotEmpty &&
+          payment.receiptPath!.startsWith('https://')) {
+        // Share existing cloud receipt
+        await ReceiptService.shareReceiptFromCloud(payment.receiptPath!);
+      } else {
+        // Generate new cloud receipt
+        final downloadUrl = await ReceiptService.generateReceiptSmart(payment);
+
+        // Update payment record
+        await _dbHelper.updatePayment({
+          'id': payment.id,
+          'receipt_path': downloadUrl,
+          'receipt_generated': 1,
+          'receipt_type': 'cloud',
+          'receipt_generated_at': DateTime.now().toIso8601String(),
+          'last_modified': DateTime.now().millisecondsSinceEpoch,
+          'firebase_synced': 0,
+        });
+
+        // Share the receipt
+        await ReceiptService.shareReceiptFromCloud(downloadUrl);
+      }
+
+      Get.snackbar(
+        'Receipt Shared',
+        'Receipt for ${payment.reference ?? payment.id} has been shared successfully',
+        backgroundColor: Colors.green.shade100,
+        colorText: Colors.green.shade800,
+      );
+    } catch (e) {
+      Get.snackbar(
+        'Share Failed',
+        'Failed to share receipt: ${e.toString()}',
+        backgroundColor: Colors.red.shade100,
+        colorText: Colors.red.shade800,
+      );
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+// Enhanced receipt generation with cloud storage
+  Future<String?> generateReceiptWithValidation(Payment payment) async {
+    // Check if business settings are complete
+    final billingController = Get.find<BillingController>();
+    if (!await billingController.validateBusinessSettingsForReceipts()) {
+      return null;
+    }
+
+    try {
+      // Use cloud generation method
+      return await ReceiptService.generateReceiptSmart(payment);
+    } catch (e) {
+      Get.snackbar(
+        'Receipt Generation Failed',
+        'Failed to generate receipt: ${e.toString()}',
+        backgroundColor: Colors.red.shade100,
+        colorText: Colors.red.shade800,
+      );
+      return null;
+    }
+  }
+
+// Enhanced method for recording payment with cloud receipt generation
+  Future<void> recordPaymentWithReceipt(
+      Payment payment, Invoice invoice, User student) async {
+    print('=== STARTING recordPaymentWithReceipt (Cloud) ===');
+
+    try {
+      setState(() => _isLoading = true);
+
+      // Generate reference if not provided
+      final reference = payment.reference ?? ReceiptService.generateReference();
+
+      // Create payment with reference
+      final paymentWithReference = payment.copyWith(reference: reference);
+
+      // Insert payment
+      final paymentId =
+          await _dbHelper.insertPayment(paymentWithReference.toJson());
+      print('✓ Payment inserted with ID: $paymentId');
+
+      // Update invoice status
+      final billingController = Get.find<BillingController>();
+      await billingController.recordPaymentWithReceipt(
+          payment, invoice, student);
+      print('✓ Invoice status updated');
+
+      // Generate cloud receipt
+      try {
+        final updatedPayment = paymentWithReference.copyWith(id: paymentId);
+        final downloadUrl = await ReceiptService.generateAndUploadReceipt(
+          updatedPayment,
+          invoice,
+          student,
+        );
+
+        // Update payment with cloud receipt URL
+        await _dbHelper.updatePayment({
+          'id': paymentId,
+          'receipt_path': downloadUrl,
+          'receipt_generated': 1,
+          'receipt_type': 'cloud',
+          'receipt_generated_at': DateTime.now().toIso8601String(),
+          'last_modified': DateTime.now().millisecondsSinceEpoch,
+          'firebase_synced': 0,
+        });
+
+        print('✅ Cloud receipt generated: $downloadUrl');
+
+        // Refresh billing data
+        await billingController.fetchBillingData();
+
+        // Show success with receipt options
+        Get.snackbar(
+          'Payment Recorded',
+          'Payment recorded and cloud receipt generated successfully',
+          snackPosition: SnackPosition.TOP,
+          backgroundColor: Colors.green.shade600,
+          colorText: Colors.white,
+          duration: const Duration(seconds: 5),
+          mainButton: TextButton(
+            onPressed: () => ReceiptService.printReceiptFromCloud(downloadUrl),
+            child: const Text('Print Receipt',
+                style: TextStyle(color: Colors.white)),
+          ),
+        );
+      } catch (receiptError) {
+        print('⚠️ Cloud receipt generation failed: $receiptError');
+
+        // Payment was recorded successfully, just receipt failed
+        await billingController.fetchBillingData();
+
+        Get.snackbar(
+          'Payment Recorded',
+          'Payment recorded successfully, but receipt generation failed. You can generate it later.',
+          snackPosition: SnackPosition.TOP,
+          backgroundColor: Colors.orange.shade600,
+          colorText: Colors.white,
+          duration: const Duration(seconds: 5),
+        );
+      }
+
+      print('=== recordPaymentWithReceipt (Cloud) COMPLETED ===');
+    } catch (e) {
+      print('=== ERROR in recordPaymentWithReceipt (Cloud) ===');
+      print('Error: $e');
+
+      Get.snackbar(
+        'Payment Failed',
+        'Failed to record payment: ${e.toString()}',
+        snackPosition: SnackPosition.TOP,
+        backgroundColor: Colors.red.shade600,
+        colorText: Colors.white,
+        duration: const Duration(seconds: 5),
+      );
+
+      rethrow;
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+// Batch operations for migration
+  Future<Map<String, dynamic>> migrateReceiptsToCloud() async {
+    try {
+      setState(() => _isLoading = true);
+
+      final billingController = Get.find<BillingController>();
+      final paymentsNeedingMigration = billingController.payments
+          .where((payment) =>
+              payment.receiptGenerated &&
+              (payment.receiptPath == null ||
+                  payment.receiptPath!.isEmpty ||
+                  !payment.receiptPath!.startsWith('https://')))
+          .toList();
+      if (paymentsNeedingMigration.isEmpty) {
+        Get.snackbar(
+          'Migration Complete',
+          'All receipts are already in the cloud',
+          backgroundColor: Colors.green.shade100,
+          colorText: Colors.green.shade800,
+        );
+        return {'message': 'No migration needed'};
+      }
+
+      // Show progress dialog
+      Get.dialog(
+        AlertDialog(
+          title: const Text('Migrating Receipts'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              Text(
+                  'Migrating ${paymentsNeedingMigration.length} receipts to cloud storage...'),
+            ],
+          ),
+        ),
+        barrierDismissible: false,
+      );
+
+      // Perform batch upload
+      final result = await ReceiptService.batchUploadReceipts(
+        paymentsNeedingMigration,
+        onProgress: (current, total) {
+          // Update progress if needed
+          print('Migration progress: $current/$total');
+        },
+      );
+
+      // Close progress dialog
+      Get.back();
+
+      // Refresh data
+      await billingController.fetchBillingData();
+
+      // Show result
+      Get.snackbar(
+        'Migration Complete',
+        'Successfully migrated ${result['success_count']} receipts to cloud storage',
+        backgroundColor: result['success_count'] == result['total_processed']
+            ? Colors.green.shade100
+            : Colors.orange.shade100,
+        colorText: result['success_count'] == result['total_processed']
+            ? Colors.green.shade800
+            : Colors.orange.shade800,
+        duration: const Duration(seconds: 5),
+      );
+
+      return result;
+    } catch (e) {
+      Get.back(); // Close progress dialog
+      Get.snackbar(
+        'Migration Failed',
+        'Failed to migrate receipts: ${e.toString()}',
+        backgroundColor: Colors.red.shade100,
+        colorText: Colors.red.shade800,
+      );
+      rethrow;
+    } finally {
+      setState(() => _isLoading = false);
     }
   }
 

@@ -1420,7 +1420,7 @@ class _ReceiptManagementScreenState extends State<ReceiptManagementScreen> {
   void _viewReceipt(Payment payment) async {
     if (payment.receiptPath != null && payment.receiptPath!.isNotEmpty) {
       try {
-        await ReceiptService.printReceipt(payment.receiptPath!);
+        await ReceiptService.printReceiptFromCloud(payment.receiptPath!);
       } catch (e) {
         _showErrorSnackbar('Failed to view receipt: ${e.toString()}');
       }
@@ -1455,7 +1455,7 @@ class _ReceiptManagementScreenState extends State<ReceiptManagementScreen> {
       }
 
       // Generate receipt using the correct method signature
-      final receiptPath = await ReceiptService.generateReceipt(
+      final receiptPath = await ReceiptService.generateAndUploadReceipt(
         payment,
         invoice,
         student,
@@ -1489,7 +1489,7 @@ class _ReceiptManagementScreenState extends State<ReceiptManagementScreen> {
   void _downloadReceiptPDF(Payment payment) async {
     if (payment.receiptPath != null && payment.receiptPath!.isNotEmpty) {
       try {
-        await ReceiptService.shareReceipt(payment.receiptPath!);
+        await ReceiptService.shareReceiptFromCloud(payment.receiptPath!);
       } catch (e) {
         _showErrorSnackbar('Failed to download receipt: ${e.toString()}');
       }

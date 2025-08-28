@@ -12,6 +12,7 @@ import 'package:driving/controllers/settings_controller.dart';
 import 'package:driving/controllers/user_controller.dart';
 import 'package:driving/services/consistency_checker_service.dart';
 import 'package:driving/services/database_helper.dart';
+import 'package:driving/services/database_migration.dart';
 import 'package:driving/services/firebase_school_service.dart';
 import 'package:driving/services/fixed_local_first_sync_service.dart';
 import 'package:driving/services/lesson_counting_service.dart';
@@ -142,6 +143,8 @@ class EnhancedAppBindings extends Bindings {
         await settingsController.loadSettingsFromDatabase();
         await settingsController.testSettingsPersistence();
         await settingsController.forceFixAllSettings();
+        await DatabaseMigration.instance.runFullMigration();
+        print('   Settings loaded and tested');
         print('✅ SettingsController initialized and loaded');
       }
       print('🔥 Registering Firebase services...');

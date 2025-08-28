@@ -809,11 +809,11 @@ class DatabaseHelper {
     final db = await database;
     final List<Map<String, dynamic>> results =
         await DatabaseHelperSyncExtension.queryWithoutDeleted(
-          db,
-          'billing_records',
-          where: 'invoiceId = ?',
-          whereArgs: [invoiceId],
-        );
+      db,
+      'billing_records',
+      where: 'invoiceId = ?',
+      whereArgs: [invoiceId],
+    );
     return results.map((json) => BillingRecord.fromJson(json)).toList();
   }
 
@@ -856,11 +856,11 @@ class DatabaseHelper {
     final db = await database;
     final List<Map<String, dynamic>> maps =
         await DatabaseHelperSyncExtension.queryWithoutDeleted(
-          db,
-          'courses',
-          where: 'id = ?',
-          whereArgs: [courseId],
-        );
+      db,
+      'courses',
+      where: 'id = ?',
+      whereArgs: [courseId],
+    );
 
     if (maps.isNotEmpty) {
       return Course.fromJson(maps.first);
@@ -930,11 +930,11 @@ class DatabaseHelper {
     final db = await database;
     final List<Map<String, dynamic>> maps =
         await DatabaseHelperSyncExtension.queryWithoutDeleted(
-          db,
-          'payments',
-          where: 'studentId = ?',
-          whereArgs: [studentId],
-        );
+      db,
+      'payments',
+      where: 'studentId = ?',
+      whereArgs: [studentId],
+    );
     return maps.map((map) => Payment.fromJson(map)).toList();
   }
 
@@ -942,11 +942,11 @@ class DatabaseHelper {
     final db = await database;
     final List<Map<String, dynamic>> maps =
         await DatabaseHelperSyncExtension.queryWithoutDeleted(
-          db,
-          'payments',
-          where: 'scheduleId = ?',
-          whereArgs: [scheduleId],
-        );
+      db,
+      'payments',
+      where: 'scheduleId = ?',
+      whereArgs: [scheduleId],
+    );
     return maps.map((map) => Payment.fromJson(map)).toList();
   }
 
@@ -964,11 +964,11 @@ class DatabaseHelper {
     final db = await database;
     final List<Map<String, dynamic>> maps =
         await DatabaseHelperSyncExtension.queryWithoutDeleted(
-          db,
-          'billings',
-          where: 'scheduleId = ?',
-          whereArgs: [scheduleId],
-        );
+      db,
+      'billings',
+      where: 'scheduleId = ?',
+      whereArgs: [scheduleId],
+    );
     if (maps.isNotEmpty) {
       return Billing.fromJson(maps.first);
     }

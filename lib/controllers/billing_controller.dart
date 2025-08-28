@@ -607,7 +607,7 @@ class BillingController extends GetxController {
 
       // Generate receipt
       try {
-        final receiptPath = await ReceiptService.generateReceipt(
+        final receiptPath = await ReceiptService.generateAndUploadReceipt(
           paymentWithReference.copyWith(id: paymentId),
           invoice,
           student,
@@ -634,7 +634,7 @@ class BillingController extends GetxController {
           colorText: Colors.white,
           duration: const Duration(seconds: 5),
           mainButton: TextButton(
-            onPressed: () => ReceiptService.printReceipt(receiptPath),
+            onPressed: () => ReceiptService.printReceiptFromCloud(receiptPath),
             child: const Text('Print Receipt',
                 style: TextStyle(color: Colors.white)),
           ),
@@ -1758,7 +1758,7 @@ class BillingController extends GetxController {
       );
 
       // Generate receipt using enhanced service
-      final receiptPath = await ReceiptService.generateReceipt(
+      final receiptPath = await ReceiptService.generateAndUploadReceipt(
         payment,
         invoice,
         student,
@@ -1791,7 +1791,7 @@ class BillingController extends GetxController {
 
       for (final payment in paymentsForInvoice) {
         if (!payment.receiptGenerated) {
-          final receiptPath = await ReceiptService.generateReceipt(
+          final receiptPath = await ReceiptService.generateAndUploadReceipt(
             payment,
             invoice,
             student,
@@ -1915,7 +1915,7 @@ class BillingController extends GetxController {
         if (receiptPath == null) return;
       }
 
-      await ReceiptService.printReceipt(receiptPath);
+      await ReceiptService.printReceiptFromCloud(receiptPath);
 
       Get.snackbar(
         'Receipt Sent to Printer',
@@ -1944,7 +1944,7 @@ class BillingController extends GetxController {
         if (receiptPath == null) return;
       }
 
-      await ReceiptService.shareReceipt(receiptPath);
+      await ReceiptService.shareReceiptFromCloud(receiptPath);
     } catch (e) {
       Get.snackbar(
         'Share Failed',
