@@ -12,7 +12,7 @@ import 'package:get/get_core/src/get_main.dart';
 import 'package:sqflite/sqflite.dart';
 
 class DatabaseHelperSyncExtension {
-  /// Add sync tracking triggers to existing tables
+  /// Fixed Database Triggers - Don't reset firebase_synced unless data actually changed
   static Future<void> addSyncTrackingTriggers(Database db) async {
     final tables = [
       'users',
@@ -29,52 +29,53 @@ class DatabaseHelperSyncExtension {
       'usermessages',
       'currencies',
       'billing_records',
-      //'settings',
     ];
 
     for (String table in tables) {
-      try {
-        // Add sync columns if they don't exist
-        await db.execute('''
-          ALTER TABLE $table ADD COLUMN last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch}
-        ''');
-      } catch (e) {
-        // Column might already exist
-        print('last_modified column may already exist in $table');
-      }
+      // Drop existing triggers first
+      await db.execute('DROP TRIGGER IF EXISTS update_${table}_timestamp');
+      await db.execute('DROP TRIGGER IF EXISTS insert_${table}_timestamp');
 
-      try {
-        await db.execute('''
-          ALTER TABLE $table ADD COLUMN firebase_synced INTEGER DEFAULT 0
-        ''');
-      } catch (e) {
-        // Column might already exist
-        print('firebase_synced column may already exist in $table');
-      }
-
-      // Create trigger to update last_modified on changes
+      // ✅ FIXED: Create smarter trigger that only resets firebase_synced if actual data changed
       await db.execute('''
-        CREATE TRIGGER IF NOT EXISTS update_${table}_timestamp
-        AFTER UPDATE ON $table
-        BEGIN
-          UPDATE $table SET 
-            last_modified = ${DateTime.now().toUtc().millisecondsSinceEpoch},
-            firebase_synced = 0
-          WHERE id = NEW.id;
-        END;
-      ''');
+      CREATE TRIGGER IF NOT EXISTS update_${table}_timestamp
+      AFTER UPDATE ON $table
+      WHEN (
+        -- Only reset firebase_synced if we're NOT just updating sync status
+        NEW.firebase_synced IS NULL OR 
+        OLD.firebase_synced != NEW.firebase_synced OR
+        -- Check if any non-sync columns actually changed
+        (OLD.firebase_synced = 1 AND (
+          COALESCE(OLD.name, '') != COALESCE(NEW.name, '') OR
+          COALESCE(OLD.email, '') != COALESCE(NEW.email, '') OR
+          COALESCE(OLD.phone, '') != COALESCE(NEW.phone, '') OR
+          COALESCE(OLD.status, '') != COALESCE(NEW.status, '') OR
+          -- Add other important columns that should trigger resync
+          OLD.deleted != NEW.deleted
+        ))
+      )
+      BEGIN
+        UPDATE $table SET 
+          last_modified = ${DateTime.now().toUtc().millisecondsSinceEpoch},
+          firebase_synced = CASE 
+            WHEN NEW.firebase_synced = 1 THEN 1  -- Don't reset if we're marking as synced
+            ELSE 0  -- Reset if actual data changed
+          END
+        WHERE id = NEW.id;
+      END;
+    ''');
 
-      // Create trigger for inserts
+      // Create trigger for inserts (this one is fine as-is)
       await db.execute('''
-        CREATE TRIGGER IF NOT EXISTS insert_${table}_timestamp
-        AFTER INSERT ON $table
-        BEGIN
-          UPDATE $table SET 
-            last_modified = ${DateTime.now().toUtc().millisecondsSinceEpoch},
-            firebase_synced = 0
-          WHERE id = NEW.id;
-        END;
-      ''');
+      CREATE TRIGGER IF NOT EXISTS insert_${table}_timestamp
+      AFTER INSERT ON $table
+      BEGIN
+        UPDATE $table SET 
+          last_modified = ${DateTime.now().toUtc().millisecondsSinceEpoch},
+          firebase_synced = 0
+        WHERE id = NEW.id;
+      END;
+    ''');
     }
   }
 

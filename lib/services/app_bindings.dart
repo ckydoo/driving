@@ -28,7 +28,7 @@ class EnhancedAppBindings extends Bindings {
     try {
       // STEP 1: Initialize core services first
       await _initializeCoreServices();
-
+      await emergencyTriggerFix(); // EMERGENCY: Drop problematic trigger
       // STEP 2: Initialize PIN authentication (before auth controller)
       await _initializePinAuthentication();
 
@@ -64,6 +64,17 @@ class EnhancedAppBindings extends Bindings {
       // Attempt emergency initialization
       await _attemptEmergencyInitialization();
     }
+  }
+
+// Add this to your app startup or call it immediately:
+  Future<void> emergencyTriggerFix() async {
+    final db = await DatabaseHelper.instance.database;
+
+    // Drop the problematic fleet trigger immediately
+    await db.execute('DROP TRIGGER IF EXISTS update_fleet_timestamp');
+
+    print('🚨 EMERGENCY: Dropped problematic fleet trigger');
+    print('✅ Your next sync should work correctly');
   }
 
   /// STEP 1: Initialize core services

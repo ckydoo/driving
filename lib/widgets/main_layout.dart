@@ -283,6 +283,7 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
                       )),
                 ),
               ),
+
               // SYNC ICON - NEW ADDITION
               const SyncIconWidget(),
               // POS button

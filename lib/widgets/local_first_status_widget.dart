@@ -1,9 +1,9 @@
 // lib/widgets/local_first_status_widget.dart - Status widget for local-first approach
 
+import 'package:driving/services/fixed_local_first_sync_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../controllers/auth_controller.dart';
-import '../services/multi_tenant_firebase_sync_service.dart';
 
 class LocalFirstStatusWidget extends StatefulWidget {
   const LocalFirstStatusWidget({Key? key}) : super(key: key);

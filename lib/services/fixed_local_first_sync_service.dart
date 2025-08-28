@@ -134,7 +134,6 @@ class FixedLocalFirstSyncService extends GetxService {
     return await syncWithFirebase();
   }
 
-  /// MAIN SYNC METHOD - Fixed local-first approach
   Future<void> syncWithFirebase() async {
     if (isSyncing.value || _firestore == null || _currentDeviceId == null) {
       print('⚠️ Sync already in progress or service not initialized');
@@ -146,23 +145,25 @@ class FixedLocalFirstSyncService extends GetxService {
 
     try {
       print('🔄 === FIXED LOCAL FIRST SYNC STARTED ===');
-      print('📱 Device ID: $_currentDeviceId');
 
       final schoolId = await _getSchoolId();
       if (schoolId.isEmpty) {
         throw Exception('School ID not configured');
       }
 
-      // CRITICAL FIX: Pull and merge FIRST, then push
+      // CRITICAL: Sync deleted records first
+      await _syncDeletedRecords(schoolId);
+
+      // Then pull and merge remote changes
       await _pullAndMergeRemoteChanges(schoolId);
+
+      // Finally push local changes
       await _pushLocalChangesToFirebase(schoolId);
 
       lastSyncTime.value = DateTime.now();
       syncStatus.value = 'Sync completed successfully';
 
-      // Update sync metadata
       await _updateSyncMetadata();
-
       print('✅ === FIXED LOCAL FIRST SYNC COMPLETED ===');
     } catch (e) {
       print('❌ Sync failed: $e');
@@ -173,7 +174,6 @@ class FixedLocalFirstSyncService extends GetxService {
     }
   }
 
-  /// STEP 1: Pull and intelligently merge remote changes
   Future<void> _pullAndMergeRemoteChanges(String schoolId) async {
     print('📥 === PULLING AND MERGING REMOTE CHANGES ===');
     syncStatus.value = 'Pulling remote changes...';
@@ -191,23 +191,46 @@ class FixedLocalFirstSyncService extends GetxService {
         print(
             '🕐 Last pull time for $table: ${DateTime.fromMillisecondsSinceEpoch(lastPullTime)}');
 
+        // Convert to Firestore timestamp for query
+        final lastPullTimestamp =
+            Timestamp.fromMillisecondsSinceEpoch(lastPullTime);
+
+        // Use proper timestamp comparison with Firestore Timestamp
         final querySnapshot = await _firestore!
             .collection('schools')
             .doc(schoolId)
             .collection(table)
-            .where('last_modified', isGreaterThan: lastPullTime)
+            .where('last_modified', isGreaterThan: lastPullTimestamp)
             .get();
 
         print(
             '📥 Found ${querySnapshot.docs.length} updated $table records in Firebase since last pull');
 
         for (final doc in querySnapshot.docs) {
-          // ADD DEBUG INFO HERE
+          final remoteData = doc.data();
+          final remoteTimestamp =
+              _getTimestampAsInt(remoteData['last_modified']);
+
+          if (remoteTimestamp == null) {
+            print('⚠️ Skipping ${table} record ${doc.id}: invalid timestamp');
+            continue;
+          }
+
+          // DEBUG: Check if this record should be processed
+          if (remoteTimestamp <= lastPullTime) {
+            print(
+                '⏭️ Skipping ${table} record ${doc.id}: timestamp $remoteTimestamp <= last pull $lastPullTime');
+            continue;
+          }
+
           print('📄 Processing ${table} record ${doc.id}');
-          print('   Remote data last_modified: ${doc.data()['last_modified']}');
+          print(
+              '   Remote timestamp: $remoteTimestamp (${DateTime.fromMillisecondsSinceEpoch(remoteTimestamp)})');
+          print(
+              '   Last pull time: $lastPullTime (${DateTime.fromMillisecondsSinceEpoch(lastPullTime)})');
 
           final result = await _mergeRecordWithConflictResolution(
-              table, doc.id, doc.data());
+              table, doc.id, remoteData);
 
           if (result == MergeResult.inserted) totalInserted++;
           if (result == MergeResult.updated) totalUpdated++;
@@ -305,18 +328,6 @@ class FixedLocalFirstSyncService extends GetxService {
         print('🎯 REAL-TIME UPDATE detected for $table');
         _processRealTimeChanges(table, snapshot);
       });
-    }
-  }
-
-  Future<void> _processRealTimeChanges(
-      String table, QuerySnapshot snapshot) async {
-    for (final doc in snapshot.docChanges) {
-      if (doc.type == DocumentChangeType.modified ||
-          doc.type == DocumentChangeType.added) {
-        print('🔄 Real-time change detected in $table: ${doc.doc.id}');
-        await _mergeRecordWithConflictResolution(
-            table, doc.doc.id, doc.doc.data() as Map<String, dynamic>);
-      }
     }
   }
 
@@ -512,35 +523,31 @@ class FixedLocalFirstSyncService extends GetxService {
           return MergeResult.skipped;
         }
       } else {
-        // UPDATE EXISTING RECORD - FIXED LOGIC
+        // UPDATE EXISTING RECORD - FIXED CONFLICT RESOLUTION
         final localRecord = existing.first;
+
+        // Get timestamps properly
         final remoteTimestamp =
             _getTimestampAsInt(remoteData['last_modified']) ?? 0;
         final localTimestamp =
             _getTimestampAsInt(localRecord['last_modified']) ?? 0;
-        final localSynced = localRecord['firebase_synced'] ?? 1;
+
+        final localSynced = (localRecord['firebase_synced'] as int?) ?? 1;
         final localDevice = localRecord['last_modified_device']?.toString();
         final remoteDevice = remoteData['last_modified_device']?.toString();
 
+        print('🔍 Timestamp Comparison:');
         print(
-            '🔍 Comparing: Remote=$remoteTimestamp, Local=$localTimestamp, Synced=$localSynced');
+            '   Remote: $remoteTimestamp (${DateTime.fromMillisecondsSinceEpoch(remoteTimestamp)})');
         print(
-            '🔍 Devices: Local=$localDevice, Remote=$remoteDevice, Current=$_currentDeviceId');
+            '   Local:  $localTimestamp (${DateTime.fromMillisecondsSinceEpoch(localTimestamp)})');
+        print('   Local Synced: $localSynced');
+        print(
+            '   Devices: Local=$localDevice, Remote=$remoteDevice, Current=$_currentDeviceId');
 
-        // CRITICAL FIX: Update if ANY of these conditions are true:
-        // 1. Remote is newer AND local is synced (normal update)
-        // 2. Remote is newer AND local device is different (another device made changes)
-        // 3. Remote is newer AND local has no unsynced changes
-
-        final bool shouldUpdate = (remoteTimestamp > localTimestamp &&
-                localSynced == 1) || // Normal update
-            (remoteTimestamp > localTimestamp &&
-                localDevice != _currentDeviceId) || // Another device's update
-            (remoteTimestamp > localTimestamp &&
-                localSynced == 0 &&
-                localDevice == remoteDevice); // Same device, newer remote
-
-        if (shouldUpdate) {
+        // CRITICAL FIX: Proper conflict resolution
+        if (remoteTimestamp > localTimestamp) {
+          // REMOTE IS NEWER - Update local with remote data
           try {
             await db.update(
               table,
@@ -554,23 +561,32 @@ class FixedLocalFirstSyncService extends GetxService {
             print('❌ Failed to update $table record $localId: $e');
             return MergeResult.skipped;
           }
-        } else if (remoteTimestamp == localTimestamp) {
-          // Same timestamp, just mark as synced if needed
-          if (localSynced == 0) {
-            await db.update(
-              table,
-              {'firebase_synced': 1},
-              where: 'id = ?',
-              whereArgs: [localId],
-            );
-            print('✅ MARKED SYNCED $table record: $localId (same timestamp)');
-            return MergeResult.updated;
-          }
-          print(
-              '⏭️ SKIPPED $table record $localId (same timestamp, already synced)');
+        } else if (remoteTimestamp < localTimestamp) {
+          // LOCAL IS NEWER - Keep local data, but don't overwrite remote yet
+          print('⏭️ SKIPPED $table record $localId (local is newer)');
+          return MergeResult.skipped;
         } else {
-          print(
-              '⏭️ SKIPPED $table record $localId (local is newer or conflict)');
+          // SAME TIMESTAMP - Check sync status
+          if (localSynced == 0 && localDevice == _currentDeviceId) {
+            // This device made the change but hasn't synced yet
+            print(
+                '⏭️ SKIPPED $table record $localId (same timestamp, local unsynced change)');
+            return MergeResult.skipped;
+          } else {
+            // Mark as synced if needed
+            if (localSynced == 0) {
+              await db.update(
+                table,
+                {'firebase_synced': 1},
+                where: 'id = ?',
+                whereArgs: [localId],
+              );
+              print('✅ MARKED SYNCED $table record: $localId (same timestamp)');
+              return MergeResult.updated;
+            }
+            print(
+                '⏭️ SKIPPED $table record $localId (same timestamp, already synced)');
+          }
         }
 
         return MergeResult.skipped;
@@ -597,7 +613,7 @@ class FixedLocalFirstSyncService extends GetxService {
     print('📊 PUSH SUMMARY: $totalPushed records pushed to Firebase');
   }
 
-  /// Push unsynced records from a table
+  /// Improved push process with better error handling and verification
   Future<int> _pushTableToFirebase(String schoolId, String table) async {
     final db = await DatabaseHelper.instance.database;
 
@@ -610,49 +626,150 @@ class FixedLocalFirstSyncService extends GetxService {
     );
 
     if (unsyncedRecords.isEmpty) {
+      print('✅ $table: No unsynced records found');
       return 0;
     }
 
     print('📤 Pushing ${unsyncedRecords.length} unsynced $table records');
 
     int successCount = 0;
+    int failureCount = 0;
+
     for (final record in unsyncedRecords) {
+      // ✅ FIXED: Properly cast the record ID to int
+      final recordIdRaw = record['id'];
+      final int recordId;
+
+      // Handle different possible types for ID
+      if (recordIdRaw is int) {
+        recordId = recordIdRaw;
+      } else if (recordIdRaw is String) {
+        recordId = int.parse(recordIdRaw);
+      } else {
+        print(
+            '❌ Invalid record ID type for $table: ${recordIdRaw.runtimeType}');
+        failureCount++;
+        continue;
+      }
+
       try {
+        // Push to Firebase
         await _pushSingleRecordToFirebase(schoolId, table, record);
-        successCount++;
+
+        // ✅ VERIFICATION: Double-check that record was marked as synced
+        final verificationRecord = await checkRecordSyncStatus(table, recordId);
+        if (verificationRecord?['firebase_synced'] == 1) {
+          successCount++;
+          print('✅ $table record $recordId: Push confirmed successful');
+        } else {
+          print(
+              '⚠️ $table record $recordId: Push succeeded but sync status not updated');
+          // Try to fix it
+          await db.update(
+            table,
+            {'firebase_synced': 1},
+            where: 'id = ?',
+            whereArgs: [recordId],
+          );
+        }
       } catch (e) {
-        print('❌ Failed to push $table record ${record['id']}: $e');
+        failureCount++;
+        print('❌ Failed to push $table record $recordId: $e');
+
+        // Optional: Mark as failed for later retry
+        await db.update(
+          table,
+          {
+            'sync_error': e.toString(),
+            'sync_error_count': (record['sync_error_count'] as int? ?? 0) + 1,
+          },
+          where: 'id = ?',
+          whereArgs: [recordId],
+        );
       }
     }
 
-    print('✅ Pushed $successCount/${unsyncedRecords.length} $table records');
+    print(
+        '📊 $table PUSH SUMMARY: $successCount success, $failureCount failed');
     return successCount;
   }
 
-  /// Push single record to Firebase
-  Future<void> _pushSingleRecordToFirebase(
+  /// Enhanced method to batch update sync status (more efficient)
+  Future<void> batchMarkAsSynced(String table, List<dynamic> recordIds) async {
+    if (recordIds.isEmpty) return;
+
+    final db = await DatabaseHelper.instance.database;
+    final batch = db.batch();
+
+    for (final idRaw in recordIds) {
+      // ✅ FIXED: Handle different ID types
+      final int id;
+      if (idRaw is int) {
+        id = idRaw;
+      } else if (idRaw is String) {
+        id = int.parse(idRaw);
+      } else {
+        print('⚠️ Skipping invalid ID type: ${idRaw.runtimeType}');
+        continue;
+      }
+
+      batch.update(
+        table,
+        {'firebase_synced': 1},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    }
+
+    try {
+      await batch.commit(noResult: true);
+      print('✅ Batch marked ${recordIds.length} $table records as synced');
+    } catch (e) {
+      print('❌ Batch sync status update failed: $e');
+      // Fallback to individual updates
+      for (final idRaw in recordIds) {
+        try {
+          final int id;
+          if (idRaw is int) {
+            id = idRaw;
+          } else if (idRaw is String) {
+            id = int.parse(idRaw);
+          } else {
+            continue;
+          }
+
+          await db.update(
+            table,
+            {'firebase_synced': 1},
+            where: 'id = ?',
+            whereArgs: [id],
+          );
+        } catch (individualError) {
+          print(
+              '❌ Individual sync update failed for $table $idRaw: $individualError');
+        }
+      }
+    }
+  }
+
+  Future<void> _pushDeletedRecordToFirebase(
     String schoolId,
     String table,
     Map<String, dynamic> record,
   ) async {
     final recordId = record['id'].toString();
 
-    // Convert to Firebase format
-    final firebaseData = _convertSqliteToFirestore(record);
-
-    // Use milliseconds instead of server timestamp for consistent comparison
-    final now = DateTime.now().millisecondsSinceEpoch;
-    firebaseData['last_modified_device'] = _currentDeviceId;
-    firebaseData['last_modified'] =
-        now; // ← Use milliseconds instead of FieldValue.serverTimestamp()
-
-    // Push to Firebase
+    // Push delete marker to Firebase
     await _firestore!
         .collection('schools')
         .doc(schoolId)
         .collection(table)
         .doc(recordId)
-        .set(firebaseData, SetOptions(merge: true));
+        .update({
+      'deleted': true,
+      'last_modified': FieldValue.serverTimestamp(),
+      'last_modified_device': _currentDeviceId,
+    });
 
     // Mark as synced locally
     final db = await DatabaseHelper.instance.database;
@@ -662,6 +779,40 @@ class FixedLocalFirstSyncService extends GetxService {
       where: 'id = ?',
       whereArgs: [int.parse(recordId)],
     );
+
+    print('✅ Deleted $table record $recordId pushed to Firebase');
+  }
+
+  Future<void> _debugSyncState(String table, int recordId) async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final localRecord = await db.query(
+        table,
+        where: 'id = ?',
+        whereArgs: [recordId],
+        limit: 1,
+      );
+
+      if (localRecord.isNotEmpty) {
+        print('🐛 DEBUG LOCAL: ${localRecord.first}');
+      }
+
+      final schoolId = await _getSchoolId();
+      if (schoolId.isNotEmpty) {
+        final remoteDoc = await _firestore!
+            .collection('schools')
+            .doc(schoolId)
+            .collection(table)
+            .doc(recordId.toString())
+            .get();
+
+        if (remoteDoc.exists) {
+          print('🐛 DEBUG REMOTE: ${remoteDoc.data()}');
+        }
+      }
+    } catch (e) {
+      print('❌ Debug error: $e');
+    }
   }
 
   /// Update sync metadata
@@ -832,16 +983,35 @@ class FixedLocalFirstSyncService extends GetxService {
 
   int? _getTimestampAsInt(dynamic timestamp) {
     if (timestamp == null) return null;
-    if (timestamp is int) return timestamp;
-    if (timestamp is Timestamp) return timestamp.millisecondsSinceEpoch;
-    if (timestamp is DateTime) return timestamp.millisecondsSinceEpoch;
-    if (timestamp is String) {
-      try {
-        return DateTime.parse(timestamp).millisecondsSinceEpoch;
-      } catch (e) {
-        return null;
+
+    try {
+      if (timestamp is int) return timestamp;
+      if (timestamp is Timestamp) return timestamp.millisecondsSinceEpoch;
+      if (timestamp is DateTime) return timestamp.millisecondsSinceEpoch;
+
+      if (timestamp is String) {
+        // Handle ISO string
+        if (timestamp.contains('T')) {
+          return DateTime.parse(timestamp).millisecondsSinceEpoch;
+        }
+        // Handle numeric string
+        return int.tryParse(timestamp);
       }
+
+      if (timestamp is Map<String, dynamic>) {
+        // Handle Firestore timestamp format: {seconds: x, nanoseconds: y}
+        if (timestamp.containsKey('seconds') &&
+            timestamp.containsKey('nanoseconds')) {
+          final seconds = timestamp['seconds'] as int;
+          final nanoseconds = timestamp['nanoseconds'] as int;
+          return seconds * 1000 + (nanoseconds ~/ 1000000);
+        }
+      }
+    } catch (e) {
+      print(
+          '❌ Error converting timestamp: $timestamp (${timestamp.runtimeType})');
     }
+
     return null;
   }
 
@@ -965,6 +1135,428 @@ class FixedLocalFirstSyncService extends GetxService {
     _periodicSyncTimer?.cancel();
     _connectivityTimer?.cancel();
     super.onClose();
+  }
+
+  Future<void> _syncDeletedRecords(String schoolId) async {
+    print('🗑️ === SYNCING DELETED RECORDS ===');
+
+    for (final table in _syncTables) {
+      try {
+        // Push locally deleted records to Firebase
+        await _pushDeletedRecordsToFirebase(schoolId, table);
+
+        // Pull deleted records from Firebase
+        await _pullDeletedRecordsFromFirebase(schoolId, table);
+      } catch (e) {
+        print('❌ Error syncing deleted records for $table: $e');
+      }
+    }
+  }
+
+  Future<void> _pushDeletedRecordsToFirebase(
+      String schoolId, String table) async {
+    final db = await DatabaseHelper.instance.database;
+
+    // Get locally deleted but not synced records
+    final deletedRecords = await db.query(
+      table,
+      where: 'deleted = ? AND firebase_synced = ?',
+      whereArgs: [1, 0],
+    );
+
+    for (final record in deletedRecords) {
+      try {
+        final recordId = record['id'].toString();
+
+        // Mark as deleted in Firebase
+        await _firestore!
+            .collection('schools')
+            .doc(schoolId)
+            .collection(table)
+            .doc(recordId)
+            .update({
+          'deleted': true,
+          'last_modified': FieldValue.serverTimestamp(),
+          'last_modified_device': _currentDeviceId,
+        });
+
+        // Mark as synced locally
+        await db.update(
+          table,
+          {'firebase_synced': 1},
+          where: 'id = ?',
+          whereArgs: [record['id']],
+        );
+
+        print('✅ Deleted $table record $recordId pushed to Firebase');
+      } catch (e) {
+        print('❌ Failed to push deleted $table record ${record['id']}: $e');
+      }
+    }
+  }
+
+  Future<void> _pullDeletedRecordsFromFirebase(
+      String schoolId, String table) async {
+    try {
+      // Get records marked as deleted in Firebase
+      final deletedSnapshot = await _firestore!
+          .collection('schools')
+          .doc(schoolId)
+          .collection(table)
+          .where('deleted', isEqualTo: true)
+          .get();
+
+      for (final doc in deletedSnapshot.docs) {
+        final localId = int.tryParse(doc.id);
+        if (localId != null) {
+          // Soft delete locally
+          final db = await DatabaseHelper.instance.database;
+          await db.update(
+            table,
+            {
+              'deleted': 1,
+              'firebase_synced': 1,
+            },
+            where: 'id = ?',
+            whereArgs: [localId],
+          );
+          print('✅ Deleted $table record $localId pulled from Firebase');
+        }
+      }
+    } catch (e) {
+      print('❌ Error pulling deleted records for $table: $e');
+    }
+  }
+
+  Future<void> _processRealTimeChanges(
+      String table, QuerySnapshot snapshot) async {
+    // Add small delay to let local updates complete
+    await Future.delayed(Duration(milliseconds: 100));
+
+    for (final doc in snapshot.docChanges) {
+      if (doc.type == DocumentChangeType.modified ||
+          doc.type == DocumentChangeType.added) {
+        final remoteData = doc.doc.data() as Map<String, dynamic>;
+        final remoteDevice = remoteData['last_modified_device'] as String?;
+
+        // Skip processing our own changes
+        if (remoteDevice == _currentDeviceId) {
+          print('🛑 Skipping own change for $table:${doc.doc.id}');
+          continue;
+        } else if (doc.type == DocumentChangeType.removed) {
+          // Handle deleted records in real-time
+          print('🗑️ Real-time delete detected in $table: ${doc.doc.id}');
+          final localId = int.tryParse(doc.doc.id);
+          if (localId != null) {
+            final db = await DatabaseHelper.instance.database;
+            await db.update(
+              table,
+              {
+                'deleted': 1,
+                'firebase_synced': 1,
+              },
+              where: 'id = ?',
+              whereArgs: [localId],
+            );
+            print('✅ Real-time delete applied for $table record $localId');
+          }
+        }
+      }
+    }
+  }
+
+  Future<Map<String, dynamic>> getSyncStatusSummary() async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+
+      final totalUsers =
+          await db.rawQuery('SELECT COUNT(*) as count FROM users');
+      final syncedUsers = await db.rawQuery(
+          'SELECT COUNT(*) as count FROM users WHERE firebase_synced = 1');
+      final unsyncedUsers = await db.rawQuery(
+          'SELECT COUNT(*) as count FROM users WHERE firebase_synced = 0 OR firebase_synced IS NULL');
+
+      return {
+        'total_users': totalUsers.first['count'] as int,
+        'synced_users': syncedUsers.first['count'] as int,
+        'unsynced_users': unsyncedUsers.first['count'] as int,
+        'firebase_available': firebaseAvailable.value,
+        'last_sync': lastSyncTime.value.toIso8601String(),
+        'sync_status': syncStatus.value,
+      };
+    } catch (e) {
+      return {
+        'error': e.toString(),
+      };
+    }
+  }
+
+  /// Add this method to your FixedLocalFirstSyncService class
+  /// Verify and fix sync status for debugging
+  Future<Map<String, dynamic>> verifySyncStatus({String? specificTable}) async {
+    final db = await DatabaseHelper.instance.database;
+    final tables = specificTable != null ? [specificTable] : _syncTables;
+    final results = <String, dynamic>{};
+
+    for (final table in tables) {
+      try {
+        // Get all records with their sync status
+        final allRecords = await db.query(table,
+            columns: ['id', 'firebase_synced', 'last_modified'],
+            where: 'deleted IS NULL OR deleted = 0');
+
+        // Get unsynced count
+        final unsyncedCount = await db.query(
+          table,
+          where:
+              '(firebase_synced = ? OR firebase_synced IS NULL) AND (deleted IS NULL OR deleted = 0)',
+          whereArgs: [0],
+        );
+
+        // Get synced count
+        final syncedCount = await db.query(
+          table,
+          where: 'firebase_synced = 1 AND (deleted IS NULL OR deleted = 0)',
+        );
+
+        results[table] = {
+          'total': allRecords.length,
+          'synced': syncedCount.length,
+          'unsynced': unsyncedCount.length,
+          'unsynced_records': unsyncedCount
+              .map((r) => {
+                    'id': r['id'],
+                    'firebase_synced': r['firebase_synced'],
+                    'last_modified': r['last_modified'],
+                  })
+              .toList(),
+        };
+
+        print('📊 $table: ${syncedCount.length}/${allRecords.length} synced');
+      } catch (e) {
+        results[table] = {'error': e.toString()};
+        print('❌ Error checking $table: $e');
+      }
+    }
+
+    return results;
+  }
+
+  /// Force mark specific records as synced (for debugging)
+  Future<void> debugMarkAsSynced(String table, List<int> recordIds) async {
+    final db = await DatabaseHelper.instance.database;
+
+    for (final id in recordIds) {
+      try {
+        final result = await db.update(
+          table,
+          {'firebase_synced': 1},
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+
+        if (result > 0) {
+          print('✅ DEBUG: Marked $table record $id as synced');
+        } else {
+          print('⚠️ DEBUG: No record found for $table ID $id');
+        }
+      } catch (e) {
+        print('❌ DEBUG: Error marking $table record $id: $e');
+      }
+    }
+  }
+
+  /// SIMPLE FIX: Disable triggers during sync operations
+  /// Add these methods to your FixedLocalFirstSyncService class
+
+// Add this flag to your FixedLocalFirstSyncService class
+  bool _syncOperationInProgress = false;
+
+  /// Disable all triggers temporarily during sync
+  Future<void> _disableTriggers(Database db, List<String> tables) async {
+    for (String table in tables) {
+      await db.execute('DROP TRIGGER IF EXISTS update_${table}_timestamp');
+      await db.execute('DROP TRIGGER IF EXISTS insert_${table}_timestamp');
+    }
+    print('🔇 Temporarily disabled triggers during sync');
+  }
+
+  /// Re-enable triggers after sync
+  Future<void> _enableTriggers(Database db, List<String> tables) async {
+    for (String table in tables) {
+      // Create simpler triggers that only reset firebase_synced for actual data changes
+      await db.execute('''
+      CREATE TRIGGER IF NOT EXISTS update_${table}_timestamp
+      AFTER UPDATE ON $table
+      WHEN (
+        -- Only reset if firebase_synced was already 1 (meaning this is a real data change)
+        OLD.firebase_synced = 1
+      )
+      BEGIN
+        UPDATE $table SET 
+          last_modified = (strftime('%s', 'now') * 1000),
+          firebase_synced = 0
+        WHERE id = NEW.id;
+      END;
+    ''');
+
+      await db.execute('''
+      CREATE TRIGGER IF NOT EXISTS insert_${table}_timestamp
+      AFTER INSERT ON $table
+      BEGIN
+        UPDATE $table SET 
+          last_modified = (strftime('%s', 'now') * 1000),
+          firebase_synced = 0
+        WHERE id = NEW.id;
+      END;
+    ''');
+    }
+    print('🔊 Re-enabled smart triggers after sync');
+  }
+
+  /// UPDATED: Push single record with trigger management
+  Future<void> _pushSingleRecordToFirebase(
+    String schoolId,
+    String table,
+    Map<String, dynamic> record,
+  ) async {
+    // ✅ FIXED: Properly handle record ID type casting
+    final recordIdRaw = record['id'];
+    final int recordId;
+
+    // Handle different possible types for ID
+    if (recordIdRaw is int) {
+      recordId = recordIdRaw;
+    } else if (recordIdRaw is String) {
+      recordId = int.parse(recordIdRaw);
+    } else {
+      throw Exception('Invalid record ID type: ${recordIdRaw.runtimeType}');
+    }
+
+    print('🔄 Pushing $table record ID: $recordId to Firebase');
+
+    try {
+      // Convert to Firebase format
+      final firebaseData = _convertSqliteToFirestore(record);
+      firebaseData['last_modified_device'] = _currentDeviceId;
+      firebaseData['last_modified'] = FieldValue.serverTimestamp();
+
+      // Push to Firebase
+      await _firestore!
+          .collection('schools')
+          .doc(schoolId)
+          .collection(table)
+          .doc(recordId.toString())
+          .set(firebaseData, SetOptions(merge: true));
+
+      print('✅ Successfully pushed $table record $recordId to Firebase');
+
+      // ✅ CRITICAL FIX: Temporarily disable triggers, then update sync status
+      final db = await DatabaseHelper.instance.database;
+
+      // Temporarily disable just this table's trigger
+      await db.execute('DROP TRIGGER IF EXISTS update_${table}_timestamp');
+
+      // Now safely update the sync status
+      final updateResult = await db.update(
+        table,
+        {
+          'firebase_synced': 1,
+          'last_modified': DateTime.now().toUtc().millisecondsSinceEpoch,
+        },
+        where: 'id = ?',
+        whereArgs: [recordId],
+      );
+
+      // Re-enable the smart trigger
+      await db.execute('''
+      CREATE TRIGGER IF NOT EXISTS update_${table}_timestamp
+      AFTER UPDATE ON $table
+      WHEN (OLD.firebase_synced = 1)
+      BEGIN
+        UPDATE $table SET 
+          last_modified = (strftime('%s', 'now') * 1000),
+          firebase_synced = 0
+        WHERE id = NEW.id;
+      END;
+    ''');
+
+      if (updateResult > 0) {
+        print(
+            '✅ Marked $table record $recordId as synced (firebase_synced = 1)');
+      } else {
+        print(
+            '⚠️ Failed to mark $table record $recordId as synced - no rows updated');
+      }
+    } catch (e) {
+      print('❌ Failed to push $table record $recordId: $e');
+      rethrow;
+    }
+  }
+
+  /// Quick fix method to apply immediately
+  Future<void> quickFixTriggers() async {
+    final db = await DatabaseHelper.instance.database;
+    final tables = [
+      'fleet',
+      'users',
+      'courses',
+      'schedules',
+      'invoices',
+      'payments',
+      'attachments',
+      'notes'
+    ];
+
+    print('⚡ APPLYING QUICK TRIGGER FIX...');
+
+    for (String table in tables) {
+      // Drop old problematic trigger
+      await db.execute('DROP TRIGGER IF EXISTS update_${table}_timestamp');
+
+      // Create new smart trigger
+      await db.execute('''
+      CREATE TRIGGER IF NOT EXISTS update_${table}_timestamp
+      AFTER UPDATE ON $table
+      WHEN (OLD.firebase_synced = 1)
+      BEGIN
+        UPDATE $table SET 
+          last_modified = (strftime('%s', 'now') * 1000),
+          firebase_synced = 0
+        WHERE id = NEW.id;
+      END;
+    ''');
+
+      print('⚡ Fixed trigger for $table');
+    }
+
+    print('🎉 Quick trigger fix complete!');
+  }
+
+  /// Check if a specific record exists and its sync status
+  Future<Map<String, dynamic>?> checkRecordSyncStatus(
+      String table, int recordId) async {
+    final db = await DatabaseHelper.instance.database;
+
+    final records = await db.query(
+      table,
+      where: 'id = ?',
+      whereArgs: [recordId],
+      limit: 1,
+    );
+
+    if (records.isEmpty) {
+      print('❌ Record $recordId not found in $table');
+      return null;
+    }
+
+    final record = records.first;
+    print('🔍 Record $recordId in $table:');
+    print('   firebase_synced: ${record['firebase_synced']}');
+    print('   last_modified: ${record['last_modified']}');
+    print('   deleted: ${record['deleted']}');
+
+    return record;
   }
 }
 
