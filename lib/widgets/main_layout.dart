@@ -21,6 +21,7 @@ import 'package:driving/settings/settings_screen.dart';
 import 'package:driving/widgets/school_info_widget.dart';
 import 'package:driving/widgets/sync_status_widget.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:driving/screens/payments/pos.dart';
 import '../controllers/navigation_controller.dart';
@@ -34,6 +35,8 @@ class ResponsiveMainLayout extends StatefulWidget {
 
 class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  DateTime? _lastBackPressed;
+  static const Duration _exitTimeLimit = Duration(seconds: 2);
 
   // Check if we should show mobile layout
   bool _isMobile(BuildContext context) {
@@ -47,49 +50,101 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
     final SettingsController settingsController =
         Get.find<SettingsController>();
 
-    return Scaffold(
-      key: _scaffoldKey,
-      // Show drawer only on mobile
-      drawer: _isMobile(context)
-          ? _buildMobileDrawer(
-              navController, authController, settingsController)
-          : null,
-      body: Obx(() {
-        // Check if user is logged in
-        if (!authController.isLoggedIn.value) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            Get.offAllNamed('/login');
-          });
-          return const Center(child: CircularProgressIndicator());
-        }
+    return WillPopScope(
+      onWillPop: () => _handleBackButton(context),
+      child: Scaffold(
+        key: _scaffoldKey,
+        // Show drawer only on mobile
+        drawer: _isMobile(context)
+            ? _buildMobileDrawer(
+                navController, authController, settingsController)
+            : null,
+        body: Obx(() {
+          // Check if user is logged in
+          if (!authController.isLoggedIn.value) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              Get.offAllNamed('/login');
+            });
+            return const Center(child: CircularProgressIndicator());
+          }
 
-        // Mobile Layout (< 768px) - Drawer + content
-        if (_isMobile(context)) {
-          return Column(
+          // Mobile Layout (< 768px) - Drawer + content
+          if (_isMobile(context)) {
+            return Column(
+              children: [
+                _buildMobileTopBar(navController),
+                Expanded(child: _buildContentArea(navController)),
+              ],
+            );
+          }
+
+          // Desktop Layout (>= 768px) - Your exact current structure
+          return Row(
             children: [
-              _buildMobileTopBar(navController),
-              Expanded(child: _buildContentArea(navController)),
+              _buildDesktopSidebar(
+                  navController, authController, settingsController),
+              Expanded(
+                child: Column(
+                  children: [
+                    _buildDesktopTopBar(navController),
+                    Expanded(child: _buildContentArea(navController)),
+                  ],
+                ),
+              ),
             ],
           );
-        }
-
-        // Desktop Layout (>= 768px) - Your exact current structure
-        return Row(
-          children: [
-            _buildDesktopSidebar(
-                navController, authController, settingsController),
-            Expanded(
-              child: Column(
-                children: [
-                  _buildDesktopTopBar(navController),
-                  Expanded(child: _buildContentArea(navController)),
-                ],
-              ),
-            ),
-          ],
-        );
-      }),
+        }),
+      ),
     );
+  }
+
+  // Add this method to handle the double tap exit functionality
+  Future<bool> _handleBackButton(BuildContext context) async {
+    final now = DateTime.now();
+
+    // Check if this is the first back press or if too much time has passed
+    if (_lastBackPressed == null ||
+        now.difference(_lastBackPressed!) > _exitTimeLimit) {
+      // First back press - show toast and record time
+      _lastBackPressed = now;
+
+      // Show toast message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(
+                Icons.info_outline,
+                color: Colors.white,
+                size: 20,
+              ),
+              SizedBox(width: 8),
+              Text(
+                'Press back again to exit',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.grey.shade800,
+          duration: _exitTimeLimit,
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+      );
+
+      // Don't exit the app yet
+      return false;
+    } else {
+      // Second back press within time limit - exit the app
+      SystemNavigator.pop();
+      return true;
+    }
   }
 
   // Mobile drawer - Exact content as desktop sidebar but in drawer format
@@ -104,11 +159,12 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
         child: SafeArea(
           child: Column(
             children: [
-              // Header with user info
+              // Header with school name and user profile
               Container(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
                   children: [
+                    // School name
                     Obx(() => Text(
                           settingsController.businessName.value.isNotEmpty
                               ? settingsController.businessName.value
@@ -120,11 +176,132 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
                           ),
                           textAlign: TextAlign.center,
                         )),
+
                     const SizedBox(height: 8),
+
+                    // User Profile Section - NEW
+                    Obx(() {
+                      final user = authController.currentUser.value;
+                      if (user == null) {
+                        return const SizedBox.shrink();
+                      }
+
+                      final userName = user.fname ?? user.email ?? 'User';
+
+                      final userRole = user.role ?? 'User';
+
+                      return GestureDetector(
+                        onTap: () {
+                          Navigator.of(context).pop(); // Close drawer
+                          Get.to(ProfileScreen());
+                        },
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: Colors.white.withOpacity(0.2),
+                              width: 1,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              // User Avatar
+                              CircleAvatar(
+                                radius: 24,
+                                backgroundColor: Colors.blue.shade600,
+                                child: Text(
+                                  userName.isNotEmpty
+                                      ? userName[0].toUpperCase()
+                                      : 'U',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+
+                              const SizedBox(width: 12),
+
+                              // User Info
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // User Name
+                                    Text(
+                                      userName,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+
+                                    const SizedBox(height: 2),
+
+                                    // User Role
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.blue.shade600,
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Text(
+                                        userRole.toUpperCase(),
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                              // Arrow indicator
+                              Icon(
+                                Icons.arrow_forward_ios,
+                                color: Colors.white60,
+                                size: 16,
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
+
                     const SizedBox(height: 16),
                   ],
                 ),
               ),
+
+              // Divider
+              Container(
+                height: 1,
+                margin: const EdgeInsets.symmetric(horizontal: 16),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Colors.transparent,
+                      Colors.white.withOpacity(0.3),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
               // Navigation items
               Expanded(
                 child: SingleChildScrollView(
@@ -134,7 +311,8 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
                       )),
                 ),
               ),
-              // UPDATED LOGOUT BUTTON WITH SAFE LOGOUT:
+
+              // Logout button
               Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: SizedBox(
@@ -191,16 +369,6 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
                       textAlign: TextAlign.center,
                     )),
                 const SizedBox(height: 8),
-                Text(
-                  settingsController.businessPhone.value.isNotEmpty
-                      ? settingsController.businessPhone.value
-                      : 'Management System',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 12,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
               ],
             ),
           ),
