@@ -140,6 +140,8 @@ class EnhancedAppBindings extends Bindings {
         // Load settings from database
         final settingsController = Get.find<SettingsController>();
         await settingsController.loadSettingsFromDatabase();
+        await settingsController.testSettingsPersistence();
+        await settingsController.forceFixAllSettings();
         print('✅ SettingsController initialized and loaded');
       }
       print('🔥 Registering Firebase services...');

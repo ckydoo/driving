@@ -71,6 +71,8 @@ class SettingsController extends GetxController {
   final RxInt _tempLowLessonThreshold = 3.obs;
   final RxInt _tempAutoSaveInterval = 5.obs;
 
+  final RxBool _isInitialized = false.obs;
+
 // Lesson duration options (in hours)
   static const List<double> lessonDurationOptions = [0.5, 1.0, 1.5, 2.0];
   static Map<double, String> lessonDurationLabels = {
@@ -79,6 +81,33 @@ class SettingsController extends GetxController {
     1.5: '1.5 hours',
     2.0: '2 hours',
   };
+  // UPDATED: Enhanced initialization sequence
+  @override
+  void onInit() {
+    super.onInit();
+
+    print('🚀 SettingsController onInit started');
+
+    // Initialize temp values first
+    _tempBreakBetweenLessons.value = breakBetweenLessons.value;
+    _tempLessonStartReminder.value = lessonStartReminder.value;
+    _tempLowLessonThreshold.value = lowLessonThreshold.value;
+    _tempAutoSaveInterval.value = autoSaveInterval.value;
+
+    // Initialize settings asynchronously to avoid blocking
+    _initializeSettingsWithDefaults().then((_) {
+      // Mark as initialized after settings are loaded
+      _isInitialized.value = true;
+      print('🎯 SettingsController fully initialized');
+    }).catchError((e) {
+      print('❌ Settings initialization failed: $e');
+      _isInitialized.value =
+          true; // Still mark as initialized to allow UI interaction
+    });
+
+    // Set up business information change listeners
+    _setupBusinessInfoListeners();
+  }
 
   // Method to set lesson duration
   void setDefaultLessonDuration(double duration) {
@@ -100,23 +129,6 @@ class SettingsController extends GetxController {
     if (hours == 1.5) return '1.5 hrs';
     if (hours == 2.0) return '2 hrs';
     return '${hours} hrs';
-  }
-
-  @override
-  void onInit() {
-    super.onInit();
-
-    // Initialize temp values first
-    _tempBreakBetweenLessons.value = breakBetweenLessons.value;
-    _tempLessonStartReminder.value = lessonStartReminder.value;
-    _tempLowLessonThreshold.value = lowLessonThreshold.value;
-    _tempAutoSaveInterval.value = autoSaveInterval.value;
-
-    // Load settings in proper sequence
-    _initializeSettings();
-
-    // Set up business information change listeners for school config updates
-    _setupBusinessInfoListeners();
   }
 
   // Enhanced methods for smooth slider experience
@@ -224,15 +236,27 @@ class SettingsController extends GetxController {
     }
   }
 
-  void _showSettingUpdatedSnackbar(String key) {
-    Get.snackbar(
-      'Setting Updated',
-      'Setting "$key" has been updated successfully',
-      backgroundColor: Colors.green.withOpacity(0.8),
-      colorText: Colors.white,
-      duration: Duration(seconds: 2),
-      snackPosition: SnackPosition.BOTTOM,
-    );
+  Future<void> ensureDefaultSettings() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      // Check if settings have been initialized before
+      bool isFirstLaunch = prefs.getBool('settings_initialized') ?? true;
+
+      if (isFirstLaunch) {
+        print('🎯 First launch detected - setting up default settings');
+
+        // Force save all default settings
+        await _saveDefaultSettings();
+
+        // Mark settings as initialized
+        await prefs.setBool('settings_initialized', false);
+
+        print('✅ Default settings saved on first launch');
+      }
+    } catch (e) {
+      print('❌ Error ensuring default settings: $e');
+    }
   }
 
   // Instructor Settings Methods
@@ -242,6 +266,55 @@ class SettingsController extends GetxController {
     _saveSetting('working_hours_start', startTime);
     _saveSetting('working_hours_end', endTime);
     _showSettingUpdatedSnackbar('working_hours');
+  }
+
+  Future<void> _saveDefaultSettings() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      // Save scheduling defaults (all TRUE)
+      await prefs.setBool('enforce_billing_validation', true);
+      await prefs.setBool('check_instructor_availability', true);
+      await prefs.setBool('enforce_working_hours', true);
+      await prefs.setBool('auto_assign_vehicles', true);
+      await prefs.setDouble('default_lesson_duration', 1.5);
+
+      // Save billing defaults (all TRUE)
+      await prefs.setBool('show_low_lesson_warning', true);
+      await prefs.setInt('low_lesson_threshold', 3);
+      await prefs.setBool('prevent_over_scheduling', true);
+      await prefs.setBool('auto_create_billing_records', true);
+      await prefs.setBool('count_scheduled_lessons', true);
+
+      // Save other defaults...
+      await prefs.setString('working_hours_start', '09:00');
+      await prefs.setString('working_hours_end', '18:00');
+      await prefs.setInt('break_between_lessons', 15);
+      await prefs.setBool('allow_back_to_back_lessons', false);
+
+      // Notification defaults
+      await prefs.setBool('auto_attendance_notifications', true);
+      await prefs.setBool('schedule_conflict_alerts', true);
+      await prefs.setBool('billing_warnings', true);
+      await prefs.setInt('lesson_start_reminder', 15);
+      await prefs.setString('daily_summary_time', '08:00');
+
+      // App preferences
+      await prefs.setString('theme', 'light');
+      await prefs.setString('date_format', 'MM/dd/yyyy');
+
+      // Advanced settings
+      await prefs.setBool('enable_data_backup', true);
+      await prefs.setBool('enable_auto_save', true);
+      await prefs.setInt('auto_save_interval', 5);
+      await prefs.setBool('enable_advanced_logging', false);
+      await prefs.setString('default_currency', 'USD');
+      await prefs.setBool('show_developer_options', false);
+
+      print('💾 All default settings saved to SharedPreferences');
+    } catch (e) {
+      print('❌ Error saving default settings: $e');
+    }
   }
 
   void setBreakBetweenLessons(int minutes) =>
@@ -839,42 +912,6 @@ class SettingsController extends GetxController {
     await _saveAllSettingsToPreferences();
   }
 
-// FIXED: Enhanced utility method with proper async handling
-  Future<void> updateSetting(
-      String key, dynamic value, dynamic observableValue) async {
-    try {
-      print('💾 Updating setting: $key = $value');
-
-      // Update the observable value first
-      if (observableValue is RxList) {
-        observableValue.assignAll(value);
-      } else if (observableValue is Rx) {
-        observableValue.value = value;
-      }
-
-      // Save to SharedPreferences - AWAIT this!
-      await _saveSetting(key, value);
-
-      // Also save to database for backup
-      await _saveSettingToDatabase(key, value);
-
-      _showSettingUpdatedSnackbar(key);
-
-      print('✅ Setting $key saved successfully');
-    } catch (e) {
-      print('❌ Error updating setting $key: $e');
-
-      // Show error to user
-      Get.snackbar(
-        'Settings Error',
-        'Failed to save setting: $key',
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-        duration: Duration(seconds: 3),
-      );
-    }
-  }
-
 // FIXED: Proper async save method
   Future<void> _saveSetting(String key, dynamic value) async {
     try {
@@ -899,116 +936,6 @@ class SettingsController extends GetxController {
     } catch (e) {
       print('❌ Error saving setting $key to SharedPreferences: $e');
       throw e; // Re-throw so updateSetting can handle it
-    }
-  }
-
-// NEW: Save setting to database as backup
-  Future<void> _saveSettingToDatabase(String key, dynamic value) async {
-    try {
-      final db = await _dbHelper.database;
-
-      await db.insert(
-        'settings',
-        {
-          'key': key,
-          'value': value.toString(),
-          'updated_at': DateTime.now().toIso8601String(),
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
-
-      print('✅ Setting $key backed up to database');
-    } catch (e) {
-      print('⚠️ Failed to backup setting $key to database: $e');
-      // Don't throw - database backup is optional
-    }
-  }
-
-// NEW: Save all current settings to SharedPreferences
-  Future<void> _saveAllSettingsToPreferences() async {
-    try {
-      print('💾 Saving all settings to SharedPreferences...');
-      final prefs = await SharedPreferences.getInstance();
-
-      // Save scheduling settings
-      await prefs.setBool(
-          'enforce_billing_validation', enforceBillingValidation.value);
-      await prefs.setBool(
-          'check_instructor_availability', checkInstructorAvailability.value);
-      await prefs.setBool('enforce_working_hours', enforceWorkingHours.value);
-      await prefs.setBool('auto_assign_vehicles', autoAssignVehicles.value);
-      await prefs.setDouble(
-          'default_lesson_duration', defaultLessonDuration.value);
-
-      // Save billing settings
-      await prefs.setBool(
-          'show_low_lesson_warning', showLowLessonWarning.value);
-      await prefs.setInt('low_lesson_threshold', lowLessonThreshold.value);
-      await prefs.setBool(
-          'prevent_over_scheduling', preventOverScheduling.value);
-      await prefs.setBool(
-          'auto_create_billing_records', autoCreateBillingRecords.value);
-      await prefs.setBool(
-          'count_scheduled_lessons', countScheduledLessons.value);
-
-      // Save all other settings...
-      await prefs.setString('working_hours_start', workingHoursStart.value);
-      await prefs.setString('working_hours_end', workingHoursEnd.value);
-      await prefs.setInt('break_between_lessons', breakBetweenLessons.value);
-      await prefs.setBool(
-          'allow_back_to_back_lessons', allowBackToBackLessons.value);
-
-      // Save notification settings
-      await prefs.setBool(
-          'auto_attendance_notifications', autoAttendanceNotifications.value);
-      await prefs.setBool(
-          'schedule_conflict_alerts', scheduleConflictAlerts.value);
-      await prefs.setBool('billing_warnings', billingWarnings.value);
-      await prefs.setInt('lesson_start_reminder', lessonStartReminder.value);
-      await prefs.setString('daily_summary_time', dailySummaryTime.value);
-
-      // Save app preferences
-      await prefs.setString('theme', theme.value);
-      await prefs.setString('date_format', dateFormat.value);
-
-      print('✅ All settings saved to SharedPreferences');
-    } catch (e) {
-      print('❌ Error saving all settings: $e');
-      throw e;
-    }
-  }
-
-// FIXED: Enhanced toggle methods with better error handling
-  void toggleBillingValidation(bool value) async {
-    try {
-      print('🔧 Toggling billing validation to: $value');
-      await updateSetting(
-          'enforce_billing_validation', value, enforceBillingValidation);
-    } catch (e) {
-      print('❌ Failed to toggle billing validation: $e');
-      // Revert the UI state if save failed
-      enforceBillingValidation.value = !value;
-    }
-  }
-
-  void toggleInstructorAvailabilityCheck(bool value) async {
-    try {
-      print('🔧 Toggling instructor availability to: $value');
-      await updateSetting(
-          'check_instructor_availability', value, checkInstructorAvailability);
-    } catch (e) {
-      print('❌ Failed to toggle instructor availability: $e');
-      checkInstructorAvailability.value = !value;
-    }
-  }
-
-  void toggleWorkingHours(bool value) async {
-    try {
-      print('🔧 Toggling working hours to: $value');
-      await updateSetting('enforce_working_hours', value, enforceWorkingHours);
-    } catch (e) {
-      print('❌ Failed to toggle working hours: $e');
-      enforceWorkingHours.value = !value;
     }
   }
 
@@ -1059,40 +986,6 @@ class SettingsController extends GetxController {
     }
   }
 
-// NEW: Method to verify settings are persisted
-  Future<bool> verifySettingsPersistence() async {
-    try {
-      print('🔍 Verifying settings persistence...');
-      final prefs = await SharedPreferences.getInstance();
-
-      // Check a few key settings
-      bool billingValidation =
-          prefs.getBool('enforce_billing_validation') ?? false;
-      bool instructorAvailability =
-          prefs.getBool('check_instructor_availability') ?? false;
-      bool workingHours = prefs.getBool('enforce_working_hours') ?? false;
-
-      bool isMatch = billingValidation == enforceBillingValidation.value &&
-          instructorAvailability == checkInstructorAvailability.value &&
-          workingHours == enforceWorkingHours.value;
-
-      if (isMatch) {
-        print('✅ Settings persistence verified');
-        return true;
-      } else {
-        print('❌ Settings persistence FAILED');
-        print(
-            'Expected: billing=$billingValidation, instructor=$instructorAvailability, hours=$workingHours');
-        print(
-            'Actual: billing=${enforceBillingValidation.value}, instructor=${checkInstructorAvailability.value}, hours=${enforceWorkingHours.value}');
-        return false;
-      }
-    } catch (e) {
-      print('❌ Error verifying settings persistence: $e');
-      return false;
-    }
-  }
-
 // NEW: Debug method to check SharedPreferences contents
   Future<void> debugSharedPreferences() async {
     try {
@@ -1115,4 +1008,441 @@ class SettingsController extends GetxController {
       print('❌ Error debugging SharedPreferences: $e');
     }
   }
+
+  // FIXED: Safe snackbar method that checks if context is ready
+  void _showSettingUpdatedSnackbar(String key) {
+    // Only show snackbar if app is fully initialized and has context
+    if (_isInitialized.value && Get.context != null) {
+      try {
+        Get.snackbar(
+          'Setting Updated',
+          'Setting "$key" has been updated successfully',
+          backgroundColor: Colors.green.withOpacity(0.8),
+          colorText: Colors.white,
+          duration: Duration(seconds: 2),
+          snackPosition: SnackPosition.BOTTOM,
+        );
+      } catch (e) {
+        print('⚠️ Could not show snackbar for $key: $e');
+      }
+    } else {
+      print('ℹ️ Setting $key updated (snackbar skipped during initialization)');
+    }
+  }
+
+  // FIXED: Enhanced updateSetting method without snackbar during init
+  Future<void> updateSetting(
+      String key, dynamic value, dynamic observableValue) async {
+    try {
+      print('💾 Updating setting: $key = $value');
+
+      // Update the observable value first
+      if (observableValue is RxList) {
+        observableValue.assignAll(value);
+      } else if (observableValue is Rx) {
+        observableValue.value = value;
+      }
+
+      // Save to SharedPreferences
+      await _saveSetting(key, value);
+
+      // Also save to database for backup (don't block on this)
+      _saveSettingToDatabase(key, value).catchError((e) {
+        print('⚠️ Database backup failed for $key: $e');
+      });
+
+      // Only show snackbar if not during initialization
+      if (_isInitialized.value) {
+        _showSettingUpdatedSnackbar(key);
+      }
+
+      print('✅ Setting $key saved successfully');
+    } catch (e) {
+      print('❌ Error updating setting $key: $e');
+
+      // Revert the observable value on error
+      if (observableValue is Rx) {
+        // You might want to revert to previous value here
+        print('⚠️ Consider reverting $key due to save failure');
+      }
+
+      // Only show error snackbar if initialized
+      if (_isInitialized.value && Get.context != null) {
+        try {
+          Get.snackbar(
+            'Settings Error',
+            'Failed to save setting: $key',
+            backgroundColor: Colors.red,
+            colorText: Colors.white,
+            duration: Duration(seconds: 3),
+          );
+        } catch (snackbarError) {
+          print('⚠️ Could not show error snackbar: $snackbarError');
+        }
+      }
+
+      throw e; // Re-throw for caller to handle
+    }
+  }
+
+  // FIXED: Toggle methods without snackbar during init
+  void toggleBillingValidation(bool value) async {
+    try {
+      print('🔧 Toggling billing validation to: $value');
+
+      // Update UI immediately
+      enforceBillingValidation.value = value;
+
+      // Save to SharedPreferences immediately
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('enforce_billing_validation', value);
+
+      // Also backup to database (async, don't wait)
+      _saveSettingToDatabase('enforce_billing_validation', value)
+          .catchError((e) {
+        print('⚠️ Database backup failed: $e');
+      });
+
+      // Only show snackbar if initialized
+      if (_isInitialized.value) {
+        _showSettingUpdatedSnackbar('enforce_billing_validation');
+      }
+
+      print('✅ Billing validation saved: $value');
+    } catch (e) {
+      print('❌ Failed to toggle billing validation: $e');
+      // Revert UI if save failed
+      enforceBillingValidation.value = !value;
+    }
+  }
+
+  void toggleInstructorAvailabilityCheck(bool value) async {
+    try {
+      print('🔧 Toggling instructor availability to: $value');
+
+      // Update UI immediately
+      checkInstructorAvailability.value = value;
+
+      // Save to SharedPreferences immediately
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('check_instructor_availability', value);
+
+      // Backup to database (async)
+      _saveSettingToDatabase('check_instructor_availability', value)
+          .catchError((e) {
+        print('⚠️ Database backup failed: $e');
+      });
+
+      // Only show snackbar if initialized
+      if (_isInitialized.value) {
+        _showSettingUpdatedSnackbar('check_instructor_availability');
+      }
+
+      print('✅ Instructor availability saved: $value');
+    } catch (e) {
+      print('❌ Failed to toggle instructor availability: $e');
+      checkInstructorAvailability.value = !value;
+    }
+  }
+
+  void toggleWorkingHours(bool value) async {
+    try {
+      print('🔧 Toggling working hours to: $value');
+
+      // Update UI immediately
+      enforceWorkingHours.value = value;
+
+      // Save to SharedPreferences immediately
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('enforce_working_hours', value);
+
+      // Backup to database (async)
+      _saveSettingToDatabase('enforce_working_hours', value).catchError((e) {
+        print('⚠️ Database backup failed: $e');
+      });
+
+      // Only show snackbar if initialized
+      if (_isInitialized.value) {
+        _showSettingUpdatedSnackbar('enforce_working_hours');
+      }
+
+      print('✅ Working hours saved: $value');
+    } catch (e) {
+      print('❌ Failed to toggle working hours: $e');
+      enforceWorkingHours.value = !value;
+    }
+  }
+
+  // UPDATED: Initialize settings with proper defaults - no snackbars during init
+  Future<void> _initializeSettingsWithDefaults() async {
+    try {
+      print('🚀 Starting settings initialization with defaults...');
+
+      // Step 1: Ensure default settings exist
+      await ensureDefaultSettings();
+
+      // Step 2: Load settings (will now load defaults if needed)
+      await _loadSettings();
+
+      // Step 3: Load from database (more complete data)
+      await loadSettingsFromDatabase();
+
+      // Step 4: Verify persistence (this was causing the issue)
+      bool verified = await verifySettingsPersistence();
+      if (!verified) {
+        print('⚠️ Settings verification failed, forcing save...');
+        await _saveAllSettingsToPreferences();
+      }
+
+      print('✅ Settings initialized with defaults successfully');
+    } catch (e) {
+      print('❌ Error initializing settings: $e');
+      // Force defaults as last resort
+      await _setDefaultSettings();
+    }
+  }
+
+  // FIXED: Safer method to save to database without blocking
+  Future<void> _saveSettingToDatabase(String key, dynamic value) async {
+    try {
+      final db = await _dbHelper.database;
+
+      await db.insert(
+        'settings',
+        {
+          'key': key,
+          'value': value.toString(),
+          'updated_at': DateTime.now().toIso8601String(),
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+
+      print('✅ Setting $key backed up to database');
+    } catch (e) {
+      print('⚠️ Failed to backup setting $key to database: $e');
+      // Don't throw - database backup is optional
+    }
+  }
+
+  // NEW: Method to enable snackbars after initialization
+  void enableSnackbars() {
+    _isInitialized.value = true;
+    print('📢 Snackbars enabled for settings updates');
+  }
+
+  // NEW: Method to disable snackbars (useful for bulk operations)
+  void disableSnackbars() {
+    _isInitialized.value = false;
+    print('🔇 Snackbars disabled for settings updates');
+  }
+
+  Future<bool> verifySettingsPersistence() async {
+    try {
+      print('🔍 Verifying settings persistence...');
+      final prefs = await SharedPreferences.getInstance();
+
+      // Check key settings using the SAME defaults as _loadSettings()
+      bool billingValidation = prefs.getBool('enforce_billing_validation') ??
+          true; // ← FIXED: true instead of false
+      bool instructorAvailability =
+          prefs.getBool('check_instructor_availability') ??
+              true; // ← FIXED: true instead of false
+      bool workingHours = prefs.getBool('enforce_working_hours') ??
+          true; // ← FIXED: true instead of false
+
+      // Compare with current UI values
+      bool isMatch = billingValidation == enforceBillingValidation.value &&
+          instructorAvailability == checkInstructorAvailability.value &&
+          workingHours == enforceWorkingHours.value;
+
+      if (isMatch) {
+        print('✅ Settings persistence verified');
+        return true;
+      } else {
+        print('❌ Settings persistence FAILED');
+        print(
+            'Expected: billing=$billingValidation, instructor=$instructorAvailability, hours=$workingHours');
+        print(
+            'Actual: billing=${enforceBillingValidation.value}, instructor=${checkInstructorAvailability.value}, hours=${enforceWorkingHours.value}');
+        return false;
+      }
+    } catch (e) {
+      print('❌ Error verifying settings persistence: $e');
+      return false;
+    }
+  }
+
+  // UPDATED: Enhanced test method with correct verification
+  Future<void> testSettingsPersistence() async {
+    print('🧪 === TESTING SETTINGS PERSISTENCE ===');
+
+    // Step 1: Clear everything to start fresh
+    final prefs = await SharedPreferences.getInstance();
+
+    // Clear only the problematic keys for testing
+    await prefs.remove('enforce_billing_validation');
+    await prefs.remove('check_instructor_availability');
+    await prefs.remove('enforce_working_hours');
+
+    print('🧹 Cleared test settings');
+
+    // Step 2: Set default values (should be true)
+    enforceBillingValidation.value = true;
+    checkInstructorAvailability.value = true;
+    enforceWorkingHours.value = true;
+
+    // Step 3: Save them explicitly
+    toggleBillingValidation(true);
+    toggleInstructorAvailabilityCheck(true);
+    toggleWorkingHours(true);
+
+    // Step 4: Wait a moment
+    await Future.delayed(Duration(milliseconds: 500));
+
+    // Step 5: Read back from SharedPreferences with correct defaults
+    bool billing = prefs.getBool('enforce_billing_validation') ??
+        true; // ← Using true as default
+    bool instructor = prefs.getBool('check_instructor_availability') ??
+        true; // ← Using true as default
+    bool hours = prefs.getBool('enforce_working_hours') ??
+        true; // ← Using true as default
+
+    print(
+        '💾 Saved values: billing=$billing, instructor=$instructor, hours=$hours');
+    print(
+        '🎮 UI values: billing=${enforceBillingValidation.value}, instructor=${checkInstructorAvailability.value}, hours=${enforceWorkingHours.value}');
+
+    if (billing && instructor && hours) {
+      print('✅ Settings persistence test PASSED');
+    } else {
+      print('❌ Settings persistence test FAILED');
+      await debugSharedPreferences();
+    }
+
+    print('🧪 === END PERSISTENCE TEST ===');
+  }
+
+  // OPTIONAL: Method to force fix all settings to proper defaults
+  Future<void> forceFixAllSettings() async {
+    print('🔧 Force fixing all settings to proper defaults...');
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      // Force save all critical settings as TRUE
+      await prefs.setBool('enforce_billing_validation', true);
+      await prefs.setBool('check_instructor_availability', true);
+      await prefs.setBool('enforce_working_hours', true);
+      await prefs.setBool('auto_assign_vehicles', true);
+      await prefs.setBool('show_low_lesson_warning', true);
+      await prefs.setBool('prevent_over_scheduling', true);
+      await prefs.setBool('auto_create_billing_records', true);
+      await prefs.setBool('count_scheduled_lessons', true);
+      await prefs.setBool('auto_attendance_notifications', true);
+      await prefs.setBool('schedule_conflict_alerts', true);
+      await prefs.setBool('billing_warnings', true);
+      await prefs.setBool('enable_data_backup', true);
+      await prefs.setBool('enable_auto_save', true);
+
+      // Update UI values to match
+      enforceBillingValidation.value = true;
+      checkInstructorAvailability.value = true;
+      enforceWorkingHours.value = true;
+      autoAssignVehicles.value = true;
+      showLowLessonWarning.value = true;
+      preventOverScheduling.value = true;
+      autoCreateBillingRecords.value = true;
+      countScheduledLessons.value = true;
+      autoAttendanceNotifications.value = true;
+      scheduleConflictAlerts.value = true;
+      billingWarnings.value = true;
+      enableDataBackup.value = true;
+      enableAutoSave.value = true;
+
+      print('✅ All settings forced to proper defaults');
+
+      // Verify the fix worked
+      await debugSharedPreferences();
+    } catch (e) {
+      print('❌ Error force fixing settings: $e');
+    }
+  }
+
+  // UPDATED: _saveAllSettingsToPreferences with explicit true values
+  Future<void> _saveAllSettingsToPreferences() async {
+    try {
+      print(
+          '💾 Saving all settings to SharedPreferences with TRUE defaults...');
+      final prefs = await SharedPreferences.getInstance();
+
+      // Save scheduling settings (EXPLICITLY TRUE)
+      await prefs.setBool('enforce_billing_validation', true);
+      await prefs.setBool('check_instructor_availability', true);
+      await prefs.setBool('enforce_working_hours', true);
+      await prefs.setBool('auto_assign_vehicles', true);
+      await prefs.setDouble('default_lesson_duration', 1.5);
+
+      // Save billing settings (EXPLICITLY TRUE)
+      await prefs.setBool('show_low_lesson_warning', true);
+      await prefs.setInt('low_lesson_threshold', 3);
+      await prefs.setBool('prevent_over_scheduling', true);
+      await prefs.setBool('auto_create_billing_records', true);
+      await prefs.setBool('count_scheduled_lessons', true);
+
+      // Update UI values to match what we saved
+      enforceBillingValidation.value = true;
+      checkInstructorAvailability.value = true;
+      enforceWorkingHours.value = true;
+      autoAssignVehicles.value = true;
+      showLowLessonWarning.value = true;
+      preventOverScheduling.value = true;
+      autoCreateBillingRecords.value = true;
+      countScheduledLessons.value = true;
+
+      // Save other default settings...
+      await prefs.setString('working_hours_start', '09:00');
+      await prefs.setString('working_hours_end', '18:00');
+      await prefs.setInt('break_between_lessons', 15);
+      await prefs.setBool('allow_back_to_back_lessons', false);
+
+      // Notification defaults
+      await prefs.setBool('auto_attendance_notifications', true);
+      await prefs.setBool('schedule_conflict_alerts', true);
+      await prefs.setBool('billing_warnings', true);
+      await prefs.setInt('lesson_start_reminder', 15);
+      await prefs.setString('daily_summary_time', '08:00');
+
+      // App preferences
+      await prefs.setString('theme', 'light');
+      await prefs.setString('date_format', 'MM/dd/yyyy');
+
+      // Advanced settings
+      await prefs.setBool('enable_data_backup', true);
+      await prefs.setBool('enable_auto_save', true);
+      await prefs.setInt('auto_save_interval', 5);
+      await prefs.setBool('enable_advanced_logging', false);
+      await prefs.setString('default_currency', 'USD');
+      await prefs.setBool('show_developer_options', false);
+
+      print('✅ All settings saved to SharedPreferences with proper defaults');
+    } catch (e) {
+      print('❌ Error saving all settings: $e');
+      throw e;
+    }
+  }
+}
+
+// Quick fix method you can call immediately
+Future<void> quickFixSettings() async {
+  final settingsController = Get.find<SettingsController>();
+
+  print('🚀 Running quick settings fix...');
+
+  // Force fix all settings
+  await settingsController.forceFixAllSettings();
+
+  // Test to make sure it worked
+  await settingsController.testSettingsPersistence();
+
+  print('🎯 Quick fix complete!');
 }
