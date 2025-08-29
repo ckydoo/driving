@@ -58,46 +58,72 @@ class DatabaseHelper {
 
   Future<void> _createAllTables(Database db) async {
     // All your existing table creation code...
-    await db.execute('''
+    Future<void> _createAllTablesWithSyncFields(Database db) async {
+      // === SETTINGS TABLE ===
+      await db.execute('''
       CREATE TABLE settings(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         key TEXT UNIQUE NOT NULL,
         value TEXT NOT NULL,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        firebase_synced INTEGER DEFAULT 0,
+        deleted INTEGER DEFAULT 0,
+        last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
+        firebase_user_id TEXT,
+        last_modified_device TEXT
       )
     ''');
 
-    await db.execute('''
+      // === ATTACHMENTS TABLE ===
+      await db.execute('''
       CREATE TABLE attachments(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         uploaded_by INTEGER NOT NULL,
         attachment_for INTEGER NOT NULL,
         name TEXT NOT NULL,
         attachment TEXT NOT NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        firebase_synced INTEGER DEFAULT 0,
+        deleted INTEGER DEFAULT 0,
+        last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
+        firebase_user_id TEXT,
+        last_modified_device TEXT
       )
     ''');
 
-    await db.execute('''
+      // === COURSE INSTRUCTOR MAPPING ===
+      await db.execute('''
       CREATE TABLE courseinstructor(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         instructor INTEGER NOT NULL,
-        course INTEGER NOT NULL
+        course INTEGER NOT NULL,
+        firebase_synced INTEGER DEFAULT 0,
+        deleted INTEGER DEFAULT 0,
+        last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
+        firebase_user_id TEXT,
+        last_modified_device TEXT
       )
     ''');
 
-    await db.execute('''
+      // === COURSES TABLE ===
+      await db.execute('''
       CREATE TABLE courses(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
         price INTEGER NOT NULL,
         status TEXT NOT NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        firebase_synced INTEGER DEFAULT 0,
+        deleted INTEGER DEFAULT 0,
+        last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
+        firebase_user_id TEXT,
+        last_modified_device TEXT
       )
     ''');
 
-    await db.execute('''
+      // === COURSE ENROLLMENT ===
+      await db.execute('''
       CREATE TABLE coursesenrolled(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         student INTEGER NOT NULL,
@@ -109,31 +135,49 @@ class DatabaseHelper {
         completed_theory INTEGER NOT NULL DEFAULT 0,
         completed_practical INTEGER NOT NULL DEFAULT 0,
         completed_on DATE,
-        status TEXT NOT NULL DEFAULT 'Pending'
+        status TEXT NOT NULL DEFAULT 'Pending',
+        firebase_synced INTEGER DEFAULT 0,
+        deleted INTEGER DEFAULT 0,
+        last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
+        firebase_user_id TEXT,
+        last_modified_device TEXT
       )
     ''');
 
-    await db.execute('''
+      // === CURRENCIES TABLE ===
+      await db.execute('''
       CREATE TABLE currencies(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
         code TEXT NOT NULL,
-        symbol TEXT NOT NULL
+        symbol TEXT NOT NULL,
+        firebase_synced INTEGER DEFAULT 0,
+        deleted INTEGER DEFAULT 0,
+        last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
+        firebase_user_id TEXT,
+        last_modified_device TEXT
       )
     ''');
 
-    await db.execute('''
+      // === FLEET TABLE ===
+      await db.execute('''
       CREATE TABLE fleet(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         carplate TEXT NOT NULL,
         make TEXT NOT NULL,
         model TEXT NOT NULL,
         modelyear TEXT NOT NULL,
-        instructor INTEGER NOT NULL
+        instructor INTEGER NOT NULL,
+        firebase_synced INTEGER DEFAULT 0,
+        deleted INTEGER DEFAULT 0,
+        last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
+        firebase_user_id TEXT,
+        last_modified_device TEXT
       )
     ''');
 
-    await db.execute('''
+      // === INVOICES TABLE ===
+      await db.execute('''
       CREATE TABLE invoices(
        id INTEGER PRIMARY KEY AUTOINCREMENT,
        student INTEGER NOT NULL,
@@ -143,36 +187,54 @@ class DatabaseHelper {
        amountpaid REAL NOT NULL DEFAULT 0,
        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
        due_date TIMESTAMP NOT NULL,
-       courseName TEXT ,
+       courseName TEXT,
        status TEXT NOT NULL DEFAULT 'unpaid',
-       total_amount REAL NOT NULL ,
+       total_amount REAL NOT NULL,
        used_lessons INTEGER NOT NULL DEFAULT 0,
-       invoice_number TEXT NOT NULL UNIQUE
+       invoice_number TEXT NOT NULL UNIQUE,
+       firebase_synced INTEGER DEFAULT 0,
+       deleted INTEGER DEFAULT 0,
+       last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
+       firebase_user_id TEXT,
+       last_modified_device TEXT
       )
     ''');
 
-    await db.execute('''
+      // === NOTES TABLE ===
+      await db.execute('''
       CREATE TABLE notes(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         note_by INTEGER NOT NULL,
         note_for INTEGER NOT NULL,
         note TEXT NOT NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        firebase_synced INTEGER DEFAULT 0,
+        deleted INTEGER DEFAULT 0,
+        last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
+        firebase_user_id TEXT,
+        last_modified_device TEXT
       )
     ''');
 
-    await db.execute('''
+      // === NOTIFICATIONS TABLE ===
+      await db.execute('''
       CREATE TABLE notifications(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user INTEGER NOT NULL,
         type TEXT,
         message TEXT NOT NULL,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        is_read INTEGER NOT NULL DEFAULT 0
+        is_read INTEGER NOT NULL DEFAULT 0,
+        firebase_synced INTEGER DEFAULT 0,
+        deleted INTEGER DEFAULT 0,
+        last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
+        firebase_user_id TEXT,
+        last_modified_device TEXT
       )
     ''');
 
-    await db.execute('''
+      // === REMINDERS TABLE ===
+      await db.execute('''
       CREATE TABLE reminders(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         school INTEGER NOT NULL,
@@ -181,11 +243,17 @@ class DatabaseHelper {
         message TEXT NOT NULL,
         type TEXT NOT NULL,
         send_via TEXT NOT NULL,
-        timing TEXT NOT NULL
+        timing TEXT NOT NULL,
+        firebase_synced INTEGER DEFAULT 0,
+        deleted INTEGER DEFAULT 0,
+        last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
+        firebase_user_id TEXT,
+        last_modified_device TEXT
       )
     ''');
 
-    await db.execute('''
+      // === SCHEDULES TABLE ===
+      await db.execute('''
       CREATE TABLE schedules(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         start TEXT NOT NULL,
@@ -201,12 +269,18 @@ class DatabaseHelper {
         recurrence_end_date TEXT,
         attended INTEGER NOT NULL DEFAULT 0,
         lessonsCompleted INTEGER DEFAULT 0,
-        lessonsDeducted INTEGER DEFAULT 0, 
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        lessonsDeducted INTEGER DEFAULT 0,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        firebase_synced INTEGER DEFAULT 0,
+        deleted INTEGER DEFAULT 0,
+        last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
+        firebase_user_id TEXT,
+        last_modified_device TEXT
       )
     ''');
 
-    await db.execute('''
+      // === TIMELINE TABLE ===
+      await db.execute('''
       CREATE TABLE timeline(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         studentId INTEGER NOT NULL,
@@ -215,11 +289,17 @@ class DatabaseHelper {
         description TEXT,
         created_by INTEGER NOT NULL,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        firebase_synced INTEGER DEFAULT 0,
+        deleted INTEGER DEFAULT 0,
+        last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
+        firebase_user_id TEXT,
+        last_modified_device TEXT,
         FOREIGN KEY (studentId) REFERENCES users(id)
       )
     ''');
 
-    await db.execute('''
+      // === USER MESSAGES TABLE ===
+      await db.execute('''
       CREATE TABLE usermessages(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         receiver INTEGER NOT NULL,
@@ -228,12 +308,18 @@ class DatabaseHelper {
         subject TEXT,
         message TEXT,
         sent_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        status TEXT NOT NULL DEFAULT 'Sent'
+        status TEXT NOT NULL DEFAULT 'Sent',
+        firebase_synced INTEGER DEFAULT 0,
+        deleted INTEGER DEFAULT 0,
+        last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
+        firebase_user_id TEXT,
+        last_modified_device TEXT
       )
     ''');
 
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS billing_records (
+      // === BILLING RECORDS TABLE ===
+      await db.execute('''
+      CREATE TABLE billing_records (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         scheduleId INTEGER NOT NULL,
         invoiceId INTEGER NOT NULL,
@@ -241,36 +327,45 @@ class DatabaseHelper {
         amount REAL NOT NULL,
         dueDate TEXT,
         status TEXT NOT NULL,
+        firebase_synced INTEGER DEFAULT 0,
+        deleted INTEGER DEFAULT 0,
+        last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
+        firebase_user_id TEXT,
+        last_modified_device TEXT,
         FOREIGN KEY (scheduleId) REFERENCES schedules(id),
         FOREIGN KEY (invoiceId) REFERENCES invoices(id),
         FOREIGN KEY (studentId) REFERENCES users(id)
       )
     ''');
-    await db.execute('''
-  CREATE TABLE users(
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    fname TEXT NOT NULL,
-    lname TEXT NOT NULL,
-    email TEXT NOT NULL UNIQUE,  
-    gender TEXT,
-    date_of_birth DATE NOT NULL,
-    phone TEXT UNIQUE,             
-    idnumber TEXT UNIQUE,        
-    address TEXT,
-    password TEXT NOT NULL,
-    course TEXT,
-    role TEXT NOT NULL,
-    courseIds TEXT,
-    status TEXT NOT NULL DEFAULT 'Active',
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
-    firebase_synced INTEGER DEFAULT 0,
-    deleted INTEGER DEFAULT 0,
-    firebase_user_id TEXT, 
-    last_modified_device TEXT   
-  )
-''');
-    await db.execute('''
+
+      // === USERS TABLE ===
+      await db.execute('''
+      CREATE TABLE users(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        fname TEXT NOT NULL,
+        lname TEXT NOT NULL,
+        email TEXT NOT NULL UNIQUE,  
+        gender TEXT,
+        date_of_birth DATE NOT NULL,
+        phone TEXT UNIQUE,             
+        idnumber TEXT UNIQUE,        
+        address TEXT,
+        password TEXT NOT NULL,
+        course TEXT,
+        role TEXT NOT NULL,
+        courseIds TEXT,
+        status TEXT NOT NULL DEFAULT 'Active',
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        firebase_synced INTEGER DEFAULT 0,
+        deleted INTEGER DEFAULT 0,
+        last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
+        firebase_user_id TEXT,
+        last_modified_device TEXT
+      )
+    ''');
+
+      // === PAYMENTS TABLE ===
+      await db.execute('''
       CREATE TABLE payments(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         invoiceId INTEGER NOT NULL,
@@ -281,13 +376,23 @@ class DatabaseHelper {
         notes TEXT,
         reference TEXT,
         receipt_path TEXT,
+        receipt_generated_at TEXT,
+        cloud_storage_path TEXT,
+        receipt_file_size INTEGER,
+        receipt_type TEXT,
         receipt_generated INTEGER NOT NULL DEFAULT 0,
         userId INTEGER REFERENCES users(id),
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        firebase_synced INTEGER DEFAULT 0,
+        deleted INTEGER DEFAULT 0,
+        last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
+        firebase_user_id TEXT,
+        last_modified_device TEXT
       )
     ''');
 
-    await db.execute('''
+      // === BILLINGS TABLE ===
+      await db.execute('''
       CREATE TABLE billings (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         scheduleId INTEGER NOT NULL,
@@ -295,12 +400,18 @@ class DatabaseHelper {
         amount REAL NOT NULL,
         dueDate TEXT,
         status TEXT,
+        firebase_synced INTEGER DEFAULT 0,
+        deleted INTEGER DEFAULT 0,
+        last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
+        firebase_user_id TEXT,
+        last_modified_device TEXT,
         FOREIGN KEY (scheduleId) REFERENCES schedules (id),
         FOREIGN KEY (studentId) REFERENCES users (id) 
       )
     ''');
 
-    await db.execute('''
+      // === BILLING RECORDS HISTORY TABLE ===
+      await db.execute('''
       CREATE TABLE billing_records_history (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           scheduleId INTEGER NOT NULL,
@@ -309,55 +420,77 @@ class DatabaseHelper {
           amount REAL NOT NULL,
           dueDate TEXT,
           status TEXT NOT NULL,
+          firebase_synced INTEGER DEFAULT 0,
+          deleted INTEGER DEFAULT 0,
+          last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
+          firebase_user_id TEXT,
+          last_modified_device TEXT,
           FOREIGN KEY (scheduleId) REFERENCES schedules(id),
           FOREIGN KEY (invoiceId) REFERENCES invoices(id),
           FOREIGN KEY (studentId) REFERENCES users(id)
       )
     ''');
 
-    await db.execute('''
-  CREATE TABLE known_schools(
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    address TEXT,
-    phone TEXT,
-    email TEXT,
-    city TEXT,
-    country TEXT,
-    last_accessed TEXT,
-    access_count INTEGER DEFAULT 1,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP
-  )
-''');
-    await db.execute('''
-    CREATE TABLE IF NOT EXISTS sync_metadata (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      table_name TEXT NOT NULL UNIQUE,
-      last_sync_timestamp INTEGER DEFAULT 0,
-      last_sync_device TEXT,
-      total_records INTEGER DEFAULT 0,
-      synced_records INTEGER DEFAULT 0,
-      conflict_count INTEGER DEFAULT 0,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-    )
-  ''');
+      // === KNOWN SCHOOLS TABLE ===
+      await db.execute('''
+      CREATE TABLE known_schools(
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        address TEXT,
+        phone TEXT,
+        email TEXT,
+        city TEXT,
+        country TEXT,
+        last_accessed TEXT,
+        access_count INTEGER DEFAULT 1,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        firebase_synced INTEGER DEFAULT 0,
+        deleted INTEGER DEFAULT 0,
+        last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
+        firebase_user_id TEXT,
+        last_modified_device TEXT
+      )
+    ''');
 
-    await db.execute('''
-    CREATE TABLE IF NOT EXISTS sync_metadata (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      table_name TEXT NOT NULL UNIQUE,
-      last_sync_timestamp INTEGER DEFAULT 0,
-      last_sync_device TEXT,
-      total_records INTEGER DEFAULT 0,
-      synced_records INTEGER DEFAULT 0,
-      conflict_count INTEGER DEFAULT 0,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-    )
-  ''');
+      print('✅ All tables created with sync fields');
+    }
+
+    /// Create sync metadata and conflict tables
+    Future<void> _createSyncMetadataTables(Database db) async {
+      // Sync metadata table
+      await db.execute('''
+      CREATE TABLE IF NOT EXISTS sync_metadata (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        table_name TEXT NOT NULL UNIQUE,
+        last_sync_timestamp INTEGER DEFAULT 0,
+        last_sync_device TEXT,
+        total_records INTEGER DEFAULT 0,
+        synced_records INTEGER DEFAULT 0,
+        conflict_count INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )
+    ''');
+
+      // Conflict resolution log table
+      await db.execute('''
+      CREATE TABLE IF NOT EXISTS sync_conflicts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        table_name TEXT NOT NULL,
+        record_id INTEGER NOT NULL,
+        conflict_type TEXT NOT NULL,
+        local_timestamp INTEGER,
+        remote_timestamp INTEGER,
+        local_device TEXT,
+        remote_device TEXT,
+        resolution TEXT NOT NULL,
+        local_data TEXT,
+        remote_data TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )
+    ''');
+    }
   }
-
   // ==================== SYNC-ENABLED CRUD METHODS ====================
 
   // ================ USERS TABLE ================
