@@ -6,6 +6,7 @@ import 'package:driving/services/app_bindings.dart';
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/controllers/pin_controller.dart';
 import 'package:driving/services/database_helper.dart';
+import 'package:driving/services/database_migration.dart';
 import 'package:driving/services/receipt_service.dart';
 import 'package:driving/services/school_config_service.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -29,6 +30,10 @@ void main() async {
   // STEP 1: Initialize Firebase with proper options and error handling
   await _initializeFirebase();
   ReceiptService.initialize();
+  final db = await DatabaseHelper.instance.database;
+
+  // ✅ FIX 3: Run migrations to add missing columns
+  await DatabaseMigration.runMigrations(db);
   // STEP 2: Initialize core services
   await _initializeCoreServices();
 

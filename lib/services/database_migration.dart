@@ -73,86 +73,6 @@ class DatabaseMigration {
     }
   }
 
-  /// Initialize sample data if the database is empty
-  Future<void> initializeSampleData() async {
-    try {
-      final dbHelper = DatabaseHelper.instance;
-      final schedules = await dbHelper.getSchedules();
-
-      if (schedules.isEmpty) {
-        print('No schedules found. Consider adding sample data for testing.');
-        // Optionally add sample schedules here
-        await _addSampleSchedules();
-      }
-    } catch (e) {
-      print('Error checking for sample data: $e');
-    }
-  }
-
-  Future<void> _addSampleSchedules() async {
-    try {
-      final dbHelper = DatabaseHelper.instance;
-
-      // Sample schedule data
-      final sampleSchedules = [
-        {
-          'start': DateTime.now().add(Duration(hours: 1)).toIso8601String(),
-          'end': DateTime.now().add(Duration(hours: 2)).toIso8601String(),
-          'course': 1,
-          'student': 1,
-          'instructor': 1,
-          'car': 1,
-          'class_type': 'Practical',
-          'status': 'Scheduled',
-          'attended': 0,
-          'lessonsCompleted': 0,
-          'lessonsDeducted': 1,
-          'is_recurring': 0,
-        },
-        {
-          'start':
-              DateTime.now().add(Duration(days: 1, hours: 2)).toIso8601String(),
-          'end':
-              DateTime.now().add(Duration(days: 1, hours: 3)).toIso8601String(),
-          'course': 1,
-          'student': 2,
-          'instructor': 1,
-          'car': 1,
-          'class_type': 'Theory',
-          'status': 'Scheduled',
-          'attended': 0,
-          'lessonsCompleted': 0,
-          'lessonsDeducted': 1,
-          'is_recurring': 0,
-        },
-        {
-          'start': DateTime.now()
-              .subtract(Duration(days: 1, hours: 1))
-              .toIso8601String(),
-          'end': DateTime.now().subtract(Duration(days: 1)).toIso8601String(),
-          'course': 1,
-          'student': 1,
-          'instructor': 1,
-          'car': 1,
-          'class_type': 'Practical',
-          'status': 'Completed',
-          'attended': 1,
-          'lessonsCompleted': 1,
-          'lessonsDeducted': 1,
-          'is_recurring': 0,
-        },
-      ];
-
-      for (final schedule in sampleSchedules) {
-        await dbHelper.insertSchedule(schedule);
-      }
-
-      print('Sample schedules added successfully');
-    } catch (e) {
-      print('Error adding sample schedules: $e');
-    }
-  }
-
   /// Clean up old or invalid data
   Future<void> cleanupData() async {
     try {
@@ -223,62 +143,187 @@ class DatabaseMigration {
     await migrateDatabase();
     await updateExistingSchedules();
     await cleanupData();
-    await initializeSampleData();
+    await checkAndFixTriggers();
     await migrateToCloudReceipts();
 
     print('Database migration completed successfully');
   }
 
+  /// ✅ FIX 3: Add missing firebase_doc_id column to fleet table
+  static Future<void> addMissingColumns(Database db) async {
+    try {
+      print('🔧 Checking for missing columns...');
+
+      // Check if firebase_doc_id column exists in fleet table
+      final fleetColumns = await db.rawQuery("PRAGMA table_info(fleet)");
+      final hasFirebaseDocId =
+          fleetColumns.any((column) => column['name'] == 'firebase_doc_id');
+
+      if (!hasFirebaseDocId) {
+        print('➕ Adding firebase_doc_id column to fleet table');
+        await db.execute('ALTER TABLE fleet ADD COLUMN firebase_doc_id TEXT');
+        print('✅ Added firebase_doc_id column to fleet table');
+      }
+
+      // Add any other missing sync columns to all tables
+      final tables = [
+        'users',
+        'courses',
+        'schedules',
+        'invoices',
+        'payments',
+        'fleet'
+      ];
+
+      for (String table in tables) {
+        await _ensureSyncColumns(db, table);
+      }
+
+      print('✅ All missing columns have been added');
+    } catch (e) {
+      print('❌ Error adding missing columns: $e');
+    }
+  }
+
+  /// Ensure all sync-related columns exist
+  static Future<void> _ensureSyncColumns(Database db, String tableName) async {
+    try {
+      final columns = await db.rawQuery("PRAGMA table_info($tableName)");
+      final columnNames = columns.map((c) => c['name'] as String).toSet();
+
+      final requiredSyncColumns = {
+        'firebase_synced': 'INTEGER DEFAULT 0',
+        'last_modified': 'INTEGER DEFAULT 0',
+        'last_modified_device': 'TEXT',
+        'firebase_doc_id': 'TEXT'
+      };
+
+      for (String columnName in requiredSyncColumns.keys) {
+        if (!columnNames.contains(columnName)) {
+          final columnDef = requiredSyncColumns[columnName]!;
+          print('➕ Adding $columnName to $tableName');
+          await db.execute(
+              'ALTER TABLE $tableName ADD COLUMN $columnName $columnDef');
+        }
+      }
+    } catch (e) {
+      print('⚠️ Error ensuring sync columns for $tableName: $e');
+    }
+  }
+
+  /// Run this during app startup to fix existing database
+  static Future<void> runMigrations(Database db) async {
+    print('🔄 Running database migrations...');
+    await addMissingColumns(db);
+    print('✅ Database migrations completed');
+  }
+
+// Add this method to your DatabaseMigration class
+  Future<void> checkAndFixTriggers() async {
+    print('🔍 Checking for problematic database triggers...');
+
+    final db = await DatabaseHelper.instance.database;
+
+    try {
+      // Get all triggers
+      final triggers = await db.rawQuery('''
+      SELECT name, sql 
+      FROM sqlite_master 
+      WHERE type = 'trigger' 
+      AND tbl_name = 'payments'
+    ''');
+
+      print('Found ${triggers.length} triggers on payments table');
+
+      for (final trigger in triggers) {
+        final triggerName = trigger['name'] as String;
+        final triggerSQL = trigger['sql'] as String;
+
+        print('Trigger: $triggerName');
+        print('SQL: $triggerSQL');
+
+        // Check if trigger references non-existent columns
+        if (triggerSQL.contains('NEW.name') ||
+            triggerSQL.contains('OLD.name')) {
+          print('⚠️ Found problematic trigger: $triggerName');
+
+          // Drop the problematic trigger
+          await db.execute('DROP TRIGGER IF EXISTS $triggerName');
+          print('✅ Dropped trigger: $triggerName');
+        }
+      }
+    } catch (e) {
+      print('❌ Error checking triggers: $e');
+    }
+  }
+
+// Updated migrateToCloudReceipts method with trigger fix
   Future<void> migrateToCloudReceipts() async {
     print('🔄 Starting cloud receipts migration...');
 
     final db = await DatabaseHelper.instance.database;
 
-    try {
-      // Add new columns for cloud receipts
-      await db.execute(
-        'ALTER TABLE payments ADD COLUMN receipt_type TEXT DEFAULT "local"',
-      );
-      print('✅ Added receipt_type column');
-    } catch (e) {
-      print('⚠️ receipt_type column may already exist: $e');
-    }
-    try {
-      // Add new columns for cloud receipts
-      await db.execute(
-        'ALTER TABLE payments ADD COLUMN receipt_generated_at TEXT',
-      );
-      print('✅ Added receipt_generated_at column');
-    } catch (e) {
-      print('⚠️ receipt_generated_at column may already exist: $e');
-    }
-    try {
-      await db.execute(
-        'ALTER TABLE payments ADD COLUMN cloud_storage_path TEXT',
-      );
-      print('✅ Added cloud_storage_path column');
-    } catch (e) {
-      print('⚠️ cloud_storage_path column may already exist: $e');
-    }
+    // First, check and fix any problematic triggers
+    await checkAndFixTriggers();
 
     try {
-      await db.execute(
-        'ALTER TABLE payments ADD COLUMN receipt_file_size INTEGER',
-      );
-      print('✅ Added receipt_file_size column');
+      // Check existing columns first
+      final columns = await db.rawQuery('PRAGMA table_info(payments)');
+      final columnNames = columns.map((col) => col['name'] as String).toSet();
+
+      // Add new columns for cloud receipts only if they don't exist
+      if (!columnNames.contains('receipt_type')) {
+        await db.execute(
+          'ALTER TABLE payments ADD COLUMN receipt_type TEXT DEFAULT "local"',
+        );
+        print('✅ Added receipt_type column');
+      } else {
+        print('ℹ️ receipt_type column already exists');
+      }
+
+      if (!columnNames.contains('receipt_generated_at')) {
+        await db.execute(
+          'ALTER TABLE payments ADD COLUMN receipt_generated_at TEXT',
+        );
+        print('✅ Added receipt_generated_at column');
+      } else {
+        print('ℹ️ receipt_generated_at column already exists');
+      }
+
+      if (!columnNames.contains('cloud_storage_path')) {
+        await db.execute(
+          'ALTER TABLE payments ADD COLUMN cloud_storage_path TEXT',
+        );
+        print('✅ Added cloud_storage_path column');
+      } else {
+        print('ℹ️ cloud_storage_path column already exists');
+      }
+
+      if (!columnNames.contains('receipt_file_size')) {
+        await db.execute(
+          'ALTER TABLE payments ADD COLUMN receipt_file_size INTEGER',
+        );
+        print('✅ Added receipt_file_size column');
+      } else {
+        print('ℹ️ receipt_file_size column already exists');
+      }
+
+      // Update existing receipts to mark them as local type
+      // Use a transaction to ensure atomicity
+      await db.transaction((txn) async {
+        await txn.execute('''
+        UPDATE payments 
+        SET receipt_type = 'local' 
+        WHERE receipt_generated = 1 
+        AND receipt_type IS NULL
+      ''');
+      });
+
+      print('✅ Cloud receipts migration completed');
     } catch (e) {
-      print('⚠️ receipt_file_size column may already exist: $e');
+      print('❌ Error in cloud receipts migration: $e');
+      rethrow;
     }
-
-    // Update existing receipts to mark them as local type
-    await db.execute('''
-      UPDATE payments 
-      SET receipt_type = 'local' 
-      WHERE receipt_generated = 1 
-      AND receipt_type IS NULL
-    ''');
-
-    print('✅ Cloud receipts migration completed');
   }
 
   // Call this in your database initialization

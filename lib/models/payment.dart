@@ -25,18 +25,86 @@ class Payment {
     this.userId,
   });
 
-  factory Payment.fromJson(Map<String, dynamic> json) => Payment(
-        id: json['id'],
-        invoiceId: json['invoiceId'],
-        amount: json['amount'].toDouble(),
-        method: json['method'],
-        paymentDate: DateTime.parse(json['created_at']),
-        notes: json['notes'],
-        reference: json['reference'],
-        receiptPath: json['receipt_path'],
-        receiptGenerated: json['receipt_generated'] == 1,
-        userId: json['user_id'],
+  factory Payment.fromJson(Map<String, dynamic> json) {
+    try {
+      print('📄 Parsing payment from JSON: $json');
+
+      return Payment(
+        id: _parseInt(json['id']),
+        invoiceId: _parseInt(json['invoiceId']) ?? 0,
+        amount: _parseDouble(json['amount']) ?? 0.0,
+        method: json['method']?.toString() ?? 'cash',
+        // ✅ FIX: Use paymentDate field first, then fall back to created_at
+        paymentDate:
+            _parseDateTime(json['paymentDate'] ?? json['created_at']) ??
+                DateTime.now(),
+        notes: json['notes']?.toString(),
+        reference: json['reference']?.toString(),
+        receiptPath: json['receipt_path']?.toString(),
+        receiptGenerated: _parseBool(json['receipt_generated']),
+        userId: _parseInt(json['userId'] ?? json['user_id']),
       );
+    } catch (e) {
+      print('❌ Error parsing Payment from JSON: $e');
+      print('🔍 JSON data: $json');
+      rethrow;
+    }
+  }
+
+// ✅ ENHANCED: Better parsing methods that handle your data structure
+  static int? _parseInt(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is String) return int.tryParse(value);
+    if (value is double) return value.toInt();
+    return null;
+  }
+
+  static double? _parseDouble(dynamic value) {
+    if (value == null) return null;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
+  }
+
+  static DateTime? _parseDateTime(dynamic value) {
+    if (value == null) return null;
+
+    try {
+      if (value is DateTime) return value;
+
+      if (value is String) {
+        // Handle different string formats
+        if (value.contains('T')) {
+          // ISO format: "2025-08-30T00:35:59.000"
+          return DateTime.parse(value);
+        } else if (value.contains('-') && value.contains(':')) {
+          // Format: "2025-08-29 15:22:08"
+          return DateTime.parse(value.replaceFirst(' ', 'T'));
+        } else {
+          // Try direct parsing
+          return DateTime.parse(value);
+        }
+      }
+
+      if (value is int) {
+        return DateTime.fromMillisecondsSinceEpoch(value);
+      }
+    } catch (e) {
+      print('⚠️ Error parsing DateTime from $value: $e');
+    }
+
+    return null;
+  }
+
+  static bool _parseBool(dynamic value) {
+    if (value == null) return false;
+    if (value is bool) return value;
+    if (value is int) return value == 1;
+    if (value is String) return value.toLowerCase() == 'true' || value == '1';
+    return false;
+  }
 
   Map<String, dynamic> toJson() => {
         'id': id,

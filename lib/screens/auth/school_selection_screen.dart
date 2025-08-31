@@ -53,7 +53,7 @@ class SchoolSelectionScreen extends StatelessWidget {
                   const SizedBox(height: 32),
 
                   Text(
-                    'Welcome to Driving School Pro',
+                    'Welcome to Drive Sync Pro',
                     style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
@@ -103,7 +103,7 @@ class SchoolSelectionScreen extends StatelessWidget {
                                   ),
                                   const SizedBox(height: 12),
                                   const Text(
-                                    'Join Existing School',
+                                    'Login',
                                     style: TextStyle(
                                       fontSize: 18,
                                       fontWeight: FontWeight.bold,
@@ -182,7 +182,7 @@ class SchoolSelectionScreen extends StatelessWidget {
                                   ),
                                   const SizedBox(height: 12),
                                   Text(
-                                    'Create New School',
+                                    'Register',
                                     style: TextStyle(
                                       fontSize: 18,
                                       fontWeight: FontWeight.bold,
@@ -191,7 +191,7 @@ class SchoolSelectionScreen extends StatelessWidget {
                                   ),
                                   const SizedBox(height: 8),
                                   Text(
-                                    'Set up a new driving school with cloud sync',
+                                    'Set up a new driving school',
                                     style: TextStyle(
                                       fontSize: 14,
                                       color:

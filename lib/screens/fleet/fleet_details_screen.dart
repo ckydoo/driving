@@ -635,30 +635,6 @@ class _FleetDetailsScreenState extends State<FleetDetailsScreen>
                               ? instructor.phone
                               : 'Not provided',
                         ),
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            onPressed: () {
-                              Get.to(() => InstructorDetailsScreen(
-                                  instructorId: instructor.id!));
-                            },
-                            icon: const Icon(Icons.person_outline),
-                            label: const ResponsiveText(
-                              'View Instructor Details',
-                              style: TextStyle(),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blue.shade600,
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                          ),
-                        ),
                       ] else ...[
                         Container(
                           width: double.infinity,

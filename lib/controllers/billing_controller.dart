@@ -206,6 +206,7 @@ class BillingController extends GetxController {
   }
 
   // Fixed fetchBillingData method in billing_controller.dart
+
   Future<void> fetchBillingData() async {
     try {
       isLoading(true);
@@ -220,20 +221,40 @@ class BillingController extends GetxController {
 
       List<Invoice> fetchedInvoices = [];
 
+      // ✅ SIMPLE FIX: Process invoices safely
       for (var invoiceData in invoicesData) {
-        // CRITICAL: Ensure amountpaid is properly parsed from database
-        // The issue might be here - make sure amountpaid field is correctly read
-        final amountPaid =
-            (invoiceData['amountpaid'] as num?)?.toDouble() ?? 0.0;
+        try {
+          final amountPaid =
+              (invoiceData['amountpaid'] as num?)?.toDouble() ?? 0.0;
+          print(
+              'Invoice ${invoiceData['id']}: amountpaid from DB = $amountPaid');
 
-        print('Invoice ${invoiceData['id']}: amountpaid from DB = $amountPaid');
+          // Create invoice with explicit amountPaid value
+          Invoice invoice = Invoice.fromJson(invoiceData);
+          fetchedInvoices.add(invoice);
+        } catch (e) {
+          print('❌ Error parsing invoice ${invoiceData['id']}: $e');
+          // Continue with other invoices
+        }
+      }
 
-        // Create invoice with explicit amountPaid value
-        Invoice invoice = Invoice.fromJson(invoiceData);
+      // ✅ SIMPLE FIX: Process payments safely without sanitization
+      List<Payment> fetchedPayments = [];
+      for (var paymentData in paymentsData) {
+        try {
+          print('Processing payment: ${paymentData['id']}');
+          Payment payment = Payment.fromJson(paymentData);
+          fetchedPayments.add(payment);
+        } catch (e) {
+          print('❌ Error parsing payment ${paymentData['id']}: $e');
+          print('🔍 Payment data: $paymentData');
+          // Continue with other payments
+        }
+      }
 
-        // Double-check by recalculating from payments
-        List<Payment> invoicePayments = paymentsData
-            .map((json) => Payment.fromJson(json))
+      // Group payments by invoice
+      for (var invoice in fetchedInvoices) {
+        final invoicePayments = fetchedPayments
             .where((payment) => payment.invoiceId == invoice.id)
             .toList();
 
@@ -245,28 +266,22 @@ class BillingController extends GetxController {
             'Invoice ${invoice.id}: calculated amount paid from payments = $calculatedAmountPaid');
         print('Invoice ${invoice.id}: DB amount paid = ${invoice.amountPaid}');
 
-        // If there's a mismatch, prefer the calculated value and update DB
+        // If there's a mismatch, prefer the calculated value
         if ((calculatedAmountPaid - invoice.amountPaid).abs() > 0.01) {
           print(
               '⚠️ MISMATCH DETECTED: Updating invoice ${invoice.id} amountpaid from ${invoice.amountPaid} to $calculatedAmountPaid');
-
-          // Update the database with correct amount
           await _updateInvoiceAmountPaid(invoice.id!, calculatedAmountPaid);
-
-          // Create corrected invoice
           invoice = invoice.copyWith(amountPaid: calculatedAmountPaid);
         }
 
         invoice.payments = invoicePayments;
-        fetchedInvoices.add(invoice);
-
         print(
             'Final invoice ${invoice.id}: amountPaid = ${invoice.amountPaid}, balance = ${invoice.balance}');
       }
 
       // Update observable lists
       invoices.assignAll(fetchedInvoices);
-      payments.assignAll(paymentsData.map((json) => Payment.fromJson(json)));
+      payments.assignAll(fetchedPayments);
 
       print(
           'BillingController: Updated ${invoices.length} invoices and ${payments.length} payments');

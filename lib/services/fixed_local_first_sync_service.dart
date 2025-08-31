@@ -3,6 +3,7 @@
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:driving/controllers/settings_controller.dart';
+import 'package:driving/controllers/utils/timestamp_converter.dart';
 import 'package:driving/services/database_helper.dart';
 import 'package:driving/services/school_config_service.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
@@ -174,6 +175,9 @@ class FixedLocalFirstSyncService extends GetxService {
     }
   }
 
+  // Add this to your FixedLocalFirstSyncService class
+// Replace your existing _pullAndMergeRemoteChanges method with this fixed version:
+
   Future<void> _pullAndMergeRemoteChanges(String schoolId) async {
     print('📥 === PULLING AND MERGING REMOTE CHANGES ===');
     syncStatus.value = 'Pulling remote changes...';
@@ -208,6 +212,8 @@ class FixedLocalFirstSyncService extends GetxService {
 
         for (final doc in querySnapshot.docs) {
           final remoteData = doc.data();
+
+          // ✅ FIXED: Use improved timestamp conversion
           final remoteTimestamp =
               _getTimestampAsInt(remoteData['last_modified']);
 
@@ -229,8 +235,8 @@ class FixedLocalFirstSyncService extends GetxService {
           print(
               '   Last pull time: $lastPullTime (${DateTime.fromMillisecondsSinceEpoch(lastPullTime)})');
 
-          final result = await _mergeRecordWithConflictResolution(
-              table, doc.id, remoteData);
+          // ✅ FIXED: Use safe merge with proper error handling
+          final result = await _safelyMergeRecord(table, doc.id, remoteData);
 
           if (result == MergeResult.inserted) totalInserted++;
           if (result == MergeResult.updated) totalUpdated++;
@@ -241,6 +247,7 @@ class FixedLocalFirstSyncService extends GetxService {
         await _updateLastPullTimestamp(table);
       } catch (e) {
         print('❌ Error processing $table: $e');
+        // Continue with other tables instead of failing completely
       }
     }
 
@@ -248,11 +255,123 @@ class FixedLocalFirstSyncService extends GetxService {
         '📊 PULL SUMMARY: $totalProcessed processed, $totalInserted inserted, $totalUpdated updated');
   }
 
+// ✅ ENHANCED: Improved timestamp conversion with better error handling
+  int? _getTimestampAsInt(dynamic timestamp) {
+    if (timestamp == null) return null;
+
+    try {
+      // Handle integer timestamps (already in milliseconds)
+      if (timestamp is int) return timestamp;
+
+      // Handle Firestore Timestamp objects
+      if (timestamp is Timestamp) return timestamp.millisecondsSinceEpoch;
+
+      // Handle DateTime objects
+      if (timestamp is DateTime) return timestamp.millisecondsSinceEpoch;
+
+      // Handle string timestamps
+      if (timestamp is String) {
+        // Handle ISO string format
+        if (timestamp.contains('T') || timestamp.contains('-')) {
+          return DateTime.parse(timestamp).millisecondsSinceEpoch;
+        }
+        // Handle numeric string
+        final parsed = int.tryParse(timestamp);
+        if (parsed != null) return parsed;
+      }
+
+      // Handle Map format (Firestore Timestamp serialized)
+      if (timestamp is Map<String, dynamic>) {
+        if (timestamp.containsKey('seconds') &&
+            timestamp.containsKey('nanoseconds')) {
+          final seconds = timestamp['seconds'] as int;
+          final nanoseconds = timestamp['nanoseconds'] as int;
+          return seconds * 1000 + (nanoseconds ~/ 1000000);
+        }
+      }
+
+      // ✅ NEW: Handle the specific error format from your logs
+      if (timestamp.toString().contains('Timestamp(seconds=')) {
+        final match = RegExp(r'seconds=(\d+)').firstMatch(timestamp.toString());
+        if (match != null) {
+          final seconds = int.parse(match.group(1)!);
+          return seconds * 1000; // Convert to milliseconds
+        }
+      }
+    } catch (e) {
+      print(
+          '❌ Error converting timestamp: $timestamp (${timestamp.runtimeType}) - $e');
+    }
+
+    return null;
+  }
+
+// ✅ NEW: Safe record merging to prevent crashes
+  Future<MergeResult> _safelyMergeRecord(
+      String table, String docId, Map<String, dynamic> remoteData) async {
+    try {
+      return await _mergeRecordWithConflictResolution(table, docId, remoteData);
+    } catch (e) {
+      print('❌ Error merging $table record $docId: $e');
+      print('🔍 Remote data causing error: $remoteData');
+
+      // Try to fix common issues and retry once
+      try {
+        final cleanedData = _cleanRemoteData(remoteData);
+        return await _mergeRecordWithConflictResolution(
+            table, docId, cleanedData);
+      } catch (e2) {
+        print('❌ Retry also failed for $table record $docId: $e2');
+        return MergeResult.skipped;
+      }
+    }
+  }
+
+// ✅ NEW: Clean remote data to fix common issues
+  Map<String, dynamic> _cleanRemoteData(Map<String, dynamic> data) {
+    final cleaned = Map<String, dynamic>.from(data);
+
+    // Fix timestamp fields using the converter
+    final timestampFields = [
+      'last_modified',
+      'created_at',
+      'updated_at',
+      'payment_date',
+      'due_date',
+      'start',
+      'end'
+    ];
+
+    for (String field in timestampFields) {
+      if (cleaned.containsKey(field)) {
+        final converted = _getTimestampAsInt(cleaned[field]);
+        if (converted != null) {
+          cleaned[field] = converted;
+        } else {
+          // Remove problematic timestamp field
+          cleaned.remove(field);
+          print('⚠️ Removed problematic timestamp field: $field');
+        }
+      }
+    }
+
+    // Convert boolean values to integers for SQLite
+    cleaned.forEach((key, value) {
+      if (value is bool) {
+        cleaned[key] = value ? 1 : 0;
+      }
+    });
+
+    // Remove null values
+    cleaned.removeWhere((key, value) => value == null);
+
+    return cleaned;
+  }
+
+// Helper methods (if you don't already have them):
   Future<int> _getLastPullTimestamp(String table) async {
     final prefs = await SharedPreferences.getInstance();
     final timestamp = prefs.getInt('last_pull_$table') ?? 0;
-    print(
-        '⏰ Last pull timestamp for $table: $timestamp (${DateTime.fromMillisecondsSinceEpoch(timestamp)})');
     return timestamp;
   }
 
@@ -260,6 +379,73 @@ class FixedLocalFirstSyncService extends GetxService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(
         'last_pull_$table', DateTime.now().millisecondsSinceEpoch);
+  }
+
+// ✅ ENHANCED: Better _convertFirestoreToSqlite method
+  Map<String, dynamic> _convertFirestoreToSqlite(Map<String, dynamic> data) {
+    try {
+      var result = Map<String, dynamic>.from(data);
+
+      // Remove Firebase-specific fields
+      result.remove('school_id');
+      result.remove('school_name');
+      result.remove('sync_timestamp');
+      result.remove('updatedAt');
+      result.remove('firebase_user_id');
+
+      print('🔄 Converting Firestore data to SQLite format...');
+
+      // Convert ALL timestamp fields comprehensively
+      final timestampFields = [
+        'created_at',
+        'last_modified',
+        'updated_at',
+        'payment_date',
+        'due_date',
+        'start',
+        'end',
+        'date_of_birth',
+        'last_login'
+      ];
+
+      for (String field in timestampFields) {
+        if (result.containsKey(field)) {
+          final convertedValue = _getTimestampAsInt(result[field]);
+          if (convertedValue != null) {
+            // For date fields, store as ISO string; for timestamps, store as int
+            if (['created_at', 'date_of_birth'].contains(field)) {
+              result[field] =
+                  DateTime.fromMillisecondsSinceEpoch(convertedValue)
+                      .toIso8601String();
+            } else {
+              result[field] = convertedValue;
+            }
+          } else {
+            result.remove(field); // Remove if can't convert
+          }
+        }
+      }
+
+      // Convert boolean values to integers for SQLite
+      result.forEach((key, value) {
+        if (value is bool) {
+          result[key] = value ? 1 : 0;
+        }
+      });
+
+      // Mark as synced from Firebase
+      result['firebase_synced'] = 1;
+      result['last_modified_device'] = _currentDeviceId;
+
+      // Remove null values
+      result.removeWhere((key, value) => value == null);
+
+      return result;
+    } catch (e) {
+      print('❌ Error in _convertFirestoreToSqlite: $e');
+      print('🔍 Problematic data: $data');
+      rethrow;
+    }
   }
 
   Future<Map<String, int>> _pullAndMergeTable(
@@ -328,66 +514,6 @@ class FixedLocalFirstSyncService extends GetxService {
         print('🎯 REAL-TIME UPDATE detected for $table');
         _processRealTimeChanges(table, snapshot);
       });
-    }
-  }
-
-  /// COMPREHENSIVE: Convert Firestore data to SQLite format with complete timestamp handling
-  Map<String, dynamic> _convertFirestoreToSqlite(Map<String, dynamic> data) {
-    try {
-      final result = Map<String, dynamic>.from(data);
-
-      // Remove Firebase-specific fields that don't exist in local schema
-      result.remove('school_id');
-      result.remove('school_name');
-      result.remove('sync_timestamp');
-      result.remove('updatedAt');
-      result.remove('firebase_user_id'); // Remove if it exists
-
-      print('🔄 Converting Firestore data to SQLite format...');
-      print('📥 Original data keys: ${data.keys.toList()}');
-
-      // CRITICAL: Convert ALL timestamp fields comprehensively
-      _convertTimestampField(result, 'created_at', isDateString: true);
-      _convertTimestampField(result, 'last_modified', isDateString: false);
-      _convertTimestampField(result, 'date_of_birth', isDateString: true);
-      _convertTimestampField(result, 'due_date', isDateString: true);
-      _convertTimestampField(result, 'payment_date', isDateString: true);
-      _convertTimestampField(result, 'start', isDateString: true);
-      _convertTimestampField(result, 'end', isDateString: true);
-      _convertTimestampField(result, 'updated_at', isDateString: false);
-      _convertTimestampField(result, 'last_login', isDateString: false);
-
-      // Convert boolean values to integers for SQLite
-      result.forEach((key, value) {
-        if (value is bool) {
-          result[key] = value ? 1 : 0;
-          print('📄 Converted boolean $key: $value -> ${result[key]}');
-        }
-      });
-
-      // Handle any remaining Timestamp objects that might have been missed
-      result.forEach((key, value) {
-        if (value is Timestamp) {
-          print('⚠️ Found unexpected Timestamp in field $key, converting...');
-          result[key] = value.toDate().toIso8601String();
-        } else if (value is Map<String, dynamic>) {
-          // Handle nested objects that might contain Timestamps
-          result[key] = _convertNestedTimestamps(value);
-        } else if (value is List) {
-          // Handle lists that might contain Timestamps
-          result[key] = _convertListTimestamps(value);
-        }
-      });
-
-      // Mark as synced from Firebase
-      result['firebase_synced'] = 1;
-
-      print('✅ Converted data keys: ${result.keys.toList()}');
-      return result;
-    } catch (e) {
-      print('❌ Error in _convertFirestoreToSqlite: $e');
-      print('🔍 Problematic data: $data');
-      rethrow;
     }
   }
 
@@ -853,13 +979,40 @@ class FixedLocalFirstSyncService extends GetxService {
     // Remove SQLite-specific fields
     result.remove('firebase_synced');
     result.remove('id');
+    result.remove('firebase_doc_id');
 
-    // Convert timestamps
+    // Convert timestamps to Firestore Timestamp objects
     if (result['created_at'] is String) {
       try {
-        result['created_at'] = DateTime.parse(result['created_at']);
+        result['created_at'] =
+            Timestamp.fromDate(DateTime.parse(result['created_at']));
       } catch (e) {
-        result['created_at'] = DateTime.now();
+        result['created_at'] = Timestamp.now();
+      }
+    }
+
+    if (result['last_modified'] is int) {
+      result['last_modified'] =
+          Timestamp.fromMillisecondsSinceEpoch(result['last_modified']);
+    } else {
+      result['last_modified'] = FieldValue.serverTimestamp();
+    }
+
+    // Convert other timestamp fields
+    final timestampFields = [
+      'due_date',
+      'payment_date',
+      'start',
+      'end',
+      'date_of_birth'
+    ];
+    for (String field in timestampFields) {
+      if (result[field] is String) {
+        try {
+          result[field] = Timestamp.fromDate(DateTime.parse(result[field]));
+        } catch (e) {
+          result.remove(field); // Remove if can't convert
+        }
       }
     }
 
@@ -979,40 +1132,6 @@ class FixedLocalFirstSyncService extends GetxService {
     } catch (e) {
       print('❌ Error syncing user to Firebase: $e');
     }
-  }
-
-  int? _getTimestampAsInt(dynamic timestamp) {
-    if (timestamp == null) return null;
-
-    try {
-      if (timestamp is int) return timestamp;
-      if (timestamp is Timestamp) return timestamp.millisecondsSinceEpoch;
-      if (timestamp is DateTime) return timestamp.millisecondsSinceEpoch;
-
-      if (timestamp is String) {
-        // Handle ISO string
-        if (timestamp.contains('T')) {
-          return DateTime.parse(timestamp).millisecondsSinceEpoch;
-        }
-        // Handle numeric string
-        return int.tryParse(timestamp);
-      }
-
-      if (timestamp is Map<String, dynamic>) {
-        // Handle Firestore timestamp format: {seconds: x, nanoseconds: y}
-        if (timestamp.containsKey('seconds') &&
-            timestamp.containsKey('nanoseconds')) {
-          final seconds = timestamp['seconds'] as int;
-          final nanoseconds = timestamp['nanoseconds'] as int;
-          return seconds * 1000 + (nanoseconds ~/ 1000000);
-        }
-      }
-    } catch (e) {
-      print(
-          '❌ Error converting timestamp: $timestamp (${timestamp.runtimeType})');
-    }
-
-    return null;
   }
 
   Future<String> _getSchoolId() async {
@@ -1557,6 +1676,120 @@ class FixedLocalFirstSyncService extends GetxService {
     print('   deleted: ${record['deleted']}');
 
     return record;
+  }
+
+  Future<void> _saveToLocalDatabase(
+      String table, List<Map<String, dynamic>> records) async {
+    if (records.isEmpty) return;
+
+    print('💾 Saving ${records.length} $table records to local database...');
+
+    final db = await DatabaseHelper.instance.database;
+    int successCount = 0;
+    int errorCount = 0;
+
+    for (var record in records) {
+      try {
+        // ✅ USE TIMESTAMP CONVERTER
+        final convertedRecord = TimestampConverter.prepareForSQLite(record);
+
+        // Check if record exists (to avoid unique constraint errors)
+        final existing = await db
+            .query(table, where: 'id = ?', whereArgs: [convertedRecord['id']]);
+
+        if (existing.isEmpty) {
+          await db.insert(table, convertedRecord,
+              conflictAlgorithm: ConflictAlgorithm.replace);
+        } else {
+          await db.update(table, convertedRecord,
+              where: 'id = ?', whereArgs: [convertedRecord['id']]);
+        }
+
+        successCount++;
+      } catch (e) {
+        print('❌ Error saving $table record: $e');
+        print('🔍 Problematic record: $record');
+        errorCount++;
+      }
+    }
+
+    print('✅ Saved $successCount $table records successfully');
+    if (errorCount > 0) {
+      print('⚠️ $errorCount $table records failed to save');
+    }
+  }
+
+// Replace your existing insertWithSync method with this:
+  static Future<int> insertWithSync(
+    Database db,
+    String table,
+    Map<String, dynamic> data,
+  ) async {
+    try {
+      // ✅ CONVERT TIMESTAMPS BEFORE INSERTING
+      final convertedData = TimestampConverter.prepareForSQLite(data);
+
+      // Set sync tracking fields
+      convertedData['firebase_synced'] = 0;
+      convertedData['last_modified'] = DateTime.now().millisecondsSinceEpoch;
+      convertedData['last_modified_device'] = await _getCurrentDeviceId();
+
+      final result = await db.insert(table, convertedData);
+
+      // Mark for Firebase sync
+      _markForFirebaseSync(table, result);
+
+      return result;
+    } catch (e) {
+      print('❌ Error in insertWithSync for $table: $e');
+      print('🔍 Data: $data');
+      rethrow;
+    }
+  }
+
+// Replace your existing updateWithSync method with this:
+  static Future<int> updateWithSync(
+    Database db,
+    String table,
+    Map<String, dynamic> data,
+    String where,
+    List<dynamic> whereArgs,
+  ) async {
+    try {
+      // ✅ CONVERT TIMESTAMPS BEFORE UPDATING
+      final convertedData = TimestampConverter.prepareForSQLite(data);
+
+      // Set sync tracking fields
+      convertedData['firebase_synced'] = 0;
+      convertedData['last_modified'] = DateTime.now().millisecondsSinceEpoch;
+      convertedData['last_modified_device'] = await _getCurrentDeviceId();
+
+      final result = await db.update(table, convertedData,
+          where: where, whereArgs: whereArgs);
+
+      // Mark for Firebase sync if update was successful
+      if (result > 0 && whereArgs.isNotEmpty) {
+        _markForFirebaseSync(table, whereArgs.first);
+      }
+
+      return result;
+    } catch (e) {
+      print('❌ Error in updateWithSync for $table: $e');
+      print('🔍 Data: $data');
+      rethrow;
+    }
+  }
+
+// Helper method to get device ID
+  static Future<String> _getCurrentDeviceId() async {
+    // You can implement this based on your device ID logic
+    return 'device_${DateTime.now().millisecondsSinceEpoch}';
+  }
+
+// Helper method to mark records for sync
+  static void _markForFirebaseSync(String table, dynamic recordId) {
+    // Add record to sync queue or trigger immediate sync
+    print('📤 Marked $table record $recordId for Firebase sync');
   }
 }
 

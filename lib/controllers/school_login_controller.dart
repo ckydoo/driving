@@ -363,26 +363,29 @@ class SchoolJoinController extends GetxController {
     try {
       final db = DatabaseHelper.instance;
 
+      // ✅ TIMESTAMP FIX: Convert Firebase data to SQLite format BEFORE saving
+      final cleanedData = _convertFirebaseDataForSQLite(data);
+
       switch (collectionName) {
         case 'users':
           // Convert to User model and save
           final user = app_user.User(
-            fname: data['fname'] ?? '',
-            lname: data['lname'] ?? '',
-            email: data['email'] ?? '',
-            password: data['password'] ?? '',
-            phone: data['phone'] ?? '',
-            address: data['address'] ?? '',
-            gender: data['gender'] ?? 'Male',
-            idnumber: data['idnumber'] ?? '',
-            role: data['role'] ?? 'user',
-            status: data['status'] ?? 'Active',
-            date_of_birth: data['date_of_birth'] != null
-                ? DateTime.tryParse(data['date_of_birth'].toString()) ??
+            fname: cleanedData['fname'] ?? '',
+            lname: cleanedData['lname'] ?? '',
+            email: cleanedData['email'] ?? '',
+            password: cleanedData['password'] ?? '',
+            phone: cleanedData['phone'] ?? '',
+            address: cleanedData['address'] ?? '',
+            gender: cleanedData['gender'] ?? 'Male',
+            idnumber: cleanedData['idnumber'] ?? '',
+            role: cleanedData['role'] ?? 'user',
+            status: cleanedData['status'] ?? 'Active',
+            date_of_birth: cleanedData['date_of_birth'] != null
+                ? DateTime.tryParse(cleanedData['date_of_birth'].toString()) ??
                     DateTime.now()
                 : DateTime.now(),
-            created_at: data['created_at'] != null
-                ? DateTime.tryParse(data['created_at'].toString()) ??
+            created_at: cleanedData['created_at'] != null
+                ? DateTime.tryParse(cleanedData['created_at'].toString()) ??
                     DateTime.now()
                 : DateTime.now(),
           );
@@ -390,23 +393,23 @@ class SchoolJoinController extends GetxController {
           break;
 
         case 'courses':
-          await db.insertCourse(data);
+          await db.insertCourse(cleanedData);
           break;
 
         case 'fleet':
-          await db.insertFleet(data);
+          await db.insertFleet(cleanedData);
           break;
 
         case 'schedules':
-          await db.insertSchedule(data);
+          await db.insertSchedule(cleanedData);
           break;
 
         case 'invoices':
-          await db.insertInvoice(data);
+          await db.insertInvoice(cleanedData);
           break;
 
         case 'payments':
-          await db.insertPayment(data);
+          await db.insertPayment(cleanedData);
           break;
 
         // Add more cases as needed for other collections
@@ -418,6 +421,78 @@ class SchoolJoinController extends GetxController {
       print('⚠️ Error saving $collectionName data to local DB: $e');
       // Don't throw error - continue with other data
     }
+  }
+
+  /// ✅ TIMESTAMP FIX: Convert Firebase data to SQLite-compatible format
+  Map<String, dynamic> _convertFirebaseDataForSQLite(
+      Map<String, dynamic> data) {
+    final converted = Map<String, dynamic>.from(data);
+
+    // Convert all Firebase Timestamp objects to integers (milliseconds)
+    converted.forEach((key, value) {
+      if (value is Timestamp) {
+        converted[key] = value.millisecondsSinceEpoch;
+        print('📅 Converted timestamp $key: Timestamp -> ${converted[key]}');
+      } else if (value is bool) {
+        // Convert boolean to integer for SQLite
+        converted[key] = value ? 1 : 0;
+        print('📄 Converted boolean $key: $value -> ${converted[key]}');
+      }
+    });
+
+    // Handle specific timestamp fields that might be in other formats
+    final timestampFields = [
+      'last_modified',
+      'created_at',
+      'updated_at',
+      'payment_date',
+      'due_date',
+      'start',
+      'end',
+      'date_of_birth'
+    ];
+
+    for (String field in timestampFields) {
+      if (converted.containsKey(field) && converted[field] != null) {
+        converted[field] = _convertTimestamp(converted[field]);
+      }
+    }
+
+    // Remove null values
+    converted.removeWhere((key, value) => value == null);
+
+    return converted;
+  }
+
+  /// ✅ TIMESTAMP FIX: Convert various timestamp formats to milliseconds
+  int _convertTimestamp(dynamic timestamp) {
+    if (timestamp == null) return DateTime.now().millisecondsSinceEpoch;
+
+    try {
+      if (timestamp is int) return timestamp;
+      if (timestamp is Timestamp) return timestamp.millisecondsSinceEpoch;
+      if (timestamp is DateTime) return timestamp.millisecondsSinceEpoch;
+
+      if (timestamp is String) {
+        if (timestamp.contains('T')) {
+          return DateTime.parse(timestamp).millisecondsSinceEpoch;
+        }
+        final parsed = int.tryParse(timestamp);
+        if (parsed != null) return parsed;
+      }
+
+      // Handle the specific format from your error logs: Timestamp(seconds=1756480655, nanoseconds=0)
+      if (timestamp.toString().contains('Timestamp(seconds=')) {
+        final match = RegExp(r'seconds=(\d+)').firstMatch(timestamp.toString());
+        if (match != null) {
+          return int.parse(match.group(1)!) * 1000; // Convert to milliseconds
+        }
+      }
+    } catch (e) {
+      print('⚠️ Error converting timestamp $timestamp: $e');
+    }
+
+    return DateTime.now().millisecondsSinceEpoch;
   }
 
   /// Step 5: Set up local authentication

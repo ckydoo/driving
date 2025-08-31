@@ -101,20 +101,79 @@ class Invoice {
   }
 
   factory Invoice.fromJson(Map<String, dynamic> json) {
-    return Invoice(
-      id: json['id'],
-      invoiceNumber: json['invoice_number'],
-      studentId: json['student'],
-      courseId: json['course'],
-      lessons: json['lessons'],
-      pricePerLesson: (json['price_per_lesson'] as num).toDouble(),
-      amountPaid: (json['amountpaid'] as num?)?.toDouble() ?? 0.0,
-      createdAt: DateTime.parse(json['created_at']),
-      dueDate: DateTime.parse(json['due_date']),
-      status: json['status'] ?? 'unpaid',
-      totalAmount: (json['total_amount'] as num?)!.toDouble(),
-      payments: [],
-    );
+    try {
+      print('📄 Parsing invoice from JSON: $json');
+
+      return Invoice(
+        id: _parseInt(json['id']),
+        invoiceNumber: json['invoice_number']?.toString() ?? '',
+        studentId: _parseInt(json['student']) ?? 0,
+        courseId: _parseInt(json['course']) ?? 0,
+        lessons: _parseInt(json['lessons']) ?? 1,
+        pricePerLesson: _parseDouble(json['price_per_lesson']) ?? 0.0,
+        amountPaid: _parseDouble(json['amountpaid']) ?? 0.0,
+        createdAt: _parseDateTime(json['created_at']) ?? DateTime.now(),
+        // ✅ FIX: Handle due_date as both integer (milliseconds) and string
+        dueDate: _parseDateTime(json['due_date']) ?? DateTime.now(),
+        status: json['status']?.toString() ?? 'unpaid',
+        totalAmount: _parseDouble(json['total_amount']) ?? 0.0,
+        payments: [],
+      );
+    } catch (e) {
+      print('❌ Error parsing Invoice from JSON: $e');
+      print('🔍 JSON data: $json');
+      rethrow;
+    }
+  }
+
+// ✅ ENHANCED: Safe parsing methods for Invoice that handle your data formats
+  static int? _parseInt(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is String) return int.tryParse(value);
+    if (value is double) return value.toInt();
+    return null;
+  }
+
+  static double? _parseDouble(dynamic value) {
+    if (value == null) return null;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
+  }
+
+  static DateTime? _parseDateTime(dynamic value) {
+    if (value == null) return null;
+
+    try {
+      if (value is DateTime) return value;
+
+      if (value is int) {
+        // Handle milliseconds timestamp like: due_date: 1756912744396
+        return DateTime.fromMillisecondsSinceEpoch(value);
+      }
+
+      if (value is String) {
+        // Handle ISO format: "2025-08-29T17:19:53.000"
+        if (value.contains('T')) {
+          return DateTime.parse(value);
+        }
+        // Handle other string formats
+        if (value.contains('-')) {
+          return DateTime.parse(value);
+        }
+        // Handle numeric string
+        final intValue = int.tryParse(value);
+        if (intValue != null) {
+          return DateTime.fromMillisecondsSinceEpoch(intValue);
+        }
+      }
+    } catch (e) {
+      print('⚠️ Error parsing DateTime from $value (${value.runtimeType}): $e');
+    }
+
+    return null;
   }
 
   Map<String, dynamic> toJson() {

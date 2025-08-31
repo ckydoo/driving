@@ -57,10 +57,8 @@ class DatabaseHelper {
   }
 
   Future<void> _createAllTables(Database db) async {
-    // All your existing table creation code...
-    Future<void> _createAllTablesWithSyncFields(Database db) async {
-      // === SETTINGS TABLE ===
-      await db.execute('''
+    // === SETTINGS TABLE ===
+    await db.execute('''
       CREATE TABLE settings(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         key TEXT UNIQUE NOT NULL,
@@ -75,8 +73,8 @@ class DatabaseHelper {
       )
     ''');
 
-      // === ATTACHMENTS TABLE ===
-      await db.execute('''
+    // === ATTACHMENTS TABLE ===
+    await db.execute('''
       CREATE TABLE attachments(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         uploaded_by INTEGER NOT NULL,
@@ -92,8 +90,8 @@ class DatabaseHelper {
       )
     ''');
 
-      // === COURSE INSTRUCTOR MAPPING ===
-      await db.execute('''
+    // === COURSE INSTRUCTOR MAPPING ===
+    await db.execute('''
       CREATE TABLE courseinstructor(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         instructor INTEGER NOT NULL,
@@ -106,8 +104,8 @@ class DatabaseHelper {
       )
     ''');
 
-      // === COURSES TABLE ===
-      await db.execute('''
+    // === COURSES TABLE ===
+    await db.execute('''
       CREATE TABLE courses(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
@@ -122,8 +120,8 @@ class DatabaseHelper {
       )
     ''');
 
-      // === COURSE ENROLLMENT ===
-      await db.execute('''
+    // === COURSE ENROLLMENT ===
+    await db.execute('''
       CREATE TABLE coursesenrolled(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         student INTEGER NOT NULL,
@@ -144,8 +142,8 @@ class DatabaseHelper {
       )
     ''');
 
-      // === CURRENCIES TABLE ===
-      await db.execute('''
+    // === CURRENCIES TABLE ===
+    await db.execute('''
       CREATE TABLE currencies(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
@@ -159,8 +157,8 @@ class DatabaseHelper {
       )
     ''');
 
-      // === FLEET TABLE ===
-      await db.execute('''
+    // === FLEET TABLE ===
+    await db.execute('''
       CREATE TABLE fleet(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         carplate TEXT NOT NULL,
@@ -176,8 +174,8 @@ class DatabaseHelper {
       )
     ''');
 
-      // === INVOICES TABLE ===
-      await db.execute('''
+    // === INVOICES TABLE ===
+    await db.execute('''
       CREATE TABLE invoices(
        id INTEGER PRIMARY KEY AUTOINCREMENT,
        student INTEGER NOT NULL,
@@ -200,8 +198,8 @@ class DatabaseHelper {
       )
     ''');
 
-      // === NOTES TABLE ===
-      await db.execute('''
+    // === NOTES TABLE ===
+    await db.execute('''
       CREATE TABLE notes(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         note_by INTEGER NOT NULL,
@@ -216,8 +214,8 @@ class DatabaseHelper {
       )
     ''');
 
-      // === NOTIFICATIONS TABLE ===
-      await db.execute('''
+    // === NOTIFICATIONS TABLE ===
+    await db.execute('''
       CREATE TABLE notifications(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user INTEGER NOT NULL,
@@ -233,8 +231,8 @@ class DatabaseHelper {
       )
     ''');
 
-      // === REMINDERS TABLE ===
-      await db.execute('''
+    // === REMINDERS TABLE ===
+    await db.execute('''
       CREATE TABLE reminders(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         school INTEGER NOT NULL,
@@ -252,8 +250,8 @@ class DatabaseHelper {
       )
     ''');
 
-      // === SCHEDULES TABLE ===
-      await db.execute('''
+    // === SCHEDULES TABLE ===
+    await db.execute('''
       CREATE TABLE schedules(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         start TEXT NOT NULL,
@@ -279,8 +277,8 @@ class DatabaseHelper {
       )
     ''');
 
-      // === TIMELINE TABLE ===
-      await db.execute('''
+    // === TIMELINE TABLE ===
+    await db.execute('''
       CREATE TABLE timeline(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         studentId INTEGER NOT NULL,
@@ -298,8 +296,8 @@ class DatabaseHelper {
       )
     ''');
 
-      // === USER MESSAGES TABLE ===
-      await db.execute('''
+    // === USER MESSAGES TABLE ===
+    await db.execute('''
       CREATE TABLE usermessages(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         receiver INTEGER NOT NULL,
@@ -317,8 +315,8 @@ class DatabaseHelper {
       )
     ''');
 
-      // === BILLING RECORDS TABLE ===
-      await db.execute('''
+    // === BILLING RECORDS TABLE ===
+    await db.execute('''
       CREATE TABLE billing_records (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         scheduleId INTEGER NOT NULL,
@@ -338,8 +336,8 @@ class DatabaseHelper {
       )
     ''');
 
-      // === USERS TABLE ===
-      await db.execute('''
+    // === USERS TABLE ===
+    await db.execute('''
       CREATE TABLE users(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         fname TEXT NOT NULL,
@@ -360,12 +358,14 @@ class DatabaseHelper {
         deleted INTEGER DEFAULT 0,
         last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
         firebase_user_id TEXT,
-        last_modified_device TEXT
+        last_modified_device TEXT,
+        last_login TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        last_login_method TEXT
       )
     ''');
 
-      // === PAYMENTS TABLE ===
-      await db.execute('''
+    // === PAYMENTS TABLE ===
+    await db.execute('''
       CREATE TABLE payments(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         invoiceId INTEGER NOT NULL,
@@ -391,8 +391,8 @@ class DatabaseHelper {
       )
     ''');
 
-      // === BILLINGS TABLE ===
-      await db.execute('''
+    // === BILLINGS TABLE ===
+    await db.execute('''
       CREATE TABLE billings (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         scheduleId INTEGER NOT NULL,
@@ -410,8 +410,8 @@ class DatabaseHelper {
       )
     ''');
 
-      // === BILLING RECORDS HISTORY TABLE ===
-      await db.execute('''
+    // === BILLING RECORDS HISTORY TABLE ===
+    await db.execute('''
       CREATE TABLE billing_records_history (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           scheduleId INTEGER NOT NULL,
@@ -431,8 +431,8 @@ class DatabaseHelper {
       )
     ''');
 
-      // === KNOWN SCHOOLS TABLE ===
-      await db.execute('''
+    // === KNOWN SCHOOLS TABLE ===
+    await db.execute('''
       CREATE TABLE known_schools(
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
@@ -452,13 +452,13 @@ class DatabaseHelper {
       )
     ''');
 
-      print('✅ All tables created with sync fields');
-    }
+    print('✅ All tables created with sync fields');
+  }
 
-    /// Create sync metadata and conflict tables
-    Future<void> _createSyncMetadataTables(Database db) async {
-      // Sync metadata table
-      await db.execute('''
+  /// Create sync metadata and conflict tables
+  Future<void> _createSyncMetadataTables(Database db) async {
+    // Sync metadata table
+    await db.execute('''
       CREATE TABLE IF NOT EXISTS sync_metadata (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         table_name TEXT NOT NULL UNIQUE,
@@ -472,8 +472,8 @@ class DatabaseHelper {
       )
     ''');
 
-      // Conflict resolution log table
-      await db.execute('''
+    // Conflict resolution log table
+    await db.execute('''
       CREATE TABLE IF NOT EXISTS sync_conflicts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         table_name TEXT NOT NULL,
@@ -489,7 +489,6 @@ class DatabaseHelper {
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
       )
     ''');
-    }
   }
   // ==================== SYNC-ENABLED CRUD METHODS ====================
 
@@ -499,11 +498,9 @@ class DatabaseHelper {
   Future<int> insertUser(User user) async {
     try {
       final db = await database;
-
-      // Prepare user data for insertion
       final userData = user.toJson();
 
-      // Ensure ID is null for new users (database will auto-generate)
+      // Remove ID for new users (auto-generated)
       userData.remove('id');
 
       // Validate required fields
@@ -512,24 +509,34 @@ class DatabaseHelper {
         throw Exception('Email is required');
       }
 
-      if (userData['fname'] == null ||
-          userData['fname'].toString().trim().isEmpty) {
-        throw Exception('First name is required');
-      }
-
-      if (userData['lname'] == null ||
-          userData['lname'].toString().trim().isEmpty) {
-        throw Exception('Last name is required');
-      }
-
-      // Set default values for potentially null fields
+      // Set default values
       userData['created_at'] ??= DateTime.now().toIso8601String();
       userData['status'] ??= 'Active';
       userData['role'] ??= 'student';
 
       print('📝 Inserting user data: ${userData['email']}');
 
-      // Insert user and get the generated ID
+      // ✅ FIX 1: Check for existing user BEFORE inserting
+      final existingUsers = await db.query('users',
+          where: 'idnumber = ? OR email = ?',
+          whereArgs: [userData['idnumber'], userData['email']]);
+
+      if (existingUsers.isNotEmpty) {
+        final existing = existingUsers.first;
+        print('User already exists: ${existing['email']}, updating instead...');
+
+        // Update existing user instead
+        userData['id'] = existing['id'];
+        final updatedRows = await db.update('users', userData,
+            where: 'id = ?', whereArgs: [existing['id']]);
+
+        if (updatedRows > 0) {
+          print('✅ User updated successfully: ${existing['id']}');
+          return existing['id'] as int;
+        }
+      }
+
+      // Insert new user if not exists
       final insertedId = await DatabaseHelperSyncExtension.insertWithSync(
         db,
         'users',
@@ -538,8 +545,7 @@ class DatabaseHelper {
 
       if (insertedId <= 0) {
         throw Exception(
-          'Failed to insert user - invalid ID returned: $insertedId',
-        );
+            'Failed to insert user - invalid ID returned: $insertedId');
       }
 
       print('✅ User inserted successfully with ID: $insertedId');
@@ -547,7 +553,7 @@ class DatabaseHelper {
     } catch (e) {
       print('❌ Error inserting user: $e');
 
-      // Provide more specific error messages
+      // Provide specific error messages
       if (e.toString().contains('UNIQUE constraint failed')) {
         if (e.toString().contains('users.email')) {
           throw Exception('Email address is already registered');
@@ -558,7 +564,6 @@ class DatabaseHelper {
         }
       }
 
-      // Re-throw the original error with context
       throw Exception('Failed to save user: ${e.toString()}');
     }
   }
@@ -1934,70 +1939,6 @@ class DatabaseHelper {
         print('⚠️ sync_version column may already exist in $table');
       }
     }
-  }
-
-  /// Create sync metadata and conflict tables
-  Future<void> _createSyncMetadataTables(Database db) async {
-    // Sync metadata table
-    await db.execute('''
-    CREATE TABLE IF NOT EXISTS sync_metadata (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      table_name TEXT NOT NULL UNIQUE,
-      last_sync_timestamp INTEGER DEFAULT 0,
-      last_sync_device TEXT,
-      total_records INTEGER DEFAULT 0,
-      synced_records INTEGER DEFAULT 0,
-      conflict_count INTEGER DEFAULT 0,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-    )
-  ''');
-
-    // Conflict resolution log table
-    await db.execute('''
-    CREATE TABLE IF NOT EXISTS sync_conflicts (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      table_name TEXT NOT NULL,
-      record_id INTEGER NOT NULL,
-      conflict_type TEXT NOT NULL,
-      local_timestamp INTEGER,
-      remote_timestamp INTEGER,
-      local_device TEXT,
-      remote_device TEXT,
-      resolution TEXT NOT NULL,
-      local_data TEXT,
-      remote_data TEXT,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP
-    )
-  ''');
-
-    // Insert initial metadata for sync tables
-    final tables = [
-      'users',
-      'courses',
-      'schedules',
-      'invoices',
-      'payments',
-      'fleet',
-      'attachments',
-      'notes',
-      'notifications',
-      'billing_records',
-      'timeline',
-      'usermessages',
-    ];
-
-    for (final table in tables) {
-      await db.execute(
-        '''
-      INSERT OR IGNORE INTO sync_metadata (table_name, last_sync_timestamp) 
-      VALUES (?, 0)
-    ''',
-        [table],
-      );
-    }
-
-    print('✅ Created sync metadata and conflict tables');
   }
 
   /// Initialize device ID

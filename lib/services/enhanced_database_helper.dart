@@ -12,7 +12,6 @@ import 'package:get/get_core/src/get_main.dart';
 import 'package:sqflite/sqflite.dart';
 
 class DatabaseHelperSyncExtension {
-  /// Fixed Database Triggers - Don't reset firebase_synced unless data actually changed
   static Future<void> addSyncTrackingTriggers(Database db) async {
     final tables = [
       'users',
@@ -36,46 +35,137 @@ class DatabaseHelperSyncExtension {
       await db.execute('DROP TRIGGER IF EXISTS update_${table}_timestamp');
       await db.execute('DROP TRIGGER IF EXISTS insert_${table}_timestamp');
 
-      // ✅ FIXED: Create smarter trigger that only resets firebase_synced if actual data changed
-      await db.execute('''
-      CREATE TRIGGER IF NOT EXISTS update_${table}_timestamp
-      AFTER UPDATE ON $table
-      WHEN (
-        -- Only reset firebase_synced if we're NOT just updating sync status
-        NEW.firebase_synced IS NULL OR 
-        OLD.firebase_synced != NEW.firebase_synced OR
-        -- Check if any non-sync columns actually changed
-        (OLD.firebase_synced = 1 AND (
-          COALESCE(OLD.name, '') != COALESCE(NEW.name, '') OR
-          COALESCE(OLD.email, '') != COALESCE(NEW.email, '') OR
-          COALESCE(OLD.phone, '') != COALESCE(NEW.phone, '') OR
-          COALESCE(OLD.status, '') != COALESCE(NEW.status, '') OR
-          -- Add other important columns that should trigger resync
-          OLD.deleted != NEW.deleted
-        ))
-      )
-      BEGIN
-        UPDATE $table SET 
-          last_modified = ${DateTime.now().toUtc().millisecondsSinceEpoch},
-          firebase_synced = CASE 
-            WHEN NEW.firebase_synced = 1 THEN 1  -- Don't reset if we're marking as synced
-            ELSE 0  -- Reset if actual data changed
-          END
-        WHERE id = NEW.id;
-      END;
-    ''');
+      // Create table-specific smart triggers
+      await _createTableSpecificTrigger(db, table);
+    }
+  }
 
-      // Create trigger for inserts (this one is fine as-is)
+  /// Create table-specific triggers based on actual columns
+  static Future<void> _createTableSpecificTrigger(
+      Database db, String table) async {
+    try {
+      // Get actual columns for this table
+      final columns = await db.rawQuery('PRAGMA table_info($table)');
+      final columnNames = columns.map((col) => col['name'] as String).toSet();
+
+      // Build conditional checks only for columns that exist
+      List<String> conditions = [];
+
+      // Check common columns that might exist
+
+      if (columnNames.contains('fname')) {
+        conditions.add("COALESCE(OLD.fname, '') != COALESCE(NEW.fname, '')");
+      }
+      if (columnNames.contains('lname')) {
+        conditions.add("COALESCE(OLD.lname, '') != COALESCE(NEW.lname, '')");
+      }
+      if (columnNames.contains('email')) {
+        conditions.add("COALESCE(OLD.email, '') != COALESCE(NEW.email, '')");
+      }
+      if (columnNames.contains('phone')) {
+        conditions.add("COALESCE(OLD.phone, '') != COALESCE(NEW.phone, '')");
+      }
+      if (columnNames.contains('status')) {
+        conditions.add("COALESCE(OLD.status, '') != COALESCE(NEW.status, '')");
+      }
+      if (columnNames.contains('amount')) {
+        conditions.add("COALESCE(OLD.amount, 0) != COALESCE(NEW.amount, 0)");
+      }
+      if (columnNames.contains('start')) {
+        conditions.add("COALESCE(OLD.start, '') != COALESCE(NEW.start, '')");
+      }
+      if (columnNames.contains('end')) {
+        conditions.add("COALESCE(OLD.end, '') != COALESCE(NEW.end, '')");
+      }
+      if (columnNames.contains('deleted')) {
+        conditions.add("OLD.deleted != NEW.deleted");
+      }
+
+      // If no specific conditions, just check if firebase_synced was already 1
+      String dataChangeCondition = conditions.isNotEmpty
+          ? conditions.join(' OR ')
+          : "1=1"; // Always true if no specific columns to check
+
+      // Create the UPDATE trigger
       await db.execute('''
-      CREATE TRIGGER IF NOT EXISTS insert_${table}_timestamp
-      AFTER INSERT ON $table
-      BEGIN
-        UPDATE $table SET 
-          last_modified = ${DateTime.now().toUtc().millisecondsSinceEpoch},
-          firebase_synced = 0
-        WHERE id = NEW.id;
-      END;
-    ''');
+        CREATE TRIGGER IF NOT EXISTS update_${table}_timestamp
+        AFTER UPDATE ON $table
+        WHEN (
+          -- Only reset firebase_synced if actual data changed and it was previously synced
+          OLD.firebase_synced = 1 AND ($dataChangeCondition)
+        )
+        BEGIN
+          UPDATE $table SET 
+            last_modified = (strftime('%s', 'now') * 1000),
+            firebase_synced = 0
+          WHERE id = NEW.id;
+        END;
+      ''');
+
+      // Create the INSERT trigger (simpler - always mark as unsynced)
+      await db.execute('''
+        CREATE TRIGGER IF NOT EXISTS insert_${table}_timestamp
+        AFTER INSERT ON $table
+        BEGIN
+          UPDATE $table SET 
+            last_modified = (strftime('%s', 'now') * 1000),
+            firebase_synced = 0
+          WHERE id = NEW.id;
+        END;
+      ''');
+
+      print(
+          '✅ Created smart triggers for $table (${conditions.length} conditions)');
+    } catch (e) {
+      print('❌ Error creating triggers for $table: $e');
+
+      // Fallback: create simple trigger without column checks
+      await db.execute('''
+        CREATE TRIGGER IF NOT EXISTS update_${table}_timestamp
+        AFTER UPDATE ON $table
+        WHEN (OLD.firebase_synced = 1)
+        BEGIN
+          UPDATE $table SET 
+            last_modified = (strftime('%s', 'now') * 1000),
+            firebase_synced = 0
+          WHERE id = NEW.id;
+        END;
+      ''');
+
+      await db.execute('''
+        CREATE TRIGGER IF NOT EXISTS insert_${table}_timestamp
+        AFTER INSERT ON $table
+        BEGIN
+          UPDATE $table SET 
+            last_modified = (strftime('%s', 'now') * 1000),
+            firebase_synced = 0
+          WHERE id = NEW.id;
+        END;
+      ''');
+
+      print('⚠️ Created fallback triggers for $table');
+    }
+  }
+
+  /// Emergency method to drop all problematic triggers
+  static Future<void> dropAllTriggers(Database db) async {
+    print('🗑️ Dropping all triggers...');
+
+    try {
+      final triggers = await db.rawQuery('''
+        SELECT name FROM sqlite_master 
+        WHERE type = 'trigger'
+      ''');
+
+      for (final trigger in triggers) {
+        final triggerName = trigger['name'] as String;
+        await db.execute('DROP TRIGGER IF EXISTS $triggerName');
+        print('✅ Dropped trigger: $triggerName');
+      }
+
+      print('✅ All triggers dropped successfully');
+    } catch (e) {
+      print('❌ Error dropping triggers: $e');
     }
   }
 

@@ -54,24 +54,100 @@ class Schedule {
     return (minutes / 30).ceil();
   }
 
-  factory Schedule.fromJson(Map<String, dynamic> json) => Schedule(
-        id: json['id'],
-        start: DateTime.parse(json['start'] ?? ''),
-        end: DateTime.parse(json['end'] ?? ''),
-        courseId: json['course'] ?? 0,
-        studentId: json['student'] ?? 0,
-        instructorId: json['instructor'] ?? 0,
-        carId: json['car'] ?? 0,
-        classType: json['class_type'] ?? '',
-        status: json['status'] ?? ScheduleStatus.scheduled,
-        attended: json['attended'] == 1,
-        lessonsCompleted: json['lessonsCompleted'] ?? 0,
-        isRecurring: json['is_recurring'] == 1,
-        recurrencePattern: json['recurrence_pattern'],
-        recurrenceEndDate: json['recurrence_end_date'] != null
-            ? DateTime.parse(json['recurrence_end_date'])
-            : null,
+  factory Schedule.fromJson(Map<String, dynamic> json) {
+    try {
+      print('📅 Parsing schedule from JSON: $json');
+
+      return Schedule(
+        id: _parseInt(json['id']),
+        // ✅ FIX: Use safe date parsing for start and end times
+        start: _parseDateTime(json['start']) ?? DateTime.now(),
+        end: _parseDateTime(json['end']) ??
+            DateTime.now().add(Duration(hours: 1)),
+        courseId: _parseInt(json['course']) ?? 0,
+        studentId: _parseInt(json['student']) ?? 0,
+        instructorId: _parseInt(json['instructor']) ?? 0,
+        carId: _parseInt(json['car']),
+        classType: json['class_type']?.toString() ?? '',
+        status: json['status']?.toString() ?? ScheduleStatus.scheduled,
+        attended: _parseBool(json['attended']),
+        lessonsCompleted: _parseInt(json['lessonsCompleted']) ?? 0,
+        isRecurring: _parseBool(json['is_recurring']),
+        recurrencePattern: json['recurrence_pattern']?.toString(),
+        recurrenceEndDate: _parseDateTime(json['recurrence_end_date']),
       );
+    } catch (e) {
+      print('❌ Error parsing Schedule from JSON: $e');
+      print('🔍 JSON data: $json');
+      rethrow;
+    }
+  }
+
+// ✅ NEW: Safe parsing methods for Schedule
+  static int? _parseInt(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is String) return int.tryParse(value);
+    if (value is double) return value.toInt();
+    return null;
+  }
+
+  static bool _parseBool(dynamic value) {
+    if (value == null) return false;
+    if (value is bool) return value;
+    if (value is int) return value == 1;
+    if (value is String) return value.toLowerCase() == 'true' || value == '1';
+    return false;
+  }
+
+  static DateTime? _parseDateTime(dynamic value) {
+    if (value == null) return null;
+
+    try {
+      if (value is DateTime) return value;
+
+      if (value is int) {
+        // Handle milliseconds timestamp
+        return DateTime.fromMillisecondsSinceEpoch(value);
+      }
+
+      if (value is String) {
+        if (value.trim().isEmpty) return null;
+
+        // Handle ISO format: "2025-08-29T17:19:53.000"
+        if (value.contains('T')) {
+          return DateTime.parse(value);
+        }
+
+        // Handle other date formats
+        if (value.contains('-')) {
+          // Try parsing date strings like "2025-08-29 15:22:08"
+          if (value.contains(' ')) {
+            return DateTime.parse(value.replaceFirst(' ', 'T'));
+          }
+          return DateTime.parse(value);
+        }
+
+        // Handle numeric string (milliseconds)
+        final intValue = int.tryParse(value);
+        if (intValue != null) {
+          return DateTime.fromMillisecondsSinceEpoch(intValue);
+        }
+      }
+
+      // Handle Firestore Timestamp format
+      if (value is Map && value.containsKey('seconds')) {
+        final seconds = value['seconds'] as int;
+        final nanoseconds = value['nanoseconds'] as int? ?? 0;
+        return DateTime.fromMillisecondsSinceEpoch(
+            seconds * 1000 + (nanoseconds ~/ 1000000));
+      }
+    } catch (e) {
+      print('⚠️ Error parsing DateTime from $value (${value.runtimeType}): $e');
+    }
+
+    return null;
+  }
 
   Map<String, dynamic> toJson() => {
         'id': id,
