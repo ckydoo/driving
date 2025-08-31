@@ -156,7 +156,7 @@ class FixedDashboardContent extends StatelessWidget {
         const SizedBox(height: 8),
         ResponsiveText(
           style: const TextStyle(),
-          'Analytics and insights at your fingertips',
+          'DriveSync Pro - Drive Smarter, Manage Easier!',
           fontSize: ResponsiveUtils.getValue(context,
               mobile: 13.0, tablet: 15.0, desktop: 16.0),
           color: Colors.white.withOpacity(0.9),

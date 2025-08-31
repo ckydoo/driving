@@ -63,10 +63,9 @@ class UserController extends GetxController {
       // If a specific role is requested, filter and return only those users
       List<User> filteredUsers;
       if (role != null) {
-        filteredUsers =
-            users
-                .where((user) => user.role.toLowerCase() == role.toLowerCase())
-                .toList();
+        filteredUsers = users
+            .where((user) => user.role.toLowerCase() == role.toLowerCase())
+            .toList();
         print('UserController: Filtered to ${filteredUsers.length} ${role}s');
       } else {
         filteredUsers = users;
@@ -276,17 +275,16 @@ class UserController extends GetxController {
     if (query.isEmpty) {
       searchedUser.clear();
     } else {
-      final results =
-          _users
-              .where(
-                (user) =>
-                    user.fname.toLowerCase().contains(query.toLowerCase()) ||
-                    user.lname.toLowerCase().contains(query.toLowerCase()) ||
-                    user.email.toLowerCase().contains(query.toLowerCase()) ||
-                    user.phone.contains(query) ||
-                    user.idnumber.contains(query),
-              )
-              .toList();
+      final results = _users
+          .where(
+            (user) =>
+                user.fname.toLowerCase().contains(query.toLowerCase()) ||
+                user.lname.toLowerCase().contains(query.toLowerCase()) ||
+                user.email.toLowerCase().contains(query.toLowerCase()) ||
+                user.phone.contains(query) ||
+                user.idnumber.contains(query),
+          )
+          .toList();
       searchedUser.assignAll(results);
     }
   }
@@ -325,6 +323,8 @@ class UserController extends GetxController {
     }
   }
 
+  // Add this to your UserController class in lib/controllers/user_controller.dart
+
   Future<void> _handleNewUserCreationLocalFirst(User user) async {
     // Step 1: Check for duplicates first
     final duplicateErrors = await checkForDuplicates(user, isUpdate: false);
@@ -340,19 +340,62 @@ class UserController extends GetxController {
       throw Exception(duplicateErrors.values.first);
     }
 
-    // Step 2: Save to LOCAL database FIRST using existing method
-    print('💾 Saving to local database first (will trigger automatic sync)...');
-
-    // Your existing insertUser method already uses sync-aware extension
+    // Step 2: Save to LOCAL database FIRST
+    print('💾 Saving to local database first...');
     final newUserId = await DatabaseHelper.instance.insertUser(user);
     final createdUser = user.copyWith(id: newUserId);
 
     // Add to local observable list for immediate UI update
     _users.add(createdUser);
+    print('✅ User saved locally with ID: $newUserId');
 
-    print('✅ User saved locally with ID: $newUserId (marked for sync)');
+    // Step 3: **NEW** - Create Firebase Authentication user
+    try {
+      final authController = Get.find<AuthController>();
 
-    // Step 3: Show success message immediately (based on local save)
+      // Convert user to userData map for Firebase
+      final userData = {
+        'id': createdUser.id,
+        'fname': createdUser.fname,
+        'lname': createdUser.lname,
+        'email': createdUser.email,
+        'phone': createdUser.phone,
+        'address': createdUser.address,
+        'gender': createdUser.gender,
+        'idnumber': createdUser.idnumber,
+        'role': createdUser.role,
+        'status': createdUser.status,
+        'date_of_birth': createdUser.date_of_birth?.toIso8601String(),
+        'created_at': createdUser.created_at?.toIso8601String(),
+      };
+
+      print(
+          '🔥 Creating Firebase Authentication user for: ${createdUser.email}');
+
+      final firebaseAuthCreated =
+          await authController.createFirebaseUserForExistingLocal(
+        createdUser.email,
+        createdUser.password,
+        userData,
+      );
+
+      if (firebaseAuthCreated) {
+        print('✅ Firebase Authentication user created successfully');
+
+        // Update local user to mark as firebase synced
+        await DatabaseHelper.instance.database.then((db) => db.update(
+            'users', {'firebase_synced': 1},
+            where: 'id = ?', whereArgs: [newUserId]));
+      } else {
+        print(
+            '⚠️ Firebase Authentication creation failed, but user exists locally');
+      }
+    } catch (e) {
+      print('⚠️ Firebase Authentication creation error: $e');
+      // Don't fail the whole operation - user was created locally successfully
+    }
+
+    // Step 4: Show success message
     Get.snackbar(
       'Success',
       '${user.fname} ${user.lname} saved successfully',
@@ -361,12 +404,140 @@ class UserController extends GetxController {
       duration: const Duration(seconds: 3),
     );
 
-    // Step 4: Sync happens automatically via DatabaseHelperSyncExtension._triggerSmartSync()
-    print('🔄 Automatic sync will be triggered in background');
+    print('🔄 User creation completed with Firebase Authentication attempt');
+  }
+// Add this method to your UserController to sync existing users to Firebase Auth
+
+  /// Batch create Firebase Authentication for existing local users
+  Future<void> batchCreateFirebaseAuthForExistingUsers() async {
+    try {
+      isLoading(true);
+
+      // Get all users from local database that haven't been synced to Firebase Auth
+      final allUsers = await DatabaseHelper.instance.getUsers();
+      final usersToSync = allUsers.where((userData) {
+        final firebaseSynced = userData['firebase_synced'] ?? 0;
+        return firebaseSynced == 0; // Users not synced to Firebase
+      }).toList();
+
+      print(
+          '🔄 Found ${usersToSync.length} users to sync to Firebase Authentication');
+
+      if (usersToSync.isEmpty) {
+        Get.snackbar(
+          'Sync Complete',
+          'All users are already synced to Firebase Authentication',
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+        );
+        return;
+      }
+
+      final authController = Get.find<AuthController>();
+      int successCount = 0;
+      int failCount = 0;
+
+      for (final userData in usersToSync) {
+        try {
+          final user = User.fromJson(userData);
+
+          // Convert to map for Firebase
+          final userDataMap = {
+            'id': user.id,
+            'fname': user.fname,
+            'lname': user.lname,
+            'email': user.email,
+            'phone': user.phone,
+            'address': user.address,
+            'gender': user.gender,
+            'idnumber': user.idnumber,
+            'role': user.role,
+            'status': user.status,
+            'date_of_birth': user.date_of_birth?.toIso8601String(),
+            'created_at': user.created_at?.toIso8601String(),
+          };
+
+          print('🔥 Creating Firebase Auth for: ${user.email}');
+
+          final success =
+              await authController.createFirebaseUserForExistingLocal(
+            user.email,
+            user.password,
+            userDataMap,
+          );
+
+          if (success) {
+            successCount++;
+            print('✅ Firebase Auth created for: ${user.email}');
+          } else {
+            failCount++;
+            print('❌ Failed to create Firebase Auth for: ${user.email}');
+          }
+
+          // Small delay to avoid rate limiting
+          await Future.delayed(Duration(milliseconds: 500));
+        } catch (e) {
+          failCount++;
+          print('❌ Error processing user ${userData['email']}: $e');
+        }
+      }
+
+      // Show results
+      Get.snackbar(
+        'Sync Complete',
+        'Firebase Authentication created for $successCount users. $failCount failed.',
+        backgroundColor: successCount > 0 ? Colors.green : Colors.orange,
+        colorText: Colors.white,
+        duration: Duration(seconds: 5),
+      );
+
+      print(
+          '🏁 Batch sync completed: $successCount success, $failCount failed');
+    } catch (e) {
+      error(e.toString());
+      Get.snackbar(
+        'Sync Error',
+        'Failed to sync users to Firebase Authentication: ${e.toString()}',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    } finally {
+      isLoading(false);
+    }
+  }
+
+  /// Method to manually trigger Firebase Auth creation for a specific user
+  Future<bool> createFirebaseAuthForUser(User user) async {
+    try {
+      final authController = Get.find<AuthController>();
+
+      final userData = {
+        'id': user.id,
+        'fname': user.fname,
+        'lname': user.lname,
+        'email': user.email,
+        'phone': user.phone,
+        'address': user.address,
+        'gender': user.gender,
+        'idnumber': user.idnumber,
+        'role': user.role,
+        'status': user.status,
+        'date_of_birth': user.date_of_birth?.toIso8601String(),
+        'created_at': user.created_at?.toIso8601String(),
+      };
+
+      return await authController.createFirebaseUserForExistingLocal(
+        user.email,
+        user.password,
+        userData,
+      );
+    } catch (e) {
+      print('❌ Error creating Firebase Auth for user: $e');
+      return false;
+    }
   }
 
   // 3. REPLACE YOUR _handleUserUpdate METHOD:
-  /// Handle user updates - FIXED version
   Future<void> _handleUserUpdate(User user) async {
     // Check for duplicates first (excluding the current user)
     final duplicateErrors = await checkForDuplicates(user, isUpdate: true);
@@ -464,22 +635,21 @@ class UserController extends GetxController {
 
       final userToDelete = _users.firstWhere(
         (user) => user.id == userId,
-        orElse:
-            () => User(
-              fname: 'Unknown',
-              lname: 'User',
-              id: userId,
-              email: '',
-              password: '',
-              gender: '',
-              phone: '',
-              address: '',
-              date_of_birth: DateTime.now(),
-              role: '',
-              status: '',
-              idnumber: '',
-              created_at: DateTime.now(),
-            ),
+        orElse: () => User(
+          fname: 'Unknown',
+          lname: 'User',
+          id: userId,
+          email: '',
+          password: '',
+          gender: '',
+          phone: '',
+          address: '',
+          date_of_birth: DateTime.now(),
+          role: '',
+          status: '',
+          idnumber: '',
+          created_at: DateTime.now(),
+        ),
       );
 
       print(

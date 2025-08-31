@@ -1,6 +1,7 @@
 // lib/settings/enhanced_settings_screen.dart
 import 'package:driving/controllers/billing_controller.dart';
 import 'package:driving/controllers/school_registration_controller.dart';
+import 'package:driving/controllers/user_controller.dart';
 import 'package:driving/services/fixed_local_first_sync_service.dart';
 import 'package:driving/settings/sync_settings_screen.dart';
 import 'package:driving/widgets/cloud_receipt_widget.dart';
@@ -209,13 +210,6 @@ class _SettingsScreenState extends State<SettingsScreen>
             label: 'Reset',
             onTap: _showResetConfirmation,
             color: Colors.red[600],
-          ),
-        if (authController.hasAnyRole(['admin', 'instructor']))
-          ElevatedButton(
-            onPressed: () async {
-              Get.to(() => CloudMigrationDashboard());
-            },
-            child: Text('Cloud Receipts'),
           ),
       ],
     );
