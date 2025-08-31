@@ -1,4 +1,4 @@
-// lib/screens/auth/updated_school_selection_screen.dart
+// lib/screens/auth/school_selection_screen.dart
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:driving/controllers/school_selection_controller.dart';
@@ -30,7 +30,7 @@ class SchoolSelectionScreen extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Logo and Header
+                  // Logo Container - Updated with image support
                   Container(
                     padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
@@ -44,10 +44,24 @@ class SchoolSelectionScreen extends StatelessWidget {
                         ),
                       ],
                     ),
-                    child: const Icon(
-                      Icons.school,
-                      size: 80,
-                      color: Colors.blue,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(
+                          40), // Half of the size for circular effect
+                      child: Image.asset(
+                        'assets/images/logo.png', // Your logo path
+                        width: 80,
+                        height: 80,
+                        fit: BoxFit
+                            .contain, // or BoxFit.cover for different scaling
+                        // Fallback to icon if image fails to load
+                        errorBuilder: (context, error, stackTrace) {
+                          return const Icon(
+                            Icons.school,
+                            size: 80,
+                            color: Colors.blue,
+                          );
+                        },
+                      ),
                     ),
                   ),
                   const SizedBox(height: 32),
@@ -160,15 +174,14 @@ class SchoolSelectionScreen extends StatelessWidget {
                           Container(
                             width: double.infinity,
                             child: OutlinedButton(
-                              onPressed:
-                                  controller.navigateToNewSchoolRegistration,
+                              onPressed: () =>
+                                  Get.toNamed('/school-registration'),
                               style: OutlinedButton.styleFrom(
-                                foregroundColor: Colors.blue.shade600,
+                                padding: const EdgeInsets.all(20),
                                 side: BorderSide(
                                   color: Colors.blue.shade600,
                                   width: 2,
                                 ),
-                                padding: const EdgeInsets.all(20),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(16),
                                 ),
@@ -182,7 +195,7 @@ class SchoolSelectionScreen extends StatelessWidget {
                                   ),
                                   const SizedBox(height: 12),
                                   Text(
-                                    'Register',
+                                    'Create New School',
                                     style: TextStyle(
                                       fontSize: 18,
                                       fontWeight: FontWeight.bold,
@@ -191,11 +204,10 @@ class SchoolSelectionScreen extends StatelessWidget {
                                   ),
                                   const SizedBox(height: 8),
                                   Text(
-                                    'Set up a new driving school',
+                                    'Set up a new driving school account',
                                     style: TextStyle(
                                       fontSize: 14,
-                                      color:
-                                          Colors.blue.shade600.withOpacity(0.8),
+                                      color: Colors.grey.shade600,
                                     ),
                                     textAlign: TextAlign.center,
                                   ),
@@ -250,7 +262,7 @@ class SchoolSelectionScreen extends StatelessWidget {
                                     const SizedBox(width: 8),
                                     Expanded(
                                       child: Text(
-                                        'Works offline with local database',
+                                        'Works offline when internet is unavailable',
                                         style: TextStyle(
                                           color: Colors.blue.shade800,
                                           fontSize: 13,
@@ -271,7 +283,7 @@ class SchoolSelectionScreen extends StatelessWidget {
                                     const SizedBox(width: 8),
                                     Expanded(
                                       child: Text(
-                                        'Secure multi-device access',
+                                        'Enterprise-grade security and data protection',
                                         style: TextStyle(
                                           color: Colors.blue.shade800,
                                           fontSize: 13,
@@ -287,17 +299,6 @@ class SchoolSelectionScreen extends StatelessWidget {
                         ],
                       ),
                     ),
-                  ),
-
-                  const SizedBox(height: 32),
-
-                  // Help text
-                  Text(
-                    'Need help? Contact support at codzlabzim53@gmail.com',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.white.withOpacity(0.8),
-                        ),
-                    textAlign: TextAlign.center,
                   ),
                 ],
               ),
