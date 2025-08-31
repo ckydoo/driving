@@ -80,7 +80,10 @@ class ProtectedRoutes {
     GetPage(
       name: main,
       page: () => const ResponsiveMainLayout(),
-      middlewares: [AuthenticatedMiddleware()],
+      middlewares: [
+        AuthMiddleware(),
+        SubscriptionMiddleware()
+      ], // Add SubscriptionMiddleware
     ),
 
     // === FEATURE ROUTES (All redirect to main layout with role checking) ===
@@ -89,7 +92,10 @@ class ProtectedRoutes {
     GetPage(
       name: '/dashboard',
       page: () => const ResponsiveMainLayout(),
-      middlewares: [AuthenticatedMiddleware()],
+      middlewares: [
+        AuthMiddleware(),
+        SubscriptionMiddleware()
+      ], // Add SubscriptionMiddleware
     ),
 
     // Student management

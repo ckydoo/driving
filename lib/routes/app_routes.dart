@@ -50,6 +50,7 @@ class AppRoutes {
       name: initial,
       page: () => const AuthenticationWrapper(), // Your existing loading screen
     ),
+
     GetPage(name: '/subscription', page: () => SubscriptionScreen()),
 
     // School selection - entry point for multi-school setup
