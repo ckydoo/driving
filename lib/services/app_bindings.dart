@@ -18,6 +18,7 @@ import 'package:driving/services/fixed_local_first_sync_service.dart';
 import 'package:driving/services/lesson_counting_service.dart';
 import 'package:driving/services/school_config_service.dart';
 import 'package:driving/services/school_management_service.dart';
+import 'package:driving/services/subscription_service.dart';
 import 'package:get/get.dart';
 
 /// Enhanced App Bindings with Firebase-First Architecture
@@ -298,6 +299,7 @@ class EnhancedAppBindings extends Bindings {
         Get.put<CourseController>(CourseController(), permanent: true);
         print('✅ CourseController initialized');
       }
+      Get.put<SubscriptionService>(SubscriptionService(), permanent: true);
 
       Get.put<AutoSyncController>(AutoSyncController(), permanent: true);
 

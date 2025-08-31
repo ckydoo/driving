@@ -1947,6 +1947,7 @@ class _FinancialReportsScreenState extends State<FinancialReportsScreen> {
     );
   }
 
+// Fixed _generatePDFReport method for mobile compatibility
   Future<void> _generatePDFReport() async {
     final report = _getReportById(selectedReportType);
     if (report == null) return;
@@ -1965,23 +1966,107 @@ class _FinancialReportsScreenState extends State<FinancialReportsScreen> {
         ),
       );
 
-      // Save file
+      // Generate the PDF bytes
+      final pdfBytes = await pdf.save();
+
+      // Save file with different approach for mobile vs desktop
       final timestamp = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
       final fileName = '${selectedReportType}_report_$timestamp.pdf';
 
-      final String? filePath = await FilePicker.platform.saveFile(
+      // Check if running on mobile platform
+      if (Platform.isAndroid || Platform.isIOS) {
+        // Mobile approach - save to documents directory and optionally share
+        final directory = await getApplicationDocumentsDirectory();
+        final reportsDir = Directory('${directory.path}/reports');
+        if (!await reportsDir.exists()) {
+          await reportsDir.create(recursive: true);
+        }
+
+        final file = File('${reportsDir.path}/$fileName');
+        await file.writeAsBytes(pdfBytes);
+
+        // Show success message with file location
+        Get.snackbar(
+          'Export Successful',
+          '${report['title']} saved to: ${file.path}',
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+          duration: Duration(seconds: 4),
+          mainButton: TextButton(
+            onPressed: () {
+              // You can add share functionality here if needed
+              // Share.shareFiles([file.path], text: 'Report exported');
+            },
+            child: Text('Share', style: TextStyle(color: Colors.white)),
+          ),
+        );
+      } else {
+        // Desktop approach - use FilePicker.saveFile normally
+        final String? filePath = await FilePicker.platform.saveFile(
+          dialogTitle: 'Save ${report['title']}',
+          fileName: fileName,
+          allowedExtensions: ['pdf'],
+        );
+
+        if (filePath != null) {
+          final file = File(filePath);
+          await file.writeAsBytes(pdfBytes);
+
+          Get.snackbar(
+            'Export Successful',
+            '${report['title']} exported to $filePath',
+            backgroundColor: Colors.green,
+            colorText: Colors.white,
+            duration: Duration(seconds: 3),
+          );
+        }
+      }
+    } catch (e) {
+      Get.snackbar(
+        'Export Failed',
+        'Failed to export PDF: ${e.toString()}',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    }
+  }
+
+// Alternative method using FilePicker with bytes (if you prefer this approach)
+  Future<void> _generatePDFReportAlternative() async {
+    final report = _getReportById(selectedReportType);
+    if (report == null) return;
+
+    try {
+      final pdf = pw.Document();
+
+      // Add cover page
+      pdf.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          margin: pw.EdgeInsets.all(20),
+          build: (pw.Context context) {
+            return _buildPDFContent(selectedReportType);
+          },
+        ),
+      );
+
+      // Generate the PDF bytes first
+      final pdfBytes = await pdf.save();
+      final timestamp = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
+      final fileName = '${selectedReportType}_report_$timestamp.pdf';
+
+      // Use FilePicker with bytes parameter for mobile compatibility
+      final String? result = await FilePicker.platform.saveFile(
         dialogTitle: 'Save ${report['title']}',
         fileName: fileName,
         allowedExtensions: ['pdf'],
+        bytes: pdfBytes, // This is key for mobile compatibility
       );
 
-      if (filePath != null) {
-        final file = File(filePath);
-        await file.writeAsBytes(await pdf.save());
-
+      if (result != null) {
         Get.snackbar(
           'Export Successful',
-          '${report['title']} exported to $filePath',
+          '${report['title']} exported successfully',
           backgroundColor: Colors.green,
           colorText: Colors.white,
           duration: Duration(seconds: 3),

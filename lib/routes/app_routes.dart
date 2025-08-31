@@ -7,6 +7,7 @@ import 'package:driving/screens/auth/pin_setup_screen.dart';
 import 'package:driving/screens/auth/school_selection_screen.dart';
 import 'package:driving/screens/auth/school_registration_screen.dart';
 import 'package:driving/screens/auth/school_login_screen.dart';
+import 'package:driving/screens/subscription/subscription_screen.dart';
 import 'package:driving/widgets/main_layout.dart';
 import 'package:get/get.dart';
 
@@ -49,6 +50,7 @@ class AppRoutes {
       name: initial,
       page: () => const AuthenticationWrapper(), // Your existing loading screen
     ),
+    GetPage(name: '/subscription', page: () => SubscriptionScreen()),
 
     // School selection - entry point for multi-school setup
     GetPage(

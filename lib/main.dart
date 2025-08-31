@@ -1,4 +1,5 @@
 // lib/main.dart - Enhanced with Multi-Tenant Architecture
+import 'package:driving/controllers/app_access_controller.dart';
 import 'package:driving/controllers/settings_controller.dart';
 import 'package:driving/routes/app_routes.dart';
 import 'package:driving/screens/auth/login_screen.dart';
@@ -39,6 +40,7 @@ void main() async {
 
   // STEP 3: Initialize multi-tenant app bindings
   await _initializeMultiTenantBindings();
+  Get.put<AppAccessController>(AppAccessController());
 
   print('✅ === APP INITIALIZATION COMPLETED ===');
 
