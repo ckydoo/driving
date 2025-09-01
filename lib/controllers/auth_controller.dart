@@ -458,6 +458,9 @@ class AuthController extends GetxController {
     }
   }
 
+  // Replace _saveUserDataToFirebase in your AuthController
+// This method is used by registerWithEmailPassword and should use Firebase UID as document ID
+
   Future<void> _saveUserDataToFirebase(
       firebase_auth.User firebaseUser, Map<String, dynamic> userData) async {
     try {
@@ -468,8 +471,8 @@ class AuthController extends GetxController {
         throw Exception('School ID not configured');
       }
 
-      // ✅ CRITICAL: Get the local ID from userData
-      final int localId = userData['id'];
+      // Get the local ID from userData
+      final localId = userData['id'];
       if (localId == null) {
         throw Exception('Local ID not found in user data');
       }
@@ -482,18 +485,37 @@ class AuthController extends GetxController {
       userData['last_modified'] = DateTime.now().toIso8601String();
       userData['firebase_synced'] = 1;
       userData['local_id'] = localId; // Store local ID for sync reference
+      userData.remove('id'); // Remove ID for Firestore
 
-      // ✅ ALWAYS use local ID as Firestore document ID
-      final String documentId = localId.toString();
-
-      await _firestore!
+      // **CRITICAL FIX**: Use Firebase UID as document ID (consistent with other methods)
+      final userDocRef = _firestore!
           .collection('schools')
           .doc(schoolId)
           .collection('users')
-          .doc(documentId) // ✅ Use local ID as document ID
-          .set(userData, SetOptions(merge: true));
+          .doc(firebaseUser.uid); // Use Firebase UID as document ID
 
-      print('✅ User data saved to Firebase with document ID: $documentId');
+      // Check if document already exists
+      final existingDoc = await userDocRef.get();
+
+      if (existingDoc.exists) {
+        print('📝 Updating existing user document: ${firebaseUser.uid}');
+        await userDocRef.update(userData);
+      } else {
+        print('➕ Creating new user document: ${firebaseUser.uid}');
+        await userDocRef.set(userData);
+      }
+
+      // **CRITICAL**: Update local user with Firebase UID
+      final db = await DatabaseHelper.instance.database;
+      await db.update(
+        'users',
+        {'firebase_uid': firebaseUser.uid, 'firebase_synced': 1},
+        where: 'id = ?',
+        whereArgs: [localId],
+      );
+
+      print(
+          '✅ User data saved to Firebase with document ID: ${firebaseUser.uid}');
       print('✅ Firebase Auth UID: ${firebaseUser.uid}');
       print('✅ Local Database ID: $localId');
     } catch (e) {
