@@ -121,7 +121,6 @@ class AuthController extends GetxController {
     try {
       print('🔄 Syncing user data for: ${firebaseUser.email}');
 
-      // Get school config to know which collection to use
       final schoolConfig = Get.find<SchoolConfigService>();
       final schoolId = schoolConfig.schoolId.value;
 
@@ -131,39 +130,36 @@ class AuthController extends GetxController {
         return;
       }
 
-      // Debug: Check if user exists locally first
-      await _debugUserInLocalDatabase(firebaseUser.email!);
-
-      // Get user data from Firebase
-      final userDoc = await _firestore!
+      // ✅ FIXED: Query by Firebase Auth UID to find the user document
+      final userQuery = await _firestore!
           .collection('schools')
           .doc(schoolId)
           .collection('users')
-          .doc(firebaseUser.uid)
+          .where('firebase_uid', isEqualTo: firebaseUser.uid)
+          .limit(1)
           .get();
 
-      if (!userDoc.exists) {
-        print('⚠️ User doc not found in Firebase, trying local cache');
+      if (userQuery.docs.isEmpty) {
+        print('⚠️ User doc not found in Firebase, trying local cache by email');
         await _loadFromLocalCache(firebaseUser.email);
         return;
       }
 
-      final userData = userDoc.data()!;
-      print('📥 Firebase user data retrieved: ${userData.keys}');
+      final userDoc = userQuery.docs.first;
+      final userData = userDoc.data();
+      print('📥 Firebase user data retrieved for UID: ${firebaseUser.uid}');
 
       // Create local user object
       final user = User.fromJson(userData);
       currentUser.value = user;
-      isLoggedIn.value = true; // IMPORTANT: Set this explicitly
+      isLoggedIn.value = true;
 
       // Cache user data locally for offline access
       await _cacheUserLocally(user);
 
       print('✅ User data synced from Firebase: ${user.email}');
-      print('✅ Local login state updated: ${isLoggedIn.value}');
     } catch (e) {
       print('❌ Error syncing user data from Firebase: $e');
-      // Try to load from local cache for offline access
       await _loadFromLocalCache(firebaseUser.email);
     }
   }
@@ -416,7 +412,6 @@ class AuthController extends GetxController {
     );
   }
 
-  /// Register new user - Firebase first
   Future<bool> registerWithEmailPassword(
       String email, String password, Map<String, dynamic> userData) async {
     if (!firebaseAvailable.value) {
@@ -430,14 +425,20 @@ class AuthController extends GetxController {
 
       print('🔐 Firebase registration attempt: $email');
 
-      // Create Firebase user
+      // ✅ FIRST: Save user locally to get a local ID
+      final User user = User.fromJson(userData);
+      final int localId = await DatabaseHelper.instance.insertUser(user);
+      print('✅ User saved locally with ID: $localId');
+
+      // ✅ SECOND: Create Firebase authentication user
       final credential = await _firebaseAuth!.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
 
       if (credential.user != null) {
-        // Save user data to Firebase
+        // ✅ THIRD: Save user data to Firestore using LOCAL ID as document ID
+        userData['id'] = localId; // Ensure local ID is included
         await _saveUserDataToFirebase(credential.user!, userData);
         print('✅ Firebase registration successful');
         return true;
@@ -457,37 +458,50 @@ class AuthController extends GetxController {
     }
   }
 
-  /// Save user data to Firebase
   Future<void> _saveUserDataToFirebase(
       firebase_auth.User firebaseUser, Map<String, dynamic> userData) async {
     try {
       final schoolConfig = Get.find<SchoolConfigService>();
       final schoolId = schoolConfig.schoolId.value;
 
-      // Add Firebase UID and timestamps
-      userData['firebase_user_id'] = firebaseUser.uid;
+      if (schoolId.isEmpty) {
+        throw Exception('School ID not configured');
+      }
+
+      // ✅ CRITICAL: Get the local ID from userData
+      final int localId = userData['id'];
+      if (localId == null) {
+        throw Exception('Local ID not found in user data');
+      }
+
+      // Add Firebase-specific fields
+      userData['firebase_uid'] =
+          firebaseUser.uid; // Store auth UID for reference
       userData['email'] = firebaseUser.email;
       userData['created_at'] = DateTime.now().toIso8601String();
       userData['last_modified'] = DateTime.now().toIso8601String();
       userData['firebase_synced'] = 1;
+      userData['local_id'] = localId; // Store local ID for sync reference
 
-      // Save to school's users collection
+      // ✅ ALWAYS use local ID as Firestore document ID
+      final String documentId = localId.toString();
+
       await _firestore!
           .collection('schools')
           .doc(schoolId)
           .collection('users')
-          .doc(firebaseUser.uid)
-          .set(userData);
+          .doc(documentId) // ✅ Use local ID as document ID
+          .set(userData, SetOptions(merge: true));
 
-      print('✅ User data saved to Firebase');
+      print('✅ User data saved to Firebase with document ID: $documentId');
+      print('✅ Firebase Auth UID: ${firebaseUser.uid}');
+      print('✅ Local Database ID: $localId');
     } catch (e) {
       print('❌ Error saving user data to Firebase: $e');
       throw e;
     }
   }
-// lib/controllers/auth_controller.dart - Add this method for local-first approach
 
-  /// Create Firebase user for existing local user (LOCAL FIRST approach)
   /// This is called AFTER the user is already saved locally
   Future<bool> createFirebaseUserForExistingLocal(
       String email, String password, Map<String, dynamic> userData) async {
@@ -581,37 +595,27 @@ class AuthController extends GetxController {
       }
       firestoreData.remove('id'); // Remove ID for Firestore
 
-      // Check if user already exists in Firestore
-      final existingUserQuery = await _firestore!
+      // **CRITICAL FIX**: Use Firebase UID as document ID (same as school registration)
+      final userDocRef = _firestore!
           .collection('schools')
           .doc(schoolId)
           .collection('users')
-          .where('firebase_uid', isEqualTo: firebaseUser.uid)
-          .limit(1)
-          .get();
+          .doc(firebaseUser.uid); // Use Firebase UID as doc ID
 
-      if (existingUserQuery.docs.isNotEmpty) {
-        // Update existing document
-        final docId = existingUserQuery.docs.first.id;
-        await _firestore!
-            .collection('schools')
-            .doc(schoolId)
-            .collection('users')
-            .doc(docId)
-            .update(firestoreData);
-        print('✅ Updated existing user in Firestore: $docId');
+      // Check if document already exists
+      final existingDoc = await userDocRef.get();
+
+      if (existingDoc.exists) {
+        print('📝 Updating existing user document: ${firebaseUser.uid}');
+        await userDocRef.update(firestoreData);
       } else {
-        // Create new document
-        await _firestore!
-            .collection('schools')
-            .doc(schoolId)
-            .collection('users')
-            .add(firestoreData);
-        print('✅ Created new user document in Firestore');
+        print('➕ Creating new user document: ${firebaseUser.uid}');
+        await userDocRef.set(firestoreData);
       }
 
       print('✅ User data saved to Firestore successfully');
       print('   School ID: $schoolId');
+      print('   Document ID: ${firebaseUser.uid}'); // Now consistent!
       print('   Firebase UID: ${firebaseUser.uid}');
       print('   Email: ${firebaseUser.email}');
     } catch (e) {

@@ -1,8 +1,12 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/models/user.dart';
+import 'package:driving/models/user.dart' as firebase_auth;
 import 'package:driving/services/database_helper.dart';
 import 'package:driving/services/fixed_local_first_sync_service.dart';
 import 'package:driving/services/fixed_local_first_sync_service.dart';
+import 'package:driving/services/school_config_service.dart';
+import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -325,89 +329,6 @@ class UserController extends GetxController {
 
   // Add this to your UserController class in lib/controllers/user_controller.dart
 
-  Future<void> _handleNewUserCreationLocalFirst(User user) async {
-    // Step 1: Check for duplicates first
-    final duplicateErrors = await checkForDuplicates(user, isUpdate: false);
-    if (duplicateErrors.isNotEmpty) {
-      final errorMessages = duplicateErrors.values.join('\n');
-      Get.snackbar(
-        'Duplicate Found',
-        errorMessages,
-        backgroundColor: Colors.orange,
-        colorText: Colors.white,
-        duration: const Duration(seconds: 4),
-      );
-      throw Exception(duplicateErrors.values.first);
-    }
-
-    // Step 2: Save to LOCAL database FIRST
-    print('💾 Saving to local database first...');
-    final newUserId = await DatabaseHelper.instance.insertUser(user);
-    final createdUser = user.copyWith(id: newUserId);
-
-    // Add to local observable list for immediate UI update
-    _users.add(createdUser);
-    print('✅ User saved locally with ID: $newUserId');
-
-    // Step 3: **NEW** - Create Firebase Authentication user
-    try {
-      final authController = Get.find<AuthController>();
-
-      // Convert user to userData map for Firebase
-      final userData = {
-        'id': createdUser.id,
-        'fname': createdUser.fname,
-        'lname': createdUser.lname,
-        'email': createdUser.email,
-        'phone': createdUser.phone,
-        'address': createdUser.address,
-        'gender': createdUser.gender,
-        'idnumber': createdUser.idnumber,
-        'role': createdUser.role,
-        'status': createdUser.status,
-        'date_of_birth': createdUser.date_of_birth?.toIso8601String(),
-        'created_at': createdUser.created_at?.toIso8601String(),
-      };
-
-      print(
-          '🔥 Creating Firebase Authentication user for: ${createdUser.email}');
-
-      final firebaseAuthCreated =
-          await authController.createFirebaseUserForExistingLocal(
-        createdUser.email,
-        createdUser.password,
-        userData,
-      );
-
-      if (firebaseAuthCreated) {
-        print('✅ Firebase Authentication user created successfully');
-
-        // Update local user to mark as firebase synced
-        await DatabaseHelper.instance.database.then((db) => db.update(
-            'users', {'firebase_synced': 1},
-            where: 'id = ?', whereArgs: [newUserId]));
-      } else {
-        print(
-            '⚠️ Firebase Authentication creation failed, but user exists locally');
-      }
-    } catch (e) {
-      print('⚠️ Firebase Authentication creation error: $e');
-      // Don't fail the whole operation - user was created locally successfully
-    }
-
-    // Step 4: Show success message
-    Get.snackbar(
-      'Success',
-      '${user.fname} ${user.lname} saved successfully',
-      backgroundColor: Colors.green,
-      colorText: Colors.white,
-      duration: const Duration(seconds: 3),
-    );
-
-    print('🔄 User creation completed with Firebase Authentication attempt');
-  }
-// Add this method to your UserController to sync existing users to Firebase Auth
-
   /// Batch create Firebase Authentication for existing local users
   Future<void> batchCreateFirebaseAuthForExistingUsers() async {
     try {
@@ -685,6 +606,210 @@ class UserController extends GetxController {
     } finally {
       isLoading(false);
     }
+  }
+
+  /// ✅ IMMEDIATE FIX: Sync Tanaka and other unsynced users
+  Future<void> fixTanakaAndOtherUsers() async {
+    print('👤 === FIXING TANAKA AND OTHER UNSYNCED USERS ===');
+
+    try {
+      // Step 1: Fix mismatched documents in Firebase
+      if (Get.isRegistered<FixedLocalFirstSyncService>()) {
+        final syncService = Get.find<FixedLocalFirstSyncService>();
+        await syncService.fixMismatchedUserDocuments();
+      }
+
+      // Step 2: Force sync to push any unsynced local users
+      await forceSyncAllUsers();
+
+      // Step 3: Refresh user list
+      await fetchUsers();
+
+      Get.snackbar(
+        'Success',
+        'User sync issues have been fixed. All users should now be available on all devices.',
+        backgroundColor: Colors.green.shade100,
+        colorText: Colors.green.shade800,
+        duration: Duration(seconds: 5),
+      );
+    } catch (e) {
+      print('❌ Error fixing user sync: $e');
+      Get.snackbar(
+        'Error',
+        'Failed to fix user sync: $e',
+        backgroundColor: Colors.red.shade100,
+        colorText: Colors.red.shade800,
+        duration: Duration(seconds: 5),
+      );
+    }
+  }
+
+  /// ✅ Force sync all local users to Firebase
+  Future<void> forceSyncAllUsers() async {
+    try {
+      print('🔄 Force syncing all users...');
+
+      final db = await DatabaseHelper.instance.database;
+
+      // Get all users (including already synced ones to ensure consistency)
+      final allUsers =
+          await db.query('users', where: 'deleted IS NULL OR deleted = 0');
+
+      print('👥 Found ${allUsers.length} users to sync');
+
+      // Mark all as unsynced to force re-sync with correct document IDs
+      for (final user in allUsers) {
+        await db.update(
+          'users',
+          {'firebase_synced': 0},
+          where: 'id = ?',
+          whereArgs: [user['id']],
+        );
+      }
+
+      // Trigger sync
+      if (Get.isRegistered<FixedLocalFirstSyncService>()) {
+        final syncService = Get.find<FixedLocalFirstSyncService>();
+        await syncService.syncWithFirebase();
+      }
+
+      print('✅ All users marked for sync and sync triggered');
+    } catch (e) {
+      print('❌ Error force syncing users: $e');
+      throw e;
+    }
+  }
+
+  /// ✅ DIAGNOSTIC: Show detailed sync status for all users
+  Future<void> showDetailedUserSyncStatus() async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+
+      final users = await db.query('users',
+          where: 'deleted IS NULL OR deleted = 0', orderBy: 'id ASC');
+
+      print('👥 === DETAILED USER SYNC STATUS ===');
+      print('Total users in local database: ${users.length}');
+      print('');
+
+      for (final user in users) {
+        final id = user['id'];
+        final name = '${user['fname']} ${user['lname']}';
+        final email = user['email'];
+        final synced = user['firebase_synced'] == 1;
+        final lastModified = user['last_modified'];
+
+        print('👤 User ID $id: $name');
+        print('   Email: $email');
+        print('   Synced: ${synced ? '✅' : '❌'}');
+        print('   Last Modified:');
+        print('');
+      }
+
+      // Show summary
+      final syncedCount = users.where((u) => u['firebase_synced'] == 1).length;
+      final unsyncedCount = users.length - syncedCount;
+
+      print('📊 SUMMARY:');
+      print('   ✅ Synced: $syncedCount');
+      print('   ❌ Unsynced: $unsyncedCount');
+
+      if (unsyncedCount > 0) {
+        print('');
+        print(
+            '💡 To fix unsynced users, run: await userController.fixTanakaAndOtherUsers()');
+      }
+    } catch (e) {
+      print('❌ Error showing user sync status: $e');
+    }
+  }
+
+  Future<void> _handleNewUserCreationLocalFirst(User user) async {
+    // Step 1: Check for duplicates first
+    final duplicateErrors = await checkForDuplicates(user, isUpdate: false);
+    if (duplicateErrors.isNotEmpty) {
+      final errorMessages = duplicateErrors.values.join('\n');
+      Get.snackbar(
+        'Duplicate Found',
+        errorMessages,
+        backgroundColor: Colors.orange,
+        colorText: Colors.white,
+        duration: const Duration(seconds: 4),
+      );
+      throw Exception(duplicateErrors.values.first);
+    }
+
+    // Step 2: Save to LOCAL database FIRST
+    print('💾 Saving to local database first...');
+    final newUserId = await DatabaseHelper.instance.insertUser(user);
+    final createdUser = user.copyWith(id: newUserId);
+
+    // Add to local observable list for immediate UI update
+    _users.add(createdUser);
+    print('✅ User saved locally with ID: $newUserId');
+
+    // Step 3: **FIXED** - Create Firebase Authentication user AND use consistent document ID
+    try {
+      final authController = Get.find<AuthController>();
+
+      print(
+          '🔥 Creating Firebase Authentication user for: ${createdUser.email}');
+
+      // Convert user to userData map for existing method
+      final userData = {
+        'id': createdUser.id,
+        'fname': createdUser.fname,
+        'lname': createdUser.lname,
+        'email': createdUser.email,
+        'phone': createdUser.phone,
+        'address': createdUser.address,
+        'gender': createdUser.gender,
+        'idnumber': createdUser.idnumber,
+        'role': createdUser.role,
+        'status': createdUser.status,
+        'date_of_birth': createdUser.date_of_birth?.toIso8601String(),
+        'created_at': createdUser.created_at?.toIso8601String(),
+      };
+
+      // Use existing method but with improved Firestore saving
+      final firebaseAuthCreated =
+          await authController.createFirebaseUserForExistingLocal(
+        createdUser.email,
+        createdUser.password,
+        userData,
+      );
+
+      if (firebaseAuthCreated) {
+        print('✅ Firebase Authentication user created successfully');
+
+        // Update local user to mark as firebase synced
+        await DatabaseHelper.instance.database.then((db) => db.update(
+              'users',
+              {'firebase_synced': 1},
+              where: 'id = ?',
+              whereArgs: [newUserId],
+            ));
+
+        print('✅ User fully synced with Firebase');
+      } else {
+        print(
+            '⚠️ Firebase Authentication creation failed, but user exists locally');
+      }
+    } catch (e) {
+      print('⚠️ Firebase Authentication creation error: $e');
+      // Don't fail the whole operation - user was created locally successfully
+    }
+
+    // Step 4: Show success message
+    Get.snackbar(
+      'Success',
+      '${user.fname} ${user.lname} saved successfully',
+      backgroundColor: Colors.green,
+      colorText: Colors.white,
+      duration: const Duration(seconds: 3),
+    );
+
+    print('🔄 User creation completed with Firebase Authentication attempt');
   }
 
   // Clear all data (useful for logout)

@@ -1,5 +1,6 @@
 // ADD THIS WIDGET TO YOUR ADMIN OR SETTINGS SCREEN
 
+import 'package:driving/controllers/user_controller.dart';
 import 'package:driving/services/database_helper.dart';
 import 'package:driving/services/fixed_local_first_sync_service.dart';
 import 'package:driving/settings/debug_sync_screen.dart';
@@ -89,6 +90,8 @@ class SyncManagementSection extends StatelessWidget {
     }
   }
 
+  final userController = Get.find<FixedLocalFirstSyncService>();
+
   Widget _buildSyncButtons() {
     return Wrap(
       spacing: 8,
@@ -125,6 +128,17 @@ class SyncManagementSection extends StatelessWidget {
           onPressed: () => _createBackup(),
           icon: Icon(Icons.backup),
           label: Text('Backup Data'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.orange,
+            foregroundColor: Colors.white,
+          ),
+        ),
+        ElevatedButton.icon(
+          onPressed: () {
+            userController.fixMismatchedUserDocuments();
+          },
+          icon: Icon(Icons.backup),
+          label: Text('Force Sync Users'),
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.orange,
             foregroundColor: Colors.white,

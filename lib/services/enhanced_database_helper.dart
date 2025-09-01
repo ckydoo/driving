@@ -4,9 +4,11 @@
 
 import 'dart:async';
 import 'package:driving/controllers/auth_controller.dart';
+import 'package:driving/controllers/utils/timestamp_converter.dart';
 import 'package:driving/services/database_helper.dart';
 import 'package:driving/services/fixed_local_first_sync_service.dart';
 import 'package:driving/services/fixed_local_first_sync_service.dart';
+import 'package:driving/services/schedule_data_validator.dart';
 import 'package:get/get.dart';
 import 'package:get/get_core/src/get_main.dart';
 import 'package:sqflite/sqflite.dart';
@@ -238,57 +240,97 @@ class DatabaseHelperSyncExtension {
     );
   }
 
-  // REPLACE THE insertWithSync METHOD WITH THIS:
   static Future<int> insertWithSync(
-      Database db, String table, Map<String, dynamic> values) async {
-    // Add sync tracking data
-    values['last_modified'] = DateTime.now().toUtc().millisecondsSinceEpoch;
-    values['firebase_synced'] = 0;
-
-    // ✅ ADD DEVICE TRACKING:
-    values['last_modified_device'] = await DatabaseHelper.getDeviceId();
-
-    // Add firebase_user_id if not present and user is authenticated
-    if (values['firebase_user_id'] == null) {
-      try {
-        final authController = Get.find<AuthController>();
-        if (authController.isFirebaseAuthenticated) {
-          values['firebase_user_id'] = authController.currentFirebaseUserId;
-        }
-      } catch (e) {
-        print('⚠️ Could not get Firebase user ID: $e');
+    Database db,
+    String table,
+    Map<String, dynamic> data,
+  ) async {
+    try {
+      // Special validation for schedules table
+      Map<String, dynamic> validatedData;
+      if (table == 'schedules') {
+        validatedData = ScheduleDataValidator.validateScheduleData(data);
+      } else {
+        validatedData = Map<String, dynamic>.from(data);
       }
+
+      // Convert timestamps before inserting
+      final convertedData = TimestampConverter.prepareForSQLite(validatedData);
+
+      // Set sync tracking fields
+      convertedData['firebase_synced'] = 0;
+      convertedData['last_modified'] = DateTime.now().millisecondsSinceEpoch;
+      convertedData['last_modified_device'] =
+          await DatabaseHelper.getDeviceId();
+
+      // Add firebase_user_id if authenticated
+      if (convertedData['firebase_user_id'] == null) {
+        try {
+          final authController = Get.find<AuthController>();
+          if (authController.isFirebaseAuthenticated) {
+            convertedData['firebase_user_id'] =
+                authController.currentFirebaseUserId;
+          }
+        } catch (e) {
+          print('⚠️ Could not get Firebase user ID: $e');
+        }
+      }
+
+      final result = await db.insert(table, convertedData);
+      print('✅ Successfully inserted into $table with ID: $result');
+
+      return result;
+    } catch (e) {
+      print('❌ Error in insertWithSync for $table: $e');
+      print('🔍 Data: $data');
+      rethrow;
     }
-
-    final result = await db.insert(table, values);
-
-    // ✅ TRIGGER SMART SYNC (replaces immediate sync)
-    _triggerSmartSync();
-
-    return result;
   }
 
-// REPLACE THE updateWithSync METHOD WITH THIS:
+  // ✅ FIX 3: Enhanced updateWithSync method with validation
   static Future<int> updateWithSync(
-      Database db,
-      String table,
-      Map<String, dynamic> values,
-      String where,
-      List<dynamic> whereArgs) async {
-    // Add sync tracking data
-    values['last_modified'] = DateTime.now().toUtc().millisecondsSinceEpoch;
-    values['firebase_synced'] = 0;
+    Database db,
+    String table,
+    Map<String, dynamic> data,
+    String where,
+    List<dynamic> whereArgs,
+  ) async {
+    try {
+      // Special validation for schedules table
+      Map<String, dynamic> validatedData;
+      if (table == 'schedules') {
+        // For updates, only validate if start/end are being changed
+        if (data.containsKey('start') || data.containsKey('end')) {
+          validatedData = ScheduleDataValidator.validateScheduleData(data);
+        } else {
+          validatedData = Map<String, dynamic>.from(data);
+        }
+      } else {
+        validatedData = Map<String, dynamic>.from(data);
+      }
 
-    // ✅ ADD DEVICE TRACKING:
-    values['last_modified_device'] = await DatabaseHelper.getDeviceId();
+      // Convert timestamps before updating
+      final convertedData = TimestampConverter.prepareForSQLite(validatedData);
 
-    final result =
-        await db.update(table, values, where: where, whereArgs: whereArgs);
+      // Set sync tracking fields
+      convertedData['firebase_synced'] = 0;
+      convertedData['last_modified'] = DateTime.now().millisecondsSinceEpoch;
+      convertedData['last_modified_device'] =
+          await DatabaseHelper.getDeviceId();
 
-    // ✅ TRIGGER SMART SYNC (replaces immediate sync)
-    _triggerSmartSync();
+      final result = await db.update(table, convertedData,
+          where: where, whereArgs: whereArgs);
 
-    return result;
+      if (result > 0) {
+        print('✅ Successfully updated $result row(s) in $table');
+      }
+
+      return result;
+    } catch (e) {
+      print('❌ Error in updateWithSync for $table: $e');
+      print('🔍 Data: $data');
+      rethrow;
+    }
   }
 
 // REPLACE THE deleteWithSync METHOD WITH THIS:

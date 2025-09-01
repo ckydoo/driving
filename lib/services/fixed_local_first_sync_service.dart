@@ -2,9 +2,11 @@
 // CREATE THIS NEW FILE
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/controllers/settings_controller.dart';
 import 'package:driving/controllers/utils/timestamp_converter.dart';
 import 'package:driving/services/database_helper.dart';
+import 'package:driving/services/deduplication_sync_service.dart';
 import 'package:driving/services/school_config_service.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:get/get.dart';
@@ -308,64 +310,272 @@ class FixedLocalFirstSyncService extends GetxService {
 
 // ✅ NEW: Safe record merging to prevent crashes
   Future<MergeResult> _safelyMergeRecord(
-      String table, String docId, Map<String, dynamic> remoteData) async {
-    try {
-      return await _mergeRecordWithConflictResolution(table, docId, remoteData);
-    } catch (e) {
-      print('❌ Error merging $table record $docId: $e');
-      print('🔍 Remote data causing error: $remoteData');
+    String table,
+    String docId,
+    Map<String, dynamic> remoteData,
+  ) async {
+    final db = await DatabaseHelper.instance.database;
 
-      // Try to fix common issues and retry once
-      try {
-        final cleanedData = _cleanRemoteData(remoteData);
-        return await _mergeRecordWithConflictResolution(
-            table, docId, cleanedData);
-      } catch (e2) {
-        print('❌ Retry also failed for $table record $docId: $e2');
+    try {
+      // Convert Firebase data to SQLite format
+      final localData = _convertFirestoreToSqlite(remoteData);
+      final localId = int.tryParse(docId);
+
+      if (localId == null) {
+        print('❌ Invalid document ID for $table: $docId');
         return MergeResult.skipped;
       }
+
+      localData['id'] = localId;
+
+      // ✅ ENHANCED: Fleet-specific deduplication by carplate
+      if (table == 'fleet') {
+        return await _mergeFleetRecordWithPlateDeduplication(db, localData);
+      }
+
+      // ✅ ENHANCED: User-specific deduplication by email/idnumber
+      if (table == 'users') {
+        return await _mergeUserRecordWithEmailDeduplication(db, localData);
+      }
+
+      // ✅ ENHANCED: General deduplication for other tables
+      return await _mergeRecordWithTimestampComparison(db, table, localData);
+    } catch (e) {
+      print('❌ Error in _safelyMergeRecord for $table $docId: $e');
+      print('🔍 Remote data: $remoteData');
+      return MergeResult.skipped;
     }
   }
 
-// ✅ NEW: Clean remote data to fix common issues
-  Map<String, dynamic> _cleanRemoteData(Map<String, dynamic> data) {
-    final cleaned = Map<String, dynamic>.from(data);
+  Future<MergeResult> _mergeFleetRecordWithPlateDeduplication(
+    Database db,
+    Map<String, dynamic> fleetData,
+  ) async {
+    final carplate = fleetData['carplate'];
+    final fleetId = fleetData['id'];
 
-    // Fix timestamp fields using the converter
-    final timestampFields = [
-      'last_modified',
-      'created_at',
-      'updated_at',
-      'payment_date',
-      'due_date',
-      'start',
-      'end'
-    ];
-
-    for (String field in timestampFields) {
-      if (cleaned.containsKey(field)) {
-        final converted = _getTimestampAsInt(cleaned[field]);
-        if (converted != null) {
-          cleaned[field] = converted;
-        } else {
-          // Remove problematic timestamp field
-          cleaned.remove(field);
-          print('⚠️ Removed problematic timestamp field: $field');
-        }
-      }
+    if (carplate == null || carplate == '') {
+      print('⚠️ Fleet record missing carplate, using ID-based merge');
+      return await _mergeRecordWithTimestampComparison(db, 'fleet', fleetData);
     }
 
-    // Convert boolean values to integers for SQLite
-    cleaned.forEach((key, value) {
-      if (value is bool) {
-        cleaned[key] = value ? 1 : 0;
+    try {
+      // Check for existing fleet by carplate (more reliable than ID)
+      final existingByCarplate = await db.query(
+        'fleet',
+        where: 'carplate = ?',
+        whereArgs: [carplate],
+        limit: 1,
+      );
+
+      if (existingByCarplate.isEmpty) {
+        // No existing fleet with this carplate - safe to insert
+        await db.insert('fleet', fleetData,
+            conflictAlgorithm: ConflictAlgorithm.replace);
+        print('🚗 INSERTED new fleet: $carplate (ID: $fleetId)');
+        return MergeResult.inserted;
       }
-    });
 
-    // Remove null values
-    cleaned.removeWhere((key, value) => value == null);
+      final existingFleet = existingByCarplate.first;
+      final existingId = existingFleet['id'];
 
-    return cleaned;
+      // Compare timestamps to decide whether to update
+      final remoteTimestamp =
+          _getTimestampAsInt(fleetData['last_modified']) ?? 0;
+      final localTimestamp =
+          _getTimestampAsInt(existingFleet['last_modified']) ?? 0;
+
+      print(
+          '🚗 Fleet carplate "$carplate": Remote ID $fleetId vs Local ID $existingId');
+      print('   Remote timestamp: $remoteTimestamp');
+      print('   Local timestamp: $localTimestamp');
+
+      if (remoteTimestamp > localTimestamp) {
+        // Remote is newer - update the existing record
+        await db.update(
+          'fleet',
+          fleetData,
+          where: 'carplate = ?',
+          whereArgs: [carplate],
+        );
+        print('🔄 UPDATED fleet: $carplate with newer remote data');
+        return MergeResult.updated;
+      } else if (remoteTimestamp < localTimestamp) {
+        // Local is newer - keep local version
+        print('⏭️ SKIPPED fleet: $carplate (local is newer)');
+        return MergeResult.skipped;
+      } else {
+        // Same timestamp - mark as synced if needed
+        final localSynced = (existingFleet['firebase_synced'] as int?) ?? 1;
+        if (localSynced == 0) {
+          await db.update(
+            'fleet',
+            {'firebase_synced': 1},
+            where: 'carplate = ?',
+            whereArgs: [carplate],
+          );
+          print('✅ MARKED fleet as synced: $carplate');
+          return MergeResult.updated;
+        }
+        print('⏭️ SKIPPED fleet: $carplate (already synced)');
+        return MergeResult.skipped;
+      }
+    } catch (e) {
+      print('❌ Error merging fleet record: $e');
+      return MergeResult.skipped;
+    }
+  }
+
+  /// ✅ NEW: User-specific merge with email deduplication
+  Future<MergeResult> _mergeUserRecordWithEmailDeduplication(
+    Database db,
+    Map<String, dynamic> userData,
+  ) async {
+    final email = userData['email'];
+    final idnumber = userData['idnumber'];
+    final userId = userData['id'];
+
+    if ((email == null || email == '') &&
+        (idnumber == null || idnumber == '')) {
+      print('⚠️ User record missing email and ID number, using ID-based merge');
+      return await _mergeRecordWithTimestampComparison(db, 'users', userData);
+    }
+
+    try {
+      // Check for existing user by email or idnumber
+      List<Map<String, dynamic>> existingUsers = [];
+
+      if (email != null && email != '') {
+        final emailMatches = await db.query(
+          'users',
+          where: 'email = ?',
+          whereArgs: [email],
+        );
+        existingUsers.addAll(emailMatches);
+      }
+
+      if (idnumber != null && idnumber != '') {
+        final idMatches = await db.query(
+          'users',
+          where: 'idnumber = ? AND email != ?',
+          whereArgs: [idnumber, email ?? ''],
+        );
+        existingUsers.addAll(idMatches);
+      }
+
+      if (existingUsers.isEmpty) {
+        // No existing user - safe to insert
+        await db.insert('users', userData,
+            conflictAlgorithm: ConflictAlgorithm.replace);
+        print('👤 INSERTED new user: $email (ID: $userId)');
+        return MergeResult.inserted;
+      }
+
+      // Use the first matching user for comparison
+      final existingUser = existingUsers.first;
+      final existingId = existingUser['id'];
+
+      // Compare timestamps
+      final remoteTimestamp =
+          _getTimestampAsInt(userData['last_modified']) ?? 0;
+      final localTimestamp =
+          _getTimestampAsInt(existingUser['last_modified']) ?? 0;
+
+      print('👤 User "$email": Remote ID $userId vs Local ID $existingId');
+
+      if (remoteTimestamp > localTimestamp) {
+        // Update existing user
+        await db.update(
+          'users',
+          userData,
+          where: 'id = ?',
+          whereArgs: [existingId],
+        );
+        print('🔄 UPDATED user: $email with newer remote data');
+        return MergeResult.updated;
+      } else {
+        print('⏭️ SKIPPED user: $email (local is newer or same)');
+        return MergeResult.skipped;
+      }
+    } catch (e) {
+      print('❌ Error merging user record: $e');
+      return MergeResult.skipped;
+    }
+  }
+
+  /// ✅ ENHANCED: General record merge with timestamp comparison
+  Future<MergeResult> _mergeRecordWithTimestampComparison(
+    Database db,
+    String table,
+    Map<String, dynamic> recordData,
+  ) async {
+    final recordId = recordData['id'];
+
+    if (recordId == null) {
+      print('❌ Record missing ID for $table');
+      return MergeResult.skipped;
+    }
+
+    try {
+      // Check if record exists by ID
+      final existing = await db.query(
+        table,
+        where: 'id = ?',
+        whereArgs: [recordId],
+        limit: 1,
+      );
+
+      if (existing.isEmpty) {
+        // Insert new record
+        await db.insert(table, recordData,
+            conflictAlgorithm: ConflictAlgorithm.replace);
+        print('📥 INSERTED new $table record: $recordId');
+        return MergeResult.inserted;
+      }
+
+      final existingRecord = existing.first;
+
+      // Compare timestamps
+      final remoteTimestamp =
+          _getTimestampAsInt(recordData['last_modified']) ?? 0;
+      final localTimestamp =
+          _getTimestampAsInt(existingRecord['last_modified']) ?? 0;
+      final localSynced = (existingRecord['firebase_synced'] as int?) ?? 1;
+
+      print('🔍 $table record $recordId:');
+      print('   Remote timestamp: $remoteTimestamp');
+      print('   Local timestamp: $localTimestamp');
+      print('   Local synced: $localSynced');
+
+      if (remoteTimestamp > localTimestamp) {
+        // Remote is newer - update local
+        await db.update(
+          table,
+          recordData,
+          where: 'id = ?',
+          whereArgs: [recordId],
+        );
+        print('🔄 UPDATED $table record: $recordId (remote newer)');
+        return MergeResult.updated;
+      } else if (remoteTimestamp == localTimestamp && localSynced == 0) {
+        // Same timestamp but local not synced - mark as synced
+        await db.update(
+          table,
+          {'firebase_synced': 1},
+          where: 'id = ?',
+          whereArgs: [recordId],
+        );
+        print('✅ MARKED $table record as synced: $recordId');
+        return MergeResult.updated;
+      } else {
+        // Local is newer or already synced
+        print('⏭️ SKIPPED $table record: $recordId (local is newer/synced)');
+        return MergeResult.skipped;
+      }
+    } catch (e) {
+      print('❌ Error merging $table record: $e');
+      return MergeResult.skipped;
+    }
   }
 
 // Helper methods (if you don't already have them):
@@ -392,6 +602,7 @@ class FixedLocalFirstSyncService extends GetxService {
       result.remove('sync_timestamp');
       result.remove('updatedAt');
       result.remove('firebase_user_id');
+      result.remove('local_id');
 
       print('🔄 Converting Firestore data to SQLite format...');
 
@@ -448,58 +659,6 @@ class FixedLocalFirstSyncService extends GetxService {
     }
   }
 
-  Future<Map<String, int>> _pullAndMergeTable(
-      String schoolId, String table) async {
-    print('🔍 DEBUG: Starting pull for $table');
-
-    try {
-      final oneHourAgo = DateTime.now().subtract(Duration(hours: 1));
-      final snapshot = await _firestore!
-          .collection('schools')
-          .doc(schoolId)
-          .collection(table)
-          .where('last_modified', isGreaterThan: oneHourAgo)
-          .get();
-
-      print(
-          '📥 DEBUG: Found ${snapshot.docs.length} $table records in Firebase');
-
-      for (final doc in snapshot.docs) {
-        print('📄 DEBUG: Processing ${table} record ${doc.id}');
-        print('   Remote data: ${doc.data()}');
-
-        // Check what we have locally
-        final db = await DatabaseHelper.instance.database;
-        final localRecord = await db.query(
-          table,
-          where: 'id = ?',
-          whereArgs: [int.tryParse(doc.id)],
-          limit: 1,
-        );
-
-        if (localRecord.isNotEmpty) {
-          print('   Local data: ${localRecord.first}');
-        } else {
-          print('   No local record found');
-        }
-
-        final result =
-            await _mergeRecordWithConflictResolution(table, doc.id, doc.data());
-        print('   Merge result: $result');
-      }
-    } catch (e) {
-      print('❌ DEBUG: Error pulling $table: $e');
-    }
-
-    return {
-      'processed': 0,
-      'inserted': 0,
-      'updated': 0,
-      'conflicts': 0,
-      'skipped': 0
-    };
-  }
-
 // Add this to your FixedLocalFirstSyncService
   final Map<String, StreamSubscription> _firestoreListeners = {};
 
@@ -514,63 +673,6 @@ class FixedLocalFirstSyncService extends GetxService {
         print('🎯 REAL-TIME UPDATE detected for $table');
         _processRealTimeChanges(table, snapshot);
       });
-    }
-  }
-
-  /// Convert a specific timestamp field with proper error handling
-  void _convertTimestampField(Map<String, dynamic> data, String fieldName,
-      {bool isDateString = true}) {
-    if (!data.containsKey(fieldName)) return;
-
-    final value = data[fieldName];
-    if (value == null) {
-      data.remove(fieldName);
-      return;
-    }
-
-    try {
-      if (value is Timestamp) {
-        final dateTime = value.toDate();
-        data[fieldName] = isDateString
-            ? dateTime.toIso8601String()
-            : dateTime.millisecondsSinceEpoch;
-        print('📅 Converted $fieldName: Timestamp -> ${data[fieldName]}');
-      } else if (value is Map<String, dynamic>) {
-        // Handle Firestore Timestamp format: {seconds: x, nanoseconds: y}
-        if (value.containsKey('seconds') && value.containsKey('nanoseconds')) {
-          final seconds = value['seconds'] as int;
-          final nanoseconds = value['nanoseconds'] as int;
-          final dateTime = DateTime.fromMillisecondsSinceEpoch(
-              seconds * 1000 + (nanoseconds / 1000000).round());
-          data[fieldName] = isDateString
-              ? dateTime.toIso8601String()
-              : dateTime.millisecondsSinceEpoch;
-          print('📅 Converted $fieldName: Map -> ${data[fieldName]}');
-        }
-      } else if (value is String) {
-        // Validate and potentially convert string dates
-        try {
-          final dateTime = DateTime.parse(value);
-          data[fieldName] = isDateString
-              ? dateTime.toIso8601String()
-              : dateTime.millisecondsSinceEpoch;
-        } catch (e) {
-          print('⚠️ Invalid date string in $fieldName: $value');
-          // Keep original string value
-        }
-      } else if (value is int && !isDateString) {
-        // Already in correct format for milliseconds
-        data[fieldName] = value;
-      } else if (value is int && isDateString) {
-        // Convert milliseconds to ISO string
-        data[fieldName] =
-            DateTime.fromMillisecondsSinceEpoch(value).toIso8601String();
-      }
-    } catch (e) {
-      print('❌ Error converting $fieldName: $e');
-      print('🔍 Value: $value (${value.runtimeType})');
-      // Remove problematic field rather than crash
-      data.remove(fieldName);
     }
   }
 
@@ -878,69 +980,6 @@ class FixedLocalFirstSyncService extends GetxService {
     }
   }
 
-  Future<void> _pushDeletedRecordToFirebase(
-    String schoolId,
-    String table,
-    Map<String, dynamic> record,
-  ) async {
-    final recordId = record['id'].toString();
-
-    // Push delete marker to Firebase
-    await _firestore!
-        .collection('schools')
-        .doc(schoolId)
-        .collection(table)
-        .doc(recordId)
-        .update({
-      'deleted': true,
-      'last_modified': FieldValue.serverTimestamp(),
-      'last_modified_device': _currentDeviceId,
-    });
-
-    // Mark as synced locally
-    final db = await DatabaseHelper.instance.database;
-    await db.update(
-      table,
-      {'firebase_synced': 1},
-      where: 'id = ?',
-      whereArgs: [int.parse(recordId)],
-    );
-
-    print('✅ Deleted $table record $recordId pushed to Firebase');
-  }
-
-  Future<void> _debugSyncState(String table, int recordId) async {
-    try {
-      final db = await DatabaseHelper.instance.database;
-      final localRecord = await db.query(
-        table,
-        where: 'id = ?',
-        whereArgs: [recordId],
-        limit: 1,
-      );
-
-      if (localRecord.isNotEmpty) {
-        print('🐛 DEBUG LOCAL: ${localRecord.first}');
-      }
-
-      final schoolId = await _getSchoolId();
-      if (schoolId.isNotEmpty) {
-        final remoteDoc = await _firestore!
-            .collection('schools')
-            .doc(schoolId)
-            .collection(table)
-            .doc(recordId.toString())
-            .get();
-
-        if (remoteDoc.exists) {
-          print('🐛 DEBUG REMOTE: ${remoteDoc.data()}');
-        }
-      }
-    } catch (e) {
-      print('❌ Debug error: $e');
-    }
-  }
-
   /// Update sync metadata
   Future<void> _updateSyncMetadata() async {
     try {
@@ -1024,11 +1063,9 @@ class FixedLocalFirstSyncService extends GetxService {
     result.removeWhere((key, value) => value == null);
     return result;
   }
+// Update this method in lib/services/fixed_local_first_sync_service.dart
 
-// FIXED: Replace your _syncSingleUserToFirebase method with this
   Future<void> _syncSingleUserToFirebase(Map<String, dynamic> localUser) async {
-    if (_firestore == null || _firebaseAuth == null) return;
-
     try {
       final email = localUser['email']?.toString().toLowerCase();
       final localId = localUser['id'];
@@ -1059,7 +1096,36 @@ class FixedLocalFirstSyncService extends GetxService {
         return;
       }
 
-      // Check if user already exists in Firestore by email first
+      // **FIXED**: Check by Firebase UID first (not email) for consistent lookup
+      String? firebaseUid = existingFirebaseUid;
+
+      // If we have Firebase UID, check if document exists
+      if (firebaseUid != null && firebaseUid.isNotEmpty) {
+        final existingDocRef = _firestore!
+            .collection('schools')
+            .doc(schoolId)
+            .collection('users')
+            .doc(firebaseUid); // Use Firebase UID as document ID
+
+        final existingDoc = await existingDocRef.get();
+
+        if (existingDoc.exists) {
+          print('📋 User document exists with consistent ID: $firebaseUid');
+
+          // Just mark as synced locally
+          final db = await DatabaseHelper.instance.database;
+          await db.update(
+            'users',
+            {'firebase_synced': 1},
+            where: 'id = ?',
+            whereArgs: [localId],
+          );
+          print('✅ Local user marked as synced');
+          return;
+        }
+      }
+
+      // Check by email as fallback (for users created with old inconsistent method)
       final existingByEmailQuery = await _firestore!
           .collection('schools')
           .doc(schoolId)
@@ -1069,20 +1135,41 @@ class FixedLocalFirstSyncService extends GetxService {
           .get();
 
       if (existingByEmailQuery.docs.isNotEmpty) {
-        print('📋 User already exists in Firestore: $email');
+        print('📋 Found user by email (inconsistent document ID): $email');
 
-        // Update local record with Firebase info and mark as synced
         final existingDoc = existingByEmailQuery.docs.first;
         final firestoreData = existingDoc.data();
-        final firebaseUid = firestoreData['firebase_uid'];
+        final docFirebaseUid = firestoreData['firebase_uid'];
 
-        if (firebaseUid != null) {
+        // **CRITICAL**: If document has inconsistent ID, recreate with correct ID
+        if (existingDoc.id != docFirebaseUid) {
+          print(
+              '🔄 Fixing inconsistent document ID: ${existingDoc.id} -> $docFirebaseUid');
+
+          if (docFirebaseUid != null && docFirebaseUid.isNotEmpty) {
+            // Create new document with correct ID
+            await _firestore!
+                .collection('schools')
+                .doc(schoolId)
+                .collection('users')
+                .doc(docFirebaseUid) // Use Firebase UID as document ID
+                .set(firestoreData);
+
+            // Delete old document with wrong ID
+            await existingDoc.reference.delete();
+
+            print('✅ Document ID fixed: $docFirebaseUid');
+          }
+        }
+
+        // Update local record with Firebase info and mark as synced
+        if (docFirebaseUid != null) {
           final db = await DatabaseHelper.instance.database;
           await db.update(
             'users',
             {
               'firebase_synced': 1,
-              'firebase_uid': firebaseUid,
+              'firebase_uid': docFirebaseUid,
             },
             where: 'id = ?',
             whereArgs: [localId],
@@ -1092,18 +1179,53 @@ class FixedLocalFirstSyncService extends GetxService {
         return;
       }
 
-      // If we have existing Firebase UID, use it for the document
-      String? firebaseUid = existingFirebaseUid;
-
-      // If no Firebase UID, we need to create/find Firebase Auth user
+      // If no Firebase UID, user needs to be created in Firebase Auth first
       if (firebaseUid == null || firebaseUid.isEmpty) {
-        // This would require additional logic to handle Firebase Auth creation
-        // For now, let's skip users without Firebase UID during sync
-        print('⚠️ Skipping sync for user without Firebase UID: $email');
-        return;
+        print('⚠️ User needs Firebase Auth creation: $email');
+
+        // Try to create Firebase Auth user using existing controller method
+        final authController = Get.find<AuthController>();
+        final password = localUser['password']?.toString();
+
+        if (password != null && password.isNotEmpty) {
+          // Convert to userData format that existing method expects
+          final userData = Map<String, dynamic>.from(localUser);
+          userData.remove('firebase_synced'); // Remove sync flag for clean data
+
+          final firebaseAuthCreated =
+              await authController.createFirebaseUserForExistingLocal(
+            email,
+            password,
+            userData,
+          );
+
+          if (firebaseAuthCreated) {
+            print('✅ Firebase Auth user created through existing method');
+
+            // Get the firebase_uid that was set by the existing method
+            final db = await DatabaseHelper.instance.database;
+            final updatedUser = await db.query(
+              'users',
+              where: 'id = ?',
+              whereArgs: [localId],
+              limit: 1,
+            );
+
+            if (updatedUser.isNotEmpty) {
+              firebaseUid = updatedUser.first['firebase_uid']?.toString();
+              print('✅ Retrieved Firebase UID: $firebaseUid');
+            }
+          } else {
+            print('⚠️ Could not create Firebase Auth user for: $email');
+            return;
+          }
+        } else {
+          print('⚠️ No password available for Firebase Auth creation: $email');
+          return;
+        }
       }
 
-      // Prepare Firestore data
+      // Now create/update Firestore document with consistent ID
       final firestoreData = _convertSqliteToFirestore(localUser);
       firestoreData['firebase_uid'] = firebaseUid;
       firestoreData['local_id'] = localId;
@@ -1111,17 +1233,16 @@ class FixedLocalFirstSyncService extends GetxService {
       firestoreData['firebase_synced'] = 1;
       firestoreData['school_id'] = schoolId;
 
-      // Use Firebase UID as document ID for consistency
+      // **FIXED**: Use Firebase UID as document ID for consistency
       final userDocRef = _firestore!
           .collection('schools')
           .doc(schoolId)
           .collection('users')
-          .doc(firebaseUid);
+          .doc(firebaseUid); // Always use Firebase UID as document ID
 
       await userDocRef.set(firestoreData, SetOptions(merge: true));
-      print('✅ User synced to Firestore: $email (Doc ID: $firebaseUid)');
 
-      // Mark as synced in local database
+      // Mark local user as synced
       final db = await DatabaseHelper.instance.database;
       await db.update(
         'users',
@@ -1129,6 +1250,9 @@ class FixedLocalFirstSyncService extends GetxService {
         where: 'id = ?',
         whereArgs: [localId],
       );
+
+      print(
+          '✅ User synced to Firebase with consistent document ID: $firebaseUid');
     } catch (e) {
       print('❌ Error syncing user to Firebase: $e');
     }
@@ -1256,22 +1380,6 @@ class FixedLocalFirstSyncService extends GetxService {
     super.onClose();
   }
 
-  Future<void> _syncDeletedRecords(String schoolId) async {
-    print('🗑️ === SYNCING DELETED RECORDS ===');
-
-    for (final table in _syncTables) {
-      try {
-        // Push locally deleted records to Firebase
-        await _pushDeletedRecordsToFirebase(schoolId, table);
-
-        // Pull deleted records from Firebase
-        await _pullDeletedRecordsFromFirebase(schoolId, table);
-      } catch (e) {
-        print('❌ Error syncing deleted records for $table: $e');
-      }
-    }
-  }
-
   Future<void> _pushDeletedRecordsToFirebase(
       String schoolId, String table) async {
     final db = await DatabaseHelper.instance.database;
@@ -1314,6 +1422,7 @@ class FixedLocalFirstSyncService extends GetxService {
     }
   }
 
+  /// This method IS used by _syncDeletedRecords()
   Future<void> _pullDeletedRecordsFromFirebase(
       String schoolId, String table) async {
     try {
@@ -1339,11 +1448,28 @@ class FixedLocalFirstSyncService extends GetxService {
             where: 'id = ?',
             whereArgs: [localId],
           );
-          print('✅ Deleted $table record $localId pulled from Firebase');
+          print('✅ Applied remote deletion for $table record $localId');
         }
       }
     } catch (e) {
-      print('❌ Error pulling deleted records for $table: $e');
+      print('❌ Error pulling deleted records from $table: $e');
+    }
+  }
+
+  /// This method IS used by syncWithFirebase()
+  Future<void> _syncDeletedRecords(String schoolId) async {
+    print('🗑️ === SYNCING DELETED RECORDS ===');
+
+    for (final table in _syncTables) {
+      try {
+        // Push locally deleted records to Firebase
+        await _pushDeletedRecordsToFirebase(schoolId, table);
+
+        // Pull deleted records from Firebase
+        await _pullDeletedRecordsFromFirebase(schoolId, table);
+      } catch (e) {
+        print('❌ Error syncing deleted records for $table: $e');
+      }
     }
   }
 
@@ -1533,13 +1659,12 @@ class FixedLocalFirstSyncService extends GetxService {
     print('🔊 Re-enabled smart triggers after sync');
   }
 
-  /// UPDATED: Push single record with trigger management
+// ✅ FIXED: Push single record with consistent document ID strategy
   Future<void> _pushSingleRecordToFirebase(
     String schoolId,
     String table,
     Map<String, dynamic> record,
   ) async {
-    // ✅ FIXED: Properly handle record ID type casting
     final recordIdRaw = record['id'];
     final int recordId;
 
@@ -1557,59 +1682,213 @@ class FixedLocalFirstSyncService extends GetxService {
     try {
       // Convert to Firebase format
       final firebaseData = _convertSqliteToFirestore(record);
+
+      // ✅ CRITICAL: Always include local_id for identification
+      firebaseData['local_id'] = recordId;
       firebaseData['last_modified_device'] = _currentDeviceId;
       firebaseData['last_modified'] = FieldValue.serverTimestamp();
 
-      // Push to Firebase
+      // Remove internal database fields that shouldn't go to Firebase
+      firebaseData.remove('firebase_synced');
+      firebaseData.remove('firebase_user_id');
+      firebaseData.remove('last_modified_device');
+
+      // ✅ FIXED: Always use local database ID as Firebase document ID
+      final documentId = recordId.toString();
+
       await _firestore!
           .collection('schools')
           .doc(schoolId)
           .collection(table)
-          .doc(recordId.toString())
+          .doc(documentId) // ✅ Use local ID as document ID
           .set(firebaseData, SetOptions(merge: true));
 
       print('✅ Successfully pushed $table record $recordId to Firebase');
+      print('   Firebase Document ID: $documentId');
+      print('   Local Database ID: $recordId');
 
-      // ✅ CRITICAL FIX: Temporarily disable triggers, then update sync status
+      // Mark as synced in local database
+      await _markRecordAsSynced(table, recordId);
+    } catch (e) {
+      print('❌ Failed to push $table record $recordId: $e');
+
+      // Log detailed error information
+      if (e.toString().contains('permission')) {
+        print('💡 Check Firebase security rules for $table collection');
+      }
+
+      rethrow;
+    }
+  }
+
+  /// ✅ Helper method to mark record as synced
+  Future<void> _markRecordAsSynced(String table, int recordId) async {
+    try {
       final db = await DatabaseHelper.instance.database;
 
-      // Temporarily disable just this table's trigger
-      await db.execute('DROP TRIGGER IF EXISTS update_${table}_timestamp');
-
-      // Now safely update the sync status
       final updateResult = await db.update(
         table,
         {
           'firebase_synced': 1,
-          'last_modified': DateTime.now().toUtc().millisecondsSinceEpoch,
+          'last_modified': DateTime.now().millisecondsSinceEpoch,
         },
         where: 'id = ?',
         whereArgs: [recordId],
       );
 
-      // Re-enable the smart trigger
-      await db.execute('''
-      CREATE TRIGGER IF NOT EXISTS update_${table}_timestamp
-      AFTER UPDATE ON $table
-      WHEN (OLD.firebase_synced = 1)
-      BEGIN
-        UPDATE $table SET 
-          last_modified = (strftime('%s', 'now') * 1000),
-          firebase_synced = 0
-        WHERE id = NEW.id;
-      END;
-    ''');
-
       if (updateResult > 0) {
-        print(
-            '✅ Marked $table record $recordId as synced (firebase_synced = 1)');
+        print('✅ Marked $table record $recordId as synced locally');
       } else {
         print(
-            '⚠️ Failed to mark $table record $recordId as synced - no rows updated');
+            '⚠️ Failed to mark $table record $recordId as synced - record not found');
       }
     } catch (e) {
-      print('❌ Failed to push $table record $recordId: $e');
-      rethrow;
+      print('❌ Error marking $table record $recordId as synced: $e');
+    }
+  }
+
+  /// ✅ CLEANUP: Fix mismatched document IDs
+  Future<void> fixMismatchedUserDocuments() async {
+    print('🔧 === FIXING MISMATCHED USER DOCUMENTS ===');
+
+    final schoolId = await _getSchoolId();
+    if (schoolId.isEmpty) {
+      print('❌ No school ID available');
+      return;
+    }
+
+    try {
+      // Get all user documents from Firebase
+      final snapshot = await _firestore!
+          .collection('schools')
+          .doc(schoolId)
+          .collection('users')
+          .get();
+
+      print('📋 Found ${snapshot.docs.length} user documents in Firebase');
+
+      final batch = _firestore!.batch();
+      int fixedCount = 0;
+
+      for (final doc in snapshot.docs) {
+        final data = doc.data();
+        final currentDocId = doc.id;
+        final localId = data['local_id'];
+
+        // Skip system documents
+        if (currentDocId.startsWith('_')) continue;
+
+        if (localId != null) {
+          final correctDocId = localId.toString();
+
+          // Check if document ID needs fixing
+          if (currentDocId != correctDocId) {
+            print('🔄 Fixing user: $currentDocId → $correctDocId');
+            print('   Name: ${data['fname']} ${data['lname']}');
+            print('   Email: ${data['email']}');
+
+            // Create new document with correct ID
+            final newDocRef = _firestore!
+                .collection('schools')
+                .doc(schoolId)
+                .collection('users')
+                .doc(correctDocId);
+
+            // Ensure data has the correct local_id
+            final correctedData = Map<String, dynamic>.from(data);
+            correctedData['local_id'] = int.tryParse(correctDocId) ?? localId;
+            correctedData['id'] = int.tryParse(correctDocId) ?? localId;
+            correctedData['fixed_at'] = FieldValue.serverTimestamp();
+
+            batch.set(newDocRef, correctedData);
+
+            // Delete old document with wrong ID
+            batch.delete(doc.reference);
+
+            fixedCount++;
+          }
+        } else {
+          print('⚠️ User document $currentDocId is missing local_id field');
+          // Try to infer from numeric document ID
+          final parsedId = int.tryParse(currentDocId);
+          if (parsedId != null) {
+            final updatedData = Map<String, dynamic>.from(data);
+            updatedData['local_id'] = parsedId;
+            updatedData['id'] = parsedId;
+            batch.update(doc.reference, {'local_id': parsedId, 'id': parsedId});
+            print('✅ Added missing local_id to user document $currentDocId');
+          }
+        }
+      }
+
+      if (fixedCount > 0) {
+        await batch.commit();
+        print('✅ Fixed $fixedCount user documents');
+
+        // Trigger a sync to ensure all devices get the updates
+        await syncWithFirebase();
+      } else {
+        print('✅ All user documents already have correct IDs');
+      }
+    } catch (e) {
+      print('❌ Error fixing user documents: $e');
+    }
+  }
+
+  /// ✅ ENHANCED: Ensure all local records have proper local_id in Firebase
+  Future<void> ensureLocalIdInFirebase() async {
+    print('🔧 === ENSURING LOCAL_ID IN FIREBASE DOCUMENTS ===');
+
+    final schoolId = await _getSchoolId();
+    if (schoolId.isEmpty) return;
+
+    final db = await DatabaseHelper.instance.database;
+
+    for (String table in _syncTables) {
+      try {
+        // Get all local records
+        final localRecords = await db.query(
+          table,
+          where: 'firebase_synced = 1 AND (deleted IS NULL OR deleted = 0)',
+        );
+
+        if (localRecords.isEmpty) continue;
+
+        print('🔍 Checking $table: ${localRecords.length} synced records');
+
+        for (final record in localRecords) {
+          final localId = record['id'];
+          if (localId == null) continue;
+
+          try {
+            // Check Firebase document
+            final firebaseDoc = await _firestore!
+                .collection('schools')
+                .doc(schoolId)
+                .collection(table)
+                .doc(localId.toString())
+                .get();
+
+            if (firebaseDoc.exists) {
+              final firebaseData = firebaseDoc.data()!;
+
+              // Ensure local_id field exists
+              if (!firebaseData.containsKey('local_id') ||
+                  firebaseData['local_id'] != localId) {
+                await firebaseDoc.reference.update({
+                  'local_id': localId,
+                  'id': localId,
+                });
+                print('✅ Updated $table document $localId with local_id');
+              }
+            }
+          } catch (e) {
+            print('⚠️ Error checking $table record $localId: $e');
+          }
+        }
+      } catch (e) {
+        print('❌ Error processing $table: $e');
+      }
     }
   }
 
@@ -1678,44 +1957,20 @@ class FixedLocalFirstSyncService extends GetxService {
     return record;
   }
 
-  Future<void> _saveToLocalDatabase(
-      String table, List<Map<String, dynamic>> records) async {
-    if (records.isEmpty) return;
+  /// ✅ FIX 8: Update your sync initialization to clean existing duplicates
+  Future<void> initializeSync() async {
+    print('🔄 Initializing sync service...');
 
-    print('💾 Saving ${records.length} $table records to local database...');
+    try {
+      // Clean existing duplicates first
+      await DeduplicationSyncService.cleanExistingDuplicates();
 
-    final db = await DatabaseHelper.instance.database;
-    int successCount = 0;
-    int errorCount = 0;
+      // ... rest of your existing initialization code ...
 
-    for (var record in records) {
-      try {
-        // ✅ USE TIMESTAMP CONVERTER
-        final convertedRecord = TimestampConverter.prepareForSQLite(record);
-
-        // Check if record exists (to avoid unique constraint errors)
-        final existing = await db
-            .query(table, where: 'id = ?', whereArgs: [convertedRecord['id']]);
-
-        if (existing.isEmpty) {
-          await db.insert(table, convertedRecord,
-              conflictAlgorithm: ConflictAlgorithm.replace);
-        } else {
-          await db.update(table, convertedRecord,
-              where: 'id = ?', whereArgs: [convertedRecord['id']]);
-        }
-
-        successCount++;
-      } catch (e) {
-        print('❌ Error saving $table record: $e');
-        print('🔍 Problematic record: $record');
-        errorCount++;
-      }
-    }
-
-    print('✅ Saved $successCount $table records successfully');
-    if (errorCount > 0) {
-      print('⚠️ $errorCount $table records failed to save');
+      print('✅ Sync service initialized successfully');
+    } catch (e) {
+      print('❌ Error initializing sync service: $e');
+      rethrow;
     }
   }
 

@@ -299,9 +299,18 @@ class EnhancedAppBindings extends Bindings {
         Get.put<CourseController>(CourseController(), permanent: true);
         print('✅ CourseController initialized');
       }
-      Get.put<SubscriptionService>(SubscriptionService(), permanent: true);
 
-      Get.put<AutoSyncController>(AutoSyncController(), permanent: true);
+      // 🔧 FIX: Initialize SubscriptionService AFTER dependencies are ready
+      // Make sure SchoolConfigService is already initialized
+      if (!Get.isRegistered<SubscriptionService>()) {
+        Get.put<SubscriptionService>(SubscriptionService(), permanent: true);
+        print('✅ SubscriptionService initialized');
+      }
+
+      if (!Get.isRegistered<AutoSyncController>()) {
+        Get.put<AutoSyncController>(AutoSyncController(), permanent: true);
+        print('✅ AutoSyncController initialized');
+      }
 
       // Fleet Controller
       if (!Get.isRegistered<FleetController>()) {

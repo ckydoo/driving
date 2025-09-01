@@ -40,8 +40,11 @@ void main() async {
 
   // STEP 3: Initialize multi-tenant app bindings
   await _initializeMultiTenantBindings();
-  Get.put<AppAccessController>(AppAccessController());
-
+  Future.delayed(Duration(seconds: 2), () {
+    if (!Get.isRegistered<AppAccessController>()) {
+      Get.put<AppAccessController>(AppAccessController());
+    }
+  });
   print('✅ === APP INITIALIZATION COMPLETED ===');
 
   runApp(MultiTenantDrivingSchoolApp());
@@ -139,32 +142,26 @@ class MultiTenantDrivingSchoolApp extends StatelessWidget {
           ),
         ),
         inputDecorationTheme: InputDecorationTheme(
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 12,
           ),
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         ),
         listTileTheme: ListTileThemeData(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
       ),
 
       // Use protected routes with middleware
       getPages: AppRoutes.routes, // Change this line
-
       // Use AuthenticationWrapper to determine initial route with PIN support
       home: const AuthenticationWrapper(),
 
       debugShowCheckedModeBanner: false,
 
       // Handle unknown routes
-      unknownRoute: GetPage(
-        name: '/notfound',
-        page: () => const LoginScreen(),
-      ),
+      unknownRoute: GetPage(name: '/notfound', page: () => const LoginScreen()),
     );
   }
 }
@@ -222,7 +219,8 @@ class _AuthenticationWrapperState extends State<AuthenticationWrapper> {
           !schoolConfig.isValidConfiguration() ||
           settingsController.businessName.value.isEmpty) {
         print(
-            '🏫 No school configuration found - starting with school selection');
+          '🏫 No school configuration found - starting with school selection',
+        );
         initialRoute = '/school-selection';
       } else {
         print('✅ School configuration found: ${schoolConfig.schoolName.value}');
@@ -292,11 +290,7 @@ class _AuthenticationWrapperState extends State<AuthenticationWrapper> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               // Logo
-              Icon(
-                Icons.school,
-                size: 80,
-                color: Colors.white,
-              ),
+              Icon(Icons.school, size: 80, color: Colors.white),
               SizedBox(height: 24),
 
               // Title
@@ -312,10 +306,7 @@ class _AuthenticationWrapperState extends State<AuthenticationWrapper> {
 
               Text(
                 'Management System',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.white70,
-                ),
+                style: TextStyle(fontSize: 16, color: Colors.white70),
               ),
               SizedBox(height: 40),
 
@@ -332,10 +323,7 @@ class _AuthenticationWrapperState extends State<AuthenticationWrapper> {
 
               Text(
                 'Initializing...',
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 14,
-                ),
+                style: TextStyle(color: Colors.white70, fontSize: 14),
               ),
             ],
           ),
@@ -377,7 +365,8 @@ class MultiTenantRouteObserver extends NavigatorObserver {
           final schoolConfig = Get.find<SchoolConfigService>();
           if (schoolConfig.isValidConfiguration()) {
             print(
-                '   School: ${schoolConfig.schoolName.value} (${schoolConfig.schoolId.value})');
+              '   School: ${schoolConfig.schoolName.value} (${schoolConfig.schoolId.value})',
+            );
           }
         }
       }
@@ -387,10 +376,10 @@ class MultiTenantRouteObserver extends NavigatorObserver {
   }
 
   // lib/main.dart - Updated route determination logic
-// Add this method to the LoadingScreen class
+  // Add this method to the LoadingScreen class
 
-// lib/main.dart - Updated route determination logic
-// Add this method to the LoadingScreen class
+  // lib/main.dart - Updated route determination logic
+  // Add this method to the LoadingScreen class
 
   Future<void> _determineInitialRoute() async {
     try {
@@ -408,7 +397,8 @@ class MultiTenantRouteObserver extends NavigatorObserver {
       if (!schoolConfig.isValidConfiguration() ||
           settingsController.businessName.value.isEmpty) {
         print(
-            '🏫 No school configuration found - starting with school selection');
+          '🏫 No school configuration found - starting with school selection',
+        );
         initialRoute = '/school-selection';
       } else {
         print('✅ School configuration found: ${schoolConfig.schoolName.value}');
@@ -447,7 +437,7 @@ class MultiTenantRouteObserver extends NavigatorObserver {
     }
   }
 
-// Helper method to check if users exist
+  // Helper method to check if users exist
   Future<bool> _checkIfUsersExist() async {
     try {
       final users = await DatabaseHelper.instance.getUsers();
@@ -458,5 +448,6 @@ class MultiTenantRouteObserver extends NavigatorObserver {
     }
   }
 }
+
 // lib/main.dart - Updated AuthenticationWrapper with multi-school support
 // Replace the existing _AuthenticationWrapperState class
