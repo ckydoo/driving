@@ -603,42 +603,63 @@ class AuthController extends GetxController {
       // Prepare userData with Firebase-specific fields
       final firestoreData = Map<String, dynamic>.from(userData);
       firestoreData.addAll({
-        'firebase_uid': firebaseUser.uid,
+        'firebase_user_id': firebaseUser
+            .uid, // **CHANGED**: Use firebase_user_id instead of firebase_uid
         'email': firebaseUser.email, // Ensure email matches Firebase auth
         'last_modified': DateTime.now().toIso8601String(),
         'firebase_synced': 1,
         'school_id': schoolId,
       });
 
-      // Keep the local ID if it exists, otherwise let Firestore generate one
+      // **CRITICAL CHANGE**: Use local ID as document ID (like in your image)
       final localId = firestoreData['id'];
-      if (localId != null) {
-        firestoreData['local_id'] = localId; // Store local ID for reference
+      if (localId == null) {
+        throw Exception('Local ID not found in user data');
       }
+
+      // Store local_id field for consistency and remove the 'id' field
+      firestoreData['local_id'] = localId;
       firestoreData.remove('id'); // Remove ID for Firestore
 
-      // **CRITICAL FIX**: Use Firebase UID as document ID (same as school registration)
+      // **CRITICAL FIX**: Use LOCAL ID as document ID (not Firebase UID)
+      final documentId = localId.toString();
       final userDocRef = _firestore!
           .collection('schools')
           .doc(schoolId)
           .collection('users')
-          .doc(firebaseUser.uid); // Use Firebase UID as doc ID
+          .doc(documentId); // Use local ID as document ID
+
+      print('📍 Creating document with local ID as document ID: $documentId');
+      print('🔥 firebase_user_id will be: ${firebaseUser.uid}');
 
       // Check if document already exists
       final existingDoc = await userDocRef.get();
 
       if (existingDoc.exists) {
-        print('📝 Updating existing user document: ${firebaseUser.uid}');
+        print('📝 Updating existing user document: $documentId');
         await userDocRef.update(firestoreData);
       } else {
-        print('➕ Creating new user document: ${firebaseUser.uid}');
+        print('➕ Creating new user document: $documentId');
         await userDocRef.set(firestoreData);
       }
 
+      // Update local user with firebase_user_id (not firebase_uid)
+      final db = await DatabaseHelper.instance.database;
+      await db.update(
+        'users',
+        {
+          'firebase_user_id': firebaseUser.uid, // Store as firebase_user_id
+          'firebase_synced': 1,
+        },
+        where: 'id = ?',
+        whereArgs: [localId],
+      );
+
       print('✅ User data saved to Firestore successfully');
       print('   School ID: $schoolId');
-      print('   Document ID: ${firebaseUser.uid}'); // Now consistent!
-      print('   Firebase UID: ${firebaseUser.uid}');
+      print('   Document ID: $documentId (local ID)');
+      print('   firebase_user_id: ${firebaseUser.uid}');
+      print('   local_id: $localId');
       print('   Email: ${firebaseUser.email}');
     } catch (e) {
       print('❌ Error saving user data to Firestore: $e');

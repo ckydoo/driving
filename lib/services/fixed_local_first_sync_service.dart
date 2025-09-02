@@ -1063,198 +1063,30 @@ class FixedLocalFirstSyncService extends GetxService {
     result.removeWhere((key, value) => value == null);
     return result;
   }
-// Update this method in lib/services/fixed_local_first_sync_service.dart
 
-  Future<void> _syncSingleUserToFirebase(Map<String, dynamic> localUser) async {
+  Future<void> updateDatabaseSchemaForFirebaseUserId() async {
     try {
-      final email = localUser['email']?.toString().toLowerCase();
-      final localId = localUser['id'];
-      final existingFirebaseUid = localUser['firebase_uid'];
-
-      if (email == null || email.isEmpty) {
-        print('❌ Cannot sync user: no email found');
-        return;
-      }
-
-      // Skip if already marked as synced AND has Firebase UID
-      final alreadySynced = localUser['firebase_synced'] == 1;
-      if (alreadySynced &&
-          existingFirebaseUid != null &&
-          existingFirebaseUid.isNotEmpty) {
-        print(
-            '✅ User already synced, skipping: $email (Firebase UID: $existingFirebaseUid)');
-        return;
-      }
-
-      print('🔄 Syncing user to Firebase: $email (Local ID: $localId)');
-
-      final schoolConfig = Get.find<SchoolConfigService>();
-      final schoolId = schoolConfig.schoolId.value;
-
-      if (schoolId.isEmpty) {
-        print('❌ No school ID available for sync');
-        return;
-      }
-
-      // **FIXED**: Check by Firebase UID first (not email) for consistent lookup
-      String? firebaseUid = existingFirebaseUid;
-
-      // If we have Firebase UID, check if document exists
-      if (firebaseUid != null && firebaseUid.isNotEmpty) {
-        final existingDocRef = _firestore!
-            .collection('schools')
-            .doc(schoolId)
-            .collection('users')
-            .doc(firebaseUid); // Use Firebase UID as document ID
-
-        final existingDoc = await existingDocRef.get();
-
-        if (existingDoc.exists) {
-          print('📋 User document exists with consistent ID: $firebaseUid');
-
-          // Just mark as synced locally
-          final db = await DatabaseHelper.instance.database;
-          await db.update(
-            'users',
-            {'firebase_synced': 1},
-            where: 'id = ?',
-            whereArgs: [localId],
-          );
-          print('✅ Local user marked as synced');
-          return;
-        }
-      }
-
-      // Check by email as fallback (for users created with old inconsistent method)
-      final existingByEmailQuery = await _firestore!
-          .collection('schools')
-          .doc(schoolId)
-          .collection('users')
-          .where('email', isEqualTo: email)
-          .limit(1)
-          .get();
-
-      if (existingByEmailQuery.docs.isNotEmpty) {
-        print('📋 Found user by email (inconsistent document ID): $email');
-
-        final existingDoc = existingByEmailQuery.docs.first;
-        final firestoreData = existingDoc.data();
-        final docFirebaseUid = firestoreData['firebase_uid'];
-
-        // **CRITICAL**: If document has inconsistent ID, recreate with correct ID
-        if (existingDoc.id != docFirebaseUid) {
-          print(
-              '🔄 Fixing inconsistent document ID: ${existingDoc.id} -> $docFirebaseUid');
-
-          if (docFirebaseUid != null && docFirebaseUid.isNotEmpty) {
-            // Create new document with correct ID
-            await _firestore!
-                .collection('schools')
-                .doc(schoolId)
-                .collection('users')
-                .doc(docFirebaseUid) // Use Firebase UID as document ID
-                .set(firestoreData);
-
-            // Delete old document with wrong ID
-            await existingDoc.reference.delete();
-
-            print('✅ Document ID fixed: $docFirebaseUid');
-          }
-        }
-
-        // Update local record with Firebase info and mark as synced
-        if (docFirebaseUid != null) {
-          final db = await DatabaseHelper.instance.database;
-          await db.update(
-            'users',
-            {
-              'firebase_synced': 1,
-              'firebase_uid': docFirebaseUid,
-            },
-            where: 'id = ?',
-            whereArgs: [localId],
-          );
-          print('✅ Local user updated with existing Firebase info');
-        }
-        return;
-      }
-
-      // If no Firebase UID, user needs to be created in Firebase Auth first
-      if (firebaseUid == null || firebaseUid.isEmpty) {
-        print('⚠️ User needs Firebase Auth creation: $email');
-
-        // Try to create Firebase Auth user using existing controller method
-        final authController = Get.find<AuthController>();
-        final password = localUser['password']?.toString();
-
-        if (password != null && password.isNotEmpty) {
-          // Convert to userData format that existing method expects
-          final userData = Map<String, dynamic>.from(localUser);
-          userData.remove('firebase_synced'); // Remove sync flag for clean data
-
-          final firebaseAuthCreated =
-              await authController.createFirebaseUserForExistingLocal(
-            email,
-            password,
-            userData,
-          );
-
-          if (firebaseAuthCreated) {
-            print('✅ Firebase Auth user created through existing method');
-
-            // Get the firebase_uid that was set by the existing method
-            final db = await DatabaseHelper.instance.database;
-            final updatedUser = await db.query(
-              'users',
-              where: 'id = ?',
-              whereArgs: [localId],
-              limit: 1,
-            );
-
-            if (updatedUser.isNotEmpty) {
-              firebaseUid = updatedUser.first['firebase_uid']?.toString();
-              print('✅ Retrieved Firebase UID: $firebaseUid');
-            }
-          } else {
-            print('⚠️ Could not create Firebase Auth user for: $email');
-            return;
-          }
-        } else {
-          print('⚠️ No password available for Firebase Auth creation: $email');
-          return;
-        }
-      }
-
-      // Now create/update Firestore document with consistent ID
-      final firestoreData = _convertSqliteToFirestore(localUser);
-      firestoreData['firebase_uid'] = firebaseUid;
-      firestoreData['local_id'] = localId;
-      firestoreData['last_modified'] = DateTime.now().toIso8601String();
-      firestoreData['firebase_synced'] = 1;
-      firestoreData['school_id'] = schoolId;
-
-      // **FIXED**: Use Firebase UID as document ID for consistency
-      final userDocRef = _firestore!
-          .collection('schools')
-          .doc(schoolId)
-          .collection('users')
-          .doc(firebaseUid); // Always use Firebase UID as document ID
-
-      await userDocRef.set(firestoreData, SetOptions(merge: true));
-
-      // Mark local user as synced
       final db = await DatabaseHelper.instance.database;
-      await db.update(
-        'users',
-        {'firebase_synced': 1},
-        where: 'id = ?',
-        whereArgs: [localId],
-      );
 
-      print(
-          '✅ User synced to Firebase with consistent document ID: $firebaseUid');
+      // Check if firebase_user_id column exists, if not add it
+      final tableInfo = await db.rawQuery("PRAGMA table_info(users)");
+      final hasFirebaseUserId =
+          tableInfo.any((column) => column['name'] == 'firebase_user_id');
+
+      if (!hasFirebaseUserId) {
+        await db.execute('ALTER TABLE users ADD COLUMN firebase_user_id TEXT');
+        print('✅ Added firebase_user_id column to users table');
+
+        // Migrate existing firebase_uid values to firebase_user_id
+        await db.execute('''
+        UPDATE users 
+        SET firebase_user_id = firebase_uid 
+        WHERE firebase_uid IS NOT NULL AND firebase_user_id IS NULL
+      ''');
+        print('✅ Migrated existing firebase_uid values to firebase_user_id');
+      }
     } catch (e) {
-      print('❌ Error syncing user to Firebase: $e');
+      print('❌ Error updating database schema: $e');
     }
   }
 
@@ -1683,28 +1515,28 @@ class FixedLocalFirstSyncService extends GetxService {
       // Convert to Firebase format
       final firebaseData = _convertSqliteToFirestore(record);
 
-      // ✅ CRITICAL: Always include local_id for identification
+      // **CRITICAL**: Always include local_id for identification
       firebaseData['local_id'] = recordId;
       firebaseData['last_modified_device'] = _currentDeviceId;
       firebaseData['last_modified'] = FieldValue.serverTimestamp();
 
       // Remove internal database fields that shouldn't go to Firebase
       firebaseData.remove('firebase_synced');
-      firebaseData.remove('firebase_user_id');
-      firebaseData.remove('last_modified_device');
+      firebaseData
+          .remove('id'); // Remove the 'id' field since we use it as document ID
 
-      // ✅ FIXED: Always use local database ID as Firebase document ID
+      // **CRITICAL FIX**: Always use local database ID as Firebase document ID
       final documentId = recordId.toString();
 
       await _firestore!
           .collection('schools')
           .doc(schoolId)
           .collection(table)
-          .doc(documentId) // ✅ Use local ID as document ID
+          .doc(documentId) // Use local ID as document ID consistently
           .set(firebaseData, SetOptions(merge: true));
 
       print('✅ Successfully pushed $table record $recordId to Firebase');
-      print('   Firebase Document ID: $documentId');
+      print('   Firebase Document ID: $documentId (local ID)');
       print('   Local Database ID: $recordId');
 
       // Mark as synced in local database

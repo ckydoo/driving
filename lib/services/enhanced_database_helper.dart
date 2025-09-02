@@ -200,6 +200,14 @@ class DatabaseHelperSyncExtension {
       } catch (e) {
         print('deleted column may already exist in $table');
       }
+      try {
+        await db.execute('''
+          ALTER TABLE $table ADD COLUMN local_id INTEGER DEFAULT 0
+        ''');
+        print('Added local_id column to $table');
+      } catch (e) {
+        print('local_id column may already exist in $table');
+      }
     }
   }
 
