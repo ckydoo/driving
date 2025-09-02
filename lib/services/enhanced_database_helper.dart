@@ -4,6 +4,7 @@
 
 import 'dart:async';
 import 'package:driving/controllers/auth_controller.dart';
+import 'package:driving/controllers/firebase_sync_service.dart';
 import 'package:driving/controllers/utils/timestamp_converter.dart';
 import 'package:driving/services/database_helper.dart';
 import 'package:driving/services/fixed_local_first_sync_service.dart';
@@ -371,28 +372,53 @@ class DatabaseHelperSyncExtension {
 // ✅ ADD SMART SYNC TRIGGER (REPLACES OLD IMMEDIATE SYNC):
   static Timer? _syncTimer;
 
+  // FIXED VERSION of _triggerSmartSync
   static void _triggerSmartSync() {
     // Cancel previous timer to debounce rapid changes
     _syncTimer?.cancel();
 
     // Wait 3 seconds after last change before syncing
     _syncTimer = Timer(const Duration(seconds: 3), () {
+      print('🔄 Smart sync triggered by data change...');
+
       try {
-        // Use only the new fixed sync service
-        if (Get.isRegistered<FixedLocalFirstSyncService>()) {
-          final syncService = Get.find<FixedLocalFirstSyncService>();
-          if (!syncService.isSyncing.value &&
-              syncService.isOnline.value &&
-              syncService.firebaseAvailable.value) {
-            syncService.syncWithFirebase().catchError((e) {
-              print('⚠️ Smart sync failed: $e');
-            });
-          }
-        } else {
-          print('⚠️ Fixed sync service not available');
+        // Try AutoSyncController first (if available)
+        if (Get.isRegistered<AutoSyncController>()) {
+          print('📡 Using AutoSyncController for data change sync');
+          final autoSyncController = Get.find<AutoSyncController>();
+          autoSyncController.triggerDataChangeSync();
+          return; // Exit early if AutoSync handles it
         }
       } catch (e) {
-        print('⚠️ Could not trigger smart sync: $e');
+        print('⚠️ AutoSyncController not available: $e');
+      }
+
+      try {
+        // Fallback to direct sync service
+        if (Get.isRegistered<FixedLocalFirstSyncService>()) {
+          final syncService = Get.find<FixedLocalFirstSyncService>();
+
+          // More reliable condition check
+          final canSync = syncService.firebaseAvailable.value &&
+              syncService.isOnline.value &&
+              !syncService.isSyncing.value;
+
+          if (canSync) {
+            print('🔄 Direct sync service call');
+            syncService.syncWithFirebase().then((_) {
+              print('✅ Smart sync completed successfully');
+            }).catchError((e) {
+              print('⚠️ Smart sync failed: $e');
+            });
+          } else {
+            print(
+                '⚠️ Sync conditions not met: firebase=${syncService.firebaseAvailable.value}, online=${syncService.isOnline.value}, syncing=${syncService.isSyncing.value}');
+          }
+        } else {
+          print('⚠️ FixedLocalFirstSyncService not registered');
+        }
+      } catch (e) {
+        print('⚠️ Could not trigger sync: $e');
       }
     });
   }

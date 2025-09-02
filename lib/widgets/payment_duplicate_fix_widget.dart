@@ -169,190 +169,203 @@ class _PaymentDuplicateFixWidgetState extends State<PaymentDuplicateFixWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: EdgeInsets.all(16),
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.healing, color: Colors.orange),
-                SizedBox(width: 8),
-                Text(
-                  'Payment Duplicate Fix',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 16),
-
-            // Duplicate Report
-            if (_duplicateReport != null) ...[
-              Container(
-                padding: EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.blue.shade200),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Current Status',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blue.shade800,
-                      ),
-                    ),
-                    SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Icon(Icons.payments,
-                            size: 16, color: Colors.blue.shade600),
-                        SizedBox(width: 4),
-                        Text(
-                            'Total Payments: ${_duplicateReport!['total_payments']}'),
-                      ],
-                    ),
-                    if ((_duplicateReport!['reference_duplicates'] ?? 0) >
-                        0) ...[
-                      SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Icon(Icons.warning, size: 16, color: Colors.orange),
-                          SizedBox(width: 4),
-                          Text(
-                            'Reference Duplicates: ${_duplicateReport!['reference_duplicates']}',
-                            style: TextStyle(color: Colors.orange.shade800),
-                          ),
-                        ],
-                      ),
-                    ],
-                    if ((_duplicateReport!['detail_duplicates'] ?? 0) > 0) ...[
-                      SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Icon(Icons.warning, size: 16, color: Colors.orange),
-                          SizedBox(width: 4),
-                          Text(
-                            'Detail Duplicates: ${_duplicateReport!['detail_duplicates']}',
-                            style: TextStyle(color: Colors.orange.shade800),
-                          ),
-                        ],
-                      ),
-                    ],
-                    if ((_duplicateReport!['reference_duplicates'] ?? 0) == 0 &&
-                        (_duplicateReport!['detail_duplicates'] ?? 0) == 0) ...[
-                      Row(
-                        children: [
-                          Icon(Icons.check_circle,
-                              size: 16, color: Colors.green),
-                          SizedBox(width: 4),
-                          Text(
-                            'No duplicates detected',
-                            style: TextStyle(color: Colors.green.shade800),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              SizedBox(height: 16),
-            ],
-
-            // Action Buttons
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _isFixing ? null : _fixDuplicatesNow,
-                    icon: Icon(Icons.healing),
-                    label: Text('Fix Duplicates Now'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange,
-                      foregroundColor: Colors.white,
-                      padding: EdgeInsets.symmetric(vertical: 12),
-                    ),
-                  ),
-                ),
-                SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _isFixing ? null : _runEnhancedSync,
-                    icon: Icon(Icons.sync),
-                    label: Text('Enhanced Sync'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                      foregroundColor: Colors.white,
-                      padding: EdgeInsets.symmetric(vertical: 12),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-
-            SizedBox(height: 12),
-
-            // Refresh Report Button
-            Center(
-              child: TextButton.icon(
-                onPressed: _isFixing ? null : _loadDuplicateReport,
-                icon: Icon(Icons.refresh, size: 16),
-                label: Text('Refresh Report'),
-                style: TextButton.styleFrom(
-                  foregroundColor: Colors.grey.shade600,
-                ),
-              ),
-            ),
-
-            SizedBox(height: 16),
-
-            // Warning Text
-            Container(
-              padding: EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.amber.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.amber.shade200),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Payments Sync and fix'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        foregroundColor: Colors.black87,
+        leading: BackButton(),
+      ),
+      body: Card(
+        margin: EdgeInsets.all(16),
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 children: [
-                  Row(
-                    children: [
-                      Icon(Icons.info, size: 16, color: Colors.amber.shade800),
-                      SizedBox(width: 8),
-                      Text(
-                        'What this does:',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.amber.shade800,
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 8),
+                  Icon(Icons.healing, color: Colors.orange),
+                  SizedBox(width: 8),
                   Text(
-                    '• Removes duplicate payments based on reference numbers\n'
-                    '• Removes duplicates with same invoice+amount+date\n'
-                    '• Recalculates invoice balances to fix negatives\n'
-                    '• Prevents future duplicates during sync',
+                    'Payment Duplicate Fix',
                     style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.amber.shade800,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ],
               ),
-            ),
-          ],
+              SizedBox(height: 16),
+
+              // Duplicate Report
+              if (_duplicateReport != null) ...[
+                Container(
+                  padding: EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Current Status',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue.shade800,
+                        ),
+                      ),
+                      SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Icon(Icons.payments,
+                              size: 16, color: Colors.blue.shade600),
+                          SizedBox(width: 4),
+                          Text(
+                              'Total Payments: ${_duplicateReport!['total_payments']}'),
+                        ],
+                      ),
+                      if ((_duplicateReport!['reference_duplicates'] ?? 0) >
+                          0) ...[
+                        SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Icon(Icons.warning, size: 16, color: Colors.orange),
+                            SizedBox(width: 4),
+                            Text(
+                              'Reference Duplicates: ${_duplicateReport!['reference_duplicates']}',
+                              style: TextStyle(color: Colors.orange.shade800),
+                            ),
+                          ],
+                        ),
+                      ],
+                      if ((_duplicateReport!['detail_duplicates'] ?? 0) >
+                          0) ...[
+                        SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Icon(Icons.warning, size: 16, color: Colors.orange),
+                            SizedBox(width: 4),
+                            Text(
+                              'Detail Duplicates: ${_duplicateReport!['detail_duplicates']}',
+                              style: TextStyle(color: Colors.orange.shade800),
+                            ),
+                          ],
+                        ),
+                      ],
+                      if ((_duplicateReport!['reference_duplicates'] ?? 0) ==
+                              0 &&
+                          (_duplicateReport!['detail_duplicates'] ?? 0) ==
+                              0) ...[
+                        Row(
+                          children: [
+                            Icon(Icons.check_circle,
+                                size: 16, color: Colors.green),
+                            SizedBox(width: 4),
+                            Text(
+                              'No duplicates detected',
+                              style: TextStyle(color: Colors.green.shade800),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                SizedBox(height: 16),
+              ],
+
+              // Action Buttons
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _isFixing ? null : _fixDuplicatesNow,
+                      icon: Icon(Icons.healing),
+                      label: Text('Fix Duplicates Now'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange,
+                        foregroundColor: Colors.white,
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _isFixing ? null : _runEnhancedSync,
+                      icon: Icon(Icons.sync),
+                      label: Text('Enhanced Sync'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        foregroundColor: Colors.white,
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+
+              SizedBox(height: 12),
+
+              // Refresh Report Button
+              Center(
+                child: TextButton.icon(
+                  onPressed: _isFixing ? null : _loadDuplicateReport,
+                  icon: Icon(Icons.refresh, size: 16),
+                  label: Text('Refresh Report'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.grey.shade600,
+                  ),
+                ),
+              ),
+
+              SizedBox(height: 16),
+
+              // Warning Text
+              Container(
+                padding: EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.amber.shade200),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.info,
+                            size: 16, color: Colors.amber.shade800),
+                        SizedBox(width: 8),
+                        Text(
+                          'What this does:',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.amber.shade800,
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      '• Removes duplicate payments based on reference numbers\n'
+                      '• Removes duplicates with same invoice+amount+date\n'
+                      '• Recalculates invoice balances to fix negatives\n'
+                      '• Prevents future duplicates during sync',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.amber.shade800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

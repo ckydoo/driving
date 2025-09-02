@@ -4,6 +4,7 @@ import 'package:driving/controllers/user_controller.dart';
 import 'package:driving/services/database_helper.dart';
 import 'package:driving/services/fixed_local_first_sync_service.dart';
 import 'package:driving/settings/debug_sync_screen.dart';
+import 'package:driving/widgets/payment_duplicate_fix_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -135,12 +136,14 @@ class SyncManagementSection extends StatelessWidget {
         ),
         ElevatedButton.icon(
           onPressed: () {
-            userController.fixMismatchedUserDocuments();
+            Get.to(
+              () => PaymentDuplicateFixWidget(), // Add this line
+            );
           },
-          icon: Icon(Icons.backup),
-          label: Text('Force Sync Users'),
+          icon: Icon(Icons.payment),
+          label: Text('Payment Fix'),
           style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.orange,
+            backgroundColor: Colors.blue,
             foregroundColor: Colors.white,
           ),
         ),

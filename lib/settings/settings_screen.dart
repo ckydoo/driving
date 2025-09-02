@@ -187,11 +187,15 @@ class _SettingsScreenState extends State<SettingsScreen>
             child: Text('Sync Settings'),
           ),
         if (authController.hasAnyRole(['admin', 'instructor']))
-          ElevatedButton(
-            onPressed: () async {
+          ElevatedButton.icon(
+            onPressed: () {
               Get.to(() => SchoolInfoWidget());
             },
-            child: Text('School Info'),
+            label: Text('Payment Fix'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
+            ),
           ),
         if (authController.hasAnyRole(['admin', 'instructor']))
           _buildQuickActionButton(
@@ -211,15 +215,6 @@ class _SettingsScreenState extends State<SettingsScreen>
             label: 'Reset',
             onTap: _showResetConfirmation,
             color: Colors.red[600],
-          ),
-        if (authController.hasAnyRole(['admin', 'instructor']))
-          ElevatedButton(
-            onPressed: () async {
-              Get.to(
-                () => PaymentDuplicateFixWidget(), // Add this line
-              );
-            },
-            child: Text('School Info'),
           ),
       ],
     );

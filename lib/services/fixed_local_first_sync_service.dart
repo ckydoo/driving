@@ -78,6 +78,28 @@ class FixedLocalFirstSyncService extends GetxService {
     }
   }
 
+  // ADD THIS METHOD for better data change detection
+  void onDataChange() {
+    print('📊 Data change detected in sync service');
+
+    // Don't sync if already syncing or offline
+    if (isSyncing.value || !isOnline.value || !firebaseAvailable.value) {
+      print('⚠️ Skipping sync - conditions not met');
+      return;
+    }
+
+    // Use a short delay to batch multiple rapid changes
+    Timer(const Duration(seconds: 2), () {
+      if (!isSyncing.value && isOnline.value && firebaseAvailable.value) {
+        syncWithFirebase().then((_) {
+          print('✅ Data change sync completed');
+        }).catchError((e) {
+          print('⚠️ Data change sync failed: $e');
+        });
+      }
+    });
+  }
+
   Future<String> _getOrCreateDeviceId() async {
     final prefs = await SharedPreferences.getInstance();
     String? deviceId = prefs.getString('device_id');
