@@ -2,6 +2,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:driving/services/database_helper.dart';
 import 'package:driving/controllers/auth_controller.dart';
+import 'package:driving/services/payment_sync_integration.dart';
 import 'package:get/get.dart';
 import 'dart:async';
 
@@ -226,13 +227,14 @@ class EnhancedPaymentSyncService extends GetxService {
     }
   }
 
-  /// Upload unsynced payments to Firebase
   Future<void> _uploadUnsyncedPayments(Database db, String userId) async {
-    print('📤 Uploading unsynced payments...');
+    print(
+        '📤 Uploading unsynced payments with reference-based duplicate prevention...');
 
     final unsyncedPayments = await db.query(
       'payments',
       where: 'firebase_synced IS NULL OR firebase_synced = 0',
+      orderBy: 'id ASC', // Process in order
     );
 
     if (unsyncedPayments.isEmpty) {
@@ -244,13 +246,90 @@ class EnhancedPaymentSyncService extends GetxService {
 
     final collection = _firestore!.collection('payments');
     int successCount = 0;
+    int duplicateCount = 0;
 
     for (final payment in unsyncedPayments) {
       try {
-        final docId = payment['id'].toString();
-        final firebaseData = _convertPaymentToFirebase(payment, userId);
+        final paymentId = payment['id'] as int;
+        final reference = payment['reference'] as String?;
 
-        await collection.doc(docId).set(firebaseData, SetOptions(merge: true));
+        // ✅ Check 1: Does document already exist in Firebase?
+        final existingDoc = await collection.doc(paymentId.toString()).get();
+
+        if (existingDoc.exists) {
+          print(
+              '⏭️ Payment $paymentId already exists in Firebase, marking as synced');
+          await db.update(
+            'payments',
+            {'firebase_synced': 1},
+            where: 'id = ?',
+            whereArgs: [paymentId],
+          );
+          successCount++;
+          continue;
+        }
+
+        // ✅ Check 2: Reference-based duplicate check (like users email checking)
+        if (reference != null &&
+            reference.isNotEmpty &&
+            payment['method'] != 'cash') {
+          final referenceQuery = await collection
+              .where('reference', isEqualTo: reference)
+              .where('user_id', isEqualTo: userId)
+              .limit(1)
+              .get();
+
+          if (referenceQuery.docs.isNotEmpty) {
+            final existingPayment = referenceQuery.docs.first;
+            final existingData = existingPayment.data();
+
+            print('🔍 Found existing payment with reference: $reference');
+
+            // Compare amounts and invoice IDs to determine if it's truly the same payment
+            final localAmount = (payment['amount'] as num).toDouble();
+            final remoteAmount = (existingData['amount'] as num).toDouble();
+            final localInvoiceId = payment['invoiceId'] as int;
+            final remoteInvoiceId = existingData['invoice_id'] as int;
+
+            if ((localAmount - remoteAmount).abs() < 0.01 &&
+                localInvoiceId == remoteInvoiceId) {
+              // Same payment - delete the local duplicate
+              print(
+                  '🗑️ Deleting local duplicate payment $paymentId (reference: $reference)');
+
+              await db.delete(
+                'payments',
+                where: 'id = ?',
+                whereArgs: [paymentId],
+              );
+
+              duplicateCount++;
+              continue;
+            } else {
+              print(
+                  '⚠️ Reference collision but different payment details - will upload with modified reference');
+              // Generate new reference to avoid collision
+              final timestamp =
+                  DateTime.now().millisecondsSinceEpoch.toString().substring(8);
+              final newReference = '${reference}_$timestamp';
+
+              await db.update(
+                'payments',
+                {'reference': newReference},
+                where: 'id = ?',
+                whereArgs: [paymentId],
+              );
+
+              print('🔄 Updated local payment reference to: $newReference');
+            }
+          }
+        }
+
+        // ✅ Upload the payment
+        final firebaseData = _convertPaymentToFirebase(payment, userId);
+        await collection
+            .doc(paymentId.toString())
+            .set(firebaseData, SetOptions(merge: true));
 
         // Mark as synced
         await db.update(
@@ -260,30 +339,31 @@ class EnhancedPaymentSyncService extends GetxService {
             'last_modified': DateTime.now().toUtc().millisecondsSinceEpoch,
           },
           where: 'id = ?',
-          whereArgs: [payment['id']],
+          whereArgs: [paymentId],
         );
 
         successCount++;
         print(
-            '📤 Uploaded payment ${payment['id']} for invoice ${payment['invoiceId']}');
+            '📤 Uploaded payment $paymentId for invoice ${payment['invoiceId']}');
       } catch (e) {
         print('❌ Failed to upload payment ${payment['id']}: $e');
       }
     }
 
-    print('✅ Uploaded $successCount payments successfully');
+    print(
+        '✅ Upload complete: $successCount uploaded, $duplicateCount duplicates removed');
   }
 
-  /// Download remote payment changes with conflict resolution
+  /// ✨ ENHANCED: Download remote payments with duplicate prevention
+  /// REPLACE your existing _downloadRemotePayments method with this one:
   Future<void> _downloadRemotePayments(Database db, String userId) async {
-    print('📥 Downloading remote payments...');
+    print('📥 Downloading remote payments with duplicate prevention...');
 
     try {
       final query = _firestore!
           .collection('payments')
           .where('user_id', isEqualTo: userId)
-          .orderBy('payment_date',
-              descending: false); // Order by payment date for proper sequencing
+          .orderBy('payment_date', descending: false);
 
       final snapshot = await query.get();
 
@@ -294,38 +374,381 @@ class EnhancedPaymentSyncService extends GetxService {
 
       print('📥 Found ${snapshot.docs.length} remote payments');
 
-      // Group payments by invoice for better handling
-      final Map<int, List<QueryDocumentSnapshot>> paymentsByInvoice = {};
+      int insertedCount = 0;
+      int updatedCount = 0;
+      int skippedCount = 0;
+      int duplicateCount = 0;
 
       for (final doc in snapshot.docs) {
-        final data = doc.data() as Map<String, dynamic>;
-        final invoiceId = data['invoice_id'] as int;
+        try {
+          final remoteData = doc.data() as Map<String, dynamic>;
+          final paymentId = int.parse(doc.id);
 
-        if (!paymentsByInvoice.containsKey(invoiceId)) {
-          paymentsByInvoice[invoiceId] = [];
-        }
-        paymentsByInvoice[invoiceId]!.add(doc);
-      }
+          // Convert to local format
+          final localData = _convertFirebaseToPayment(remoteData);
+          localData['firebase_synced'] = 1;
 
-      // Process payments by invoice to maintain proper sequence
-      for (final invoiceId in paymentsByInvoice.keys) {
-        final paymentsForInvoice = paymentsByInvoice[invoiceId]!;
-        print(
-            '📥 Processing ${paymentsForInvoice.length} payments for invoice $invoiceId');
+          // ✅ Check if payment exists locally by ID
+          final existingById = await db.query(
+            'payments',
+            where: 'id = ?',
+            whereArgs: [paymentId],
+            limit: 1,
+          );
 
-        for (final doc in paymentsForInvoice) {
-          try {
-            await _mergeRemotePayment(db, doc);
-          } catch (e) {
-            print('❌ Failed to merge payment ${doc.id}: $e');
+          if (existingById.isNotEmpty) {
+            // Payment exists - check if we need to update
+            final existing = existingById.first;
+            final localModified = existing['last_modified'] as int? ?? 0;
+            final remoteModified = localData['last_modified'] as int? ?? 0;
+
+            if (remoteModified > localModified) {
+              await db.update(
+                'payments',
+                {
+                  'firebase_synced': 1,
+                  'notes': localData['notes'],
+                  'reference': localData['reference'],
+                  'last_modified': remoteModified,
+                },
+                where: 'id = ?',
+                whereArgs: [paymentId],
+              );
+              print('📥 Updated payment $paymentId');
+              updatedCount++;
+            } else {
+              print('⏭️ Skipped payment $paymentId (local is newer)');
+              skippedCount++;
+            }
+            continue;
           }
+
+          // ✅ Check for duplicates by reference (similar to users duplicate checking)
+          final reference = localData['reference'] as String?;
+          if (reference != null &&
+              reference.isNotEmpty &&
+              localData['method'] != 'cash') {
+            final existingByReference = await db.query(
+              'payments',
+              where: 'reference = ?',
+              whereArgs: [reference],
+              limit: 1,
+            );
+
+            if (existingByReference.isNotEmpty) {
+              final existing = existingByReference.first;
+              final existingAmount = (existing['amount'] as num).toDouble();
+              final newAmount = (localData['amount'] as num).toDouble();
+              final existingInvoice = existing['invoiceId'] as int;
+              final newInvoice = localData['invoiceId'] as int;
+
+              if ((existingAmount - newAmount).abs() < 0.01 &&
+                  existingInvoice == newInvoice) {
+                print('🚫 Duplicate payment detected by reference: $reference');
+                duplicateCount++;
+                continue;
+              }
+            }
+          }
+
+          // ✅ Check for duplicates by invoice+amount+date (additional safety)
+          final invoiceId = localData['invoiceId'] as int;
+          final amount = (localData['amount'] as num).toDouble();
+          final paymentDate = localData['paymentDate'] as int;
+          final method = localData['method'] as String;
+
+          // Check within 1 hour tolerance
+          final tolerance = 60 * 60 * 1000; // 1 hour in milliseconds
+          final startTime = paymentDate - tolerance;
+          final endTime = paymentDate + tolerance;
+
+          final existingByDetails = await db.query(
+            'payments',
+            where: '''
+              invoiceId = ? 
+              AND ABS(amount - ?) < 0.01 
+              AND method = ?
+              AND paymentDate BETWEEN ? AND ?
+            ''',
+            whereArgs: [invoiceId, amount, method, startTime, endTime],
+            limit: 1,
+          );
+
+          if (existingByDetails.isNotEmpty) {
+            print('🚫 Duplicate payment detected by details');
+            print(
+                '   Invoice: $invoiceId, Amount: \$${amount.toStringAsFixed(2)}, Method: $method');
+            duplicateCount++;
+            continue;
+          }
+
+          // ✅ Safe to insert new payment
+          await db.insert('payments', localData);
+          print(
+              '📥 Inserted new payment $paymentId for invoice ${localData['invoiceId']}');
+          insertedCount++;
+        } catch (e) {
+          print('❌ Failed to merge payment ${doc.id}: $e');
+          skippedCount++;
         }
       }
 
-      print('✅ Downloaded payment changes successfully');
+      print(
+          '✅ Download complete: $insertedCount inserted, $updatedCount updated, $skippedCount skipped, $duplicateCount duplicates prevented');
     } catch (e) {
       print('❌ Failed to download payments: $e');
       throw e;
+    }
+  }
+
+  /// ✨ NEW: Helper method to convert Firebase payment data to local format
+  Map<String, dynamic> _convertFirebaseToPayment(
+      Map<String, dynamic> firebaseData) {
+    final localData = Map<String, dynamic>.from(firebaseData);
+
+    // Handle field name conversions
+    if (localData.containsKey('invoice_id')) {
+      localData['invoiceId'] = localData['invoice_id'];
+      localData.remove('invoice_id');
+    }
+
+    if (localData.containsKey('payment_date')) {
+      if (localData['payment_date'] is Timestamp) {
+        localData['paymentDate'] =
+            (localData['payment_date'] as Timestamp).millisecondsSinceEpoch;
+      } else if (localData['payment_date'] is int) {
+        localData['paymentDate'] = localData['payment_date'];
+      }
+      localData.remove('payment_date');
+    }
+
+    if (localData.containsKey('user_id')) {
+      localData['userId'] = localData['user_id'];
+      localData.remove('user_id');
+    }
+
+    // Ensure required fields have default values
+    localData['firebase_synced'] = 1;
+    localData['last_modified'] ??= DateTime.now().millisecondsSinceEpoch;
+
+    return localData;
+  }
+
+  /// ✨ NEW: Helper method to convert local payment data to Firebase format
+  Map<String, dynamic> _convertPaymentToFirebase(
+      Map<String, dynamic> paymentData, String userId) {
+    final firebaseData = Map<String, dynamic>.from(paymentData);
+
+    // Convert field names
+    if (firebaseData.containsKey('invoiceId')) {
+      firebaseData['invoice_id'] = firebaseData['invoiceId'];
+      firebaseData.remove('invoiceId');
+    }
+
+    if (firebaseData.containsKey('paymentDate')) {
+      final paymentDate = firebaseData['paymentDate'] as int;
+      firebaseData['payment_date'] =
+          Timestamp.fromMillisecondsSinceEpoch(paymentDate);
+      firebaseData.remove('paymentDate');
+    }
+
+    if (firebaseData.containsKey('userId')) {
+      firebaseData.remove('userId'); // Don't need local user ID in Firebase
+    }
+
+    // Add Firebase-specific fields
+    firebaseData['user_id'] = userId;
+    firebaseData['created_at'] =
+        firebaseData['payment_date'] ?? Timestamp.now();
+    firebaseData['last_modified'] = Timestamp.fromMillisecondsSinceEpoch(
+        firebaseData['last_modified'] ?? DateTime.now().millisecondsSinceEpoch);
+
+    // Remove local-only fields
+    firebaseData.remove('firebase_synced');
+    firebaseData.remove('id'); // Don't include local ID in document data
+
+    return firebaseData;
+  }
+
+  /// ✨ ENHANCED: Emergency payment sync with duplicate cleanup
+  /// REPLACE your existing emergencyPaymentSync method with this one:
+  Future<void> emergencyPaymentSync() async {
+    print('🚨 === EMERGENCY PAYMENT SYNC WITH DUPLICATE CLEANUP ===');
+
+    try {
+      // Step 0: Clean existing duplicates first
+      await _cleanExistingPaymentDuplicates();
+
+      // Step 1: Validate current state
+      await validatePaymentIntegrity();
+
+      // Step 2: Recalculate all invoice balances
+      await _recalculateInvoiceBalances();
+
+      // Step 3: Full sync with duplicate prevention
+      await syncInvoicesAndPayments();
+
+      // Step 4: Re-validate
+      await validatePaymentIntegrity();
+
+      print('✅ Emergency payment sync with duplicate cleanup completed');
+    } catch (e) {
+      print('❌ Emergency payment sync failed: $e');
+      throw e;
+    }
+  }
+
+  /// ✨ NEW: Clean existing payment duplicates (internal method)
+  Future<void> _cleanExistingPaymentDuplicates() async {
+    print('🧹 Cleaning existing payment duplicates...');
+
+    final db = await DatabaseHelper.instance.database;
+
+    try {
+      // Use the same logic as PaymentSyncIntegration
+      final integration = PaymentSyncIntegration.instance;
+      await integration.fixDuplicatePaymentsNow();
+    } catch (e) {
+      print('⚠️ Error during duplicate cleanup: $e');
+      // Continue with sync even if cleanup fails
+    }
+  }
+
+  /// ✨ NEW: Check if payment would be duplicate before inserting
+  Future<bool> wouldBePaymentDuplicate(Map<String, dynamic> paymentData) async {
+    final db = await DatabaseHelper.instance.database;
+
+    try {
+      final reference = paymentData['reference'] as String?;
+      final invoiceId = paymentData['invoiceId'] as int;
+      final amount = (paymentData['amount'] as num).toDouble();
+      final method = paymentData['method'] as String;
+      final paymentDate = paymentData['paymentDate'] as int? ??
+          DateTime.now().millisecondsSinceEpoch;
+
+      // Check 1: Reference-based duplicate (for non-cash payments)
+      if (reference != null && reference.isNotEmpty && method != 'cash') {
+        final existingByReference = await db.query(
+          'payments',
+          where: 'reference = ?',
+          whereArgs: [reference],
+          limit: 1,
+        );
+
+        if (existingByReference.isNotEmpty) {
+          print('🚫 Would be duplicate: reference already exists: $reference');
+          return true;
+        }
+      }
+
+      // Check 2: Invoice + Amount + Date + Method combination
+      final tolerance = 60 * 60 * 1000; // 1 hour in milliseconds
+      final startTime = paymentDate - tolerance;
+      final endTime = paymentDate + tolerance;
+
+      final existingByDetails = await db.query(
+        'payments',
+        where: '''
+          invoiceId = ? 
+          AND ABS(amount - ?) < 0.01 
+          AND method = ?
+          AND paymentDate BETWEEN ? AND ?
+        ''',
+        whereArgs: [invoiceId, amount, method, startTime, endTime],
+        limit: 1,
+      );
+
+      if (existingByDetails.isNotEmpty) {
+        print(
+            '🚫 Would be duplicate: same invoice+amount+date+method combination exists');
+        return true;
+      }
+
+      return false;
+    } catch (e) {
+      print('⚠️ Error checking if payment would be duplicate: $e');
+      return false; // If check fails, allow the payment (safer)
+    }
+  }
+
+  /// ✨ NEW: Get comprehensive payment sync status
+  Future<Map<String, dynamic>> getPaymentSyncStatus() async {
+    final db = await DatabaseHelper.instance.database;
+
+    try {
+      // Count total payments
+      final totalPayments = await db.query('payments');
+
+      // Count synced vs unsynced
+      final synced = await db.query('payments', where: 'firebase_synced = 1');
+      final unsynced = await db.query('payments',
+          where: 'firebase_synced = 0 OR firebase_synced IS NULL');
+
+      // Count potential reference duplicates
+      final referenceDuplicates = await db.rawQuery('''
+        SELECT COUNT(*) as count
+        FROM (
+          SELECT reference
+          FROM payments 
+          WHERE reference IS NOT NULL 
+          AND reference != '' 
+          AND method != 'cash'
+          GROUP BY reference 
+          HAVING COUNT(*) > 1
+        )
+      ''');
+
+      // Count potential detail duplicates
+      final detailDuplicates = await db.rawQuery('''
+        SELECT COUNT(*) as count
+        FROM (
+          SELECT 
+            invoiceId,
+            ROUND(amount, 2),
+            method,
+            DATE(datetime(paymentDate/1000, 'unixepoch'))
+          FROM payments 
+          GROUP BY 
+            invoiceId, 
+            ROUND(amount, 2), 
+            method,
+            DATE(datetime(paymentDate/1000, 'unixepoch'))
+          HAVING COUNT(*) > 1
+        )
+      ''');
+
+      // Check invoice balance integrity
+      final invoiceIntegrityIssues = await db.rawQuery('''
+        SELECT COUNT(*) as count
+        FROM (
+          SELECT 
+            i.id,
+            i.amountpaid as invoice_amount_paid,
+            COALESCE(SUM(p.amount), 0) as actual_payments_total
+          FROM invoices i
+          LEFT JOIN payments p ON i.id = p.invoiceId
+          GROUP BY i.id, i.amountpaid
+          HAVING ABS(i.amountpaid - COALESCE(SUM(p.amount), 0)) > 0.01
+        )
+      ''');
+
+      return {
+        'total_payments': totalPayments.length,
+        'synced_payments': synced.length,
+        'unsynced_payments': unsynced.length,
+        'sync_percentage': totalPayments.isEmpty
+            ? 0
+            : (synced.length / totalPayments.length * 100).round(),
+        'reference_duplicates': referenceDuplicates.first['count'] ?? 0,
+        'detail_duplicates': detailDuplicates.first['count'] ?? 0,
+        'invoice_integrity_issues': invoiceIntegrityIssues.first['count'] ?? 0,
+        'last_check': DateTime.now().toIso8601String(),
+      };
+    } catch (e) {
+      return {
+        'error': 'Failed to get sync status: $e',
+        'last_check': DateTime.now().toIso8601String(),
+      };
     }
   }
 
@@ -531,68 +954,6 @@ class EnhancedPaymentSyncService extends GetxService {
     return data;
   }
 
-  /// Convert local payment data to Firebase format
-  Map<String, dynamic> _convertPaymentToFirebase(
-      Map<String, dynamic> payment, String userId) {
-    final data = Map<String, dynamic>.from(payment);
-
-    // Remove local-only fields
-    data.remove('firebase_synced');
-
-    // Add Firebase-specific fields
-    data['user_id'] = userId;
-    data['sync_timestamp'] = FieldValue.serverTimestamp();
-
-    // Rename fields to match Firebase schema
-    if (data.containsKey('invoiceId')) {
-      data['invoice_id'] = data['invoiceId'];
-      data.remove('invoiceId');
-    }
-
-    if (data.containsKey('created_at')) {
-      data['payment_date'] = data['created_at'];
-      data.remove('created_at');
-    }
-
-    // Convert timestamps
-    if (data['payment_date'] is String) {
-      try {
-        data['payment_date'] =
-            Timestamp.fromDate(DateTime.parse(data['payment_date']));
-      } catch (e) {
-        data['payment_date'] = FieldValue.serverTimestamp();
-      }
-    }
-
-    return data;
-  }
-
-  /// Convert Firebase payment data to local format
-  Map<String, dynamic> _convertFirebaseToPayment(
-      Map<String, dynamic> firebase) {
-    final data = Map<String, dynamic>.from(firebase);
-
-    // Remove Firebase-specific fields
-    data.remove('user_id');
-    data.remove('sync_timestamp');
-
-    // Rename fields back to local schema
-    if (data.containsKey('invoice_id')) {
-      data['invoiceId'] = data['invoice_id'];
-      data.remove('invoice_id');
-    }
-
-    if (data.containsKey('payment_date')) {
-      if (data['payment_date'] is Timestamp) {
-        data['created_at'] =
-            (data['payment_date'] as Timestamp).toDate().toIso8601String();
-      }
-      data.remove('payment_date');
-    }
-
-    return data;
-  }
-
   /// Validate payment data integrity
   Future<void> validatePaymentIntegrity() async {
     print('🔍 Validating payment data integrity...');
@@ -649,28 +1010,6 @@ class EnhancedPaymentSyncService extends GetxService {
   }
 
   /// Emergency fix for payment sync issues
-  Future<void> emergencyPaymentSync() async {
-    print('🚨 === EMERGENCY PAYMENT SYNC ===');
-
-    try {
-      // Step 1: Validate current state
-      await validatePaymentIntegrity();
-
-      // Step 2: Recalculate all invoice balances
-      await _recalculateInvoiceBalances();
-
-      // Step 3: Full sync
-      await syncInvoicesAndPayments();
-
-      // Step 4: Re-validate
-      await validatePaymentIntegrity();
-
-      print('✅ Emergency payment sync completed');
-    } catch (e) {
-      print('❌ Emergency payment sync failed: $e');
-      throw e;
-    }
-  }
 
   /// Enhanced method to sync payments with cloud receipts
   Future<void> syncPaymentsWithCloudReceipts() async {

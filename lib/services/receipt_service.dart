@@ -17,7 +17,6 @@ import '../controllers/settings_controller.dart';
 import '../services/database_helper.dart';
 import '../controllers/billing_controller.dart';
 import '../controllers/user_controller.dart';
-import '../controllers/auth_controller.dart';
 import 'package:get/get.dart';
 
 class ReceiptService {

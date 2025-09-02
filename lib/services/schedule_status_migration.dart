@@ -1,6 +1,4 @@
-// lib/services/schedule_status_migration.dart
 import 'package:driving/constant/schedule_status.dart';
-import 'package:sqflite_common/sqlite_api.dart';
 import 'database_helper.dart';
 
 class ScheduleStatusMigration {

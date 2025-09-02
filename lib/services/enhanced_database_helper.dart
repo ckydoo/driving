@@ -7,7 +7,6 @@ import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/controllers/utils/timestamp_converter.dart';
 import 'package:driving/services/database_helper.dart';
 import 'package:driving/services/fixed_local_first_sync_service.dart';
-import 'package:driving/services/fixed_local_first_sync_service.dart';
 import 'package:driving/services/schedule_data_validator.dart';
 import 'package:get/get.dart';
 import 'package:get/get_core/src/get_main.dart';

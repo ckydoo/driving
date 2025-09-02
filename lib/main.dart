@@ -8,6 +8,8 @@ import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/controllers/pin_controller.dart';
 import 'package:driving/services/database_helper.dart';
 import 'package:driving/services/database_migration.dart';
+import 'package:driving/services/enhanced_payment_sync_service.dart';
+import 'package:driving/services/payment_sync_integration.dart';
 import 'package:driving/services/receipt_service.dart';
 import 'package:driving/services/school_config_service.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -76,7 +78,9 @@ Future<void> _initializeCoreServices() async {
   } catch (e) {
     print('❌ Core services initialization failed: $e');
     print('🚨 Attempting emergency initialization...');
-
+    Get.put(EnhancedPaymentSyncService(), permanent: true);
+    Get.put(PaymentSyncIntegration(), permanent: true);
+    print('Payment Service Intialized');
     // Emergency fallback - initialize critical controllers
     EmergencyBindings.initializeMissingControllers();
   }

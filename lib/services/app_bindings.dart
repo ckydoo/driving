@@ -13,9 +13,11 @@ import 'package:driving/controllers/user_controller.dart';
 import 'package:driving/services/consistency_checker_service.dart';
 import 'package:driving/services/database_helper.dart';
 import 'package:driving/services/database_migration.dart';
+import 'package:driving/services/enhanced_payment_sync_service.dart';
 import 'package:driving/services/firebase_school_service.dart';
 import 'package:driving/services/fixed_local_first_sync_service.dart';
 import 'package:driving/services/lesson_counting_service.dart';
+import 'package:driving/services/payment_sync_integration.dart';
 import 'package:driving/services/school_config_service.dart';
 import 'package:driving/services/school_management_service.dart';
 import 'package:driving/services/subscription_service.dart';
@@ -311,7 +313,9 @@ class EnhancedAppBindings extends Bindings {
         Get.put<AutoSyncController>(AutoSyncController(), permanent: true);
         print('✅ AutoSyncController initialized');
       }
-
+      Get.put(EnhancedPaymentSyncService(), permanent: true);
+      Get.put(PaymentSyncIntegration(), permanent: true);
+      print('Sync Payment integration');
       // Fleet Controller
       if (!Get.isRegistered<FleetController>()) {
         Get.put<FleetController>(FleetController(), permanent: true);

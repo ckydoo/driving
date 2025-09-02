@@ -1,10 +1,6 @@
-// Enhanced Automatic Sync System with User Controls
-// Add this to your firebase_sync_service.dart or create a new controller
-
 import 'dart:async';
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/services/fixed_local_first_sync_service.dart';
-import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';

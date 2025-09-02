@@ -1013,54 +1013,111 @@ class FixedLocalFirstSyncService extends GetxService {
   }
 
   Map<String, dynamic> _convertSqliteToFirestore(Map<String, dynamic> data) {
+    print('🔄 Converting SQLite to Firestore: $data');
+
     final result = Map<String, dynamic>.from(data);
 
-    // Remove SQLite-specific fields
+    // Remove SQLite-specific fields that shouldn't go to Firebase
     result.remove('firebase_synced');
-    result.remove('id');
+    result.remove('id'); // Remove because we use this as document ID
     result.remove('firebase_doc_id');
 
-    // Convert timestamps to Firestore Timestamp objects
-    if (result['created_at'] is String) {
-      try {
-        result['created_at'] =
-            Timestamp.fromDate(DateTime.parse(result['created_at']));
-      } catch (e) {
-        result['created_at'] = Timestamp.now();
-      }
-    }
-
-    if (result['last_modified'] is int) {
-      result['last_modified'] =
-          Timestamp.fromMillisecondsSinceEpoch(result['last_modified']);
-    } else {
-      result['last_modified'] = FieldValue.serverTimestamp();
-    }
-
-    // Convert other timestamp fields
+    // ✅ COMPLETE TIMESTAMP CONVERSION - Handle ALL timestamp fields
     final timestampFields = [
-      'due_date',
+      'created_at',
+      'last_modified',
+      'updated_at',
       'payment_date',
-      'start',
-      'end',
-      'date_of_birth'
+      'due_date',
+      'start', // ✅ CRITICAL: Added for schedules
+      'end', // ✅ CRITICAL: Added for schedules
+      'date_of_birth',
+      'last_login',
+      'recurrence_end_date',
+      'sent_at',
+      'verified_at'
     ];
+
     for (String field in timestampFields) {
-      if (result[field] is String) {
+      if (result.containsKey(field) && result[field] != null) {
+        final value = result[field];
+
         try {
-          result[field] = Timestamp.fromDate(DateTime.parse(result[field]));
+          if (value is int) {
+            // Convert SQLite integer timestamp to Firestore Timestamp
+            result[field] = Timestamp.fromMillisecondsSinceEpoch(value);
+            print('✅ Converted $field: $value (int) → Firestore Timestamp');
+          } else if (value is String) {
+            if (value.contains('T') || value.contains('-')) {
+              // Handle ISO 8601 or date strings
+              final dateTime = DateTime.parse(value);
+              result[field] = Timestamp.fromDate(dateTime);
+              print(
+                  '✅ Converted $field: $value (string) → Firestore Timestamp');
+            } else {
+              // Try parsing as timestamp string
+              final timestamp = int.tryParse(value);
+              if (timestamp != null) {
+                result[field] = Timestamp.fromMillisecondsSinceEpoch(timestamp);
+                print(
+                    '✅ Converted $field: $value (timestamp string) → Firestore Timestamp');
+              } else {
+                print(
+                    '⚠️ Could not parse timestamp $field: $value - removing field');
+                result.remove(field);
+              }
+            }
+          } else if (value is DateTime) {
+            result[field] = Timestamp.fromDate(value);
+            print('✅ Converted $field: DateTime → Firestore Timestamp');
+          } else {
+            print(
+                '⚠️ Unknown timestamp type for $field ($value): ${value.runtimeType} - removing field');
+            result.remove(field);
+          }
         } catch (e) {
-          result.remove(field); // Remove if can't convert
+          print(
+              '❌ Error converting timestamp field $field ($value): $e - removing field');
+          result.remove(field); // Remove problematic field rather than crash
         }
       }
     }
 
-    // Ensure last_modified is set
-    result['last_modified'] = FieldValue.serverTimestamp();
+    // ✅ BOOLEAN CONVERSION - Convert SQLite integers to proper Firestore booleans
+    final booleanFields = [
+      'attended',
+      'is_recurring',
+      'deleted',
+      'firebase_synced',
+      'isPublic',
+      'auto_renew'
+    ];
+
+    for (String field in booleanFields) {
+      if (result.containsKey(field) && result[field] != null) {
+        final value = result[field];
+        if (value is int) {
+          result[field] = value == 1;
+          print('✅ Converted boolean $field: $value → ${result[field]}');
+        }
+        // If it's already a boolean, leave it as is
+      }
+    }
+
+    // ✅ ENSURE REQUIRED FIRESTORE FIELDS
+    result['last_modified'] ??= FieldValue.serverTimestamp();
+
+    // Add device tracking for sync resolution
     result['last_modified_device'] = _currentDeviceId;
 
-    // Remove null values
+    // Remove any remaining null values that might cause Firestore issues
     result.removeWhere((key, value) => value == null);
+
+    print('✅ Final Firestore data for upload:');
+    print('   start: ${result['start']} (${result['start']?.runtimeType})');
+    print('   end: ${result['end']} (${result['end']?.runtimeType})');
+    print('   Full data: $result');
+
     return result;
   }
 

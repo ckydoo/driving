@@ -1,5 +1,3 @@
-import 'package:driving/services/database_helper.dart';
-
 class ScheduleDataValidator {
   /// Validates schedule data before inserting to prevent NOT NULL constraint errors
   static Map<String, dynamic> validateScheduleData(
