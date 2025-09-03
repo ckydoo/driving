@@ -1035,110 +1035,65 @@ class FixedLocalFirstSyncService extends GetxService {
   }
 
   Map<String, dynamic> _convertSqliteToFirestore(Map<String, dynamic> data) {
-    print('🔄 Converting SQLite to Firestore: $data');
+    print('🔄 Converting SQLite to Firestore: ${data['id']}');
 
     final result = Map<String, dynamic>.from(data);
 
-    // Remove SQLite-specific fields that shouldn't go to Firebase
+    // Remove SQLite-specific fields
     result.remove('firebase_synced');
-    result.remove('id'); // Remove because we use this as document ID
+    result.remove('id'); // Use as document ID
     result.remove('firebase_doc_id');
 
-    // ✅ COMPLETE TIMESTAMP CONVERSION - Handle ALL timestamp fields
-    final timestampFields = [
-      'created_at',
-      'last_modified',
-      'updated_at',
-      'payment_date',
-      'due_date',
-      'start', // ✅ CRITICAL: Added for schedules
-      'end', // ✅ CRITICAL: Added for schedules
-      'date_of_birth',
-      'last_login',
-      'recurrence_end_date',
-      'sent_at',
-      'verified_at'
+    // This ensures consistent timestamps across all devices
+    result['last_modified'] = FieldValue.serverTimestamp();
+
+    // Don't convert local timestamps - let Firebase set them
+    result.remove('created_at'); // Will be set by Firebase
+    result.remove('updated_at'); // Will be set by Firebase
+
+    // Convert other timestamp fields that should preserve original time
+    final preserveTimestampFields = [
+      'start', // Schedule start time
+      'end', // Schedule end time
+      'payment_date', // When payment was made
+      'due_date', // When payment is due
+      'date_of_birth', // User's birthday
+      'scheduleDate', // Schedule date
     ];
 
-    for (String field in timestampFields) {
+    for (String field in preserveTimestampFields) {
       if (result.containsKey(field) && result[field] != null) {
         final value = result[field];
 
         try {
-          if (value is int) {
-            // Convert SQLite integer timestamp to Firestore Timestamp
+          if (value is int && value > 0) {
             result[field] = Timestamp.fromMillisecondsSinceEpoch(value);
-            print('✅ Converted $field: $value (int) → Firestore Timestamp');
-          } else if (value is String) {
+          } else if (value is String && value.isNotEmpty) {
             if (value.contains('T') || value.contains('-')) {
-              // Handle ISO 8601 or date strings
-              final dateTime = DateTime.parse(value);
-              result[field] = Timestamp.fromDate(dateTime);
-              print(
-                  '✅ Converted $field: $value (string) → Firestore Timestamp');
-            } else {
-              // Try parsing as timestamp string
-              final timestamp = int.tryParse(value);
-              if (timestamp != null) {
-                result[field] = Timestamp.fromMillisecondsSinceEpoch(timestamp);
-                print(
-                    '✅ Converted $field: $value (timestamp string) → Firestore Timestamp');
-              } else {
-                print(
-                    '⚠️ Could not parse timestamp $field: $value - removing field');
-                result.remove(field);
-              }
+              result[field] = Timestamp.fromDate(DateTime.parse(value));
             }
-          } else if (value is DateTime) {
-            result[field] = Timestamp.fromDate(value);
-            print('✅ Converted $field: DateTime → Firestore Timestamp');
-          } else {
-            print(
-                '⚠️ Unknown timestamp type for $field ($value): ${value.runtimeType} - removing field');
-            result.remove(field);
           }
         } catch (e) {
-          print(
-              '❌ Error converting timestamp field $field ($value): $e - removing field');
-          result.remove(field); // Remove problematic field rather than crash
+          print('⚠️ Error converting $field: $e');
+          result.remove(field); // Remove problematic timestamps
         }
       }
     }
 
-    // ✅ BOOLEAN CONVERSION - Convert SQLite integers to proper Firestore booleans
-    final booleanFields = [
-      'attended',
-      'is_recurring',
-      'deleted',
-      'firebase_synced',
-      'isPublic',
-      'auto_renew'
-    ];
-
+    // Convert boolean fields properly
+    final booleanFields = ['attended', 'is_recurring', 'deleted', 'isActive'];
     for (String field in booleanFields) {
       if (result.containsKey(field) && result[field] != null) {
         final value = result[field];
         if (value is int) {
           result[field] = value == 1;
-          print('✅ Converted boolean $field: $value → ${result[field]}');
         }
-        // If it's already a boolean, leave it as is
       }
     }
 
-    // ✅ ENSURE REQUIRED FIRESTORE FIELDS
-    result['last_modified'] ??= FieldValue.serverTimestamp();
-
-    // Add device tracking for sync resolution
-    result['last_modified_device'] = _currentDeviceId;
-
-    // Remove any remaining null values that might cause Firestore issues
-    result.removeWhere((key, value) => value == null);
-
-    print('✅ Final Firestore data for upload:');
-    print('   start: ${result['start']} (${result['start']?.runtimeType})');
-    print('   end: ${result['end']} (${result['end']?.runtimeType})');
-    print('   Full data: $result');
+    // Add metadata for tracking
+    result['device_id'] = _currentDeviceId;
+    result['sync_version'] = 2; // Track sync version
 
     return result;
   }
@@ -1950,6 +1905,220 @@ class FixedLocalFirstSyncService extends GetxService {
   static Future<String> _getCurrentDeviceId() async {
     // You can implement this based on your device ID logic
     return 'device_${DateTime.now().millisecondsSinceEpoch}';
+  }
+
+  Future<void> fixDeviceBFleetSync() async {
+    print('🚨 === FIXING DEVICE B FLEET SYNC ===');
+
+    try {
+      print('Problem identified:');
+      print('- Firebase has fleet records from ~22:10');
+      print('- Device B last pulled at 23:01 (newer!)');
+      print('- Device B has 0 local fleet records');
+      print('- Query finds 0 new records because last_pull is newer');
+      print('');
+
+      // SOLUTION: Reset Device B's fleet sync state to 0
+      print('🔧 Step 1: Resetting Device B fleet sync state...');
+      final prefs = await SharedPreferences.getInstance();
+
+      // Reset fleet last pull time to 0 (beginning of time)
+      await prefs.setInt('last_pull_fleet', 0);
+      print('✅ Reset last_pull_fleet to 0');
+
+      // SOLUTION: Force download all fleet records
+      print('🔧 Step 2: Force downloading all fleet records...');
+      await forceDownloadAllFleetRecords();
+
+      // SOLUTION: Verify the fix worked
+      print('🔧 Step 3: Verifying fix...');
+      await verifyDeviceBFleetFix();
+
+      print('✅ === DEVICE B FLEET SYNC FIXED ===');
+    } catch (e) {
+      print('❌ Device B fleet sync fix failed: $e');
+      rethrow;
+    }
+  }
+
+// Force download all fleet records regardless of timestamps
+  Future<void> forceDownloadAllFleetRecords() async {
+    final schoolId = await _getSchoolId();
+    if (schoolId.isEmpty) throw Exception('School ID not configured');
+
+    try {
+      // Get ALL fleet records from Firebase (ignore timestamps completely)
+      final allFleetSnapshot = await _firestore!
+          .collection('schools')
+          .doc(schoolId)
+          .collection('fleet')
+          .get();
+
+      print(
+          '📥 Found ${allFleetSnapshot.docs.length} fleet records in Firebase');
+
+      if (allFleetSnapshot.docs.isEmpty) {
+        print('⚠️ No fleet records found in Firebase');
+        return;
+      }
+
+      final db = await DatabaseHelper.instance.database;
+      int inserted = 0;
+      int errors = 0;
+
+      for (final doc in allFleetSnapshot.docs) {
+        try {
+          final firebaseData = doc.data();
+
+          // Skip deleted records
+          if (firebaseData['deleted'] == true) {
+            print('⏭️ Skipping deleted fleet: ${firebaseData['carplate']}');
+            continue;
+          }
+
+          final carplate = firebaseData['carplate'];
+          final docId = doc.id;
+
+          print('🔄 Processing fleet: $carplate (Doc ID: $docId)');
+
+          // Convert Firebase data to local format
+          final localData = _convertFirestoreToSqlite(firebaseData);
+
+          // Ensure we have the correct local ID
+          final localId = int.tryParse(docId);
+          if (localId == null) {
+            print('❌ Invalid document ID: $docId');
+            errors++;
+            continue;
+          }
+
+          localData['id'] = localId;
+          localData['firebase_synced'] = 1; // Mark as synced
+
+          // Check if record already exists locally
+          final existing =
+              await db.query('fleet', where: 'id = ?', whereArgs: [localId]);
+
+          if (existing.isEmpty) {
+            // Insert new record
+            await db.insert('fleet', localData,
+                conflictAlgorithm: ConflictAlgorithm.replace);
+            print('✅ INSERTED fleet: $carplate (ID: $localId)');
+            inserted++;
+          } else {
+            // Update existing record
+            await db.update('fleet', localData,
+                where: 'id = ?', whereArgs: [localId]);
+            print('🔄 UPDATED fleet: $carplate (ID: $localId)');
+          }
+        } catch (e) {
+          print('❌ Error processing fleet record ${doc.id}: $e');
+          errors++;
+        }
+      }
+
+      print('✅ FORCE DOWNLOAD COMPLETE:');
+      print('   Total processed: ${allFleetSnapshot.docs.length}');
+      print('   Successfully inserted/updated: $inserted');
+      print('   Errors: $errors');
+
+      // Update the last pull timestamp to now
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(
+          'last_pull_fleet', DateTime.now().millisecondsSinceEpoch);
+      print('✅ Updated last_pull_fleet timestamp');
+    } catch (e) {
+      print('❌ Force download failed: $e');
+      rethrow;
+    }
+  }
+
+// Verify the fix worked
+  Future<void> verifyDeviceBFleetFix() async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+
+      // Count local fleet records
+      final localFleet =
+          await db.query('fleet', where: 'deleted IS NULL OR deleted = 0');
+      print('📊 Device B now has ${localFleet.length} local fleet records:');
+
+      for (var fleet in localFleet) {
+        print(
+            '   🚗 ${fleet['carplate']} (ID: ${fleet['id']}, Synced: ${fleet['firebase_synced']})');
+      }
+
+      // Check sync status
+      final syncedCount = await db.rawQuery('''
+      SELECT COUNT(*) as count FROM fleet 
+      WHERE firebase_synced = 1 AND (deleted IS NULL OR deleted = 0)
+    ''');
+
+      final totalCount = localFleet.length;
+      final syncedTotal = syncedCount.first['count'] as int;
+
+      print('📊 SYNC STATUS:');
+      print('   Total fleet records: $totalCount');
+      print('   Synced fleet records: $syncedTotal');
+
+      if (totalCount == syncedTotal && totalCount > 0) {
+        print('✅ SUCCESS: All fleet records are synced!');
+      } else if (totalCount == 0) {
+        print('❌ FAILED: Still no fleet records on Device B');
+      } else {
+        print('⚠️ PARTIAL: ${totalCount - syncedTotal} records not synced');
+      }
+
+      // Check last pull timestamp
+      final prefs = await SharedPreferences.getInstance();
+      final newLastPull = prefs.getInt('last_pull_fleet') ?? 0;
+      final lastPullDate = DateTime.fromMillisecondsSinceEpoch(newLastPull);
+      print('🕐 New last_pull_fleet timestamp: $lastPullDate');
+    } catch (e) {
+      print('❌ Verification failed: $e');
+    }
+  }
+
+// ONE-LINE FIX: Run this method on Device B
+  Future<void> quickFixDeviceB() async {
+    print('⚡ === QUICK FIX FOR DEVICE B ===');
+
+    // Reset fleet sync and download everything
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('last_pull_fleet', 0);
+
+    // Force sync
+    await syncWithFirebase();
+
+    print('✅ Quick fix completed - check if fleet records appeared');
+  }
+
+// PREVENTION: Add this to prevent future sync gaps
+  Future<void> validateSyncIntegrity() async {
+    print('🔍 === VALIDATING SYNC INTEGRITY ===');
+
+    final db = await DatabaseHelper.instance.database;
+
+    for (String table in ['fleet', 'schedules', 'users', 'courses']) {
+      final localCount = await db.rawQuery(
+          'SELECT COUNT(*) as count FROM $table WHERE deleted IS NULL OR deleted = 0');
+      final localTotal = localCount.first['count'] as int;
+
+      final prefs = await SharedPreferences.getInstance();
+      final lastPullTime = prefs.getInt('last_pull_$table') ?? 0;
+
+      print('📊 $table:');
+      print('   Local records: $localTotal');
+      print(
+          '   Last pull: ${DateTime.fromMillisecondsSinceEpoch(lastPullTime)}');
+
+      // If we have a recent last_pull time but 0 local records, there's a sync gap
+      if (lastPullTime > 0 && localTotal == 0) {
+        print(
+            '⚠️ SYNC GAP DETECTED in $table - last_pull is set but no local records');
+        print('💡 Consider resetting last_pull_$table to 0');
+      }
+    }
   }
 
 // Helper method to mark records for sync

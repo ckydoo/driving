@@ -538,7 +538,7 @@ class _CourseFormDialogState extends State<CourseFormDialog>
   }
 
   void _submitForm() async {
-    if (!_formKey.currentState!.validate()) {
+    if (_isLoading || !_formKey.currentState!.validate()) {
       return;
     }
 
@@ -556,36 +556,39 @@ class _CourseFormDialogState extends State<CourseFormDialog>
       await Get.find<CourseController>()
           .handleCourse(course, isUpdate: widget.course != null);
 
-      // First close the dialog
-      Get.back(result: true);
+      // ✅ CRITICAL FIX: Reset loading BEFORE navigation
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
 
-      // Then show success feedback with a slight delay to ensure dialog is closed
-      await Future.delayed(Duration(milliseconds: 100));
+      // ✅ CRITICAL FIX: Use Navigator.pop instead of Get.back
+      if (mounted) {
+        Navigator.of(context).pop(true);
+      }
+
+      // Show success message after dialog closes
+      await Future.delayed(Duration(milliseconds: 150));
 
       Get.snackbar(
         widget.course == null ? 'Course Created!' : 'Course Updated!',
-        widget.course == null
-            ? 'New course "${course.name}" has been created successfully'
-            : 'Course "${course.name}" has been updated successfully',
+        'Course "${course.name}" ${widget.course == null ? "created" : "updated"} successfully',
         backgroundColor: Colors.green.shade600,
         colorText: Colors.white,
         icon: Icon(Icons.check_circle, color: Colors.white),
         duration: Duration(seconds: 3),
-        snackPosition: SnackPosition.TOP,
-        margin: EdgeInsets.all(16),
       );
     } catch (e) {
-      setState(() => _isLoading = false);
+      // ✅ CRITICAL FIX: Always reset loading in catch block
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
 
       Get.snackbar(
         'Error',
-        'Failed to ${widget.course == null ? "create" : "update"} course: ${e.toString()}',
+        'Failed to ${widget.course == null ? "create" : "update"} course: $e',
         backgroundColor: Colors.red.shade600,
         colorText: Colors.white,
-        icon: Icon(Icons.error, color: Colors.white),
         duration: Duration(seconds: 4),
-        snackPosition: SnackPosition.TOP,
-        margin: EdgeInsets.all(16),
       );
     }
   }

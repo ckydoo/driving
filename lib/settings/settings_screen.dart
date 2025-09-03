@@ -170,6 +170,8 @@ class _SettingsScreenState extends State<SettingsScreen>
     return views;
   }
 
+  final debugFleetQuery = Get.find<FixedLocalFirstSyncService>();
+
   Widget _buildQuickActions() {
     return Wrap(
       spacing: 8,
@@ -191,7 +193,7 @@ class _SettingsScreenState extends State<SettingsScreen>
             onPressed: () {
               Get.to(() => SchoolInfoWidget());
             },
-            label: Text('Payment Fix'),
+            label: Text('About School'),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.blue,
               foregroundColor: Colors.white,
@@ -216,6 +218,17 @@ class _SettingsScreenState extends State<SettingsScreen>
             onTap: _showResetConfirmation,
             color: Colors.red[600],
           ),
+        // if (authController.hasAnyRole(['admin', 'instructor']))
+        //   ElevatedButton.icon(
+        //     onPressed: () {
+        //       debugFleetQuery.fixDeviceBFleetSync();
+        //     },
+        //     label: Text('Debug Fleet'),
+        //     style: ElevatedButton.styleFrom(
+        //       backgroundColor: Colors.blue,
+        //       foregroundColor: Colors.white,
+        //     ),
+        //   ),
       ],
     );
   }
