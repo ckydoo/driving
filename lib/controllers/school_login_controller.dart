@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 import 'package:driving/controllers/auth_controller_extension.dart';
+import 'package:driving/services/payment_sync_integration.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -296,7 +297,8 @@ class SchoolJoinController extends GetxController {
     }
   }
 
-  /// Step 4: Download and sync all school data to offline database
+  /// Enhanced _downloadSchoolDataToOffline method with duplicate prevention
+  /// Replace your existing method in SchoolLoginController with this one
   Future<void> _downloadSchoolDataToOffline(
       Map<String, dynamic> schoolData, Map<String, dynamic> userData) async {
     try {
@@ -316,33 +318,63 @@ class SchoolJoinController extends GetxController {
         'notifications',
         'attachments',
         'currencies',
-        //'settings'
       ];
 
       double progressPerCollection = 1.0 / collectionsToSync.length;
       double currentProgress = 0.0;
 
+      // ✅ NEW: Check if this is a re-join by looking for existing school data
+      final isRejoining = await _checkIfRejoiningSchool(schoolDocId);
+
+      if (isRejoining) {
+        print(
+            '🔄 DETECTED RE-JOIN: Will update existing data instead of duplicating');
+        statusMessage.value = 'Updating existing school data...';
+      } else {
+        print('🆕 NEW JOIN: Fresh download of school data');
+        statusMessage.value = 'Downloading fresh school data...';
+      }
+
       for (String collectionName in collectionsToSync) {
-        statusMessage.value = 'Downloading $collectionName...';
+        statusMessage.value = isRejoining
+            ? 'Updating $collectionName...'
+            : 'Downloading $collectionName...';
 
         try {
           final collectionSnapshot =
               await schoolRef.collection(collectionName).get();
+
+          int insertedCount = 0;
+          int updatedCount = 0;
+          int skippedCount = 0;
 
           // Process each document in the collection
           for (var doc in collectionSnapshot.docs) {
             final data = doc.data();
             data['firebase_doc_id'] = doc.id; // Store Firebase document ID
 
-            // Save to local database based on collection type
-            await _saveToLocalDatabase(collectionName, data);
+            // ✅ ENHANCED: Save with duplicate prevention
+            final result = await _saveToLocalDatabaseWithDuplicateCheck(
+                collectionName, data, doc.id, isRejoining);
+
+            switch (result) {
+              case 'inserted':
+                insertedCount++;
+                break;
+              case 'updated':
+                updatedCount++;
+                break;
+              case 'skipped':
+                skippedCount++;
+                break;
+            }
           }
 
           currentProgress += progressPerCollection;
           downloadProgress.value = currentProgress;
 
-          print(
-              '✅ Downloaded ${collectionSnapshot.docs.length} $collectionName records');
+          print('✅ $collectionName: ${collectionSnapshot.docs.length} total, '
+              '$insertedCount inserted, $updatedCount updated, $skippedCount skipped');
         } catch (e) {
           print('⚠️ Failed to download $collectionName: $e');
           // Continue with other collections
@@ -350,118 +382,713 @@ class SchoolJoinController extends GetxController {
       }
 
       downloadProgress.value = 1.0;
-      statusMessage.value = 'Data download complete!';
+      statusMessage.value = 'Data synchronization complete!';
+
+      // ✅ NEW: Clean up any remaining duplicates after download
+      await _cleanupPostDownloadDuplicates();
     } catch (e) {
       print('❌ Error downloading school data: $e');
       throw Exception('Failed to download school data.');
     }
   }
 
-  /// Save data to local database based on collection type
-  Future<void> _saveToLocalDatabase(
-      String collectionName, Map<String, dynamic> data) async {
+  /// ✅ NEW: Check if user is rejoining an existing school
+  Future<bool> _checkIfRejoiningSchool(String schoolId) async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+
+      // Check if we have existing data for this school
+      final existingUsers = await db.query('users', limit: 1);
+
+      final existingCourses = await db.query('courses', limit: 1);
+
+      final existingFleet = await db.query('fleet', limit: 1);
+
+      // If we have any existing core data, this is likely a re-join
+      return existingUsers.isNotEmpty ||
+          existingCourses.isNotEmpty ||
+          existingFleet.isNotEmpty;
+    } catch (e) {
+      print('⚠️ Error checking re-join status: $e');
+      return false; // Default to treating as new join
+    }
+  }
+
+  /// ✅ ENHANCED: Save data with comprehensive duplicate checking
+  Future<String> _saveToLocalDatabaseWithDuplicateCheck(String collectionName,
+      Map<String, dynamic> data, String firebaseDocId, bool isRejoining) async {
     try {
       final db = DatabaseHelper.instance;
-
-      // ✅ TIMESTAMP FIX: Convert Firebase data to SQLite format BEFORE saving
       final cleanedData = _convertFirebaseDataForSQLite(data);
 
       switch (collectionName) {
         case 'users':
-          // Convert to User model and save
-          final user = app_user.User(
-            fname: cleanedData['fname'] ?? '',
-            lname: cleanedData['lname'] ?? '',
-            email: cleanedData['email'] ?? '',
-            password: cleanedData['password'] ?? '',
-            phone: cleanedData['phone'] ?? '',
-            address: cleanedData['address'] ?? '',
-            gender: cleanedData['gender'] ?? 'Male',
-            idnumber: cleanedData['idnumber'] ?? '',
-            role: cleanedData['role'] ?? 'user',
-            status: cleanedData['status'] ?? 'Active',
-            date_of_birth: cleanedData['date_of_birth'] != null
-                ? DateTime.tryParse(cleanedData['date_of_birth'].toString()) ??
-                    DateTime.now()
-                : DateTime.now(),
-            created_at: cleanedData['created_at'] != null
-                ? DateTime.tryParse(cleanedData['created_at'].toString()) ??
-                    DateTime.now()
-                : DateTime.now(),
-          );
-          await db.insertUser(user);
-          break;
+          return await _handleUserData(cleanedData, firebaseDocId, isRejoining);
 
         case 'courses':
-          await db.insertCourse(cleanedData);
-          break;
+          return await _handleCourseData(
+              cleanedData, firebaseDocId, isRejoining);
 
         case 'fleet':
-          await db.insertFleet(cleanedData);
-          break;
+          return await _handleFleetData(
+              cleanedData, firebaseDocId, isRejoining);
 
         case 'schedules':
-          await db.insertSchedule(cleanedData);
-          break;
+          return await _handleScheduleData(
+              cleanedData, firebaseDocId, isRejoining);
 
         case 'invoices':
-          await db.insertInvoice(cleanedData);
-          break;
+          return await _handleInvoiceData(
+              cleanedData, firebaseDocId, isRejoining);
 
         case 'payments':
-          await db.insertPayment(cleanedData);
-          break;
+          return await _handlePaymentData(
+              cleanedData, firebaseDocId, isRejoining);
 
-        // Add more cases as needed for other collections
+        case 'billing_records':
+          return await _handleBillingRecordData(
+              cleanedData, firebaseDocId, isRejoining);
+
+        // Add other collections as needed
         default:
-          // For collections without specific models, save as generic data
-          print('ℹ️ Skipping $collectionName - no specific handler');
+          // For other collections, use generic handling
+          return await _handleGenericData(
+              collectionName, cleanedData, firebaseDocId, isRejoining);
       }
     } catch (e) {
-      print('⚠️ Error saving $collectionName data to local DB: $e');
-      // Don't throw error - continue with other data
+      print('❌ Error saving $collectionName data: $e');
+      return 'error';
     }
   }
 
-  /// ✅ TIMESTAMP FIX: Convert Firebase data to SQLite-compatible format
-  Map<String, dynamic> _convertFirebaseDataForSQLite(
-      Map<String, dynamic> data) {
-    final converted = Map<String, dynamic>.from(data);
+  Map<String, dynamic> _convertDataForSQLite(Map<String, dynamic> data) {
+    final Map<String, dynamic> converted = {};
 
-    // Convert all Firebase Timestamp objects to integers (milliseconds)
-    converted.forEach((key, value) {
-      if (value is Timestamp) {
-        converted[key] = value.millisecondsSinceEpoch;
-        print('📅 Converted timestamp $key: Timestamp -> ${converted[key]}');
+    for (String key in data.keys) {
+      final value = data[key];
+
+      if (value == null) {
+        converted[key] = null;
       } else if (value is bool) {
-        // Convert boolean to integer for SQLite
+        // Convert boolean to integer (0 or 1)
         converted[key] = value ? 1 : 0;
-        print('📄 Converted boolean $key: $value -> ${converted[key]}');
-      }
-    });
-
-    // Handle specific timestamp fields that might be in other formats
-    final timestampFields = [
-      'last_modified',
-      'created_at',
-      'updated_at',
-      'payment_date',
-      'due_date',
-      'start',
-      'end',
-      'date_of_birth'
-    ];
-
-    for (String field in timestampFields) {
-      if (converted.containsKey(field) && converted[field] != null) {
-        converted[field] = _convertTimestamp(converted[field]);
+      } else if (value is List) {
+        // Convert list to JSON string
+        converted[key] = jsonEncode(value);
+      } else if (value is Map) {
+        // Convert map to JSON string
+        converted[key] = jsonEncode(value);
+      } else if (value is DateTime) {
+        // Convert DateTime to milliseconds
+        converted[key] = value.millisecondsSinceEpoch;
+      } else if (value is Timestamp) {
+        // Convert Firestore Timestamp to milliseconds
+        converted[key] = value.millisecondsSinceEpoch;
+      } else {
+        // Keep other types as-is (String, int, double, null)
+        converted[key] = value;
       }
     }
 
-    // Remove null values
-    converted.removeWhere((key, value) => value == null);
-
     return converted;
+  }
+
+  /// Helper method to filter data for users table specifically
+  Map<String, dynamic> _filterUserDataForDatabase(Map<String, dynamic> data) {
+    // Define the allowed columns for users table based on your schema
+    final allowedUserColumns = {
+      'fname',
+      'lname',
+      'email',
+      'phone',
+      'idnumber',
+      'id_number',
+      'role',
+      'status',
+      'address',
+      'gender',
+      'password',
+      'date_of_birth',
+      'created_at',
+      'last_modified',
+      'firebase_synced',
+      'firebase_doc_id',
+      'firebase_user_id',
+      'deleted',
+      'last_modified_device'
+    };
+
+    final filteredData = <String, dynamic>{};
+
+    for (String key in data.keys) {
+      if (allowedUserColumns.contains(key)) {
+        filteredData[key] = data[key];
+      } else if (key == 'firebase_uid' &&
+          !filteredData.containsKey('firebase_user_id')) {
+        // Map firebase_uid to firebase_user_id
+        filteredData['firebase_user_id'] = data[key];
+      }
+    }
+
+    return filteredData;
+  }
+
+  /// Updated _handleUserData method with proper data conversion and filtering
+  Future<String> _handleUserData(
+      Map<String, dynamic> data, String firebaseDocId, bool isRejoining) async {
+    final db = await DatabaseHelper.instance.database;
+
+    try {
+      // Check for existing user by email (primary identifier)
+      final email = data['email']?.toString().toLowerCase();
+      if (email == null) return 'skipped';
+
+      final existing = await db.query('users',
+          where: 'LOWER(email) = ?', whereArgs: [email], limit: 1);
+
+      if (existing.isNotEmpty) {
+        if (isRejoining) {
+          // Update existing user
+          final existingId = existing.first['id'];
+          final updateData = Map<String, dynamic>.from(data);
+          updateData.remove('id'); // Don't update the local ID
+          updateData['firebase_synced'] = 1;
+          updateData['firebase_doc_id'] = firebaseDocId;
+          updateData['last_modified'] = DateTime.now().millisecondsSinceEpoch;
+
+          // ✅ FIX: Filter and convert data types for SQLite
+          final filteredData = _filterUserDataForDatabase(updateData);
+          final convertedUpdateData = _convertDataForSQLite(filteredData);
+
+          await db.update('users', convertedUpdateData,
+              where: 'id = ?', whereArgs: [existingId]);
+
+          print('🔄 Updated existing user: $email');
+          return 'updated';
+        } else {
+          print('⏭️ User already exists, skipping: $email');
+          return 'skipped';
+        }
+      }
+
+      // Create new user using your User model
+      final user = app_user.User(
+        fname: data['fname'] ?? '',
+        lname: data['lname'] ?? '',
+        email: email,
+        phone: data['phone'] ?? '',
+        role: data['role'] ?? 'student',
+        status: data['status'] ?? 'active',
+        date_of_birth: data['date_of_birth'] != null
+            ? (DateTime.tryParse(data['date_of_birth'].toString()) ??
+                DateTime(2000, 1, 1))
+            : DateTime(2000, 1, 1),
+        created_at: data['created_at'] != null
+            ? (DateTime.tryParse(data['created_at'].toString()) ??
+                DateTime.now())
+            : DateTime.now(),
+        password: data['password'] ?? '',
+        gender: data['gender'] ?? '',
+        address: data['address'] ?? '',
+        idnumber: data['idnumber'] ??
+            data['idnumber'] ??
+            '', // Handle both field names
+      );
+
+      final userId = await DatabaseHelper.instance.insertUser(user);
+
+      // Update Firebase sync info after insertion
+      final database = await DatabaseHelper.instance.database;
+      await database.update(
+          'users',
+          {
+            'firebase_synced': 1,
+            'firebase_doc_id': firebaseDocId,
+            'firebase_user_id': data['firebase_uid'] ??
+                data['firebase_user_id'], // Handle both field names
+          },
+          where: 'id = ?',
+          whereArgs: [userId]);
+
+      print('➕ Created new user: $email (ID: $userId)');
+      return 'inserted';
+    } catch (e) {
+      print('❌ Error handling user data: $e');
+      return 'error';
+    }
+  }
+
+  /// Updated _handleCourseData method with data conversion
+  Future<String> _handleCourseData(
+      Map<String, dynamic> data, String firebaseDocId, bool isRejoining) async {
+    final db = await DatabaseHelper.instance.database;
+
+    try {
+      final courseName = data['name']?.toString();
+      if (courseName == null) return 'skipped';
+
+      // Check for existing course by name
+      final existing = await db.query('courses',
+          where: 'LOWER(name) = ?',
+          whereArgs: [courseName.toLowerCase()],
+          limit: 1);
+
+      if (existing.isNotEmpty) {
+        if (isRejoining) {
+          // Update existing course
+          final existingId = existing.first['id'];
+          final updateData = Map<String, dynamic>.from(data);
+          updateData.remove('id');
+          updateData['firebase_synced'] = 1;
+          updateData['firebase_doc_id'] = firebaseDocId;
+          updateData['last_modified'] = DateTime.now().millisecondsSinceEpoch;
+
+          // ✅ FIX: Convert data types for SQLite
+          final convertedUpdateData = _convertDataForSQLite(updateData);
+
+          await db.update('courses', convertedUpdateData,
+              where: 'id = ?', whereArgs: [existingId]);
+
+          print('🔄 Updated existing course: $courseName');
+          return 'updated';
+        } else {
+          print('⏭️ Course already exists, skipping: $courseName');
+          return 'skipped';
+        }
+      }
+
+      // Create new course
+      data['firebase_synced'] = 1;
+      data['firebase_doc_id'] = firebaseDocId;
+      data['created_at'] =
+          data['created_at'] ?? DateTime.now().millisecondsSinceEpoch;
+
+      // ✅ FIX: Convert data types for SQLite
+      final convertedData = _convertDataForSQLite(data);
+
+      final courseId = await db.insert('courses', convertedData);
+      print('➕ Created new course: $courseName (ID: $courseId)');
+      return 'inserted';
+    } catch (e) {
+      print('❌ Error handling course data: $e');
+      return 'error';
+    }
+  }
+
+  /// Updated _handleFleetData method with data conversion
+  Future<String> _handleFleetData(
+      Map<String, dynamic> data, String firebaseDocId, bool isRejoining) async {
+    final db = await DatabaseHelper.instance.database;
+
+    try {
+      final registrationNumber = data['registrationNumber']?.toString();
+      if (registrationNumber == null) return 'skipped';
+
+      // Check for existing vehicle by registration number
+      final existing = await db.query('fleet',
+          where: 'LOWER(registrationNumber) = ?',
+          whereArgs: [registrationNumber.toLowerCase()],
+          limit: 1);
+
+      if (existing.isNotEmpty) {
+        if (isRejoining) {
+          // Update existing vehicle
+          final existingId = existing.first['id'];
+          final updateData = Map<String, dynamic>.from(data);
+          updateData.remove('id');
+          updateData['firebase_synced'] = 1;
+          updateData['firebase_doc_id'] = firebaseDocId;
+          updateData['last_modified'] = DateTime.now().millisecondsSinceEpoch;
+
+          // ✅ FIX: Convert data types for SQLite
+          final convertedUpdateData = _convertDataForSQLite(updateData);
+
+          await db.update('fleet', convertedUpdateData,
+              where: 'id = ?', whereArgs: [existingId]);
+
+          print('🔄 Updated existing vehicle: $registrationNumber');
+          return 'updated';
+        } else {
+          print('⏭️ Vehicle already exists, skipping: $registrationNumber');
+          return 'skipped';
+        }
+      }
+
+      // Create new vehicle
+      data['firebase_synced'] = 1;
+      data['firebase_doc_id'] = firebaseDocId;
+      data['created_at'] =
+          data['created_at'] ?? DateTime.now().millisecondsSinceEpoch;
+
+      // ✅ FIX: Convert data types for SQLite
+      final convertedData = _convertDataForSQLite(data);
+
+      final vehicleId = await db.insert('fleet', convertedData);
+      print('➕ Created new vehicle: $registrationNumber (ID: $vehicleId)');
+      return 'inserted';
+    } catch (e) {
+      print('❌ Error handling fleet data: $e');
+      return 'error';
+    }
+  }
+
+  /// Updated _handlePaymentData method with data conversion
+  Future<String> _handlePaymentData(
+      Map<String, dynamic> data, String firebaseDocId, bool isRejoining) async {
+    final db = await DatabaseHelper.instance.database;
+
+    try {
+      // Safe check for PaymentSyncIntegration
+      bool isDuplicate = false;
+      try {
+        final syncIntegration = Get.find<PaymentSyncIntegration>();
+        isDuplicate = await syncIntegration.isPaymentDuplicateBeforeSync(data);
+      } catch (e) {
+        print(
+            '⚠️ PaymentSyncIntegration not available, skipping duplicate check: $e');
+        // Continue without the check
+      }
+
+      if (isDuplicate) {
+        print('🚫 Payment is duplicate, skipping');
+        return 'skipped';
+      }
+
+      // Check by Firebase doc ID first
+      final existingByDocId = await db.query('payments',
+          where: 'firebase_doc_id = ?', whereArgs: [firebaseDocId], limit: 1);
+
+      if (existingByDocId.isNotEmpty) {
+        if (isRejoining) {
+          // Update existing payment
+          final existingId = existingByDocId.first['id'];
+          final updateData = Map<String, dynamic>.from(data);
+          updateData.remove('id');
+          updateData['firebase_synced'] = 1;
+          updateData['firebase_doc_id'] = firebaseDocId;
+
+          // ✅ FIX: Convert data types for SQLite
+          final convertedUpdateData = _convertDataForSQLite(updateData);
+
+          await db.update('payments', convertedUpdateData,
+              where: 'id = ?', whereArgs: [existingId]);
+
+          print('🔄 Updated existing payment by doc ID');
+          return 'updated';
+        } else {
+          print('⏭️ Payment already exists by doc ID, skipping');
+          return 'skipped';
+        }
+      }
+
+      // Create new payment
+      data['firebase_synced'] = 1;
+      data['firebase_doc_id'] = firebaseDocId;
+
+      // ✅ FIX: Convert data types for SQLite
+      final convertedData = _convertDataForSQLite(data);
+
+      final paymentId = await db.insert('payments', convertedData);
+      print('➕ Created new payment (ID: $paymentId)');
+      return 'inserted';
+    } catch (e) {
+      print('❌ Error handling payment data: $e');
+      return 'error';
+    }
+  }
+
+  /// Updated _handleInvoiceData method with data conversion
+  Future<String> _handleInvoiceData(
+      Map<String, dynamic> data, String firebaseDocId, bool isRejoining) async {
+    final db = await DatabaseHelper.instance.database;
+
+    try {
+      // Check by Firebase doc ID first
+      final existingByDocId = await db.query('invoices',
+          where: 'firebase_doc_id = ?', whereArgs: [firebaseDocId], limit: 1);
+
+      if (existingByDocId.isNotEmpty) {
+        if (isRejoining) {
+          // Update existing invoice
+          final existingId = existingByDocId.first['id'];
+          final updateData = Map<String, dynamic>.from(data);
+          updateData.remove('id');
+          updateData['firebase_synced'] = 1;
+          updateData['firebase_doc_id'] = firebaseDocId;
+
+          // ✅ FIX: Convert data types for SQLite
+          final convertedUpdateData = _convertDataForSQLite(updateData);
+
+          await db.update('invoices', convertedUpdateData,
+              where: 'id = ?', whereArgs: [existingId]);
+
+          print('🔄 Updated existing invoice by doc ID');
+          return 'updated';
+        } else {
+          print('⏭️ Invoice already exists by doc ID, skipping');
+          return 'skipped';
+        }
+      }
+
+      // Additional check: avoid duplicates by student+course combination
+      final studentId = data['studentId'];
+      final courseId = data['courseId'];
+      if (studentId != null && courseId != null) {
+        final existingByStudentCourse = await db.query('invoices',
+            where: 'studentId = ? AND courseId = ?',
+            whereArgs: [studentId, courseId],
+            limit: 1);
+
+        if (existingByStudentCourse.isNotEmpty) {
+          print(
+              '⏭️ Invoice already exists for student $studentId course $courseId, skipping');
+          return 'skipped';
+        }
+      }
+
+      // Create new invoice
+      data['firebase_synced'] = 1;
+      data['firebase_doc_id'] = firebaseDocId;
+
+      // ✅ FIX: Convert data types for SQLite
+      final convertedData = _convertDataForSQLite(data);
+
+      final invoiceId = await db.insert('invoices', convertedData);
+      print('➕ Created new invoice (ID: $invoiceId)');
+      return 'inserted';
+    } catch (e) {
+      print('❌ Error handling invoice data: $e');
+      return 'error';
+    }
+  }
+
+  /// Updated _handleScheduleData method with data conversion
+  Future<String> _handleScheduleData(
+      Map<String, dynamic> data, String firebaseDocId, bool isRejoining) async {
+    final db = await DatabaseHelper.instance.database;
+
+    try {
+      // Check by Firebase doc ID first
+      final existingByDocId = await db.query('schedules',
+          where: 'firebase_doc_id = ?', whereArgs: [firebaseDocId], limit: 1);
+
+      if (existingByDocId.isNotEmpty) {
+        if (isRejoining) {
+          final existingId = existingByDocId.first['id'];
+          final updateData = Map<String, dynamic>.from(data);
+          updateData.remove('id');
+          updateData['firebase_synced'] = 1;
+          updateData['firebase_doc_id'] = firebaseDocId;
+
+          // ✅ FIX: Convert data types for SQLite
+          final convertedUpdateData = _convertDataForSQLite(updateData);
+
+          await db.update('schedules', convertedUpdateData,
+              where: 'id = ?', whereArgs: [existingId]);
+
+          print('🔄 Updated existing schedule by doc ID');
+          return 'updated';
+        } else {
+          print('⏭️ Schedule already exists by doc ID, skipping');
+          return 'skipped';
+        }
+      }
+
+      // Additional check: avoid duplicate schedules by student+start time
+      final studentId = data['studentId'];
+      final startTime = data['start'];
+      if (studentId != null && startTime != null) {
+        final existingByStudentTime = await db.query('schedules',
+            where: 'studentId = ? AND start = ?',
+            whereArgs: [studentId, startTime],
+            limit: 1);
+
+        if (existingByStudentTime.isNotEmpty) {
+          print(
+              '⏭️ Schedule already exists for student $studentId at $startTime, skipping');
+          return 'skipped';
+        }
+      }
+
+      // Create new schedule
+      data['firebase_synced'] = 1;
+      data['firebase_doc_id'] = firebaseDocId;
+
+      // ✅ FIX: Convert data types for SQLite
+      final convertedData = _convertDataForSQLite(data);
+
+      final scheduleId = await db.insert('schedules', convertedData);
+      print('➕ Created new schedule (ID: $scheduleId)');
+      return 'inserted';
+    } catch (e) {
+      print('❌ Error handling schedule data: $e');
+      return 'error';
+    }
+  }
+
+  /// Updated _handleBillingRecordData method with data conversion
+  Future<String> _handleBillingRecordData(
+      Map<String, dynamic> data, String firebaseDocId, bool isRejoining) async {
+    final db = await DatabaseHelper.instance.database;
+
+    try {
+      // Check by Firebase doc ID first
+      final existingByDocId = await db.query('billing_records',
+          where: 'firebase_doc_id = ?', whereArgs: [firebaseDocId], limit: 1);
+
+      if (existingByDocId.isNotEmpty) {
+        if (isRejoining) {
+          final existingId = existingByDocId.first['id'];
+          final updateData = Map<String, dynamic>.from(data);
+          updateData.remove('id');
+          updateData['firebase_synced'] = 1;
+          updateData['firebase_doc_id'] = firebaseDocId;
+
+          // ✅ FIX: Convert data types for SQLite
+          final convertedUpdateData = _convertDataForSQLite(updateData);
+
+          await db.update('billing_records', convertedUpdateData,
+              where: 'id = ?', whereArgs: [existingId]);
+
+          print('🔄 Updated existing billing record by doc ID');
+          return 'updated';
+        } else {
+          print('⏭️ Billing record already exists by doc ID, skipping');
+          return 'skipped';
+        }
+      }
+
+      // Create new billing record
+      data['firebase_synced'] = 1;
+      data['firebase_doc_id'] = firebaseDocId;
+
+      // ✅ FIX: Convert data types for SQLite
+      final convertedData = _convertDataForSQLite(data);
+
+      final recordId = await db.insert('billing_records', convertedData);
+      print('➕ Created new billing record (ID: $recordId)');
+      return 'inserted';
+    } catch (e) {
+      print('❌ Error handling billing record data: $e');
+      return 'error';
+    }
+  }
+
+  /// Updated _handleGenericData method with data conversion
+  Future<String> _handleGenericData(String tableName, Map<String, dynamic> data,
+      String firebaseDocId, bool isRejoining) async {
+    final db = await DatabaseHelper.instance.database;
+
+    try {
+      // Check by Firebase doc ID first
+      final existingByDocId = await db.query(tableName,
+          where: 'firebase_doc_id = ?', whereArgs: [firebaseDocId], limit: 1);
+
+      if (existingByDocId.isNotEmpty) {
+        if (isRejoining) {
+          final existingId = existingByDocId.first['id'];
+          final updateData = Map<String, dynamic>.from(data);
+          updateData.remove('id');
+          updateData['firebase_synced'] = 1;
+          updateData['firebase_doc_id'] = firebaseDocId;
+
+          // ✅ FIX: Convert data types for SQLite
+          final convertedUpdateData = _convertDataForSQLite(updateData);
+
+          await db.update(tableName, convertedUpdateData,
+              where: 'id = ?', whereArgs: [existingId]);
+
+          print('🔄 Updated existing $tableName record by doc ID');
+          return 'updated';
+        } else {
+          print('⏭️ $tableName record already exists by doc ID, skipping');
+          return 'skipped';
+        }
+      }
+
+      // Create new record
+      data['firebase_synced'] = 1;
+      data['firebase_doc_id'] = firebaseDocId;
+
+      // ✅ FIX: Convert data types for SQLite
+      final convertedData = _convertDataForSQLite(data);
+
+      final recordId = await db.insert(tableName, convertedData);
+      print('➕ Created new $tableName record (ID: $recordId)');
+      return 'inserted';
+    } catch (e) {
+      print('❌ Error handling $tableName data: $e');
+      return 'error';
+    }
+  }
+
+  /// Clean up any remaining duplicates after download
+  Future<void> _cleanupPostDownloadDuplicates() async {
+    try {
+      print('🧹 Running post-download duplicate cleanup...');
+
+      // Use the existing payment duplicate cleanup
+      final syncIntegration = Get.find<PaymentSyncIntegration>();
+      await syncIntegration.fixDuplicatePaymentsNow();
+
+      print('✅ Post-download cleanup completed');
+    } catch (e) {
+      print('⚠️ Error during post-download cleanup: $e');
+      // Don't throw - cleanup failure shouldn't stop the join process
+    }
+  }
+
+  /// Helper method to convert Firebase data to SQLite format (keep your existing implementation)
+  Map<String, dynamic> _convertFirebaseDataForSQLite(
+      Map<String, dynamic> firebaseData) {
+    final Map<String, dynamic> cleanedData =
+        Map<String, dynamic>.from(firebaseData);
+
+    // Convert Firestore Timestamps to milliseconds
+    for (String key in cleanedData.keys) {
+      final value = cleanedData[key];
+      if (value != null) {
+        if (value.toString().contains('Timestamp')) {
+          // Handle Firestore Timestamp
+          try {
+            // Extract seconds from Timestamp string
+            final timestampStr = value.toString();
+            if (timestampStr.contains('seconds=')) {
+              final secondsMatch =
+                  RegExp(r'seconds=(\d+)').firstMatch(timestampStr);
+              if (secondsMatch != null) {
+                final seconds = int.parse(secondsMatch.group(1)!);
+                cleanedData[key] = seconds * 1000; // Convert to milliseconds
+              }
+            }
+          } catch (e) {
+            print('⚠️ Failed to convert Timestamp for key $key: $e');
+            cleanedData[key] = DateTime.now().millisecondsSinceEpoch;
+          }
+        } else if (key.contains('date') ||
+            key.contains('time') ||
+            key.contains('created') ||
+            key.contains('modified')) {
+          // Handle other date fields
+          if (value is String) {
+            try {
+              final date = DateTime.parse(value);
+              cleanedData[key] = date.millisecondsSinceEpoch;
+            } catch (e) {
+              // Keep as string if parsing fails
+            }
+          }
+        }
+      }
+    }
+
+    // Ensure required fields exist
+    cleanedData['last_modified'] =
+        cleanedData['last_modified'] ?? DateTime.now().millisecondsSinceEpoch;
+    cleanedData['created_at'] =
+        cleanedData['created_at'] ?? DateTime.now().millisecondsSinceEpoch;
+
+    return cleanedData;
   }
 
   /// ✅ TIMESTAMP FIX: Convert various timestamp formats to milliseconds
