@@ -1,7 +1,6 @@
 // lib/routes/protected_routes.dart (Updated with School Selection)
 import 'package:driving/dashboard.dart';
 import 'package:driving/middleware/auth_middleware.dart';
-import 'package:driving/middleware/subscription_middleware.dart';
 import 'package:driving/screens/auth/login_screen.dart';
 import 'package:driving/screens/auth/pin_login_screen.dart';
 import 'package:driving/screens/auth/pin_setup_screen.dart';
@@ -62,11 +61,7 @@ class ProtectedRoutes {
       page: () => const PinSetupScreen(isInitialSetup: true),
       middlewares: [AuthenticatedMiddleware()],
     ),
-    GetPage(
-      name: '/dashboard',
-      page: () => FixedDashboardScreen(),
-      middlewares: [SubscriptionMiddleware()],
-    ),
+
     // PIN setup from settings (after login)
     GetPage(
       name: '/pin-setup-settings',
@@ -76,27 +71,7 @@ class ProtectedRoutes {
 
     // === MAIN APPLICATION ===
 
-    // ALL protected routes go through the main layout
-    GetPage(
-      name: main,
-      page: () => const ResponsiveMainLayout(),
-      middlewares: [
-        AuthMiddleware(),
-        SubscriptionMiddleware()
-      ], // Add SubscriptionMiddleware
-    ),
-
     // === FEATURE ROUTES (All redirect to main layout with role checking) ===
-
-    // Dashboard
-    GetPage(
-      name: '/dashboard',
-      page: () => const ResponsiveMainLayout(),
-      middlewares: [
-        AuthMiddleware(),
-        SubscriptionMiddleware()
-      ], // Add SubscriptionMiddleware
-    ),
 
     // Student management
     GetPage(

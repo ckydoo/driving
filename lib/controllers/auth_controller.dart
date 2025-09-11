@@ -3,12 +3,9 @@ import 'package:crypto/crypto.dart';
 import 'package:driving/models/user.dart';
 import 'package:driving/services/database_helper.dart';
 import 'package:driving/controllers/pin_controller.dart';
-import 'package:driving/services/fixed_local_first_sync_service.dart';
 import 'package:driving/services/school_config_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:convert';
 
 class AuthController extends GetxController {
@@ -20,16 +17,6 @@ class AuthController extends GetxController {
   final RxBool rememberMe = false.obs;
   final RxString userEmail = ''.obs;
 
-  // Firebase - now primary auth system
-  firebase_auth.FirebaseAuth? _firebaseAuth;
-  FirebaseFirestore? _firestore;
-  final Rx<firebase_auth.User?> firebaseUser = Rx<firebase_auth.User?>(null);
-  final RxBool firebaseAvailable = false.obs;
-  final RxString firebaseError = ''.obs;
-
-  // Migration flag - remove after full migration
-  final RxBool isUsingFirebaseFirst = true.obs;
-
   // Get PIN controller
   PinController get _pinController => Get.find<PinController>();
 
@@ -37,82 +24,6 @@ class AuthController extends GetxController {
   void onInit() {
     super.onInit();
     Get.lazyPut(() => PinController());
-    _initializeFirebaseAuth();
-  }
-
-  /// Initialize Firebase as primary auth system
-  Future<void> _initializeFirebaseAuth() async {
-    try {
-      print('🔥 Initializing Firebase-first authentication...');
-
-      _firebaseAuth = firebase_auth.FirebaseAuth.instance;
-      _firestore = FirebaseFirestore.instance;
-
-      // Test Firebase connection
-      await _testFirebaseConnection();
-      firebaseAvailable.value = true;
-
-      // Set up auth state listener
-      _firebaseAuth!.authStateChanges().listen(_onFirebaseAuthStateChanged);
-
-      print('✅ Firebase-first auth initialized');
-
-      // Handle initial auth state
-      await _handleInitialAuthState();
-    } catch (e) {
-      print('❌ Firebase initialization failed: $e');
-      firebaseAvailable.value = false;
-      firebaseError.value =
-          'Firebase connection failed. Please check internet connection.';
-
-      // Fallback to old system temporarily during migration
-      await _checkLoginStatusLegacy();
-    }
-  }
-
-  /// Test Firebase connection
-  Future<void> _testFirebaseConnection() async {
-    final currentFirebaseUser = _firebaseAuth?.currentUser;
-    print(
-        '🔥 Firebase connection test - Current user: ${currentFirebaseUser?.email ?? "none"}');
-
-    // Try to access Firestore
-    await _firestore?.collection('test').limit(1).get();
-    print('✅ Firebase connection test passed');
-  }
-
-  /// Handle initial auth state on app startup
-  Future<void> _handleInitialAuthState() async {
-    final currentFirebaseUser = _firebaseAuth?.currentUser;
-
-    if (currentFirebaseUser != null) {
-      print('🔥 Found existing Firebase user: ${currentFirebaseUser.email}');
-      await _syncUserDataFromFirebase(currentFirebaseUser);
-    } else {
-      print('ℹ️ No existing Firebase user found');
-    }
-  }
-
-  /// Firebase auth state change handler
-  Future<void> _onFirebaseAuthStateChanged(firebase_auth.User? user) async {
-    try {
-      firebaseUser.value = user;
-
-      if (user != null) {
-        print('🔥 Firebase user signed in: ${user.email}');
-
-        // CRITICAL: Always sync user data when Firebase user changes
-        await _syncUserDataFromFirebase(user);
-
-        _startSyncService();
-      } else {
-        print('🔥 Firebase user signed out');
-        await _handleSignOut();
-      }
-    } catch (e) {
-      print('❌ Auth state change error: $e');
-      error.value = 'Authentication error: ${e.toString()}';
-    }
   }
 
   /// Sync user data from Firebase to local cache
@@ -231,18 +142,6 @@ class AuthController extends GetxController {
       }
     } catch (e) {
       print('❌ Could not load from offline cache: $e');
-    }
-  }
-
-  /// Start sync service after successful authentication
-  void _startSyncService() {
-    try {
-      final syncService = Get.find<FixedLocalFirstSyncService>();
-      Future.delayed(const Duration(seconds: 1), () {
-        syncService.triggerManualSync();
-      });
-    } catch (e) {
-      print('⚠️ Could not start sync service: $e');
     }
   }
 
@@ -521,229 +420,6 @@ class AuthController extends GetxController {
     } catch (e) {
       print('❌ Error saving user data to Firebase: $e');
       throw e;
-    }
-  }
-
-  /// This is called AFTER the user is already saved locally
-  Future<bool> createFirebaseUserForExistingLocal(
-      String email, String password, Map<String, dynamic> userData) async {
-    // If Firebase is not available, return false (not an error)
-    if (!firebaseAvailable.value) {
-      print('ℹ️ Firebase not available - keeping user local-only');
-      return false;
-    }
-
-    try {
-      print('🔄 Creating Firebase user for existing local user: $email');
-
-      // Step 1: Try to create Firebase Authentication user
-      firebase_auth.UserCredential? credential;
-
-      try {
-        credential = await _firebaseAuth!.createUserWithEmailAndPassword(
-          email: email,
-          password: password,
-        );
-      } on firebase_auth.FirebaseAuthException catch (e) {
-        if (e.code == 'email-already-in-use') {
-          print(
-              'ℹ️ Email already exists in Firebase - attempting to sync data only');
-
-          // Try to sign in to get the existing user
-          try {
-            credential = await _firebaseAuth!.signInWithEmailAndPassword(
-              email: email,
-              password: password,
-            );
-            print('✅ Signed in to existing Firebase account');
-          } catch (signInError) {
-            print(
-                '⚠️ Could not sign in to existing Firebase account: $signInError');
-            return false;
-          }
-        } else {
-          print('❌ Firebase auth creation failed: ${e.code}');
-          return false;
-        }
-      }
-
-      if (credential?.user == null) {
-        print('❌ Firebase user creation/signin returned null');
-        return false;
-      }
-
-      print('✅ Firebase Authentication ready: ${credential!.user!.uid}');
-
-      // Step 2: Save/update user data in Firestore
-      await _saveOrUpdateUserDataInFirestore(credential.user!, userData);
-
-      // Step 3: Trigger sync service to ensure everything is synchronized
-      await _triggerSyncServiceAfterFirebaseCreation();
-
-      return true;
-    } catch (e) {
-      print('❌ Error creating Firebase user for local user: $e');
-      return false;
-    }
-  }
-
-  /// Save or update user data in Firestore (handles both new and existing users)
-  Future<void> _saveOrUpdateUserDataInFirestore(
-      firebase_auth.User firebaseUser, Map<String, dynamic> userData) async {
-    try {
-      print('💾 Saving user data to Firestore...');
-
-      final schoolConfig = Get.find<SchoolConfigService>();
-      final schoolId = schoolConfig.schoolId.value;
-
-      if (schoolId.isEmpty) {
-        throw Exception('No school ID configured. Cannot save to Firestore.');
-      }
-
-      // Prepare userData with Firebase-specific fields
-      final firestoreData = Map<String, dynamic>.from(userData);
-      firestoreData.addAll({
-        'firebase_user_id': firebaseUser
-            .uid, // **CHANGED**: Use firebase_user_id instead of firebase_uid
-        'email': firebaseUser.email, // Ensure email matches Firebase auth
-        'last_modified': DateTime.now().toIso8601String(),
-        'firebase_synced': 1,
-        'school_id': schoolId,
-      });
-
-      // **CRITICAL CHANGE**: Use local ID as document ID (like in your image)
-      final localId = firestoreData['id'];
-      if (localId == null) {
-        throw Exception('Local ID not found in user data');
-      }
-
-      // Store local_id field for consistency and remove the 'id' field
-      firestoreData['local_id'] = localId;
-      firestoreData.remove('id'); // Remove ID for Firestore
-
-      // **CRITICAL FIX**: Use LOCAL ID as document ID (not Firebase UID)
-      final documentId = localId.toString();
-      final userDocRef = _firestore!
-          .collection('schools')
-          .doc(schoolId)
-          .collection('users')
-          .doc(documentId); // Use local ID as document ID
-
-      print('📍 Creating document with local ID as document ID: $documentId');
-      print('🔥 firebase_user_id will be: ${firebaseUser.uid}');
-
-      // Check if document already exists
-      final existingDoc = await userDocRef.get();
-
-      if (existingDoc.exists) {
-        print('📝 Updating existing user document: $documentId');
-        await userDocRef.update(firestoreData);
-      } else {
-        print('➕ Creating new user document: $documentId');
-        await userDocRef.set(firestoreData);
-      }
-
-      // Update local user with firebase_user_id (not firebase_uid)
-      final db = await DatabaseHelper.instance.database;
-      await db.update(
-        'users',
-        {
-          'firebase_user_id': firebaseUser.uid, // Store as firebase_user_id
-          'firebase_synced': 1,
-        },
-        where: 'id = ?',
-        whereArgs: [localId],
-      );
-
-      print('✅ User data saved to Firestore successfully');
-      print('   School ID: $schoolId');
-      print('   Document ID: $documentId (local ID)');
-      print('   firebase_user_id: ${firebaseUser.uid}');
-      print('   local_id: $localId');
-      print('   Email: ${firebaseUser.email}');
-    } catch (e) {
-      print('❌ Error saving user data to Firestore: $e');
-      throw Exception('Failed to save user data to cloud: $e');
-    }
-  }
-
-  /// Trigger sync service after Firebase creation
-  Future<void> _triggerSyncServiceAfterFirebaseCreation() async {
-    try {
-      print('🔄 Triggering sync service after Firebase creation...');
-
-      final syncService = Get.find<FixedLocalFirstSyncService>();
-
-      // Small delay to ensure Firestore data is committed
-      Future.delayed(const Duration(seconds: 1), () async {
-        await syncService.triggerManualSync();
-        print('✅ Post-creation sync triggered');
-      });
-    } catch (e) {
-      print('⚠️ Could not trigger post-creation sync: $e');
-      // Don't throw - this is not critical
-    }
-  }
-
-  /// Enhanced method to check if user can sync to Firebase
-  bool canSyncToFirebase() {
-    return firebaseAvailable.value &&
-        _firebaseAuth != null &&
-        _firestore != null;
-  }
-
-  /// Method to get sync status for a user
-  Future<Map<String, dynamic>> getUserSyncStatus(String email) async {
-    try {
-      if (!canSyncToFirebase()) {
-        return {
-          'canSync': false,
-          'reason': 'Firebase not available',
-          'status': 'local_only'
-        };
-      }
-
-      final schoolConfig = Get.find<SchoolConfigService>();
-      final schoolId = schoolConfig.schoolId.value;
-
-      if (schoolId.isEmpty) {
-        return {
-          'canSync': false,
-          'reason': 'No school configured',
-          'status': 'local_only'
-        };
-      }
-
-      // Check if user exists in Firestore
-      final userQuery = await _firestore!
-          .collection('schools')
-          .doc(schoolId)
-          .collection('users')
-          .where('email', isEqualTo: email.toLowerCase())
-          .limit(1)
-          .get();
-
-      if (userQuery.docs.isNotEmpty) {
-        return {
-          'canSync': true,
-          'reason': 'User exists in Firebase',
-          'status': 'synced',
-          'firestore_doc_id': userQuery.docs.first.id
-        };
-      } else {
-        return {
-          'canSync': true,
-          'reason': 'User can be synced to Firebase',
-          'status': 'can_sync'
-        };
-      }
-    } catch (e) {
-      print('❌ Error checking user sync status: $e');
-      return {
-        'canSync': false,
-        'reason': 'Error checking sync status: $e',
-        'status': 'error'
-      };
     }
   }
 

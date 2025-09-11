@@ -2,25 +2,17 @@
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/controllers/billing_controller.dart';
 import 'package:driving/controllers/course_controller.dart';
-import 'package:driving/controllers/firebase_sync_service.dart';
 import 'package:driving/controllers/fleet_controller.dart';
 import 'package:driving/controllers/navigation_controller.dart';
 import 'package:driving/controllers/pin_controller.dart';
 import 'package:driving/controllers/schedule_controller.dart';
-import 'package:driving/controllers/school_registration_controller.dart';
 import 'package:driving/controllers/settings_controller.dart';
 import 'package:driving/controllers/user_controller.dart';
 import 'package:driving/services/consistency_checker_service.dart';
 import 'package:driving/services/database_helper.dart';
 import 'package:driving/services/database_migration.dart';
-import 'package:driving/services/enhanced_payment_sync_service.dart';
-import 'package:driving/services/firebase_school_service.dart';
-import 'package:driving/services/fixed_local_first_sync_service.dart';
 import 'package:driving/services/lesson_counting_service.dart';
-import 'package:driving/services/payment_sync_integration.dart';
 import 'package:driving/services/school_config_service.dart';
-import 'package:driving/services/school_management_service.dart';
-import 'package:driving/services/subscription_service.dart';
 import 'package:get/get.dart';
 
 /// Enhanced App Bindings with Firebase-First Architecture
@@ -31,19 +23,12 @@ class EnhancedAppBindings extends Bindings {
 
     try {
       // STEP 1: Initialize core services first
-      await _initializeCoreServices();
       await emergencyTriggerFix(); // EMERGENCY: Drop problematic trigger
       // STEP 2: Initialize PIN authentication (before auth controller)
       await _initializePinAuthentication();
 
       // STEP 3: Initialize settings and school configuration
       await _initializeConfiguration();
-
-      // STEP 4: Initialize Firebase-first authentication controller
-      await _initializeFirebaseFirstAuth();
-
-      // STEP 5: Initialize Firebase sync service
-      await _initializeFirebaseSync();
 
       // STEP 6: Initialize UI controllers
       await _initializeUIControllers();
@@ -53,9 +38,6 @@ class EnhancedAppBindings extends Bindings {
 
       // STEP 8: Initialize service controllers
       await _initializeServiceControllers();
-
-      // STEP 9: Set up automatic sync system
-      await _setupAutomaticSync();
 
       // STEP 10: Print summary
       _printInitializationSummary();
@@ -79,38 +61,6 @@ class EnhancedAppBindings extends Bindings {
 
     print('🚨 EMERGENCY: Dropped problematic fleet trigger');
     print('✅ Your next sync should work correctly');
-  }
-
-  /// STEP 1: Initialize core services
-  Future<void> _initializeCoreServices() async {
-    print('📋 Initializing core services...');
-
-    try {
-      // Database Helper - must be first
-      if (!Get.isRegistered<DatabaseHelper>()) {
-        Get.put<DatabaseHelper>(DatabaseHelper.instance, permanent: true);
-        print('✅ DatabaseHelper initialized');
-      }
-
-      // School Management Service - early init for school operations
-      if (!Get.isRegistered<SchoolManagementService>()) {
-        Get.put<SchoolManagementService>(SchoolManagementService(),
-            permanent: true);
-        print('✅ SchoolManagementService initialized');
-      }
-
-      // School Registration Controller - for new school setup
-      if (!Get.isRegistered<SchoolRegistrationController>()) {
-        Get.put<SchoolRegistrationController>(SchoolRegistrationController(),
-            permanent: true);
-        print('✅ SchoolRegistrationController initialized');
-      }
-
-      print('✅ Core services initialization completed');
-    } catch (e) {
-      print('❌ Core services initialization failed: $e');
-      throw Exception('Critical services failed to initialize: $e');
-    }
   }
 
   /// STEP 2: Initialize PIN authentication (before auth controller)
@@ -150,8 +100,6 @@ class EnhancedAppBindings extends Bindings {
         print('   Settings loaded and tested');
         print('✅ SettingsController initialized and loaded');
       }
-      print('🔥 Registering Firebase services...');
-      Get.put<FirebaseSchoolService>(FirebaseSchoolService(), permanent: true);
 
       print('✅ Firebase services registered');
       // School Config Service (depends on settings)
@@ -175,94 +123,6 @@ class EnhancedAppBindings extends Bindings {
     } catch (e) {
       print('❌ Configuration initialization failed: $e');
       throw Exception('Configuration failed to initialize: $e');
-    }
-  }
-
-  /// STEP 4: Initialize Firebase-first authentication controller
-  Future<void> _initializeFirebaseFirstAuth() async {
-    print('🔥 Initializing Firebase-first authentication...');
-
-    try {
-      // AuthController with Firebase-first approach
-      if (!Get.isRegistered<AuthController>()) {
-        Get.put<AuthController>(AuthController(), permanent: true);
-        print('✅ Firebase-first AuthController initialized');
-      }
-
-      // Wait a moment for Firebase initialization to complete
-      await Future.delayed(const Duration(milliseconds: 500));
-
-      final authController = Get.find<AuthController>();
-      print('🔥 Firebase Available: ${authController.firebaseAvailable.value}');
-      print(
-          '🔐 Current Firebase User: ${authController.firebaseUser.value?.email ?? "None"}');
-      print('👤 Local User Logged In: ${authController.isLoggedIn.value}');
-
-      print('✅ Firebase-first authentication initialization completed');
-    } catch (e) {
-      print('❌ Firebase-first authentication initialization failed: $e');
-      throw Exception('Authentication failed to initialize: $e');
-    }
-  }
-
-  Future<void> _initializeFirebaseSync() async {
-    print('🔄 Initializing FIXED Firebase sync service...');
-
-    try {
-      // REPLACE FixedLocalFirstSyncService with FixedLocalFirstSyncService
-      if (!Get.isRegistered<FixedLocalFirstSyncService>()) {
-        Get.put<FixedLocalFirstSyncService>(FixedLocalFirstSyncService(),
-            permanent: true);
-        print('✅ FixedLocalFirstSyncService initialized');
-
-        // Initialize the service
-        final syncService = Get.find<FixedLocalFirstSyncService>();
-        await syncService.onInit();
-        print('✅ Fixed sync service configured');
-      }
-
-      print('✅ FIXED Firebase sync service initialization completed');
-    } catch (e) {
-      print('❌ FIXED Firebase sync service initialization failed: $e');
-      print('⚠️ App will continue with local-only mode');
-      // Don't throw - app can work without sync
-    }
-  }
-
-  Future<void> _setupAutomaticSync() async {
-    print('🤖 Setting up FIXED automatic sync system...');
-
-    try {
-      if (Get.isRegistered<FixedLocalFirstSyncService>()) {
-        final syncService = Get.find<FixedLocalFirstSyncService>();
-        final authController = Get.find<AuthController>();
-
-        // Only setup sync if Firebase is available
-        if (syncService.firebaseAvailable.value) {
-          print('✅ FIXED automatic sync system ready');
-          print('🔄 Sync will activate when user authenticates with Firebase');
-          print('⏰ Periodic sync configured (every 5 minutes)');
-
-          // Manual trigger for immediate sync if authenticated
-          if (authController.isFirebaseAuthenticated) {
-            Future.delayed(const Duration(seconds: 2), () {
-              syncService.syncWithFirebase().catchError((e) {
-                print('⚠️ Initial sync failed: $e');
-              });
-            });
-          }
-        } else {
-          print('⚠️ Firebase unavailable - sync system in standby mode');
-        }
-      } else {
-        print('⚠️ FIXED sync service not available - continuing without sync');
-      }
-
-      print('✅ FIXED automatic sync setup completed');
-    } catch (e) {
-      print('❌ FIXED automatic sync setup failed: $e');
-      print('⚠️ Manual sync will still be available');
-      // Don't throw - sync is not critical for basic app function
     }
   }
 
@@ -302,20 +162,6 @@ class EnhancedAppBindings extends Bindings {
         print('✅ CourseController initialized');
       }
 
-      // 🔧 FIX: Initialize SubscriptionService AFTER dependencies are ready
-      // Make sure SchoolConfigService is already initialized
-      if (!Get.isRegistered<SubscriptionService>()) {
-        Get.put<SubscriptionService>(SubscriptionService(), permanent: true);
-        print('✅ SubscriptionService initialized');
-      }
-
-      if (!Get.isRegistered<AutoSyncController>()) {
-        Get.put<AutoSyncController>(AutoSyncController(), permanent: true);
-        print('✅ AutoSyncController initialized');
-      }
-      Get.put(EnhancedPaymentSyncService(), permanent: true);
-      Get.put(PaymentSyncIntegration(), permanent: true);
-      print('Sync Payment integration');
       // Fleet Controller
       if (!Get.isRegistered<FleetController>()) {
         Get.put<FleetController>(FleetController(), permanent: true);
@@ -409,22 +255,6 @@ class EnhancedAppBindings extends Bindings {
           '🚨 Multiple service failures - app may have limited functionality');
     }
 
-    // Firebase-specific summary
-    try {
-      final authController = Get.find<AuthController>();
-      final syncService = Get.find<FixedLocalFirstSyncService>(); // CHANGED
-      print('\n🔥 === FIREBASE STATUS ===');
-      print('🔥 Firebase Available: ${authController.firebaseAvailable.value}');
-      print('🔄 Sync Service Ready: ${syncService.firebaseAvailable.value}');
-      print(
-          '👤 Firebase User: ${authController.firebaseUser.value?.email ?? "None"}');
-      print('👤 Local User Logged In: ${authController.isLoggedIn.value}');
-
-      print('✅ FIXED Firebase-first authentication initialization completed');
-    } catch (e) {
-      print('❌ Could not get Firebase status: $e');
-    }
-
     print('\n🚀 === FIXED APP READY FOR USE ===');
   }
 
@@ -443,8 +273,6 @@ class EnhancedAppBindings extends Bindings {
           return Get.isRegistered<SchoolConfigService>();
         case 'AuthController':
           return Get.isRegistered<AuthController>();
-        case 'FixedLocalFirstSyncService': // CHANGED
-          return Get.isRegistered<FixedLocalFirstSyncService>();
         case 'NavigationController':
           return Get.isRegistered<NavigationController>();
         case 'UserController':

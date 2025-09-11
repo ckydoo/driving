@@ -1,5 +1,4 @@
 // lib/screens/payments/enhanced_pos_screen.dart
-import 'package:driving/services/receipt_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';

@@ -16,10 +16,8 @@ import 'package:driving/screens/schedule/schedule_screen.dart';
 import 'package:driving/screens/users/alumni_screen.dart';
 import 'package:driving/screens/users/enhanced_users_screen.dart';
 import 'package:driving/screens/users/graduation_screen.dart';
-import 'package:driving/services/fixed_local_first_sync_service.dart';
 import 'package:driving/settings/settings_screen.dart';
 import 'package:driving/widgets/school_info_widget.dart';
-import 'package:driving/widgets/sync_status_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
@@ -451,21 +449,6 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
                       )),
                 ),
               ),
-
-              // SYNC ICON - NEW ADDITION
-              const SyncIconWidget(),
-              // POS button
-              Container(
-                width: 56,
-                height: 56,
-                child: IconButton(
-                  onPressed: () => navController.navigateToPage('pos'),
-                  icon: const Icon(Icons.payment, size: 35), // Bigger icon
-                  tooltip: 'POS',
-                  splashRadius: 24,
-                ),
-              ),
-              // Search button
               Container(
                 width: 56,
                 height: 56,
@@ -505,14 +488,7 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
                   )),
             ),
           ),
-          // SYNC STATUS WIDGET - NEW ADDITION
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 8.0),
-            child: SyncStatusWidget(
-              showText: true, // Show text on desktop for more info
-              showTooltip: true,
-            ),
-          ),
+
           // POS button
           IconButton(
             onPressed: () {
@@ -1096,9 +1072,6 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
                 ],
               ),
             ),
-
-            // Dynamic sync status info
-            _buildSyncStatusWarning(),
           ],
         ),
         actions: [
@@ -1123,144 +1096,9 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
     );
   }
 
-  // BUILD SYNC STATUS WARNING WIDGET
-  Widget _buildSyncStatusWarning() {
-    try {
-      final syncService = Get.find<FixedLocalFirstSyncService>();
-
-      return Obx(() {
-        final isSyncing = syncService.isSyncing.value;
-        final isOnline = syncService.isOnline.value;
-
-        if (isSyncing) {
-          return Column(
-            children: [
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
-                  border: Border.all(
-                    color: Colors.blue.shade200,
-                    width: 1,
-                  ),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          Colors.blue.shade600,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Data is currently syncing...',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.blue.shade700,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          );
-        } else if (!isOnline) {
-          return Column(
-            children: [
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade50,
-                  border: Border.all(
-                    color: Colors.red.shade200,
-                    width: 1,
-                  ),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.cloud_off,
-                      color: Colors.red.shade600,
-                      size: 18,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Currently offline - some data may not be synced.',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.red.shade700,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          );
-        }
-
-        return const SizedBox.shrink();
-      });
-    } catch (e) {
-      // If sync service not available, just return empty widget
-      return const SizedBox.shrink();
-    }
-  }
-
   // BUILD LOGOUT BUTTON WITH DYNAMIC STATE
   Widget _buildLogoutButton() {
-    try {
-      final syncService = Get.find<FixedLocalFirstSyncService>();
-
-      return Obx(() {
-        final isSyncing = syncService.isSyncing.value;
-
-        return ElevatedButton.icon(
-          onPressed: isSyncing
-              ? null // Disable if syncing
-              : () async {
-                  Get.back(); // Close dialog
-                  await _executeEnhancedLogout();
-                },
-          icon: isSyncing
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                  ),
-                )
-              : const Icon(Icons.logout),
-          label: Text(isSyncing ? 'Syncing...' : 'Logout'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor:
-                isSyncing ? Colors.grey.shade400 : Colors.red.shade600,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(
-              horizontal: 20,
-              vertical: 12,
-            ),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
-        );
-      });
-    } catch (e) {
-      // If sync service not available, show simple button
+    return Obx(() {
       return ElevatedButton.icon(
         onPressed: () async {
           Get.back(); // Close dialog
@@ -1280,186 +1118,186 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
           ),
         ),
       );
-    }
-  }
-
-  // ENHANCED LOGOUT EXECUTION WITH SYNC HANDLING
-  Future<void> _executeEnhancedLogout() async {
-    try {
-      final authController = Get.find<AuthController>();
-
-      // Show loading dialog
-      Get.dialog(
-        AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const CircularProgressIndicator(),
-              const SizedBox(height: 16),
-              const Text(
-                'Logging out...',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Finalizing data sync',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey.shade600,
-                ),
-              ),
-            ],
-          ),
-        ),
-        barrierDismissible: false,
-      );
-
-      // Step 2: Perform the actual logout
-      await authController.signOut();
-
-      // Step 3: Close loading dialog if still open
-      if (Get.isDialogOpen ?? false) {
-        Get.back();
-      }
-
-      // Step 4: Show success message
-      Get.snackbar(
-        'Logged Out',
-        'You have been successfully logged out',
-        backgroundColor: Colors.green.shade100,
-        colorText: Colors.green.shade800,
-        icon: Icon(
-          Icons.check_circle,
-          color: Colors.green.shade600,
-        ),
-        duration: const Duration(seconds: 2),
-      );
-
-      // Step 5: Navigate to login
-      Get.offAllNamed('/login');
-    } catch (e) {
-      print('❌ Error during logout: $e');
-
-      // Close loading dialog on error
-      if (Get.isDialogOpen ?? false) {
-        Get.back();
-      }
-
-      // Show error message but still try to logout
-      Get.snackbar(
-        'Logout Warning',
-        'There was an issue during logout, but you have been signed out.',
-        backgroundColor: Colors.orange.shade100,
-        colorText: Colors.orange.shade800,
-        icon: Icon(
-          Icons.warning,
-          color: Colors.orange.shade600,
-        ),
-        duration: const Duration(seconds: 4),
-      );
-
-      // Force navigation to login even on error
-      try {
-        final authController = Get.find<AuthController>();
-        await authController.signOut();
-      } catch (_) {}
-
-      Get.offAllNamed('/login');
-    }
-  }
-
-  // Content area - EXACT copy
-  Widget _buildContentArea(NavigationController navController) {
-    return Obx(() {
-      final currentPage = navController.currentPage.value;
-
-      // Check access before rendering
-      if (!navController.hasAccessToPage(currentPage)) {
-        return const Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.block,
-                size: 64,
-                color: Colors.red,
-              ),
-              SizedBox(height: 16),
-              Text(
-                'Access Denied',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.red,
-                ),
-              ),
-              SizedBox(height: 8),
-              Text('You do not have permission to access this page.'),
-            ],
-          ),
-        );
-      }
-
-      return Container(
-        width: double.infinity,
-        height: double.infinity,
-        color: Colors.grey[100],
-        child: _getCurrentPageWidget(currentPage),
-      );
     });
   }
+}
 
-  // Get current page widget - EXACT copy
-  Widget _getCurrentPageWidget(String pageKey) {
-    switch (pageKey) {
-      case 'dashboard':
-        return const FixedDashboardContent();
-      case 'students':
-        return const EnhancedUsersScreen(
-          key: ValueKey('student_screen'),
-          role: 'student',
-        );
-      case 'instructors':
-        return const EnhancedUsersScreen(
-          key: ValueKey('instructor_screen'),
-          role: 'instructor',
-        );
-      case 'courses':
-        return const CourseScreen();
-      case 'vehicles':
-        return const FleetScreen();
-      case 'schedules':
-        return ScheduleScreen();
-      case 'billing':
-        return const BillingScreen();
-      case 'receipts':
-        return const ReceiptManagementScreen();
-      case 'pos':
-        return const POSScreen();
-      case 'financial_reports':
-        return FinancialReportsScreen();
-      case 'user_reports':
-        return UsersReportsScreen();
-      case 'users':
-        return const EnhancedUsersScreen(
-          key: ValueKey('admin_users_screen'),
-          role: 'admin',
-        );
-      case 'quick_search':
-        return const QuickSearchScreen();
-      case 'settings':
-        return SettingsScreen();
+// ENHANCED LOGOUT EXECUTION WITH SYNC HANDLING
+Future<void> _executeEnhancedLogout() async {
+  try {
+    final authController = Get.find<AuthController>();
 
-      case 'alumni':
-        return const AlumniScreen();
-      default:
-        return const FixedDashboardContent();
+    // Show loading dialog
+    Get.dialog(
+      AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            const Text(
+              'Logging out...',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Finalizing data sync',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey.shade600,
+              ),
+            ),
+          ],
+        ),
+      ),
+      barrierDismissible: false,
+    );
+
+    // Step 2: Perform the actual logout
+    await authController.signOut();
+
+    // Step 3: Close loading dialog if still open
+    if (Get.isDialogOpen ?? false) {
+      Get.back();
     }
+
+    // Step 4: Show success message
+    Get.snackbar(
+      'Logged Out',
+      'You have been successfully logged out',
+      backgroundColor: Colors.green.shade100,
+      colorText: Colors.green.shade800,
+      icon: Icon(
+        Icons.check_circle,
+        color: Colors.green.shade600,
+      ),
+      duration: const Duration(seconds: 2),
+    );
+
+    // Step 5: Navigate to login
+    Get.offAllNamed('/login');
+  } catch (e) {
+    print('❌ Error during logout: $e');
+
+    // Close loading dialog on error
+    if (Get.isDialogOpen ?? false) {
+      Get.back();
+    }
+
+    // Show error message but still try to logout
+    Get.snackbar(
+      'Logout Warning',
+      'There was an issue during logout, but you have been signed out.',
+      backgroundColor: Colors.orange.shade100,
+      colorText: Colors.orange.shade800,
+      icon: Icon(
+        Icons.warning,
+        color: Colors.orange.shade600,
+      ),
+      duration: const Duration(seconds: 4),
+    );
+
+    // Force navigation to login even on error
+    try {
+      final authController = Get.find<AuthController>();
+      await authController.signOut();
+    } catch (_) {}
+
+    Get.offAllNamed('/login');
+  }
+}
+
+// Content area - EXACT copy
+Widget _buildContentArea(NavigationController navController) {
+  return Obx(() {
+    final currentPage = navController.currentPage.value;
+
+    // Check access before rendering
+    if (!navController.hasAccessToPage(currentPage)) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.block,
+              size: 64,
+              color: Colors.red,
+            ),
+            SizedBox(height: 16),
+            Text(
+              'Access Denied',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.red,
+              ),
+            ),
+            SizedBox(height: 8),
+            Text('You do not have permission to access this page.'),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      color: Colors.grey[100],
+      child: _getCurrentPageWidget(currentPage),
+    );
+  });
+}
+
+// Get current page widget - EXACT copy
+Widget _getCurrentPageWidget(String pageKey) {
+  switch (pageKey) {
+    case 'dashboard':
+      return const FixedDashboardContent();
+    case 'students':
+      return const EnhancedUsersScreen(
+        key: ValueKey('student_screen'),
+        role: 'student',
+      );
+    case 'instructors':
+      return const EnhancedUsersScreen(
+        key: ValueKey('instructor_screen'),
+        role: 'instructor',
+      );
+    case 'courses':
+      return const CourseScreen();
+    case 'vehicles':
+      return const FleetScreen();
+    case 'schedules':
+      return ScheduleScreen();
+    case 'billing':
+      return const BillingScreen();
+    case 'receipts':
+      return const ReceiptManagementScreen();
+    case 'pos':
+      return const POSScreen();
+    case 'financial_reports':
+      return FinancialReportsScreen();
+    case 'user_reports':
+      return UsersReportsScreen();
+    case 'users':
+      return const EnhancedUsersScreen(
+        key: ValueKey('admin_users_screen'),
+        role: 'admin',
+      );
+    case 'quick_search':
+      return const QuickSearchScreen();
+    case 'settings':
+      return SettingsScreen();
+
+    case 'alumni':
+      return const AlumniScreen();
+    default:
+      return const FixedDashboardContent();
   }
 }

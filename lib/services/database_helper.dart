@@ -1,23 +1,9 @@
-// Updated DatabaseHelper with Firebase sync integration
+// Simplified DatabaseHelper without Firebase sync
 import 'dart:async';
-import 'dart:convert';
-import 'package:driving/controllers/auth_controller.dart';
-import 'package:driving/models/billing.dart';
-import 'package:driving/models/billing_record.dart';
-import 'package:driving/models/course.dart';
-import 'package:driving/models/fleet.dart';
-import 'package:driving/models/payment.dart';
-import 'package:driving/models/user.dart';
-import 'package:driving/services/fixed_local_first_sync_service.dart';
-import 'package:get/get.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common/sqlite_api.dart';
 import 'package:path/path.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-
-// Import the sync extension
-import 'enhanced_database_helper.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._internal();
@@ -43,17 +29,7 @@ class DatabaseHelper {
 
   Future<void> _onCreate(Database db, int version) async {
     await _createAllTables(db);
-    await DatabaseHelperSyncExtension.addSyncTrackingTriggers(db);
-
-    await DatabaseHelperSyncExtension.addDeletedColumn(db);
-
-    await _addDeviceTrackingColumns(db);
-
-    await _createSyncMetadataTables(db);
-
-    await _initializeDeviceId();
-
-    print('Database tables created with sync support');
+    print('Database tables created');
   }
 
   Future<void> _createAllTables(Database db) async {
@@ -64,12 +40,7 @@ class DatabaseHelper {
         key TEXT UNIQUE NOT NULL,
         value TEXT NOT NULL,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        firebase_synced INTEGER DEFAULT 0,
-        deleted INTEGER DEFAULT 0,
-        last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
-        firebase_user_id TEXT,
-        last_modified_device TEXT
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
       )
     ''');
 
@@ -81,12 +52,7 @@ class DatabaseHelper {
         attachment_for INTEGER NOT NULL,
         name TEXT NOT NULL,
         attachment TEXT NOT NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        firebase_synced INTEGER DEFAULT 0,
-        deleted INTEGER DEFAULT 0,
-        last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
-        firebase_user_id TEXT,
-        last_modified_device TEXT
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     ''');
 
@@ -95,12 +61,7 @@ class DatabaseHelper {
       CREATE TABLE courseinstructor(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         instructor INTEGER NOT NULL,
-        course INTEGER NOT NULL,
-        firebase_synced INTEGER DEFAULT 0,
-        deleted INTEGER DEFAULT 0,
-        last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
-        firebase_user_id TEXT,
-        last_modified_device TEXT
+        course INTEGER NOT NULL
       )
     ''');
 
@@ -111,12 +72,7 @@ class DatabaseHelper {
         name TEXT NOT NULL,
         price INTEGER NOT NULL,
         status TEXT NOT NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        firebase_synced INTEGER DEFAULT 0,
-        deleted INTEGER DEFAULT 0,
-        last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
-        firebase_user_id TEXT,
-        last_modified_device TEXT
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     ''');
 
@@ -133,12 +89,7 @@ class DatabaseHelper {
         completed_theory INTEGER NOT NULL DEFAULT 0,
         completed_practical INTEGER NOT NULL DEFAULT 0,
         completed_on DATE,
-        status TEXT NOT NULL DEFAULT 'Pending',
-        firebase_synced INTEGER DEFAULT 0,
-        deleted INTEGER DEFAULT 0,
-        last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
-        firebase_user_id TEXT,
-        last_modified_device TEXT
+        status TEXT NOT NULL DEFAULT 'Pending'
       )
     ''');
 
@@ -148,12 +99,7 @@ class DatabaseHelper {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
         code TEXT NOT NULL,
-        symbol TEXT NOT NULL,
-        firebase_synced INTEGER DEFAULT 0,
-        deleted INTEGER DEFAULT 0,
-        last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
-        firebase_user_id TEXT,
-        last_modified_device TEXT
+        symbol TEXT NOT NULL
       )
     ''');
 
@@ -165,12 +111,7 @@ class DatabaseHelper {
         make TEXT NOT NULL,
         model TEXT NOT NULL,
         modelyear TEXT NOT NULL,
-        instructor INTEGER NOT NULL,
-        firebase_synced INTEGER DEFAULT 0,
-        deleted INTEGER DEFAULT 0,
-        last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
-        firebase_user_id TEXT,
-        last_modified_device TEXT
+        instructor INTEGER NOT NULL
       )
     ''');
 
@@ -189,12 +130,7 @@ class DatabaseHelper {
        status TEXT NOT NULL DEFAULT 'unpaid',
        total_amount REAL NOT NULL,
        used_lessons INTEGER NOT NULL DEFAULT 0,
-       invoice_number TEXT NOT NULL UNIQUE,
-       firebase_synced INTEGER DEFAULT 0,
-       deleted INTEGER DEFAULT 0,
-       last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
-       firebase_user_id TEXT,
-       last_modified_device TEXT
+       invoice_number TEXT NOT NULL UNIQUE
       )
     ''');
 
@@ -205,12 +141,7 @@ class DatabaseHelper {
         note_by INTEGER NOT NULL,
         note_for INTEGER NOT NULL,
         note TEXT NOT NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        firebase_synced INTEGER DEFAULT 0,
-        deleted INTEGER DEFAULT 0,
-        last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
-        firebase_user_id TEXT,
-        last_modified_device TEXT
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     ''');
 
@@ -222,12 +153,7 @@ class DatabaseHelper {
         type TEXT,
         message TEXT NOT NULL,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        is_read INTEGER NOT NULL DEFAULT 0,
-        firebase_synced INTEGER DEFAULT 0,
-        deleted INTEGER DEFAULT 0,
-        last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
-        firebase_user_id TEXT,
-        last_modified_device TEXT
+        is_read INTEGER NOT NULL DEFAULT 0
       )
     ''');
 
@@ -241,12 +167,7 @@ class DatabaseHelper {
         message TEXT NOT NULL,
         type TEXT NOT NULL,
         send_via TEXT NOT NULL,
-        timing TEXT NOT NULL,
-        firebase_synced INTEGER DEFAULT 0,
-        deleted INTEGER DEFAULT 0,
-        last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
-        firebase_user_id TEXT,
-        last_modified_device TEXT
+        timing TEXT NOT NULL
       )
     ''');
 
@@ -268,12 +189,7 @@ class DatabaseHelper {
         attended INTEGER NOT NULL DEFAULT 0,
         lessonsCompleted INTEGER DEFAULT 0,
         lessonsDeducted INTEGER DEFAULT 0,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        firebase_synced INTEGER DEFAULT 0,
-        deleted INTEGER DEFAULT 0,
-        last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
-        firebase_user_id TEXT,
-        last_modified_device TEXT
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     ''');
 
@@ -287,11 +203,6 @@ class DatabaseHelper {
         description TEXT,
         created_by INTEGER NOT NULL,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        firebase_synced INTEGER DEFAULT 0,
-        deleted INTEGER DEFAULT 0,
-        last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
-        firebase_user_id TEXT,
-        last_modified_device TEXT,
         FOREIGN KEY (studentId) REFERENCES users(id)
       )
     ''');
@@ -306,12 +217,7 @@ class DatabaseHelper {
         subject TEXT,
         message TEXT,
         sent_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        status TEXT NOT NULL DEFAULT 'Sent',
-        firebase_synced INTEGER DEFAULT 0,
-        deleted INTEGER DEFAULT 0,
-        last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
-        firebase_user_id TEXT,
-        last_modified_device TEXT
+        status TEXT NOT NULL DEFAULT 'Sent'
       )
     ''');
 
@@ -325,11 +231,6 @@ class DatabaseHelper {
         amount REAL NOT NULL,
         dueDate TEXT,
         status TEXT NOT NULL,
-        firebase_synced INTEGER DEFAULT 0,
-        deleted INTEGER DEFAULT 0,
-        last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
-        firebase_user_id TEXT,
-        last_modified_device TEXT,
         FOREIGN KEY (scheduleId) REFERENCES schedules(id),
         FOREIGN KEY (invoiceId) REFERENCES invoices(id),
         FOREIGN KEY (studentId) REFERENCES users(id)
@@ -354,11 +255,6 @@ class DatabaseHelper {
         courseIds TEXT,
         status TEXT NOT NULL DEFAULT 'Active',
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        firebase_synced INTEGER DEFAULT 0,
-        deleted INTEGER DEFAULT 0,
-        last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
-        firebase_user_id TEXT,
-        last_modified_device TEXT,
         last_login TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         last_login_method TEXT
       )
@@ -382,12 +278,7 @@ class DatabaseHelper {
         receipt_type TEXT,
         receipt_generated INTEGER NOT NULL DEFAULT 0,
         userId INTEGER REFERENCES users(id),
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        firebase_synced INTEGER DEFAULT 0,
-        deleted INTEGER DEFAULT 0,
-        last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
-        firebase_user_id TEXT,
-        last_modified_device TEXT
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     ''');
 
@@ -400,11 +291,6 @@ class DatabaseHelper {
         amount REAL NOT NULL,
         dueDate TEXT,
         status TEXT,
-        firebase_synced INTEGER DEFAULT 0,
-        deleted INTEGER DEFAULT 0,
-        last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
-        firebase_user_id TEXT,
-        last_modified_device TEXT,
         FOREIGN KEY (scheduleId) REFERENCES schedules (id),
         FOREIGN KEY (studentId) REFERENCES users (id) 
       )
@@ -420,11 +306,6 @@ class DatabaseHelper {
           amount REAL NOT NULL,
           dueDate TEXT,
           status TEXT NOT NULL,
-          firebase_synced INTEGER DEFAULT 0,
-          deleted INTEGER DEFAULT 0,
-          last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
-          firebase_user_id TEXT,
-          last_modified_device TEXT,
           FOREIGN KEY (scheduleId) REFERENCES schedules(id),
           FOREIGN KEY (invoiceId) REFERENCES invoices(id),
           FOREIGN KEY (studentId) REFERENCES users(id)
@@ -443,91 +324,47 @@ class DatabaseHelper {
         country TEXT,
         last_accessed TEXT,
         access_count INTEGER DEFAULT 1,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        firebase_synced INTEGER DEFAULT 0,
-        deleted INTEGER DEFAULT 0,
-        last_modified INTEGER DEFAULT ${DateTime.now().toUtc().millisecondsSinceEpoch},
-        firebase_user_id TEXT,
-        last_modified_device TEXT
-      )
-    ''');
-
-    print('✅ All tables created with sync fields');
-  }
-
-  /// Create sync metadata and conflict tables
-  Future<void> _createSyncMetadataTables(Database db) async {
-    // Sync metadata table
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS sync_metadata (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        table_name TEXT NOT NULL UNIQUE,
-        last_sync_timestamp INTEGER DEFAULT 0,
-        last_sync_device TEXT,
-        total_records INTEGER DEFAULT 0,
-        synced_records INTEGER DEFAULT 0,
-        conflict_count INTEGER DEFAULT 0,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-      )
-    ''');
-
-    // Conflict resolution log table
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS sync_conflicts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        table_name TEXT NOT NULL,
-        record_id INTEGER NOT NULL,
-        conflict_type TEXT NOT NULL,
-        local_timestamp INTEGER,
-        remote_timestamp INTEGER,
-        local_device TEXT,
-        remote_device TEXT,
-        resolution TEXT NOT NULL,
-        local_data TEXT,
-        remote_data TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
       )
     ''');
+
+    print('✅ All tables created');
   }
-  // ==================== SYNC-ENABLED CRUD METHODS ====================
+
+  // ==================== SIMPLIFIED CRUD METHODS ====================
 
   // ================ USERS TABLE ================
-  // lib/services/database_helper.dart - Enhanced insertUser method with better error handling
-
-  Future<int> insertUser(User user) async {
+  Future<int> insertUser(Map<String, dynamic> user) async {
     try {
       final db = await database;
-      final userData = user.toJson();
 
       // Remove ID for new users (auto-generated)
-      userData.remove('id');
+      user.remove('id');
 
       // Validate required fields
-      if (userData['email'] == null ||
-          userData['email'].toString().trim().isEmpty) {
+      if (user['email'] == null || user['email'].toString().trim().isEmpty) {
         throw Exception('Email is required');
       }
 
       // Set default values
-      userData['created_at'] ??= DateTime.now().toIso8601String();
-      userData['status'] ??= 'Active';
-      userData['role'] ??= 'student';
+      user['created_at'] ??= DateTime.now().toIso8601String();
+      user['status'] ??= 'Active';
+      user['role'] ??= 'student';
 
-      print('📝 Inserting user data: ${userData['email']}');
+      print('📝 Inserting user data: ${user['email']}');
 
-      // ✅ FIX 1: Check for existing user BEFORE inserting
+      // Check for existing user BEFORE inserting
       final existingUsers = await db.query('users',
           where: 'idnumber = ? OR email = ?',
-          whereArgs: [userData['idnumber'], userData['email']]);
+          whereArgs: [user['idnumber'], user['email']]);
 
       if (existingUsers.isNotEmpty) {
         final existing = existingUsers.first;
         print('User already exists: ${existing['email']}, updating instead...');
 
         // Update existing user instead
-        userData['id'] = existing['id'];
-        final updatedRows = await db.update('users', userData,
+        user['id'] = existing['id'];
+        final updatedRows = await db.update('users', user,
             where: 'id = ?', whereArgs: [existing['id']]);
 
         if (updatedRows > 0) {
@@ -537,11 +374,7 @@ class DatabaseHelper {
       }
 
       // Insert new user if not exists
-      final insertedId = await DatabaseHelperSyncExtension.insertWithSync(
-        db,
-        'users',
-        userData,
-      );
+      final insertedId = await db.insert('users', user);
 
       if (insertedId <= 0) {
         throw Exception(
@@ -568,34 +401,30 @@ class DatabaseHelper {
     }
   }
 
-  Future<int> updateUser(User user) async {
+  Future<int> updateUser(Map<String, dynamic> user) async {
     try {
       final db = await database;
 
-      if (user.id == null || user.id! <= 0) {
+      if (user['id'] == null || user['id'] <= 0) {
         throw Exception('Invalid user ID for update');
       }
 
-      final userData = user.toJson();
-
       // Validate required fields
-      if (userData['email'] == null ||
-          userData['email'].toString().trim().isEmpty) {
+      if (user['email'] == null || user['email'].toString().trim().isEmpty) {
         throw Exception('Email is required');
       }
 
-      print('📝 Updating user data: ID ${user.id}, Email ${userData['email']}');
+      print('📝 Updating user data: ID ${user['id']}, Email ${user['email']}');
 
-      final rowsAffected = await DatabaseHelperSyncExtension.updateWithSync(
-        db,
+      final rowsAffected = await db.update(
         'users',
-        userData,
-        'id = ?',
-        [user.id!],
+        user,
+        where: 'id = ?',
+        whereArgs: [user['id']],
       );
 
       if (rowsAffected == 0) {
-        throw Exception('No user found with ID ${user.id}');
+        throw Exception('No user found with ID ${user['id']}');
       }
 
       print('✅ User updated successfully: $rowsAffected row(s) affected');
@@ -607,8 +436,7 @@ class DatabaseHelper {
       if (e.toString().contains('UNIQUE constraint failed')) {
         if (e.toString().contains('users.email')) {
           throw Exception(
-            'Email address is already registered by another user',
-          );
+              'Email address is already registered by another user');
         } else if (e.toString().contains('users.phone')) {
           throw Exception('Phone number is already registered by another user');
         } else if (e.toString().contains('users.idnumber')) {
@@ -622,351 +450,228 @@ class DatabaseHelper {
 
   Future<int> deleteUser(int id) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.deleteWithSync(db, 'users', 'id = ?', [
-      id,
-    ]);
+    return await db.delete('users', where: 'id = ?', whereArgs: [id]);
   }
 
   Future<List<Map<String, dynamic>>> getUsers({String? role}) async {
     final db = await database;
     if (role != null) {
-      return DatabaseHelperSyncExtension.queryWithoutDeleted(
-        db,
-        'users',
-        where: 'LOWER(role) = ?',
-        whereArgs: [role.toLowerCase()],
-      );
+      return await db.query('users',
+          where: 'LOWER(role) = ?', whereArgs: [role.toLowerCase()]);
     } else {
-      return DatabaseHelperSyncExtension.queryWithoutDeleted(db, 'users');
+      return await db.query('users');
     }
   }
 
   // ================ SCHEDULES TABLE ================
   Future<int> insertSchedule(Map<String, dynamic> schedule) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.insertWithSync(
-      db,
-      'schedules',
-      schedule,
-    );
+    return await db.insert('schedules', schedule);
   }
 
   Future<int> updateSchedule(Map<String, dynamic> schedule) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.updateWithSync(
-      db,
-      'schedules',
-      schedule,
-      'id = ?',
-      [schedule['id']],
-    );
+    return await db.update('schedules', schedule,
+        where: 'id = ?', whereArgs: [schedule['id']]);
   }
 
   Future<int> deleteSchedule(int id) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.deleteWithSync(
-      db,
-      'schedules',
-      'id = ?',
-      [id],
-    );
+    return await db.delete('schedules', where: 'id = ?', whereArgs: [id]);
   }
 
   Future<List<Map<String, dynamic>>> getSchedules() async {
     final db = await database;
-    return DatabaseHelperSyncExtension.queryWithoutDeleted(db, 'schedules');
+    return await db.query('schedules');
   }
 
   // ================ COURSES TABLE ================
   Future<int> insertCourse(Map<String, dynamic> course) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.insertWithSync(db, 'courses', course);
+    return await db.insert('courses', course);
   }
 
   Future<int> updateCourse(Map<String, dynamic> course) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.updateWithSync(
-      db,
-      'courses',
-      course,
-      'id = ?',
-      [course['id']],
-    );
+    return await db
+        .update('courses', course, where: 'id = ?', whereArgs: [course['id']]);
   }
 
   Future<int> deleteCourse(int id) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.deleteWithSync(db, 'courses', 'id = ?', [
-      id,
-    ]);
+    return await db.delete('courses', where: 'id = ?', whereArgs: [id]);
   }
 
   Future<List<Map<String, dynamic>>> getCourses() async {
     final db = await database;
-
-    return DatabaseHelperSyncExtension.queryWithoutDeleted(db, 'courses');
+    return await db.query('courses');
   }
 
   // ================ INVOICES TABLE ================
   Future<int> insertInvoice(Map<String, dynamic> invoice) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.insertWithSync(db, 'invoices', invoice);
+    return await db.insert('invoices', invoice);
   }
 
   Future<int> updateInvoice(Map<String, dynamic> invoice) async {
     print('DatabaseHelper: Updating invoice with data: $invoice');
     final db = await database;
-    return DatabaseHelperSyncExtension.updateWithSync(
-      db,
-      'invoices',
-      invoice,
-      'id = ?',
-      [invoice['id']],
-    );
+    return await db.update('invoices', invoice,
+        where: 'id = ?', whereArgs: [invoice['id']]);
   }
 
   Future<int> deleteInvoice(int id) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.deleteWithSync(
-      db,
-      'invoices',
-      'id = ?',
-      [id],
-    );
+    return await db.delete('invoices', where: 'id = ?', whereArgs: [id]);
   }
 
   Future<List<Map<String, dynamic>>> getInvoices() async {
     final db = await database;
-    return DatabaseHelperSyncExtension.queryWithoutDeleted(db, 'invoices');
+    return await db.query('invoices');
   }
 
   // ================ PAYMENTS TABLE ================
   Future<int> insertPayment(Map<String, dynamic> payment) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.insertWithSync(db, 'payments', payment);
+    return await db.insert('payments', payment);
   }
 
   Future<int> updatePayment(Map<String, dynamic> payment) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.updateWithSync(
-      db,
-      'payments',
-      payment,
-      'id = ?',
-      [payment['id']],
-    );
+    return await db.update('payments', payment,
+        where: 'id = ?', whereArgs: [payment['id']]);
   }
 
   Future<int> deletePayment(int id) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.deleteWithSync(
-      db,
-      'payments',
-      'id = ?',
-      [id],
-    );
+    return await db.delete('payments', where: 'id = ?', whereArgs: [id]);
   }
 
   Future<List<Map<String, dynamic>>> getPayments() async {
     final db = await database;
-    return DatabaseHelperSyncExtension.queryWithoutDeleted(db, 'payments');
+    return await db.query('payments');
   }
 
   // ================ FLEET TABLE ================
   Future<int> insertFleet(Map<String, dynamic> fleet) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.insertWithSync(db, 'fleet', fleet);
+    return await db.insert('fleet', fleet);
   }
 
   Future<int> updateFleet(Map<String, dynamic> fleet) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.updateWithSync(
-      db,
-      'fleet',
-      fleet,
-      'id = ?',
-      [fleet['id']],
-    );
+    return await db
+        .update('fleet', fleet, where: 'id = ?', whereArgs: [fleet['id']]);
   }
 
   Future<int> deleteFleet(int id) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.deleteWithSync(db, 'fleet', 'id = ?', [
-      id,
-    ]);
+    return await db.delete('fleet', where: 'id = ?', whereArgs: [id]);
   }
 
   Future<List<Map<String, dynamic>>> getFleet() async {
     final db = await database;
-    return DatabaseHelperSyncExtension.queryWithoutDeleted(db, 'fleet');
+    return await db.query('fleet');
   }
 
   // ================ ATTACHMENTS TABLE ================
   Future<int> insertAttachment(Map<String, dynamic> attachment) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.insertWithSync(
-      db,
-      'attachments',
-      attachment,
-    );
+    return await db.insert('attachments', attachment);
   }
 
   Future<int> updateAttachment(Map<String, dynamic> attachment) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.updateWithSync(
-      db,
-      'attachments',
-      attachment,
-      'id = ?',
-      [attachment['id']],
-    );
+    return await db.update('attachments', attachment,
+        where: 'id = ?', whereArgs: [attachment['id']]);
   }
 
   Future<int> deleteAttachment(int id) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.deleteWithSync(
-      db,
-      'attachments',
-      'id = ?',
-      [id],
-    );
+    return await db.delete('attachments', where: 'id = ?', whereArgs: [id]);
   }
 
   Future<List<Map<String, dynamic>>> getAttachments() async {
     final db = await database;
-    return DatabaseHelperSyncExtension.queryWithoutDeleted(db, 'attachments');
+    return await db.query('attachments');
   }
 
   // ================ NOTES TABLE ================
   Future<int> insertNote(Map<String, dynamic> note) async {
     final db = await database;
     print('Note saved');
-    return DatabaseHelperSyncExtension.insertWithSync(db, 'notes', note);
+    return await db.insert('notes', note);
   }
 
   Future<int> updateNote(Map<String, dynamic> note) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.updateWithSync(
-      db,
-      'notes',
-      note,
-      'id = ?',
-      [note['id']],
-    );
+    return await db
+        .update('notes', note, where: 'id = ?', whereArgs: [note['id']]);
   }
 
   Future<int> deleteNote(int id) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.deleteWithSync(db, 'notes', 'id = ?', [
-      id,
-    ]);
+    return await db.delete('notes', where: 'id = ?', whereArgs: [id]);
   }
 
   Future<List<Map<String, dynamic>>> getNotes() async {
     final db = await database;
-    return DatabaseHelperSyncExtension.queryWithoutDeleted(db, 'notes');
+    return await db.query('notes');
   }
 
   // ================ NOTIFICATIONS TABLE ================
   Future<int> insertNotification(Map<String, dynamic> notification) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.insertWithSync(
-      db,
-      'notifications',
-      notification,
-    );
+    return await db.insert('notifications', notification);
   }
 
   Future<int> updateNotification(Map<String, dynamic> notification) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.updateWithSync(
-      db,
-      'notifications',
-      notification,
-      'id = ?',
-      [notification['id']],
-    );
+    return await db.update('notifications', notification,
+        where: 'id = ?', whereArgs: [notification['id']]);
   }
 
   Future<int> deleteNotification(int id) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.deleteWithSync(
-      db,
-      'notifications',
-      'id = ?',
-      [id],
-    );
+    return await db.delete('notifications', where: 'id = ?', whereArgs: [id]);
   }
 
   Future<List<Map<String, dynamic>>> getNotificationsForUser(int userId) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.queryWithoutDeleted(
-      db,
-      'notifications',
-      where: 'user = ?',
-      whereArgs: [userId],
-      orderBy: 'created_at DESC',
-    );
+    return await db.query('notifications',
+        where: 'user = ?', whereArgs: [userId], orderBy: 'created_at DESC');
   }
 
   // ================ BILLING RECORDS TABLE ================
-  Future<int> insertBillingRecord(BillingRecord billingRecord) async {
+  Future<int> insertBillingRecord(Map<String, dynamic> billingRecord) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.insertWithSync(
-      db,
-      'billing_records',
-      billingRecord.toJson(),
-    );
+    return await db.insert('billing_records', billingRecord);
   }
 
   Future<void> updateBillingRecordStatus(
-    int billingRecordId,
-    String status,
-  ) async {
+      int billingRecordId, String status) async {
     final db = await database;
-    await DatabaseHelperSyncExtension.updateWithSync(
-      db,
-      'billing_records',
-      {'status': status},
-      'id = ?',
-      [billingRecordId],
-    );
+    await db.update('billing_records', {'status': status},
+        where: 'id = ?', whereArgs: [billingRecordId]);
   }
 
   Future<int> deleteBillingRecord(int id) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.deleteWithSync(
-      db,
-      'billing_records',
-      'id = ?',
-      [id],
-    );
+    return await db.delete('billing_records', where: 'id = ?', whereArgs: [id]);
   }
 
-  Future<List<BillingRecord>> getBillingRecordsForInvoice(int invoiceId) async {
+  Future<List<Map<String, dynamic>>> getBillingRecordsForInvoice(
+      int invoiceId) async {
     final db = await database;
-    final List<Map<String, dynamic>> results =
-        await DatabaseHelperSyncExtension.queryWithoutDeleted(
-      db,
-      'billing_records',
-      where: 'invoiceId = ?',
-      whereArgs: [invoiceId],
-    );
-    return results.map((json) => BillingRecord.fromJson(json)).toList();
+    return await db.query('billing_records',
+        where: 'invoiceId = ?', whereArgs: [invoiceId]);
   }
 
   // ==================== SPECIALIZED QUERY METHODS ====================
-  // These methods use special queries, so they might need custom handling
-
   Future<Map<String, dynamic>?> getUserByEmail(String email) async {
     final db = await database;
-    final results = await DatabaseHelperSyncExtension.queryWithoutDeleted(
-      db,
-      'users',
-      where: 'LOWER(email) = ?',
-      whereArgs: [email.toLowerCase()],
-      limit: 1,
-    );
+    final results = await db.query('users',
+        where: 'LOWER(email) = ?', whereArgs: [email.toLowerCase()], limit: 1);
 
     if (results.isNotEmpty) {
       return results.first;
@@ -976,13 +681,8 @@ class DatabaseHelper {
 
   Future<Map<String, dynamic>?> getUserById(int id) async {
     final db = await database;
-    final results = await DatabaseHelperSyncExtension.queryWithoutDeleted(
-      db,
-      'users',
-      where: 'id = ?',
-      whereArgs: [id],
-      limit: 1,
-    );
+    final results =
+        await db.query('users', where: 'id = ?', whereArgs: [id], limit: 1);
 
     if (results.isNotEmpty) {
       return results.first;
@@ -990,28 +690,21 @@ class DatabaseHelper {
     return null;
   }
 
-  Future<Course?> getCourseById(int courseId) async {
+  Future<Map<String, dynamic>?> getCourseById(int courseId) async {
     final db = await database;
     final List<Map<String, dynamic>> maps =
-        await DatabaseHelperSyncExtension.queryWithoutDeleted(
-      db,
-      'courses',
-      where: 'id = ?',
-      whereArgs: [courseId],
-    );
+        await db.query('courses', where: 'id = ?', whereArgs: [courseId]);
 
     if (maps.isNotEmpty) {
-      return Course.fromJson(maps.first);
+      return maps.first;
     } else {
       return null;
     }
   }
 
   Future<List<Map<String, dynamic>>> getInvoicesWithCourseNamesForStudent(
-    int studentId,
-  ) async {
+      int studentId) async {
     final db = await database;
-    // For complex joins, we'll use raw query but add deleted check
     final List<Map<String, dynamic>> results = await db.rawQuery(
       '''
       SELECT 
@@ -1030,9 +723,7 @@ class DatabaseHelper {
         courses.name AS courseName 
       FROM invoices
       INNER JOIN courses ON invoices.course = courses.id  
-      WHERE invoices.student = ? 
-        AND (invoices.deleted IS NULL OR invoices.deleted = 0)
-        AND (courses.deleted IS NULL OR courses.deleted = 0)
+      WHERE invoices.student = ?
     ''',
       [studentId],
     );
@@ -1041,81 +732,53 @@ class DatabaseHelper {
   }
 
   Future<List<Map<String, dynamic>>> getAttachmentsForStudent(
-    int studentId,
-  ) async {
+      int studentId) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.queryWithoutDeleted(
-      db,
-      'attachments',
-      where: 'attachment_for = ?',
-      whereArgs: [studentId],
-      orderBy: 'created_at DESC',
-    );
+    return await db.query('attachments',
+        where: 'attachment_for = ?',
+        whereArgs: [studentId],
+        orderBy: 'created_at DESC');
   }
 
   Future<List<Map<String, dynamic>>> getNotesForStudent(int studentId) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.queryWithoutDeleted(
-      db,
-      'notes',
-      where: 'note_for = ?',
-      whereArgs: [studentId],
-      orderBy: 'created_at DESC',
-    );
+    return await db.query('notes',
+        where: 'note_for = ?',
+        whereArgs: [studentId],
+        orderBy: 'created_at DESC');
   }
 
-  Future<List<Payment>> getPaymentsForStudent(int studentId) async {
+  Future<List<Map<String, dynamic>>> getPaymentsForStudent(
+      int studentId) async {
     final db = await database;
-    final List<Map<String, dynamic>> maps =
-        await DatabaseHelperSyncExtension.queryWithoutDeleted(
-      db,
-      'payments',
-      where: 'studentId = ?',
-      whereArgs: [studentId],
-    );
-    return maps.map((map) => Payment.fromJson(map)).toList();
+    return await db
+        .query('payments', where: 'studentId = ?', whereArgs: [studentId]);
   }
 
-  Future<List<Payment>> getPaymentsForSchedule(int scheduleId) async {
+  Future<List<Map<String, dynamic>>> getPaymentsForSchedule(
+      int scheduleId) async {
     final db = await database;
-    final List<Map<String, dynamic>> maps =
-        await DatabaseHelperSyncExtension.queryWithoutDeleted(
-      db,
-      'payments',
-      where: 'scheduleId = ?',
-      whereArgs: [scheduleId],
-    );
-    return maps.map((map) => Payment.fromJson(map)).toList();
+    return await db
+        .query('payments', where: 'scheduleId = ?', whereArgs: [scheduleId]);
   }
 
   Future<List<Map<String, dynamic>>> getBillingForStudent(int studentId) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.queryWithoutDeleted(
-      db,
-      'billings',
-      where: 'studentId = ?',
-      whereArgs: [studentId],
-    );
+    return await db
+        .query('billings', where: 'studentId = ?', whereArgs: [studentId]);
   }
 
-  Future<Billing?> getBillingForSchedule(int scheduleId) async {
+  Future<Map<String, dynamic>?> getBillingForSchedule(int scheduleId) async {
     final db = await database;
-    final List<Map<String, dynamic>> maps =
-        await DatabaseHelperSyncExtension.queryWithoutDeleted(
-      db,
-      'billings',
-      where: 'scheduleId = ?',
-      whereArgs: [scheduleId],
-    );
+    final List<Map<String, dynamic>> maps = await db
+        .query('billings', where: 'scheduleId = ?', whereArgs: [scheduleId]);
     if (maps.isNotEmpty) {
-      return Billing.fromJson(maps.first);
+      return maps.first;
     }
     return null;
   }
 
   // ==================== NON-SYNC METHODS ====================
-  // Methods that don't need sync (authentication, utilities, etc.)
-
   Future<bool> emailExists(String email) async {
     final user = await getUserByEmail(email);
     return user != null;
@@ -1123,714 +786,161 @@ class DatabaseHelper {
 
   Future<void> updateUserPassword(int userId, String hashedPassword) async {
     final db = await database;
-    await DatabaseHelperSyncExtension.updateWithSync(
-      db,
-      'users',
-      {'password': hashedPassword},
-      'id = ?',
-      [userId],
-    );
+    await db.update('users', {'password': hashedPassword},
+        where: 'id = ?', whereArgs: [userId]);
   }
 
   Future<void> updateUserLastLogin(int userId) async {
     final db = await database;
-    await DatabaseHelperSyncExtension.updateWithSync(
-      db,
-      'users',
-      {'last_login': DateTime.now().toIso8601String()},
-      'id = ?',
-      [userId],
-    );
+    await db.update('users', {'last_login': DateTime.now().toIso8601String()},
+        where: 'id = ?', whereArgs: [userId]);
   }
 
-  // ==================== LEGACY METHODS (IF NEEDED) ====================
-  // Keep any methods that might be called by existing code but add deprecation notices
-
-  List<Fleet> fleet = [];
-
-  @deprecated
-  Future<void> fetchFleet() async {
-    final List<Map<String, dynamic>> maps = await getFleet();
-    fleet = maps.map((map) => Fleet.fromMap(map)).toList();
-  }
-
-  @deprecated
-  Future<void> saveFleet(List<Fleet> newFleet) async {
-    for (final vehicle in newFleet) {
-      await insertFleet(vehicle.toMap());
-    }
-    await fetchFleet(); // Refresh the list after saving
-  }
-
-  // ==================== REMAINING TABLES WITH SYNC SUPPORT ====================
+  // ==================== REMAINING TABLES ====================
 
   // ================ COURSE INSTRUCTOR TABLE ================
   Future<int> insertCourseInstructor(
-    Map<String, dynamic> courseInstructor,
-  ) async {
+      Map<String, dynamic> courseInstructor) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.insertWithSync(
-      db,
-      'courseinstructor',
-      courseInstructor,
-    );
+    return await db.insert('courseinstructor', courseInstructor);
   }
 
   Future<int> updateCourseInstructor(
-    Map<String, dynamic> courseInstructor,
-  ) async {
+      Map<String, dynamic> courseInstructor) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.updateWithSync(
-      db,
-      'courseinstructor',
-      courseInstructor,
-      'id = ?',
-      [courseInstructor['id']],
-    );
+    return await db.update('courseinstructor', courseInstructor,
+        where: 'id = ?', whereArgs: [courseInstructor['id']]);
   }
 
   Future<int> deleteCourseInstructor(int id) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.deleteWithSync(
-      db,
-      'courseinstructor',
-      'id = ?',
-      [id],
-    );
+    return await db
+        .delete('courseinstructor', where: 'id = ?', whereArgs: [id]);
   }
 
   Future<List<Map<String, dynamic>>> getCourseInstructors() async {
     final db = await database;
-    return DatabaseHelperSyncExtension.queryWithoutDeleted(
-      db,
-      'courseinstructor',
-    );
+    return await db.query('courseinstructor');
   }
 
   // ================ COURSES ENROLLED TABLE ================
   Future<int> insertCourseEnrolled(Map<String, dynamic> courseEnrolled) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.insertWithSync(
-      db,
-      'coursesenrolled',
-      courseEnrolled,
-    );
+    return await db.insert('coursesenrolled', courseEnrolled);
   }
 
   Future<int> updateCourseEnrolled(Map<String, dynamic> courseEnrolled) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.updateWithSync(
-      db,
-      'coursesenrolled',
-      courseEnrolled,
-      'id = ?',
-      [courseEnrolled['id']],
-    );
+    return await db.update('coursesenrolled', courseEnrolled,
+        where: 'id = ?', whereArgs: [courseEnrolled['id']]);
   }
 
   Future<int> deleteCourseEnrolled(int id) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.deleteWithSync(
-      db,
-      'coursesenrolled',
-      'id = ?',
-      [id],
-    );
+    return await db.delete('coursesenrolled', where: 'id = ?', whereArgs: [id]);
   }
 
   Future<List<Map<String, dynamic>>> getCoursesEnrolled() async {
     final db = await database;
-    return DatabaseHelperSyncExtension.queryWithoutDeleted(
-      db,
-      'coursesenrolled',
-    );
+    return await db.query('coursesenrolled');
   }
 
   // ================ CURRENCIES TABLE ================
   Future<int> insertCurrency(Map<String, dynamic> currency) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.insertWithSync(
-      db,
-      'currencies',
-      currency,
-    );
+    return await db.insert('currencies', currency);
   }
 
   Future<int> updateCurrency(Map<String, dynamic> currency) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.updateWithSync(
-      db,
-      'currencies',
-      currency,
-      'id = ?',
-      [currency['id']],
-    );
+    return await db.update('currencies', currency,
+        where: 'id = ?', whereArgs: [currency['id']]);
   }
 
   Future<int> deleteCurrency(int id) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.deleteWithSync(
-      db,
-      'currencies',
-      'id = ?',
-      [id],
-    );
+    return await db.delete('currencies', where: 'id = ?', whereArgs: [id]);
   }
 
   Future<List<Map<String, dynamic>>> getCurrencies() async {
     final db = await database;
-    return DatabaseHelperSyncExtension.queryWithoutDeleted(db, 'currencies');
+    return await db.query('currencies');
   }
 
   // ================ REMINDERS TABLE ================
   Future<int> insertReminder(Map<String, dynamic> reminder) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.insertWithSync(
-      db,
-      'reminders',
-      reminder,
-    );
+    return await db.insert('reminders', reminder);
   }
 
   Future<int> updateReminder(Map<String, dynamic> reminder) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.updateWithSync(
-      db,
-      'reminders',
-      reminder,
-      'id = ?',
-      [reminder['id']],
-    );
+    return await db.update('reminders', reminder,
+        where: 'id = ?', whereArgs: [reminder['id']]);
   }
 
   Future<int> deleteReminder(int id) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.deleteWithSync(
-      db,
-      'reminders',
-      'id = ?',
-      [id],
-    );
+    return await db.delete('reminders', where: 'id = ?', whereArgs: [id]);
   }
 
   Future<List<Map<String, dynamic>>> getReminders() async {
     final db = await database;
-    return DatabaseHelperSyncExtension.queryWithoutDeleted(db, 'reminders');
+    return await db.query('reminders');
   }
 
   // ================ TIMELINE TABLE ================
   Future<int> insertTimeline(Map<String, dynamic> timeline) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.insertWithSync(db, 'timeline', timeline);
+    return await db.insert('timeline', timeline);
   }
 
   Future<int> updateTimeline(Map<String, dynamic> timeline) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.updateWithSync(
-      db,
-      'timeline',
-      timeline,
-      'id = ?',
-      [timeline['id']],
-    );
+    return await db.update('timeline', timeline,
+        where: 'id = ?', whereArgs: [timeline['id']]);
   }
 
   Future<int> deleteTimeline(int id) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.deleteWithSync(
-      db,
-      'timeline',
-      'id = ?',
-      [id],
-    );
+    return await db.delete('timeline', where: 'id = ?', whereArgs: [id]);
   }
 
   Future<List<Map<String, dynamic>>> getTimeline() async {
     final db = await database;
-    return DatabaseHelperSyncExtension.queryWithoutDeleted(db, 'timeline');
+    return await db.query('timeline');
   }
 
   // ================ USER MESSAGES TABLE ================
   Future<int> insertUserMessage(Map<String, dynamic> userMessage) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.insertWithSync(
-      db,
-      'usermessages',
-      userMessage,
-    );
+    return await db.insert('usermessages', userMessage);
   }
 
   Future<int> updateUserMessage(Map<String, dynamic> userMessage) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.updateWithSync(
-      db,
-      'usermessages',
-      userMessage,
-      'id = ?',
-      [userMessage['id']],
-    );
+    return await db.update('usermessages', userMessage,
+        where: 'id = ?', whereArgs: [userMessage['id']]);
   }
 
   Future<int> deleteUserMessage(int id) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.deleteWithSync(
-      db,
-      'usermessages',
-      'id = ?',
-      [id],
-    );
+    return await db.delete('usermessages', where: 'id = ?', whereArgs: [id]);
   }
 
   Future<List<Map<String, dynamic>>> getUserMessages() async {
     final db = await database;
-    return DatabaseHelperSyncExtension.queryWithoutDeleted(db, 'usermessages');
+    return await db.query('usermessages');
   }
 
   // ================ BILLING RECORDS HISTORY TABLE ================
-  Future<int> insertBillingRecordHistory(BillingRecord billingRecord) async {
+  Future<int> insertBillingRecordHistory(
+      Map<String, dynamic> billingRecord) async {
     final db = await database;
-    return DatabaseHelperSyncExtension.insertWithSync(
-      db,
-      'billing_records_history',
-      billingRecord.toJson(),
-    );
+    return await db.insert('billing_records_history', billingRecord);
   }
 
-  // ==================== MANUAL SYNC TRIGGER METHODS ====================
-  // These methods can be called when you want to force immediate sync for specific data
-
-  Future<void> forceSyncTable(String tableName) async {
-    try {
-      // Get the sync service and trigger sync for specific table
-      // This is a placeholder - you'd implement table-specific sync logic
-      print('Forcing sync for table: $tableName');
-
-      // You could implement specific logic here to:
-      // 1. Mark all records in the table as needing sync
-      // 2. Trigger immediate sync
-      // 3. Handle any conflicts
-    } catch (e) {
-      print('Error forcing sync for $tableName: $e');
-    }
-  }
-
-  // ==================== SYNC STATUS METHODS ====================
-
-  Future<Map<String, int>> getSyncStatus() async {
-    final db = await database;
-    final tables = [
-      'users',
-      'courses',
-      'schedules',
-      'invoices',
-      'payments',
-      'fleet',
-      'attachments',
-      'notes',
-      'notifications',
-      'billing_records',
-      'timeline',
-      'usermessages',
-      //'settings'
-    ];
-
-    Map<String, int> syncStatus = {};
-
-    for (String table in tables) {
-      try {
-        // Count total records
-        final totalResult = await db.rawQuery('''
-          SELECT COUNT(*) as count FROM $table 
-          WHERE deleted IS NULL OR deleted = 0
-        ''');
-        final total = totalResult.first['count'] as int;
-
-        // Count synced records
-        final syncedResult = await db.rawQuery('''
-          SELECT COUNT(*) as count FROM $table 
-          WHERE (deleted IS NULL OR deleted = 0) 
-          AND firebase_synced = 1
-        ''');
-        final synced = syncedResult.first['count'] as int;
-
-        syncStatus[table] = synced;
-        syncStatus['${table}_total'] = total;
-      } catch (e) {
-        print('Error getting sync status for $table: $e');
-        syncStatus[table] = 0;
-        syncStatus['${table}_total'] = 0;
-      }
-    }
-
-    return syncStatus;
-  }
-
-  Future<List<Map<String, dynamic>>> getPendingSyncRecords(String table) async {
-    final db = await database;
-    try {
-      return await db.query(
-        table,
-        where: '(deleted IS NULL OR deleted = 0) AND firebase_synced = 0',
-        orderBy: 'last_modified DESC',
-      );
-    } catch (e) {
-      print('Error getting pending sync records for $table: $e');
-      return [];
-    }
-  }
-
-  // ==================== BACKUP METHODS ====================
-
-  Future<Map<String, List<Map<String, dynamic>>>> exportAllData() async {
-    final db = await database;
-    final tables = [
-      'users',
-      'courses',
-      'schedules',
-      'invoices',
-      'payments',
-      'fleet',
-      'attachments',
-      'notes',
-      'notifications',
-      'billing_records',
-      'courseinstructor',
-      'coursesenrolled',
-      'currencies',
-      'reminders',
-      'timeline',
-      'usermessages',
-      //'settings'
-    ];
-
-    Map<String, List<Map<String, dynamic>>> exportData = {};
-
-    for (String table in tables) {
-      try {
-        final data = await DatabaseHelperSyncExtension.queryWithoutDeleted(
-          db,
-          table,
-        );
-        exportData[table] = data;
-        print('Exported ${data.length} records from $table');
-      } catch (e) {
-        print('Error exporting $table: $e');
-        exportData[table] = [];
-      }
-    }
-
-    return exportData;
-  }
-
-  Future<void> importAllData(
-    Map<String, List<Map<String, dynamic>>> importData,
-  ) async {
-    final db = await database;
-
-    await db.transaction((txn) async {
-      for (final entry in importData.entries) {
-        final table = entry.key;
-        final records = entry.value;
-
-        try {
-          // Clear existing data
-          await txn.delete(table);
-
-          // Insert imported data
-          for (final record in records) {
-            await txn.insert(table, record);
-          }
-
-          print('Imported ${records.length} records to $table');
-        } catch (e) {
-          print('Error importing to $table: $e');
-        }
-      }
-    });
-  }
-
-  // ==================== CLEANUP METHODS ====================
-
-  Future<void> cleanupDeletedRecords() async {
-    final db = await database;
-    final tables = [
-      'users',
-      'courses',
-      'schedules',
-      'invoices',
-      'payments',
-      'fleet',
-      'attachments',
-      'notes',
-      'notifications',
-      'billing_records',
-      'timeline',
-      'usermessages',
-      //'settings'
-    ];
-
-    for (String table in tables) {
-      try {
-        // Only remove records that have been synced and are marked as deleted
-        final deletedCount = await db.delete(
-          table,
-          where: 'deleted = 1 AND firebase_synced = 1',
-        );
-
-        if (deletedCount > 0) {
-          print('Cleaned up $deletedCount deleted records from $table');
-        }
-      } catch (e) {
-        print('Error cleaning up $table: $e');
-      }
-    }
-  }
-
-  Future<void> resetSyncStatus() async {
-    final db = await database;
-    final tables = [
-      'users',
-      'courses',
-      'schedules',
-      'invoices',
-      'payments',
-      'fleet',
-      'attachments',
-      'notes',
-      'notifications',
-      'billing_records',
-      'timeline',
-      'usermessages',
-      //'settings'
-    ];
-
-    for (String table in tables) {
-      try {
-        await db.execute('''
-          UPDATE $table 
-          SET firebase_synced = 0, 
-              last_modified = ${DateTime.now().toUtc().millisecondsSinceEpoch}
-        ''');
-        print('Reset sync status for $table');
-      } catch (e) {
-        print('Could not reset sync status for $table: $e');
-      }
-    }
-  }
-
-  /// Assign Firebase user ID to all existing records
-  Future<void> setFirebaseUserForAllRecords(String firebaseUserId) async {
-    final db = await database;
-
-    print('🔧 === SETTING FIREBASE USER FOR ALL RECORDS ===');
-    print('🔑 Firebase User ID: $firebaseUserId');
-
-    final tables = [
-      'users',
-      'courses',
-      'schedules',
-      'invoices',
-      'payments',
-      'fleet',
-      'attachments',
-      'notes',
-      'notifications',
-      'billing_records',
-      'timeline',
-      'usermessages',
-    ];
-
-    for (String table in tables) {
-      try {
-        // Update all existing records to have the current firebase_user_id
-        await db.execute(
-          '''
-        UPDATE $table 
-        SET firebase_user_id = ?, 
-            firebase_synced = 0,
-            last_modified = ?
-        WHERE firebase_user_id IS NULL OR firebase_user_id = ''
-      ''',
-          [firebaseUserId, DateTime.now().toUtc().millisecondsSinceEpoch],
-        );
-
-        // Count how many records were updated
-        final countResult = await db.rawQuery(
-          '''
-        SELECT COUNT(*) as count FROM $table 
-        WHERE firebase_user_id = ?
-      ''',
-          [firebaseUserId],
-        );
-
-        final count = countResult.first['count'] as int;
-        print('  ✅ $table: Set firebase_user_id for $count records');
-      } catch (e) {
-        print('  ❌ Error updating $table: $e');
-      }
-    }
-
-    print('🔧 === FIREBASE USER ASSIGNMENT COMPLETE ===\n');
-  }
-
-  /// Complete safe migration
-  Future<void> completeSafeMigration() async {
-    print('\n🚀 === COMPLETE SAFE MIGRATION ===');
-
-    try {
-      // Step 2: Get Firebase user ID
-      final authController = Get.find<AuthController>();
-      final firebaseUserId = authController.currentFirebaseUserId;
-
-      if (firebaseUserId == null) {
-        print('❌ No Firebase user ID found. Please ensure you are logged in.');
-        return;
-      }
-
-      // Step 3: Assign firebase_user_id to existing records
-      await setFirebaseUserForAllRecords(firebaseUserId);
-
-      print('🚀 === SAFE MIGRATION COMPLETE ===');
-      print('✅ Database is ready for sync!');
-      print(
-        '⚠️  Next step: Update FirebaseSync to use firebase_user_id column',
-      );
-    } catch (e) {
-      print('❌ Error during safe migration: $e');
-    }
-  }
-
-  // Replace your existing DatabaseHelperSyncExtension methods with these:
-
-  /// Enhanced insert method with debounced sync
-  static Future<int> insertWithSync(
-    Database db,
-    String table,
-    Map<String, dynamic> values,
-  ) async {
-    // Add sync tracking data
-    values['last_modified'] = DateTime.now().toUtc().millisecondsSinceEpoch;
-    values['firebase_synced'] = 0;
-
-    // Add firebase_user_id if not present and user is authenticated
-    if (values['firebase_user_id'] == null) {
-      try {
-        final authController = Get.find<AuthController>();
-        if (authController.isFirebaseAuthenticated) {
-          values['firebase_user_id'] = authController.currentFirebaseUserId;
-        }
-      } catch (e) {
-        print('⚠️ Could not get Firebase user ID: $e');
-      }
-    }
-
-    final result = await db.insert(table, values);
-
-    // Trigger debounced sync instead of immediate sync
-    _triggerSmartSync();
-
-    return result;
-  }
-
-  // In your enhanced_database_helper.dart updateWithSync method:
-  Future<int> updateWithSync(
-    String table,
-    Map<String, dynamic> values, {
-    String? where,
-    List<dynamic>? whereArgs,
-  }) async {
-    final db = await database;
-
-    try {
-      final result = await db.update(
-        table,
-        values,
-        where: where,
-        whereArgs: whereArgs,
-      );
-
-      if (result == 0 && table == 'users') {
-        // No rows affected, try insert with conflict resolution
-        return await db.insert(
-          table,
-          values,
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
-      }
-
-      return result;
-    } catch (e) {
-      if (e.toString().contains('UNIQUE constraint failed')) {
-        return await db.insert(
-          table,
-          values,
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
-      }
-      rethrow;
-    }
-  }
-
-  /// Enhanced delete method with debounced sync
-  static Future<int> deleteWithSync(
-    Database db,
-    String table,
-    String where,
-    List<dynamic> whereArgs,
-  ) async {
-    try {
-      // Try to mark as deleted first (soft delete)
-      final result = await db.update(
-        table,
-        {
-          'deleted': 1,
-          'last_modified': DateTime.now().toUtc().millisecondsSinceEpoch,
-          'firebase_synced': 0,
-        },
-        where: where,
-        whereArgs: whereArgs,
-      );
-
-      // Trigger debounced sync
-      _triggerSmartSync();
-
-      return result;
-    } catch (e) {
-      // If table doesn't have deleted column, do actual delete
-      final result = await db.delete(table, where: where, whereArgs: whereArgs);
-      _triggerSmartSync();
-      return result;
-    }
-  }
-
-  static Timer? _syncTimer;
-
-  static void _triggerSmartSync() {
-    // Cancel previous timer to debounce rapid changes
-    _syncTimer?.cancel();
-
-    // Wait 3 seconds after last change before syncing
-    _syncTimer = Timer(const Duration(seconds: 3), () {
-      try {
-        // Use only the new fixed sync service
-        if (Get.isRegistered<FixedLocalFirstSyncService>()) {
-          final syncService = Get.find<FixedLocalFirstSyncService>();
-          if (!syncService.isSyncing.value &&
-              syncService.isOnline.value &&
-              syncService.firebaseAvailable.value) {
-            syncService.syncWithFirebase().catchError((e) {
-              print('⚠️ Smart sync failed: $e');
-            });
-          }
-        } else {
-          print('⚠️ Fixed sync service not available');
-        }
-      } catch (e) {
-        print('⚠️ Could not trigger smart sync: $e');
-      }
-    });
-  }
-
+  // ================ KNOWN SCHOOLS TABLE ================
   Future<void> saveKnownSchool(Map<String, dynamic> schoolData) async {
     final db = await database;
 
@@ -1894,254 +1004,6 @@ class DatabaseHelper {
       print('✅ Cleared all known schools');
     } catch (e) {
       print('❌ Error clearing known schools: $e');
-      throw e;
-    }
-  }
-
-  /// Add device tracking columns to all sync tables
-  Future<void> _addDeviceTrackingColumns(Database db) async {
-    final tables = [
-      'users',
-      'courses',
-      'schedules',
-      'invoices',
-      'payments',
-      'fleet',
-      'attachments',
-      'notes',
-      'notifications',
-      'billing_records',
-      'timeline',
-      'usermessages',
-    ];
-
-    for (final table in tables) {
-      try {
-        await db.execute(
-          'ALTER TABLE $table ADD COLUMN last_modified_device TEXT',
-        );
-        print('✅ Added last_modified_device to $table');
-      } catch (e) {
-        print('⚠️ last_modified_device column may already exist in $table');
-      }
-      try {
-        await db.execute('ALTER TABLE $table ADD COLUMN firebase_user_id TEXT');
-        print('✅ Added firebase_user_id to $table');
-      } catch (e) {
-        print('⚠️ firebase_user_id column may already exist in $table');
-      }
-      try {
-        await db.execute(
-          'ALTER TABLE $table ADD COLUMN sync_version INTEGER DEFAULT 1',
-        );
-        print('✅ Added sync_version to $table');
-      } catch (e) {
-        print('⚠️ sync_version column may already exist in $table');
-      }
-    }
-  }
-
-  /// Initialize device ID
-  Future<void> _initializeDeviceId() async {
-    final deviceId = await getDeviceId();
-    print('✅ Device ID initialized: $deviceId');
-  }
-
-  /// Get or create device ID
-  static Future<String> getDeviceId() async {
-    final prefs = await SharedPreferences.getInstance();
-    String? deviceId = prefs.getString('device_id');
-
-    if (deviceId == null) {
-      deviceId = _generateDeviceId();
-      await prefs.setString('device_id', deviceId);
-      print('🆔 Generated new device ID: $deviceId');
-    }
-
-    return deviceId;
-  }
-
-  /// Generate unique device ID
-  static String _generateDeviceId() {
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final random = (timestamp % 10000).toString();
-    return 'device_${random}_${timestamp.toString().substring(8)}';
-  }
-
-  /// Get detailed sync status for all tables
-  Future<Map<String, dynamic>> getDetailedSyncStatus() async {
-    final db = await database;
-    final status = <String, dynamic>{};
-
-    final tables = [
-      'users',
-      'courses',
-      'schedules',
-      'invoices',
-      'payments',
-      'fleet',
-      'notes',
-    ];
-
-    for (final table in tables) {
-      try {
-        final totalResult = await db.rawQuery('''
-        SELECT COUNT(*) as count FROM $table 
-        WHERE deleted IS NULL OR deleted = 0
-      ''');
-        final total = totalResult.first['count'] as int;
-
-        final syncedResult = await db.rawQuery('''
-        SELECT COUNT(*) as count FROM $table 
-        WHERE (deleted IS NULL OR deleted = 0) 
-        AND firebase_synced = 1
-      ''');
-        final synced = syncedResult.first['count'] as int;
-
-        final unsyncedResult = await db.rawQuery('''
-        SELECT COUNT(*) as count FROM $table 
-        WHERE (deleted IS NULL OR deleted = 0) 
-        AND (firebase_synced = 0 OR firebase_synced IS NULL)
-      ''');
-        final unsynced = unsyncedResult.first['count'] as int;
-
-        status[table] = {
-          'total': total,
-          'synced': synced,
-          'unsynced': unsynced,
-          'sync_percentage': total > 0 ? (synced / total * 100).round() : 100,
-        };
-      } catch (e) {
-        print('Error getting sync status for $table: $e');
-        status[table] = {'error': e.toString()};
-      }
-    }
-
-    return status;
-  }
-
-  /// Get conflict history
-  Future<List<Map<String, dynamic>>> getConflictHistory({
-    int limit = 50,
-  }) async {
-    try {
-      final db = await database;
-      return await db.query(
-        'sync_conflicts',
-        orderBy: 'created_at DESC',
-        limit: limit,
-      );
-    } catch (e) {
-      print('Error getting conflict history: $e');
-      return [];
-    }
-  }
-
-  /// Clear old conflict logs
-  Future<void> clearOldConflictLogs({int daysToKeep = 30}) async {
-    try {
-      final db = await database;
-      final cutoffDate =
-          DateTime.now().subtract(Duration(days: daysToKeep)).toIso8601String();
-
-      final deletedCount = await db.delete(
-        'sync_conflicts',
-        where: daysToKeep > 0 ? 'created_at < ?' : null,
-        whereArgs: daysToKeep > 0 ? [cutoffDate] : null,
-      );
-
-      print('✅ Cleared $deletedCount old conflict logs');
-    } catch (e) {
-      print('Error clearing old conflict logs: $e');
-    }
-  }
-
-  /// Mark all records for sync (force resync)
-  Future<void> markAllRecordsForSync() async {
-    final db = await database;
-    final tables = [
-      'users',
-      'courses',
-      'schedules',
-      'invoices',
-      'payments',
-      'fleet',
-      'attachments',
-      'notes',
-      'notifications',
-      'billing_records',
-      'timeline',
-      'usermessages',
-    ];
-
-    final deviceId = await getDeviceId();
-    final now = DateTime.now().toUtc().millisecondsSinceEpoch;
-
-    for (String table in tables) {
-      try {
-        final updateCount = await db.execute(
-          '''
-        UPDATE $table 
-        SET firebase_synced = 0, 
-            last_modified = ?,
-            last_modified_device = ?
-        WHERE deleted IS NULL OR deleted = 0
-      ''',
-          [now, deviceId],
-        );
-
-        print('✅ Marked $table records for sync');
-      } catch (e) {
-        print('Could not mark $table for sync: $e');
-      }
-    }
-  }
-
-  /// Enhanced backup with better error handling
-  Future<Map<String, dynamic>> backupDatabase() async {
-    try {
-      print('🗄️ === CREATING DATABASE BACKUP ===');
-
-      final db = await database;
-      final tables = [
-        'users',
-        'courses',
-        'schedules',
-        'invoices',
-        'payments',
-        'fleet',
-      ];
-      final backup = <String, dynamic>{
-        'timestamp': DateTime.now().toIso8601String(),
-        'device_id': await getDeviceId(),
-        'tables': <String, List<Map<String, dynamic>>>{},
-      };
-
-      for (final table in tables) {
-        try {
-          final data = await db.query(table);
-          backup['tables'][table] = data;
-          print('📦 Backed up ${data.length} records from $table');
-        } catch (e) {
-          print('⚠️ Could not backup $table: $e');
-          backup['tables'][table] = [];
-        }
-      }
-
-      // Save backup to preferences
-      final prefs = await SharedPreferences.getInstance();
-      final backupKey =
-          'database_backup_${DateTime.now().millisecondsSinceEpoch}';
-      await prefs.setString(backupKey, jsonEncode(backup));
-
-      backup['backup_key'] = backupKey;
-
-      print('✅ Database backup completed successfully');
-      print('📄 Backup key: $backupKey');
-
-      return backup;
-    } catch (e) {
-      print('❌ Database backup failed: $e');
       throw e;
     }
   }

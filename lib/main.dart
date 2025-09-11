@@ -1,5 +1,3 @@
-// lib/main.dart - Enhanced with Multi-Tenant Architecture
-import 'package:driving/controllers/app_access_controller.dart';
 import 'package:driving/controllers/settings_controller.dart';
 import 'package:driving/routes/app_routes.dart';
 import 'package:driving/screens/auth/login_screen.dart';
@@ -8,16 +6,11 @@ import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/controllers/pin_controller.dart';
 import 'package:driving/services/database_helper.dart';
 import 'package:driving/services/database_migration.dart';
-import 'package:driving/services/enhanced_payment_sync_service.dart';
-import 'package:driving/services/payment_sync_integration.dart';
-import 'package:driving/services/receipt_service.dart';
 import 'package:driving/services/school_config_service.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'dart:io' show Platform;
-import 'firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -31,8 +24,6 @@ void main() async {
   print('🚀 === STARTING MULTI-TENANT DRIVING SCHOOL APP ===');
 
   // STEP 1: Initialize Firebase with proper options and error handling
-  await _initializeFirebase();
-  ReceiptService.initialize();
   final db = await DatabaseHelper.instance.database;
 
   // ✅ FIX 3: Run migrations to add missing columns
@@ -42,29 +33,10 @@ void main() async {
 
   // STEP 3: Initialize multi-tenant app bindings
   await _initializeMultiTenantBindings();
-  Future.delayed(Duration(seconds: 2), () {
-    if (!Get.isRegistered<AppAccessController>()) {
-      Get.put<AppAccessController>(AppAccessController());
-    }
-  });
+
   print('✅ === APP INITIALIZATION COMPLETED ===');
 
   runApp(MultiTenantDrivingSchoolApp());
-}
-
-/// Initialize Firebase
-Future<void> _initializeFirebase() async {
-  try {
-    print('🔥 Initializing Firebase...');
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-    print('✅ Firebase initialized successfully');
-  } catch (e) {
-    print('❌ Firebase initialization failed: $e');
-    print('⚠️ App will continue in offline-only mode');
-    // Don't rethrow - let app continue without Firebase
-  }
 }
 
 /// Initialize core services
@@ -78,9 +50,6 @@ Future<void> _initializeCoreServices() async {
   } catch (e) {
     print('❌ Core services initialization failed: $e');
     print('🚨 Attempting emergency initialization...');
-    Get.put(EnhancedPaymentSyncService(), permanent: true);
-    Get.put(PaymentSyncIntegration(), permanent: true);
-    print('Payment Service Intialized');
     // Emergency fallback - initialize critical controllers
     EmergencyBindings.initializeMissingControllers();
   }
