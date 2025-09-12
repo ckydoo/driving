@@ -651,7 +651,8 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
       created_at: student.created_at,
     );
 
-    await DatabaseHelper.instance.updateUser(updatedStudent);
+    await DatabaseHelper.instance
+        .updateUser(updatedStudent as Map<String, dynamic>);
   }
 
   Future<bool> _showBulkDeleteConfirmation(int count) async {

@@ -227,48 +227,45 @@ class _LoginScreenState extends State<LoginScreen> {
 
                         // Firebase Connection Status
                         Obx(() {
-                          if (!_authController.firebaseAvailable.value) {
-                            return Container(
-                              padding: const EdgeInsets.all(12),
-                              margin: const EdgeInsets.only(bottom: 16),
-                              decoration: BoxDecoration(
-                                color: Colors.orange[50],
-                                border: Border.all(color: Colors.orange[300]!),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(Icons.cloud_off,
-                                      color: Colors.orange[700], size: 20),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'Limited connectivity',
-                                          style: TextStyle(
-                                            color: Colors.orange[700],
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w500,
-                                          ),
+                          return Container(
+                            padding: const EdgeInsets.all(12),
+                            margin: const EdgeInsets.only(bottom: 16),
+                            decoration: BoxDecoration(
+                              color: Colors.orange[50],
+                              border: Border.all(color: Colors.orange[300]!),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.cloud_off,
+                                    color: Colors.orange[700], size: 20),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Limited connectivity',
+                                        style: TextStyle(
+                                          color: Colors.orange[700],
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w500,
                                         ),
-                                        Text(
-                                          'You can still sign in with existing accounts',
-                                          style: TextStyle(
-                                            color: Colors.orange[600],
-                                            fontSize: 12,
-                                          ),
+                                      ),
+                                      Text(
+                                        'You can still sign in with existing accounts',
+                                        style: TextStyle(
+                                          color: Colors.orange[600],
+                                          fontSize: 12,
                                         ),
-                                      ],
-                                    ),
+                                      ),
+                                    ],
                                   ),
-                                ],
-                              ),
-                            );
-                          }
-                          return const SizedBox.shrink();
+                                ),
+                              ],
+                            ),
+                          );
                         }),
 
                         // Login Button
@@ -354,7 +351,6 @@ class _LoginScreenState extends State<LoginScreen> {
       print('✅ Login successful, navigating to main app');
       print('🔍 Auth Status:');
       print('   Local: ${_authController.isLoggedIn.value}');
-      print('   Firebase: ${_authController.isFirebaseAuthenticated}');
 
       // Force a small delay to ensure auth state is fully updated
       await Future.delayed(const Duration(milliseconds: 100));

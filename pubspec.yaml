@@ -61,6 +61,7 @@ dependencies:
   flutter_secure_storage: ^9.2.4
   local_auth: ^2.1.6    
   device_info_plus: ^10.1.2
+  share_plus: ^6.0.0
           
 
 

@@ -1,5 +1,4 @@
 // lib/screens/auth/simple_school_join_screen.dart
-import 'package:driving/controllers/school_login_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 

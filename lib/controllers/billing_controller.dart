@@ -93,7 +93,7 @@ class BillingController extends GetxController {
     try {
       print('Getting course name for courseId: $courseId');
       final course = await DatabaseHelper.instance.getCourseById(courseId);
-      final courseName = course?.name ?? 'Course ID: $courseId';
+      final courseName = course?['name'] ?? 'Course ID: $courseId';
       print('Course name found: $courseName');
       return courseName;
     } catch (e) {
@@ -1084,9 +1084,9 @@ class BillingController extends GetxController {
           try {
             final course =
                 await DatabaseHelper.instance.getCourseById(invoice.courseId);
-            courseNames[invoice.courseId] = course?.name ?? 'Unknown Course';
+            courseNames[invoice.courseId] = course?['name'] ?? 'Unknown Course';
             coursePrices[invoice.courseId] =
-                course?.price?.toDouble() ?? invoice.pricePerLesson;
+                course?['price']?.toDouble() ?? invoice.pricePerLesson;
             print(
                 'Cached course: ${courseNames[invoice.courseId]} (ID: ${invoice.courseId})');
           } catch (e) {
