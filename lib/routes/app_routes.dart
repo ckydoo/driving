@@ -4,9 +4,6 @@ import 'package:driving/middleware/auth_middleware.dart';
 import 'package:driving/screens/auth/login_screen.dart';
 import 'package:driving/screens/auth/enhanced_pin_login_screen.dart';
 import 'package:driving/screens/auth/pin_setup_screen.dart';
-import 'package:driving/screens/auth/school_selection_screen.dart';
-import 'package:driving/screens/auth/school_registration_screen.dart';
-import 'package:driving/screens/auth/school_login_screen.dart';
 import 'package:driving/widgets/main_layout.dart';
 import 'package:get/get.dart';
 
@@ -48,32 +45,6 @@ class AppRoutes {
     GetPage(
       name: initial,
       page: () => const AuthenticationWrapper(), // Your existing loading screen
-    ),
-
-    // School selection - entry point for multi-school setup
-    GetPage(
-      name: schoolSelection,
-      page: () => const SchoolSelectionScreen(),
-      transition: Transition.fadeIn,
-      transitionDuration: const Duration(milliseconds: 300),
-    ),
-
-    // === SCHOOL SETUP ROUTES ===
-
-    // New school registration
-    GetPage(
-      name: schoolRegistration,
-      page: () => const SchoolRegistrationScreen(),
-      transition: Transition.rightToLeft,
-      transitionDuration: const Duration(milliseconds: 300),
-    ),
-
-    // Existing school login
-    GetPage(
-      name: schoolLogin,
-      page: () => const SchoolLoginScreen(),
-      transition: Transition.rightToLeft,
-      transitionDuration: const Duration(milliseconds: 300),
     ),
 
     // === AUTHENTICATION ROUTES ===

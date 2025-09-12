@@ -166,7 +166,8 @@ class _GraduationScreenState extends State<GraduationScreen> {
       );
 
       // Update in database
-      await DatabaseHelper.instance.updateUser(updatedStudent);
+      await DatabaseHelper.instance
+          .updateUser(updatedStudent as Map<String, dynamic>);
 
       // Add graduation record to timeline/history
       await _addGraduationRecord();

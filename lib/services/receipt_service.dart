@@ -37,8 +37,23 @@ class ReceiptService {
     try {
       print('📄 Generating local receipt for payment ${payment.id}');
 
+      // Get course data
+      final db = await DatabaseHelper.instance.database;
+      final List<Map<String, dynamic>> results = await db.query(
+        'courses',
+        where: 'id = ?',
+        whereArgs: [invoice.courseId],
+      );
+
+      if (results.isEmpty) {
+        throw Exception('Course not found for invoice ${invoice.id}');
+      }
+
+      final course = Course.fromJson(results.first);
+
       // Create the receipt PDF
-      final pdfBytes = await _generateReceiptPDF(payment, invoice, student);
+      final pdfBytes =
+          await _generateReceiptPDF(payment, invoice, student, course);
 
       // Save to local storage
       final filePath = await _saveReceiptToLocal(pdfBytes, payment);
@@ -49,6 +64,36 @@ class ReceiptService {
       print('❌ Receipt generation failed: $e');
       rethrow;
     }
+  }
+
+  static Future<Map<String, dynamic>> batchUploadReceipts(
+    List<Payment> payments, {
+    Function(int current, int total)? onProgress,
+  }) async {
+    int successCount = 0;
+    int failureCount = 0;
+    final total = payments.length;
+
+    for (int i = 0; i < payments.length; i++) {
+      try {
+        final downloadUrl = await generateReceiptSmart(payments[i]);
+        if (downloadUrl != null) {
+          successCount++;
+        } else {
+          failureCount++;
+        }
+        onProgress?.call(i + 1, total);
+      } catch (e) {
+        failureCount++;
+        print('Failed to upload receipt for payment ${payments[i].id}: $e');
+      }
+    }
+
+    return {
+      'success_count': successCount,
+      'failure_count': failureCount,
+      'total_processed': total,
+    };
   }
 
   /// Generate receipt with smart fallback (alias for main method)
@@ -65,12 +110,14 @@ class ReceiptService {
     Payment payment,
     Invoice invoice,
     User student,
+    Course course,
   ) async {
     final pdf = pw.Document();
     final settings = Get.find<SettingsController>();
 
     // Generate receipt data
-    final receiptData = _buildReceiptData(payment, invoice, student, settings);
+    final receiptData =
+        _buildReceiptData(payment, invoice, student, course, settings);
 
     pdf.addPage(
       pw.Page(
@@ -182,7 +229,7 @@ class ReceiptService {
         throw Exception('Receipt file not found: $filePath');
       }
 
-      final xFile = File(filePath);
+      final xFile = XFile(filePath);
       await Share.shareXFiles(
         [xFile],
         subject: 'Payment Receipt',

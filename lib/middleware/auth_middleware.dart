@@ -1,4 +1,4 @@
-// lib/middleware/auth_middleware.dart - Updated for Firebase-First authentication
+// lib/middleware/auth_middleware.dart - Updated for Local-Only authentication
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/screens/auth/login_screen.dart';
 import 'package:flutter/material.dart';
@@ -10,17 +10,15 @@ class AuthMiddleware extends GetMiddleware {
     try {
       final authController = Get.find<AuthController>();
 
-      // For Firebase-first: Check both local and Firebase authentication
-      final isAuthenticated = authController.isLoggedIn.value ||
-          authController.isFirebaseAuthenticated;
+      // Check only local authentication (Firebase removed)
+      final isAuthenticated = authController.isLoggedIn.value;
 
       print('🔐 Auth Middleware Check:');
       print('   Route: $route');
       print('   Local Auth: ${authController.isLoggedIn.value}');
-      print('   Firebase Auth: ${authController.isFirebaseAuthenticated}');
       print('   Final Decision: ${isAuthenticated ? "ALLOW" : "REDIRECT"}');
 
-      // If user is not authenticated at all, redirect to login
+      // If user is not authenticated, redirect to login
       if (!isAuthenticated) {
         return const RouteSettings(name: '/login');
       }
@@ -38,9 +36,8 @@ class AuthMiddleware extends GetMiddleware {
     try {
       final authController = Get.find<AuthController>();
 
-      // For Firebase-first: Check both local and Firebase authentication
-      final isAuthenticated = authController.isLoggedIn.value ||
-          authController.isFirebaseAuthenticated;
+      // Check only local authentication (Firebase removed)
+      final isAuthenticated = authController.isLoggedIn.value;
 
       // If user is not authenticated and trying to access protected route
       if (!isAuthenticated && page?.name != '/login') {
@@ -62,7 +59,7 @@ class AuthMiddleware extends GetMiddleware {
   }
 }
 
-// Updated Role-based middleware
+// Updated Role-based middleware (Firebase references removed)
 class RoleMiddleware extends GetMiddleware {
   final List<String> allowedRoles;
 
@@ -73,30 +70,13 @@ class RoleMiddleware extends GetMiddleware {
     try {
       final authController = Get.find<AuthController>();
 
-      // Check authentication first (Firebase-first compatible)
-      final isAuthenticated = authController.isLoggedIn.value ||
-          authController.isFirebaseAuthenticated;
+      // Check local authentication only
+      final isAuthenticated = authController.isLoggedIn.value;
 
       if (!isAuthenticated) {
         print(
             '🚫 Role Middleware: User not authenticated, redirecting to login');
         return const RouteSettings(name: '/login');
-      }
-
-      // If Firebase authenticated but not locally authenticated, wait for sync
-      if (authController.isFirebaseAuthenticated &&
-          !authController.isLoggedIn.value) {
-        print(
-            '⏳ Role Middleware: Firebase user found, waiting for local sync...');
-        // Give some time for user data to sync from Firebase
-        Future.delayed(const Duration(milliseconds: 500), () {
-          if (!authController.isLoggedIn.value) {
-            print(
-                '⚠️ Local sync timeout, but allowing access with Firebase auth');
-          }
-        });
-        // Allow access for now - Firebase user is authenticated
-        return null;
       }
 
       // Check user role
@@ -114,12 +94,12 @@ class RoleMiddleware extends GetMiddleware {
             backgroundColor: Colors.red,
             colorText: Colors.white,
           );
-          return const RouteSettings(
-              name: '/main'); // Redirect to main instead of dashboard
+          return const RouteSettings(name: '/main'); // Redirect to main
         }
       } else {
-        print('⚠️ Role Middleware: User object not available, allowing access');
-        // If user object not available but Firebase authenticated, allow access
+        print(
+            '⚠️ Role Middleware: User object not available, redirecting to login');
+        return const RouteSettings(name: '/login');
       }
 
       return null;

@@ -1048,7 +1048,8 @@ class _AlumniScreenState extends State<AlumniScreen> {
         created_at: alumni.created_at,
       );
 
-      await DatabaseHelper.instance.updateUser(reactivatedStudent);
+      await DatabaseHelper.instance
+          .updateUser(reactivatedStudent as Map<String, dynamic>);
 
       // Add timeline record
       final db = await DatabaseHelper.instance.database;

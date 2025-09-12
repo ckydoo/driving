@@ -4,9 +4,6 @@ import 'package:driving/middleware/auth_middleware.dart';
 import 'package:driving/screens/auth/login_screen.dart';
 import 'package:driving/screens/auth/pin_login_screen.dart';
 import 'package:driving/screens/auth/pin_setup_screen.dart';
-import 'package:driving/screens/auth/school_selection_screen.dart';
-import 'package:driving/screens/auth/school_registration_screen.dart';
-import 'package:driving/screens/auth/school_login_screen.dart';
 import 'package:driving/widgets/main_layout.dart';
 import 'package:get/get.dart';
 
@@ -22,24 +19,6 @@ class ProtectedRoutes {
 
   static final routes = [
     // === PUBLIC ROUTES (No authentication required) ===
-
-    // School selection - first screen for multi-school setup
-    GetPage(
-      name: schoolSelection,
-      page: () => const SchoolSelectionScreen(),
-    ),
-
-    // New school registration
-    GetPage(
-      name: schoolRegistration,
-      page: () => const SchoolRegistrationScreen(),
-    ),
-
-    // Existing school login
-    GetPage(
-      name: schoolLogin,
-      page: () => const SchoolLoginScreen(),
-    ),
 
     // Traditional login (for existing users)
     GetPage(
