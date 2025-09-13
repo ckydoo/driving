@@ -1,4 +1,5 @@
 // lib/services/app_initialization.dart
+import 'package:driving/controllers/navigation_controller.dart';
 import 'package:driving/services/auto_seed_initializer.dart'
     show AutoSeedInitializer;
 import 'package:driving/services/schedule_status_migration.dart';
@@ -52,6 +53,7 @@ class AppInitialization {
       Get.put(CourseController(), permanent: true);
       Get.put(FleetController(), permanent: true);
       Get.put(BillingController(), permanent: true);
+      Get.put(NavigationController(), permanent: true);
 
       // Initialize schedule controller last since it depends on others
       Get.put(ScheduleController(), permanent: true);

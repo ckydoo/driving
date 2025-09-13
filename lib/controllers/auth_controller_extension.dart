@@ -119,4 +119,108 @@ extension SimpleSchoolJoinExtension on AuthController {
   String? get currentUserEmail {
     return currentUser.value?.email;
   }
+
+  String get userFirstName {
+    final user = currentUser.value;
+    if (user?.fname?.isNotEmpty == true) return user!.fname!;
+    if (user?.email?.isNotEmpty == true) return user!.email!.split('@').first;
+    return 'User';
+  }
+
+  // Safe getter for user's full name
+  String get userFullName {
+    final user = currentUser.value;
+    if (user == null) return 'User';
+
+    final fname = user.fname ?? '';
+    final lname = user.lname ?? '';
+
+    if (fname.isEmpty && lname.isEmpty) {
+      return user.email ?? 'User';
+    }
+
+    return '$fname $lname'.trim();
+  }
+
+  // Safe getter for user initials
+  String get userInitials {
+    final user = currentUser.value;
+    if (user == null) return 'U';
+
+    String initials = '';
+
+    if (user.fname?.isNotEmpty == true) {
+      initials += user.fname![0].toUpperCase();
+    }
+
+    if (user.lname?.isNotEmpty == true && initials.length < 2) {
+      initials += user.lname![0].toUpperCase();
+    }
+
+    if (initials.isEmpty && user.email?.isNotEmpty == true) {
+      initials = user.email![0].toUpperCase();
+    }
+
+    return initials.isNotEmpty ? initials : 'U';
+  }
+
+  // Safe method to check if user data is available
+  bool get isUserDataAvailable {
+    return isLoggedIn.value && currentUser.value != null;
+  }
+
+  // Safe method to get user role
+  String get userRole {
+    final user = currentUser.value;
+    return user?.role?.toLowerCase() ?? 'guest';
+  }
+
+  // Safe method to check specific roles - FIXED VERSION
+  bool hasRole(String role) {
+    if (!isUserDataAvailable) return false;
+    final currentUserRole = currentUser.value?.role?.toLowerCase() ?? '';
+    return currentUserRole == role.toLowerCase();
+  }
+
+  // Safe method to check multiple roles - FIXED VERSION
+  bool hasAnyRole(List<String> roles) {
+    if (!isUserDataAvailable) return false;
+    final currentUserRole = currentUser.value?.role?.toLowerCase() ?? '';
+    return roles.any((role) => currentUserRole == role.toLowerCase());
+  }
+
+  // Safe method to check if user is admin
+  bool get isAdmin {
+    return hasRole('admin');
+  }
+
+  // Safe method to check if user is instructor
+  bool get isInstructor {
+    return hasRole('instructor');
+  }
+
+  // Safe method to check if user is student
+  bool get isStudent {
+    return hasRole('student');
+  }
+
+  // Safe method to check if user can access admin features
+  bool get canAccessAdminFeatures {
+    return hasAnyRole(['admin']);
+  }
+
+  // Safe method to check if user can access instructor features
+  bool get canAccessInstructorFeatures {
+    return hasAnyRole(['admin', 'instructor']);
+  }
+
+  // Safe method to get user email
+  String get userEmail {
+    return currentUser.value?.email ?? '';
+  }
+
+  // Safe method to get user ID
+  String? get userId {
+    return currentUser.value?.id?.toString();
+  }
 }

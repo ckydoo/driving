@@ -1,3 +1,4 @@
+import 'package:driving/controllers/navigation_controller.dart';
 import 'package:driving/controllers/settings_controller.dart';
 import 'package:driving/routes/app_routes.dart';
 import 'package:driving/screens/auth/login_screen.dart';
@@ -59,7 +60,10 @@ Future<void> _initializeCoreServices() async {
       Get.put<AuthController>(AuthController(), permanent: true);
       print('✅ AuthController initialized');
     }
-
+    if (!Get.isRegistered<NavigationController>()) {
+      Get.put<NavigationController>(NavigationController(), permanent: true);
+      print('✅ NavigationController initialized');
+    }
     print('✅ Core services initialization completed');
   } catch (e) {
     print('❌ Core services initialization failed: $e');

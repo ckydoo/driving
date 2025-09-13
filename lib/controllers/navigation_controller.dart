@@ -1,11 +1,12 @@
-// lib/controllers/navigation_controller.dart
+// lib/controllers/navigation_controller.dart - Fix null check operators
+
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:get/get.dart';
 import 'package:flutter/material.dart';
 
 class NavigationController extends GetxController {
   var currentPage = 'dashboard'.obs;
-  var expandedDropdowns = <String>{}.obs; // Track which dropdowns are expanded
+  var expandedDropdowns = <String>{}.obs;
 
   // Get current user from AuthController
   AuthController get authController => Get.find<AuthController>();
@@ -31,6 +32,22 @@ class NavigationController extends GetxController {
     'alumni': 'alumni',
     '/main': 'dashboard',
   };
+
+  // Get navigation items based on current user's role
+  List<NavigationItem> get navigationItems {
+    if (!authController.isLoggedIn.value ||
+        authController.currentUser.value == null) {
+      return [];
+    }
+
+    // SAFE: Use null-safe navigation here
+    final userRole =
+        authController.currentUser.value?.role?.toLowerCase() ?? '';
+
+    return allNavigationItems.where((item) {
+      return item.requiredRoles.contains(userRole);
+    }).toList();
+  }
 
   // Define all navigation items with their required roles
   final List<NavigationItem> allNavigationItems = [
@@ -69,95 +86,54 @@ class NavigationController extends GetxController {
       pageKey: 'vehicles',
       requiredRoles: ['admin'],
     ),
-    // NEW: Combined Financial dropdown group
     NavigationItem(
-      title: 'Financial',
-      icon: Icons.account_balance_wallet,
-      pageKey: 'financial_group',
-      requiredRoles: [
-        'admin',
-        'instructor'
-      ], // Combined roles from all children
-      isDropdown: true,
-      children: [
-        NavigationItem(
-          title: 'POS',
-          icon: Icons.payment,
-          route: '/pos',
-          pageKey: 'pos',
-          requiredRoles: ['admin', 'instructor'],
-        ),
-        NavigationItem(
-          title: 'Receipts',
-          icon: Icons.receipt_long,
-          route: '/receipts',
-          pageKey: 'receipts',
-          requiredRoles: ['admin', 'instructor', 'student'],
-        ),
-        NavigationItem(
-          title: 'Billing',
-          icon: Icons.account_balance_wallet,
-          route: '/billing',
-          pageKey: 'billing',
-          requiredRoles: ['admin'],
-        ),
-      ],
-    ),
-    NavigationItem(
-      title: 'Schedule',
-      icon: Icons.calendar_today,
+      title: 'Schedules',
+      icon: Icons.schedule,
       route: '/schedules',
       pageKey: 'schedules',
-      requiredRoles: ['admin', 'instructor', 'student'],
+      requiredRoles: ['admin', 'instructor'],
+    ),
+    NavigationItem(
+      title: 'Billing',
+      icon: Icons.attach_money,
+      route: '/billing',
+      pageKey: 'billing',
+      requiredRoles: ['admin', 'instructor'],
+    ),
+    NavigationItem(
+      title: 'Receipts',
+      icon: Icons.receipt,
+      route: '/receipts',
+      pageKey: 'receipts',
+      requiredRoles: ['admin', 'instructor'],
+    ),
+    NavigationItem(
+      title: 'POS',
+      icon: Icons.payment,
+      route: '/pos',
+      pageKey: 'pos',
+      requiredRoles: ['admin', 'instructor'],
     ),
     NavigationItem(
       title: 'Users',
-      icon: Icons.admin_panel_settings,
+      icon: Icons.people,
       route: '/users',
       pageKey: 'users',
       requiredRoles: ['admin'],
+    ),
+    NavigationItem(
+      title: 'Alumni',
+      icon: Icons.school,
+      route: '/alumni',
+      pageKey: 'alumni',
+      requiredRoles: ['admin', 'instructor'],
     ),
     NavigationItem(
       title: 'Quick Search',
       icon: Icons.search,
       route: '/quick-search',
       pageKey: 'quick_search',
-      requiredRoles: ['admin', 'instructor'],
-    ),
-
-    NavigationItem(
-      title: 'Alumni',
-      icon: Icons.people_alt,
-      route: '/alumni',
-      pageKey: 'alumni',
-      requiredRoles: ['admin', 'instructor'],
-    ),
-
-    NavigationItem(
-      title: 'Reports',
-      icon: Icons.report,
-      pageKey: 'reports_group',
-      requiredRoles: [
-        'admin',
-        'instructor'
-      ], // Combined roles from all children
-      isDropdown: true,
-      children: [
-        NavigationItem(
-          title: 'financial',
-          icon: Icons.pie_chart,
-          route: 'financial_reports',
-          pageKey: 'financial_reports',
-          requiredRoles: ['admin', 'instructor'],
-        ),
-        NavigationItem(
-          title: 'users',
-          icon: Icons.people,
-          route: 'user_reports',
-          pageKey: 'user_reports',
-          requiredRoles: ['admin', 'instructor'],
-        ),
-      ], // Children will be added dynamically
+      requiredRoles: ['admin', 'instructor', 'student'],
     ),
     NavigationItem(
       title: 'Settings',
@@ -167,20 +143,6 @@ class NavigationController extends GetxController {
       requiredRoles: ['admin', 'instructor', 'student'],
     ),
   ];
-
-  // Get navigation items based on current user's role
-  List<NavigationItem> get navigationItems {
-    if (!authController.isLoggedIn.value ||
-        authController.currentUser.value == null) {
-      return [];
-    }
-
-    final userRole = authController.currentUser.value!.role.toLowerCase();
-
-    return allNavigationItems.where((item) {
-      return item.requiredRoles.contains(userRole);
-    }).toList();
-  }
 
   // Toggle dropdown expansion
   void toggleDropdown(String pageKey) {
@@ -204,9 +166,8 @@ class NavigationController extends GetxController {
     ever(authController.isLoggedIn, (bool loggedIn) {
       if (!loggedIn) {
         currentPage.value = 'login';
-        expandedDropdowns.clear(); // Clear expanded dropdowns on logout
+        expandedDropdowns.clear();
       } else {
-        // Reset to dashboard when user logs in
         currentPage.value = 'dashboard';
       }
     });
@@ -217,7 +178,7 @@ class NavigationController extends GetxController {
     }
   }
 
-  // Navigate to page with role checking
+  // Navigate to page with role checking - SAFE VERSION
   void navigateToPage(String pageKey) {
     if (!authController.isLoggedIn.value) {
       Get.offAllNamed('/login');
@@ -236,7 +197,7 @@ class NavigationController extends GetxController {
       return;
     }
 
-    // Update current page - this will trigger the UI to update
+    // Update current page
     currentPage.value = pageKey;
 
     // Auto-expand parent dropdown if navigating to a child page
@@ -264,14 +225,16 @@ class NavigationController extends GetxController {
     }
   }
 
-  // Check if current user has access to a specific page
+  // Check if current user has access to a specific page - SAFE VERSION
   bool hasAccessToPage(String pageKey) {
     if (!authController.isLoggedIn.value ||
         authController.currentUser.value == null) {
       return false;
     }
 
-    final userRole = authController.currentUser.value!.role.toLowerCase();
+    // SAFE: Use null-safe navigation
+    final userRole =
+        authController.currentUser.value?.role?.toLowerCase() ?? '';
 
     // Check in main items
     final item = allNavigationItems.firstWhereOrNull(
@@ -297,6 +260,40 @@ class NavigationController extends GetxController {
     return false;
   }
 
+  // Get current page title safely
+  String getCurrentPageTitle() {
+    final pageKey = currentPage.value;
+
+    // Find the navigation item
+    final item = allNavigationItems.firstWhereOrNull(
+      (item) => item.pageKey == pageKey,
+    );
+
+    if (item != null) {
+      return item.title;
+    }
+
+    // Check in dropdown children
+    for (final parentItem in allNavigationItems) {
+      if (parentItem.children != null) {
+        final childItem = parentItem.children!.firstWhereOrNull(
+          (child) => child.pageKey == pageKey,
+        );
+        if (childItem != null) {
+          return childItem.title;
+        }
+      }
+    }
+
+    // Default fallback
+    return pageKey
+        .replaceAll('_', ' ')
+        .split(' ')
+        .map((word) =>
+            word.isNotEmpty ? word[0].toUpperCase() + word.substring(1) : '')
+        .join(' ');
+  }
+
   // Logout with proper cleanup
   Future<void> logout() async {
     try {
@@ -307,111 +304,20 @@ class NavigationController extends GetxController {
     } catch (e) {
       print('Error during logout: $e');
       Get.snackbar(
-        'Error',
-        'Failed to logout properly',
+        'Logout Error',
+        'An error occurred during logout.',
         backgroundColor: Colors.red,
         colorText: Colors.white,
       );
     }
   }
-
-  // Get current page title
-  String getCurrentPageTitle() {
-    // Check main items first
-    final item = allNavigationItems.firstWhereOrNull(
-      (item) => item.pageKey == currentPage.value,
-    );
-
-    if (item != null) {
-      return item.title;
-    }
-
-    // Check dropdown children
-    for (final parentItem in allNavigationItems) {
-      if (parentItem.children != null) {
-        final childItem = parentItem.children!.firstWhereOrNull(
-          (child) => child.pageKey == currentPage.value,
-        );
-        if (childItem != null) {
-          return childItem.title;
-        }
-      }
-    }
-
-    // Fallback titles for custom pages
-    switch (currentPage.value) {
-      case 'dashboard':
-        return 'Dashboard';
-      case 'courses':
-        return 'Course Management';
-      case 'quick_search':
-        return 'Quick Search & Overview';
-      case 'students':
-        return 'Student Management';
-      case 'instructors':
-        return 'Instructor Management';
-      case 'vehicles':
-        return 'Vehicle Management';
-      case 'receipts':
-        return 'Receipts Management';
-      case 'billing':
-        return 'Payments & Invoices';
-      case 'reports':
-        return 'Financial Overview';
-      case 'financial_reports':
-        return 'Financial Reports';
-      case 'user_reports':
-        return 'User Reports';
-      case 'financial_group':
-        return 'Financial Management';
-      case 'pos':
-        return 'Point of Sale';
-      case 'schedules':
-        return 'Schedule Management';
-      case 'alumni':
-        return 'Alumni Management';
-      case 'users':
-        return 'User Management';
-      case 'settings':
-        return 'Settings';
-      default:
-        return 'Dashboard';
-    }
-  }
-
-  // Get user info for display
-  String get currentUserName {
-    return authController.currentUserName;
-  }
-
-  String get currentUserRole {
-    return authController.currentUserRole;
-  }
-
-  String get currentUserEmail {
-    return authController.currentUser.value?.email ?? 'No Email';
-  }
-
-  // Get role badge color
-  Color getRoleBadgeColor() {
-    final role = authController.currentUserRole.toLowerCase();
-    switch (role) {
-      case 'admin':
-        return Colors.red;
-      case 'instructor':
-        return Colors.blue;
-      case 'student':
-        return Colors.green;
-      default:
-        return Colors.grey;
-    }
-  }
 }
 
+// NavigationItem class
 class NavigationItem {
   final String title;
   final IconData icon;
-  final String? route;
+  final String route;
   final String pageKey;
   final List<String> requiredRoles;
   final bool isDropdown;
@@ -420,7 +326,7 @@ class NavigationItem {
   NavigationItem({
     required this.title,
     required this.icon,
-    this.route,
+    required this.route,
     required this.pageKey,
     required this.requiredRoles,
     this.isDropdown = false,
