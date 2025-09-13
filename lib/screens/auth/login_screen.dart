@@ -1,4 +1,4 @@
-// lib/screens/auth/login_screen.dart - Updated for Firebase-First with backward compatibility
+// lib/screens/auth/login_screen.dart - Simplified without Firebase
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -23,6 +23,21 @@ class _LoginScreenState extends State<LoginScreen> {
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  Future<void> _handleLogin() async {
+    if (_formKey.currentState!.validate()) {
+      final success = await _authController.login(
+        _emailController.text.trim(),
+        _passwordController.text,
+      );
+
+      if (success) {
+        // Navigate to main app on successful login
+        Get.offAllNamed('/main');
+      }
+      // Error handling is already done in the AuthController
+    }
   }
 
   @override
@@ -76,21 +91,20 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                               SizedBox(height: isWideScreen ? 32 : 24),
                               Text(
-                                'Welcome Back',
-                                textAlign: TextAlign.center,
+                                'Driving School',
                                 style: TextStyle(
                                   fontSize: isWideScreen ? 32 : 28,
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.black87,
+                                  color: Theme.of(context).primaryColor,
                                 ),
                               ),
-                              SizedBox(height: isWideScreen ? 12 : 8),
+                              SizedBox(height: isWideScreen ? 8 : 6),
                               Text(
-                                'Sign in to access your school management system',
-                                textAlign: TextAlign.center,
+                                'Management System',
                                 style: TextStyle(
-                                  fontSize: isWideScreen ? 16 : 14,
-                                  color: Colors.grey.shade600,
+                                  fontSize: isWideScreen ? 18 : 16,
+                                  color: Colors.grey[600],
+                                  fontWeight: FontWeight.w500,
                                 ),
                               ),
                             ],
@@ -99,33 +113,47 @@ class _LoginScreenState extends State<LoginScreen> {
 
                         SizedBox(height: isWideScreen ? 48 : 32),
 
+                        // Welcome Text
+                        Text(
+                          'Welcome Back',
+                          style: TextStyle(
+                            fontSize: isWideScreen ? 24 : 20,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey[800],
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        SizedBox(height: isWideScreen ? 8 : 6),
+                        Text(
+                          'Sign in to continue',
+                          style: TextStyle(
+                            fontSize: isWideScreen ? 16 : 14,
+                            color: Colors.grey[600],
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+
+                        SizedBox(height: isWideScreen ? 40 : 32),
+
                         // Email Field
                         TextFormField(
                           controller: _emailController,
                           keyboardType: TextInputType.emailAddress,
+                          textInputAction: TextInputAction.next,
                           decoration: InputDecoration(
-                            labelText: 'Email Address',
+                            labelText: 'Email',
                             hintText: 'Enter your email',
                             prefixIcon: const Icon(Icons.email_outlined),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide:
-                                  BorderSide(color: Colors.grey.shade300),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide:
-                                  BorderSide(color: Colors.blue.shade600),
-                            ),
-                            filled: true,
-                            fillColor: Colors.grey.shade50,
                             contentPadding: EdgeInsets.symmetric(
                               horizontal: 16,
-                              vertical: isWideScreen ? 16 : 12,
+                              vertical: isWideScreen ? 20 : 16,
                             ),
+                          ),
+                          style: TextStyle(
+                            fontSize: isWideScreen ? 16 : 14,
                           ),
                           validator: (value) {
                             if (value == null || value.isEmpty) {
@@ -138,12 +166,14 @@ class _LoginScreenState extends State<LoginScreen> {
                           },
                         ),
 
-                        SizedBox(height: isWideScreen ? 20 : 16),
+                        SizedBox(height: isWideScreen ? 24 : 20),
 
                         // Password Field
                         TextFormField(
                           controller: _passwordController,
                           obscureText: _obscurePassword,
+                          textInputAction: TextInputAction.done,
+                          onFieldSubmitted: (_) => _handleLogin(),
                           decoration: InputDecoration(
                             labelText: 'Password',
                             hintText: 'Enter your password',
@@ -151,8 +181,8 @@ class _LoginScreenState extends State<LoginScreen> {
                             suffixIcon: IconButton(
                               icon: Icon(
                                 _obscurePassword
-                                    ? Icons.visibility_off
-                                    : Icons.visibility,
+                                    ? Icons.visibility_outlined
+                                    : Icons.visibility_off_outlined,
                               ),
                               onPressed: () {
                                 setState(() {
@@ -163,22 +193,13 @@ class _LoginScreenState extends State<LoginScreen> {
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide:
-                                  BorderSide(color: Colors.grey.shade300),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide:
-                                  BorderSide(color: Colors.blue.shade600),
-                            ),
-                            filled: true,
-                            fillColor: Colors.grey.shade50,
                             contentPadding: EdgeInsets.symmetric(
                               horizontal: 16,
-                              vertical: isWideScreen ? 16 : 12,
+                              vertical: isWideScreen ? 20 : 16,
                             ),
+                          ),
+                          style: TextStyle(
+                            fontSize: isWideScreen ? 16 : 14,
                           ),
                           validator: (value) {
                             if (value == null || value.isEmpty) {
@@ -193,7 +214,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                         SizedBox(height: isWideScreen ? 32 : 24),
 
-                        // Error Message
+                        // Error Message (Only show actual errors)
                         Obx(() {
                           if (_authController.error.value.isNotEmpty) {
                             return Container(
@@ -225,49 +246,6 @@ class _LoginScreenState extends State<LoginScreen> {
                           return const SizedBox.shrink();
                         }),
 
-                        // Firebase Connection Status
-                        Obx(() {
-                          return Container(
-                            padding: const EdgeInsets.all(12),
-                            margin: const EdgeInsets.only(bottom: 16),
-                            decoration: BoxDecoration(
-                              color: Colors.orange[50],
-                              border: Border.all(color: Colors.orange[300]!),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(Icons.cloud_off,
-                                    color: Colors.orange[700], size: 20),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'Limited connectivity',
-                                        style: TextStyle(
-                                          color: Colors.orange[700],
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                      Text(
-                                        'You can still sign in with existing accounts',
-                                        style: TextStyle(
-                                          color: Colors.orange[600],
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }),
-
                         // Login Button
                         Obx(() => ElevatedButton(
                               onPressed: _authController.isLoading.value
@@ -285,13 +263,29 @@ class _LoginScreenState extends State<LoginScreen> {
                                 elevation: 2,
                               ),
                               child: _authController.isLoading.value
-                                  ? const SizedBox(
-                                      height: 20,
-                                      width: 20,
-                                      child: CircularProgressIndicator(
-                                        color: Colors.white,
-                                        strokeWidth: 2,
-                                      ),
+                                  ? Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            valueColor:
+                                                AlwaysStoppedAnimation<Color>(
+                                                    Colors.white),
+                                          ),
+                                        ),
+                                        SizedBox(width: 12),
+                                        Text(
+                                          'Signing In...',
+                                          style: TextStyle(
+                                            fontSize: isWideScreen ? 18 : 16,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
                                     )
                                   : Text(
                                       'Sign In',
@@ -302,30 +296,40 @@ class _LoginScreenState extends State<LoginScreen> {
                                     ),
                             )),
 
-                        SizedBox(height: isWideScreen ? 32 : 24),
+                        SizedBox(height: isWideScreen ? 24 : 20),
 
-                        // Register Link
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              "Don't have an account? ",
-                              style: TextStyle(
-                                color: Colors.grey[600],
-                                fontSize: isWideScreen ? 16 : 14,
-                              ),
+                        // Forgot Password
+                        TextButton(
+                          onPressed: () {
+                            // Handle forgot password
+                            Get.snackbar(
+                              'Coming Soon',
+                              'Password reset functionality will be available soon',
+                              backgroundColor: Colors.blue[50],
+                              colorText: Colors.blue[800],
+                            );
+                          },
+                          child: Text(
+                            'Forgot Password?',
+                            style: TextStyle(
+                              color: Theme.of(context).primaryColor,
+                              fontSize: isWideScreen ? 16 : 14,
+                              fontWeight: FontWeight.w500,
                             ),
-                            TextButton(
-                              onPressed: () => Get.toNamed('/school-selection'),
-                              child: Text(
-                                'Create Account',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: isWideScreen ? 16 : 14,
-                                ),
-                              ),
+                          ),
+                        ),
+
+                        SizedBox(height: isWideScreen ? 40 : 32),
+
+                        // Version/Footer
+                        Center(
+                          child: Text(
+                            'Version 1.0.0',
+                            style: TextStyle(
+                              color: Colors.grey[500],
+                              fontSize: 12,
                             ),
-                          ],
+                          ),
                         ),
                       ],
                     ),
@@ -335,64 +339,6 @@ class _LoginScreenState extends State<LoginScreen> {
             );
           },
         ),
-      ),
-    );
-  }
-
-  Future<void> _handleLogin() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    final success = await _authController.login(
-      _emailController.text.trim(),
-      _passwordController.text,
-    );
-
-    if (success) {
-      print('✅ Login successful, navigating to main app');
-      print('🔍 Auth Status:');
-      print('   Local: ${_authController.isLoggedIn.value}');
-
-      // Force a small delay to ensure auth state is fully updated
-      await Future.delayed(const Duration(milliseconds: 100));
-
-      // Check if user has PIN setup for future convenience
-      if (_authController.hasPinSetup) {
-        // Go to main app
-        Get.offAllNamed('/main');
-      } else {
-        // Offer to setup PIN for future logins
-        _showPinSetupDialog();
-      }
-    } else {
-      print('❌ Login failed');
-    }
-  }
-
-  void _showPinSetupDialog() {
-    Get.dialog(
-      AlertDialog(
-        title: const Text('Setup PIN'),
-        content: const Text(
-          'Would you like to set up a PIN for faster login next time?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Get.back();
-              print('📱 Navigating to main app (PIN setup skipped)');
-              Get.offAllNamed('/main');
-            },
-            child: const Text('Maybe Later'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Get.back();
-              print('📱 Navigating to PIN setup');
-              Get.offAllNamed('/pin-setup');
-            },
-            child: const Text('Setup PIN'),
-          ),
-        ],
       ),
     );
   }
