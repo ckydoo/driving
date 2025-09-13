@@ -1,4 +1,6 @@
 // lib/services/app_initialization.dart
+import 'package:driving/services/auto_seed_initializer.dart'
+    show AutoSeedInitializer;
 import 'package:driving/services/schedule_status_migration.dart';
 import 'package:get/get.dart';
 import '../controllers/auth_controller.dart';
@@ -29,7 +31,8 @@ class AppInitialization {
       print('Schedule status migration completed');
       // Initialize controllers in proper order
       await _initializeControllers();
-
+      // Add auto-seeding for development/testing
+      await AutoSeedInitializer.instance.developmentInit();
       print('App initialization completed successfully');
     } catch (e) {
       print('Error during app initialization: $e');

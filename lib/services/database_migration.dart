@@ -3,7 +3,9 @@ import 'dart:io';
 
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/models/payment.dart';
+import 'package:driving/services/auto_seed_initializer.dart';
 import 'package:driving/services/school_config_service.dart';
+import 'package:driving/services/test_data_seeder.dart';
 import 'package:get/get.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite_common/sqlite_api.dart';
@@ -214,6 +216,15 @@ class DatabaseMigration {
     print('🔄 Running database migrations...');
     await addMissingColumns(db);
     print('✅ Database migrations completed');
+    // For immediate seeding (useful in development)
+    await TestDataSeeder.instance.seedAllTestData();
+
+// Check what exists
+    final status = await AutoSeedInitializer.instance.getStatus();
+    print('Database status: $status');
+
+// Seed only users for auth testing
+    await TestDataSeeder.instance.seedUsersOnly();
   }
 
 // Add this method to your DatabaseMigration class

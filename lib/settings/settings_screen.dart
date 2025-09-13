@@ -1,4 +1,5 @@
 import 'package:driving/widgets/school_info_widget.dart';
+import 'package:driving/widgets/seed_data_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
@@ -176,6 +177,14 @@ class _SettingsScreenState extends State<SettingsScreen>
               backgroundColor: Colors.blue,
               foregroundColor: Colors.white,
             ),
+          ),
+        if (authController.hasAnyRole(['admin', 'instructor']))
+          _buildQuickActionButton(
+            icon: Icons.bug_report,
+            label: 'Seed Data',
+            onTap: () {
+              Get.to(() => SeedDataWidget());
+            },
           ),
         if (authController.hasAnyRole(['admin', 'instructor']))
           _buildQuickActionButton(

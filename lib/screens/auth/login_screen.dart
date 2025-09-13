@@ -91,7 +91,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                               SizedBox(height: isWideScreen ? 32 : 24),
                               Text(
-                                'Driving School',
+                                'DriveSync Pro',
                                 style: TextStyle(
                                   fontSize: isWideScreen ? 32 : 28,
                                   fontWeight: FontWeight.bold,
@@ -100,7 +100,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                               SizedBox(height: isWideScreen ? 8 : 6),
                               Text(
-                                'Management System',
+                                'Drive Smarter, Manage Easier',
                                 style: TextStyle(
                                   fontSize: isWideScreen ? 18 : 16,
                                   color: Colors.grey[600],
@@ -111,29 +111,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
 
-                        SizedBox(height: isWideScreen ? 48 : 32),
-
-                        // Welcome Text
-                        Text(
-                          'Welcome Back',
-                          style: TextStyle(
-                            fontSize: isWideScreen ? 24 : 20,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.grey[800],
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        SizedBox(height: isWideScreen ? 8 : 6),
-                        Text(
-                          'Sign in to continue',
-                          style: TextStyle(
-                            fontSize: isWideScreen ? 16 : 14,
-                            color: Colors.grey[600],
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-
-                        SizedBox(height: isWideScreen ? 40 : 32),
+                        SizedBox(height: isWideScreen ? 30 : 18),
 
                         // Email Field
                         TextFormField(
