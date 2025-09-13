@@ -21,66 +21,55 @@ void main() async {
     databaseFactory = databaseFactoryFfi;
   }
 
-  print('🚀 === STARTING MULTI-TENANT DRIVING SCHOOL APP ===');
+  print('🚀 === STARTING DRIVING SCHOOL APP ===');
 
-  // STEP 1: Initialize Firebase with proper options and error handling
+  // Initialize database
   final db = await DatabaseHelper.instance.database;
-
-  // ✅ FIX 3: Run migrations to add missing columns
   await DatabaseMigration.runMigrations(db);
-  // STEP 2: Initialize core services
-  await _initializeCoreServices();
 
-  // STEP 3: Initialize multi-tenant app bindings
-  await _initializeMultiTenantBindings();
+  // Initialize core services (simplified)
+  await _initializeCoreServices();
 
   print('✅ === APP INITIALIZATION COMPLETED ===');
 
-  runApp(MultiTenantDrivingSchoolApp());
+  runApp(DrivingSchoolApp()); // Rename to remove "MultiTenant"
 }
 
-/// Initialize core services
 Future<void> _initializeCoreServices() async {
   try {
     print('⚙️ Initializing core services...');
 
-    // Initialize PIN Controller early (before other controllers that might depend on it)
-    Get.put(PinController(), permanent: true);
-    print('✅ PinController initialized');
+    // Initialize PIN Controller early
+    if (!Get.isRegistered<PinController>()) {
+      Get.put<PinController>(PinController(), permanent: true);
+      print('✅ PinController initialized');
+    }
+
+    // Initialize Settings Controller (but skip school config)
+    if (!Get.isRegistered<SettingsController>()) {
+      Get.put<SettingsController>(SettingsController(), permanent: true);
+
+      final settingsController = Get.find<SettingsController>();
+      await settingsController.loadSettingsFromDatabase();
+      print('✅ SettingsController initialized');
+    }
+
+    // Initialize Auth Controller
+    if (!Get.isRegistered<AuthController>()) {
+      Get.put<AuthController>(AuthController(), permanent: true);
+      print('✅ AuthController initialized');
+    }
+
+    print('✅ Core services initialization completed');
   } catch (e) {
     print('❌ Core services initialization failed: $e');
-    print('🚨 Attempting emergency initialization...');
-    // Emergency fallback - initialize critical controllers
-    EmergencyBindings.initializeMissingControllers();
+    // Continue anyway - app should still work with basic functionality
   }
 }
 
-/// Initialize multi-tenant app bindings
-Future<void> _initializeMultiTenantBindings() async {
-  try {
-    print('🏫 Initializing multi-tenant app bindings...');
-
-    // Use enhanced app bindings with multi-tenant support
-    await EnhancedAppBindings().dependencies();
-    print('✅ Multi-tenant app bindings completed');
-
-    // Optional: Run additional app initialization if needed
-    // Note: AppInitialization might duplicate some controller initialization
-    // Uncomment only if you need additional initialization steps
-    // await AppInitialization.initialize();
-    // print('✅ Additional app initialization completed');
-  } catch (e) {
-    print('❌ Multi-tenant app bindings failed: $e');
-    print('🚨 Attempting emergency controller initialization...');
-
-    // Emergency fallback - initialize critical controllers
-    EmergencyBindings.initializeMissingControllers();
-  }
-}
-
-/// Multi-Tenant Driving School App
-class MultiTenantDrivingSchoolApp extends StatelessWidget {
-  const MultiTenantDrivingSchoolApp({super.key});
+///  Driving School App
+class DrivingSchoolApp extends StatelessWidget {
+  const DrivingSchoolApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -154,84 +143,64 @@ class _AuthenticationWrapperState extends State<AuthenticationWrapper> {
   }
 
   Future<void> _determineInitialRoute() async {
-    // Wait for controllers to initialize
-    await Future.delayed(const Duration(milliseconds: 500));
+    // Prevent multiple calls
+    if (_isNavigating) {
+      print('🔄 Navigation already in progress, skipping...');
+      return;
+    }
+
+    _isNavigating = true;
 
     try {
-      print('🔍 === DETERMINING INITIAL ROUTE ===');
+      print('🔍 === DETERMINING INITIAL ROUTE (SIMPLIFIED) ===');
 
-      // Check if AuthController exists, if not initialize it
-      AuthController authController;
-      try {
-        authController = Get.find<AuthController>();
-      } catch (e) {
-        // Initialize AuthController if not found
-        authController = Get.put(AuthController());
-        await Future.delayed(const Duration(milliseconds: 200));
-      }
+      // Wait a bit for controllers to initialize
+      await Future.delayed(const Duration(milliseconds: 300));
 
-      // Get required controllers for multi-school support
+      // Get required controllers
+      final authController = Get.find<AuthController>();
       final pinController = Get.find<PinController>();
-
-      // Try to get school config and settings controllers
-      SchoolConfigService? schoolConfig;
-      SettingsController? settingsController;
-
-      try {
-        schoolConfig = Get.find<SchoolConfigService>();
-        settingsController = Get.find<SettingsController>();
-      } catch (e) {
-        print('⚠️ School controllers not ready: $e');
-      }
 
       String initialRoute;
 
-      // Step 1: Check if school is configured
-      if (schoolConfig == null ||
-          settingsController == null ||
-          !schoolConfig.isValidConfiguration() ||
-          settingsController.businessName.value.isEmpty) {
-        print(
-          '🏫 No school configuration found - starting with school selection',
-        );
-        initialRoute = '/school-selection';
+      // Step 1: Check if user is already logged in
+      if (authController.isLoggedIn.value) {
+        print('👤 User already logged in');
+        initialRoute = '/main';
       } else {
-        print('✅ School configuration found: ${schoolConfig.schoolName.value}');
+        // Step 2: Check PIN availability for quick login
+        final isUserVerified = await pinController.isUserVerified();
+        final shouldUsePinAuth = pinController.shouldUsePinAuth();
+        final hasUsers = await _checkIfUsersExist();
 
-        // Step 2: Check authentication status
-        if (authController.isLoggedIn.value) {
-          print('👤 User already logged in');
-          initialRoute = '/main';
+        if (isUserVerified && shouldUsePinAuth && hasUsers) {
+          print('📱 PIN available - using PIN login');
+          initialRoute = '/pin-login';
         } else {
-          // Step 3: Check PIN availability for quick login
-          final isUserVerified = await pinController.isUserVerified();
-          final shouldUsePinAuth = pinController.shouldUsePinAuth();
-          final hasUsers = await _checkIfUsersExist();
-
-          if (isUserVerified && shouldUsePinAuth && hasUsers) {
-            print('📱 PIN available - using PIN login');
-            initialRoute = '/pin-login';
-          } else if (hasUsers) {
-            print('🔐 Users exist but no PIN - using email/password login');
-            initialRoute = '/login';
-          } else {
-            print('👥 No users found - starting with school selection');
-            initialRoute = '/school-selection';
-          }
+          print('🔐 Going to standard login');
+          initialRoute = '/login';
         }
       }
 
       print('🎯 Initial route determined: $initialRoute');
 
       // Navigate to the determined route
-      Get.offAllNamed(initialRoute);
+      if (mounted) {
+        Get.offAllNamed(initialRoute);
+      }
     } catch (e) {
-      // Fallback to school selection if there's any error
       debugPrint('❌ Error determining initial route: $e');
-      Get.offAllNamed('/school-selection');
+      // Always fallback to login instead of school selection
+      if (mounted) {
+        Get.offAllNamed('/login');
+      }
+    } finally {
+      _isNavigating = false;
     }
   }
 
+// Add this flag as a class member
+  bool _isNavigating = false;
   // Helper method to check if users exist
   Future<bool> _checkIfUsersExist() async {
     try {
@@ -347,80 +316,4 @@ class MultiTenantRouteObserver extends NavigatorObserver {
       // Ignore errors in logging
     }
   }
-
-  // lib/main.dart - Updated route determination logic
-  // Add this method to the LoadingScreen class
-
-  // lib/main.dart - Updated route determination logic
-  // Add this method to the LoadingScreen class
-
-  Future<void> _determineInitialRoute() async {
-    try {
-      print('🔍 === DETERMINING INITIAL ROUTE ===');
-
-      // Get required controllers
-      final authController = Get.find<AuthController>();
-      final pinController = Get.find<PinController>();
-      final schoolConfig = Get.find<SchoolConfigService>();
-      final settingsController = Get.find<SettingsController>();
-
-      String initialRoute;
-
-      // Step 1: Check if school is configured
-      if (!schoolConfig.isValidConfiguration() ||
-          settingsController.businessName.value.isEmpty) {
-        print(
-          '🏫 No school configuration found - starting with school selection',
-        );
-        initialRoute = '/school-selection';
-      } else {
-        print('✅ School configuration found: ${schoolConfig.schoolName.value}');
-
-        // Step 2: Check authentication status
-        if (authController.isLoggedIn.value) {
-          print('👤 User already logged in');
-          initialRoute = '/main';
-        } else {
-          // Step 3: Check PIN availability for quick login
-          final isUserVerified = await pinController.isUserVerified();
-          final shouldUsePinAuth = pinController.shouldUsePinAuth();
-          final hasUsers = await _checkIfUsersExist();
-
-          if (isUserVerified && shouldUsePinAuth && hasUsers) {
-            print('📱 PIN available - using PIN login');
-            initialRoute = '/pin-login';
-          } else if (hasUsers) {
-            print('🔐 Users exist but no PIN - using email/password login');
-            initialRoute = '/login';
-          } else {
-            print('👥 No users found - starting with school selection');
-            initialRoute = '/school-selection';
-          }
-        }
-      }
-
-      print('🎯 Initial route determined: $initialRoute');
-
-      // Navigate to the determined route
-      Get.offAllNamed(initialRoute);
-    } catch (e) {
-      // Fallback to school selection if there's any error
-      debugPrint('❌ Error determining initial route: $e');
-      Get.offAllNamed('/school-selection');
-    }
-  }
-
-  // Helper method to check if users exist
-  Future<bool> _checkIfUsersExist() async {
-    try {
-      final users = await DatabaseHelper.instance.getUsers();
-      return users.isNotEmpty;
-    } catch (e) {
-      print('⚠️ Error checking users: $e');
-      return false;
-    }
-  }
 }
-
-// lib/main.dart - Updated AuthenticationWrapper with multi-school support
-// Replace the existing _AuthenticationWrapperState class

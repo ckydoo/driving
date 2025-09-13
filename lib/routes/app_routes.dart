@@ -12,9 +12,6 @@ class AppRoutes {
 
   // Authentication flow
   static const String initial = '/';
-  static const String schoolSelection = '/school-selection';
-  static const String schoolRegistration = '/school-registration';
-  static const String schoolLogin = '/school-login';
   static const String login = '/login';
   static const String pinLogin = '/pin-login';
   static const String pinSetup = '/pin-setup';
@@ -44,7 +41,7 @@ class AppRoutes {
     // Initial loading screen
     GetPage(
       name: initial,
-      page: () => const AuthenticationWrapper(), // Your existing loading screen
+      page: () => const AuthenticationWrapper(),
     ),
 
     // === AUTHENTICATION ROUTES ===
@@ -197,21 +194,6 @@ class AppRoutes {
 
   // === NAVIGATION HELPERS ===
 
-  /// Navigate to school selection
-  static void toSchoolSelection() {
-    Get.offAllNamed(schoolSelection);
-  }
-
-  /// Navigate to school registration
-  static void toSchoolRegistration() {
-    Get.toNamed(schoolRegistration);
-  }
-
-  /// Navigate to existing school login
-  static void toSchoolLogin() {
-    Get.toNamed(schoolLogin);
-  }
-
   /// Navigate to traditional login
   static void toLogin() {
     Get.offAllNamed(login);
@@ -247,9 +229,6 @@ class AppRoutes {
   /// Check if currently on authentication flow
   static bool get isOnAuthFlow {
     final authRoutes = [
-      schoolSelection,
-      schoolRegistration,
-      schoolLogin,
       login,
       pinLogin,
       pinSetup,

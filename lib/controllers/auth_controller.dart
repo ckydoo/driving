@@ -426,12 +426,6 @@ class AuthController extends GetxController {
   /// Get initial route based on authentication state
   Future<String> determineInitialRoute() async {
     try {
-      // Check for school configuration first
-      final schoolConfig = Get.find<SchoolConfigService>();
-      if (!schoolConfig.isValidConfiguration()) {
-        return '/school-selection';
-      }
-
       // Check if PIN authentication should be used
       if (_pinController.shouldUsePinAuth()) {
         return '/pin-login';
