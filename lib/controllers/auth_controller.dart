@@ -474,17 +474,6 @@ class AuthController extends GetxController {
   bool get shouldUsePinAuth => _pinController.shouldUsePinAuth();
   bool get hasPinSetup => _pinController.isPinSet.value;
 
-  /// Role checking methods
-  bool hasAnyRole(List<String> roles) {
-    if (!isLoggedIn.value || currentUser.value == null) return false;
-    final userRole = currentUser.value!.role.toLowerCase();
-    return roles.any((role) => role.toLowerCase() == userRole);
-  }
-
-  bool get isAdmin => hasAnyRole(['admin']);
-  bool get isInstructor => hasAnyRole(['admin', 'instructor']);
-  bool get isStudent => hasAnyRole(['student']);
-
   /// Check if user has permission for specific school
   bool hasSchoolPermission(String schoolId) {
     if (!isLoggedIn.value || currentUser.value == null) return false;
@@ -518,66 +507,156 @@ class AuthController extends GetxController {
     }
   }
 
-  // Safe getter for user's full name
-  String get userFullName {
-    final user = currentUser.value;
-    if (user == null) return 'User';
+  /// Safe method to check multiple roles - COMPLETELY FIXED VERSION
+  bool hasAnyRole(List<String> roles) {
+    try {
+      // Check authentication first
+      if (!isLoggedIn.value) {
+        print('🚫 hasAnyRole: User not logged in');
+        return false;
+      }
 
-    final fname = user.fname ?? '';
-    final lname = user.lname ?? '';
+      // Check if user object exists
+      if (currentUser.value == null) {
+        print('🚫 hasAnyRole: User object is null');
+        return false;
+      }
 
-    if (fname.isEmpty && lname.isEmpty) {
-      return user.email ?? 'User';
+      // SAFE: Use null-aware access for role property
+      final userRole = currentUser.value?.role?.toLowerCase();
+      if (userRole == null || userRole.isEmpty) {
+        print('🚫 hasAnyRole: User role is null or empty');
+        return false;
+      }
+
+      // Check if user has any of the specified roles
+      final hasRole = roles.any((role) => userRole == role.toLowerCase());
+      print(
+          '✅ hasAnyRole: User role "$userRole" - Has required role: $hasRole');
+      return hasRole;
+    } catch (e) {
+      print('❌ hasAnyRole Error: $e');
+      return false;
     }
-
-    return '$fname $lname'.trim();
   }
 
-  // Safe getter for user first name
-  String get userFirstName {
-    final user = currentUser.value;
-    if (user?.fname?.isNotEmpty == true) return user!.fname!;
-    if (user?.email?.isNotEmpty == true) return user!.email!.split('@').first;
-    return 'User';
-  }
-
-  // Safe getter for user initials
-  String get userInitials {
-    final user = currentUser.value;
-    if (user == null) return 'U';
-
-    String initials = '';
-
-    if (user.fname?.isNotEmpty == true) {
-      initials += user.fname![0].toUpperCase();
-    }
-
-    if (user.lname?.isNotEmpty == true && initials.length < 2) {
-      initials += user.lname![0].toUpperCase();
-    }
-
-    if (initials.isEmpty && user.email?.isNotEmpty == true) {
-      initials = user.email![0].toUpperCase();
-    }
-
-    return initials.isNotEmpty ? initials : 'U';
-  }
-
-  // Safe method to check if user data is available
-  bool get isUserDataAvailable {
-    return isLoggedIn.value && currentUser.value != null;
-  }
-
-  // Safe method to get user role
-  String get userRole {
-    final user = currentUser.value;
-    return user?.role?.toLowerCase() ?? 'guest';
-  }
-
-  // Safe method to check specific roles - FIXED VERSION
+  /// Safe method to check specific role - COMPLETELY FIXED VERSION
   bool hasRole(String role) {
-    if (!isUserDataAvailable) return false;
-    final currentUserRole = currentUser.value?.role?.toLowerCase() ?? '';
-    return currentUserRole == role.toLowerCase();
+    try {
+      if (!isLoggedIn.value || currentUser.value == null) {
+        return false;
+      }
+
+      final currentUserRole = currentUser.value?.role?.toLowerCase();
+      if (currentUserRole == null) return false;
+
+      return currentUserRole == role.toLowerCase();
+    } catch (e) {
+      print('❌ hasRole Error: $e');
+      return false;
+    }
   }
+
+  /// Safe getter for user data availability
+  bool get isUserDataAvailable {
+    try {
+      return isLoggedIn.value &&
+          currentUser.value != null &&
+          currentUser.value!.email?.isNotEmpty == true;
+    } catch (e) {
+      print('❌ isUserDataAvailable Error: $e');
+      return false;
+    }
+  }
+
+  /// Safe getter for user's full name - COMPLETELY FIXED VERSION
+  String get userFullName {
+    try {
+      final user = currentUser.value;
+      if (user == null) return 'User';
+
+      final fname = user.fname ?? '';
+      final lname = user.lname ?? '';
+
+      if (fname.isEmpty && lname.isEmpty) {
+        return user.email?.split('@').first ?? 'User';
+      }
+
+      return '$fname $lname'.trim();
+    } catch (e) {
+      print('❌ userFullName Error: $e');
+      return 'User';
+    }
+  }
+
+  /// Safe getter for user first name - COMPLETELY FIXED VERSION
+  String get userFirstName {
+    try {
+      final user = currentUser.value;
+      if (user?.fname?.isNotEmpty == true) {
+        return user!.fname!;
+      }
+      if (user?.email?.isNotEmpty == true) {
+        return user!.email!.split('@').first;
+      }
+      return 'User';
+    } catch (e) {
+      print('❌ userFirstName Error: $e');
+      return 'User';
+    }
+  }
+
+  /// Safe getter for user initials - COMPLETELY FIXED VERSION
+  String get userInitials {
+    try {
+      final user = currentUser.value;
+      if (user == null) return 'U';
+
+      String initials = '';
+
+      if (user.fname?.isNotEmpty == true) {
+        initials += user.fname![0].toUpperCase();
+      }
+
+      if (user.lname?.isNotEmpty == true && initials.length < 2) {
+        initials += user.lname![0].toUpperCase();
+      }
+
+      if (initials.isEmpty && user.email?.isNotEmpty == true) {
+        initials = user.email![0].toUpperCase();
+      }
+
+      return initials.isNotEmpty ? initials : 'U';
+    } catch (e) {
+      print('❌ userInitials Error: $e');
+      return 'U';
+    }
+  }
+
+  /// Safe getter for user role - COMPLETELY FIXED VERSION
+  String get userRole {
+    try {
+      return currentUser.value?.role?.toLowerCase() ?? 'guest';
+    } catch (e) {
+      print('❌ userRole Error: $e');
+      return 'guest';
+    }
+  }
+
+  /// Safe getter for user ID - COMPLETELY FIXED VERSION
+  String? get userId {
+    try {
+      return currentUser.value?.id?.toString();
+    } catch (e) {
+      print('❌ userId Error: $e');
+      return null;
+    }
+  }
+
+  /// Convenience role check methods - COMPLETELY SAFE
+  bool get isAdmin => hasRole('admin');
+  bool get isInstructor => hasAnyRole(['admin', 'instructor']);
+  bool get isStudent => hasRole('student');
+  bool get canAccessAdminFeatures => hasRole('admin');
+  bool get canAccessInstructorFeatures => hasAnyRole(['admin', 'instructor']);
 }

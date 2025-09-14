@@ -41,185 +41,196 @@ class _SeedDataWidgetState extends State<SeedDataWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 4,
-      margin: EdgeInsets.all(16),
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.invert_colors_on_sharp,
-                    color: Colors.blue, size: 24),
-                SizedBox(width: 8),
-                Text(
-                  'Test Data Management',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 16),
-
-            // Status indicators
-            if (_isChecking) ...[
-              Center(
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                    SizedBox(width: 8),
-                    Text('Checking existing data...'),
-                  ],
-                ),
-              ),
-            ] else ...[
-              Text(
-                'Current Status:',
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 16,
-                ),
-              ),
-              SizedBox(height: 8),
-
-              // Status rows
-              _buildStatusRow(
-                'Test Users',
-                _existingData['users'] ?? false,
-                'Admin, Instructor, and Student accounts',
-              ),
-              _buildStatusRow(
-                'Test Courses',
-                _existingData['courses'] ?? false,
-                'Basic to Advanced driving courses',
-              ),
-              _buildStatusRow(
-                'Test Fleet',
-                _existingData['fleet'] ?? false,
-                'Sample vehicles for training',
-              ),
-
-              SizedBox(height: 20),
-
-              // Action buttons
-              Text(
-                'Actions:',
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 16,
-                ),
-              ),
-              SizedBox(height: 12),
-
-              // Create test data button
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () =>
-                      SeedDataRunner.runSeedDataWithConfirmation(context),
-                  icon: Icon(Icons.add_circle_outline),
-                  label: Text('Create Complete Test Data'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    foregroundColor: Colors.white,
-                    padding: EdgeInsets.symmetric(vertical: 12),
-                  ),
-                ),
-              ),
-
-              SizedBox(height: 8),
-
-              // Quick actions row
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        title: Text('Data Seed Management'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        foregroundColor: Colors.black87,
+        leading: BackButton(),
+      ),
+      body: Card(
+        elevation: 4,
+        margin: EdgeInsets.all(16),
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               Row(
                 children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => SeedDataRunner.seedUsersOnly(),
-                      icon: Icon(Icons.person_add, size: 18),
-                      label: Text('Users Only'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.green,
-                        side: BorderSide(color: Colors.green),
-                      ),
-                    ),
-                  ),
+                  Icon(Icons.invert_colors_on_sharp,
+                      color: Colors.blue, size: 24),
                   SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => _refreshStatus(),
-                      icon: Icon(Icons.refresh, size: 18),
-                      label: Text('Refresh'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.blue,
-                        side: BorderSide(color: Colors.blue),
-                      ),
+                  Text(
+                    'Test Data Management',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ],
               ),
-
-              SizedBox(height: 8),
-
-              // Danger zone
-              Container(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: () => SeedDataRunner.clearTestData(),
-                  icon: Icon(Icons.delete_forever, size: 18),
-                  label: Text('Clear All Test Data'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.red,
-                    side: BorderSide(color: Colors.red),
-                  ),
-                ),
-              ),
-
               SizedBox(height: 16),
 
-              // Help text
-              Container(
-                padding: EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.blue.shade200),
+              // Status indicators
+              if (_isChecking) ...[
+                Center(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      SizedBox(width: 8),
+                      Text('Checking existing data...'),
+                    ],
+                  ),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.info, color: Colors.blue, size: 20),
-                        SizedBox(width: 8),
-                        Text(
-                          'Test Login Credentials',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.blue.shade800,
-                          ),
-                        ),
-                      ],
+              ] else ...[
+                Text(
+                  'Current Status:',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 16,
+                  ),
+                ),
+                SizedBox(height: 8),
+
+                // Status rows
+                _buildStatusRow(
+                  'Test Users',
+                  _existingData['users'] ?? false,
+                  'Admin, Instructor, and Student accounts',
+                ),
+                _buildStatusRow(
+                  'Test Courses',
+                  _existingData['courses'] ?? false,
+                  'Basic to Advanced driving courses',
+                ),
+                _buildStatusRow(
+                  'Test Fleet',
+                  _existingData['fleet'] ?? false,
+                  'Sample vehicles for training',
+                ),
+
+                SizedBox(height: 20),
+
+                // Action buttons
+                Text(
+                  'Actions:',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 16,
+                  ),
+                ),
+                SizedBox(height: 12),
+
+                // Create test data button
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () =>
+                        SeedDataRunner.runSeedDataWithConfirmation(context),
+                    icon: Icon(Icons.add_circle_outline),
+                    label: Text('Create Complete Test Data'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      foregroundColor: Colors.white,
+                      padding: EdgeInsets.symmetric(vertical: 12),
                     ),
-                    SizedBox(height: 8),
-                    _buildCredentialText('Admin', 'admin@test.com', 'admin123'),
-                    _buildCredentialText(
-                        'Instructor', 'instructor1@test.com', 'instructor123'),
-                    _buildCredentialText(
-                        'Student', 'student1@test.com', 'student123'),
+                  ),
+                ),
+
+                SizedBox(height: 8),
+
+                // Quick actions row
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => SeedDataRunner.seedUsersOnly(),
+                        icon: Icon(Icons.person_add, size: 18),
+                        label: Text('Users Only'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.green,
+                          side: BorderSide(color: Colors.green),
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _refreshStatus(),
+                        icon: Icon(Icons.refresh, size: 18),
+                        label: Text('Refresh'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.blue,
+                          side: BorderSide(color: Colors.blue),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
-              ),
+
+                SizedBox(height: 8),
+
+                // Danger zone
+                Container(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => SeedDataRunner.clearTestData(),
+                    icon: Icon(Icons.delete_forever, size: 18),
+                    label: Text('Clear All Test Data'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red,
+                      side: BorderSide(color: Colors.red),
+                    ),
+                  ),
+                ),
+
+                SizedBox(height: 16),
+
+                // Help text
+                Container(
+                  padding: EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.info, color: Colors.blue, size: 20),
+                          SizedBox(width: 8),
+                          Text(
+                            'Test Login Credentials',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.blue.shade800,
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 8),
+                      _buildCredentialText(
+                          'Admin', 'admin@test.com', 'admin123'),
+                      _buildCredentialText('Instructor', 'instructor1@test.com',
+                          'instructor123'),
+                      _buildCredentialText(
+                          'Student', 'student1@test.com', 'student123'),
+                    ],
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

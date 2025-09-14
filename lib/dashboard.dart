@@ -1,4 +1,4 @@
-// lib/dashboard.dart - FIXED NULL SAFETY VERSION
+// lib/dashboard_fixed.dart
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/controllers/billing_controller.dart';
 import 'package:driving/controllers/navigation_controller.dart';
@@ -25,27 +25,10 @@ class FixedDashboardContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final authController = Get.find<AuthController>();
-
     return GetBuilder<UserController>(
       builder: (userController) {
         return GetBuilder<BillingController>(
           builder: (billingController) {
-            // SAFE: Check authentication before proceeding
-            if (!authController.isLoggedIn.value ||
-                authController.currentUser.value == null) {
-              // Return a loading or error widget if user is not authenticated
-              return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    CircularProgressIndicator(),
-                    SizedBox(height: 16),
-                    Text('Loading user data...'),
-                  ],
-                ),
-              );
-            }
-
             // Calculate real values - Fixed income calculation
             final totalStudents = userController.users
                 .where((user) => user.role == 'student')
@@ -64,13 +47,12 @@ class FixedDashboardContent extends StatelessWidget {
                 .length;
 
             return SingleChildScrollView(
-              // <-- This is line 52 - Now SAFE
               padding: ResponsiveUtils.getPadding(context),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Welcome Section - Fixed
-                  _buildFixedWelcomeSection(context, authController),
+                  _buildFixedWelcomeSection(context),
                   SizedBox(
                       height: ResponsiveUtils.getValue(context,
                           mobile: 16.0, tablet: 20.0, desktop: 24.0)),
@@ -89,7 +71,6 @@ class FixedDashboardContent extends StatelessWidget {
                       height: ResponsiveUtils.getValue(context,
                           mobile: 20.0, tablet: 24.0, desktop: 32.0)),
 
-                  // SAFE: Check user role before showing role-specific content
                   if (authController.hasAnyRole(['admin', 'instructor']))
                     _buildFixedQuickActions(context),
 
@@ -110,8 +91,7 @@ class FixedDashboardContent extends StatelessWidget {
     );
   }
 
-  Widget _buildFixedWelcomeSection(
-      BuildContext context, AuthController authController) {
+  Widget _buildFixedWelcomeSection(BuildContext context) {
     return Container(
       width: double.infinity,
       padding: ResponsiveUtils.getValue(
@@ -140,12 +120,12 @@ class FixedDashboardContent extends StatelessWidget {
                   color: Colors.white.withOpacity(0.3),
                 ),
                 const SizedBox(height: 12),
-                _buildWelcomeText(context, authController),
+                _buildWelcomeText(context),
               ],
             )
           : Row(
               children: [
-                Expanded(child: _buildWelcomeText(context, authController)),
+                Expanded(child: _buildWelcomeText(context)),
                 const SizedBox(width: 16),
                 Icon(
                   Icons.school,
@@ -158,20 +138,14 @@ class FixedDashboardContent extends StatelessWidget {
     );
   }
 
-  Widget _buildWelcomeText(
-      BuildContext context, AuthController authController) {
-    // Use safe access to userFirstName
-    final welcomeName = authController.isUserDataAvailable
-        ? authController.userFirstName
-        : 'User';
-
+  Widget _buildWelcomeText(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
         ResponsiveText(
           style: const TextStyle(),
-          'Welcome back, $welcomeName!',
+          'Welcome back!',
           fontSize: ResponsiveUtils.getValue(context,
               mobile: 22.0, tablet: 25.0, desktop: 28.0),
           fontWeight: FontWeight.bold,
@@ -211,19 +185,17 @@ class FixedDashboardContent extends StatelessWidget {
       },
       {
         'title': 'Total Income',
-        'value': '\${totalIncome.toStringAsFixed(2)}',
+        'value': '\$${totalIncome.toStringAsFixed(2)}',
         'icon': Icons.attach_money,
         'color': Colors.green,
-        'show': authController
-            .hasAnyRole(['admin', 'instructor']), // SAFE: Uses safe method
+        'show': authController.hasAnyRole(['admin', 'instructor']),
       },
       {
         'title': 'Unpaid Amount',
-        'value': '\${unpaidInvoices.toStringAsFixed(2)}',
+        'value': '\$${unpaidInvoices.toStringAsFixed(2)}',
         'icon': Icons.payment,
         'color': Colors.orange,
-        'show': authController
-            .hasAnyRole(['admin', 'instructor']), // SAFE: Uses safe method
+        'show': authController.hasAnyRole(['admin', 'instructor']),
       },
       {
         'title': 'Active Instructors',
@@ -371,83 +343,146 @@ class FixedDashboardContent extends StatelessWidget {
     final actions = [
       {
         'title': 'Add Student',
+        'subtitle': 'Register a new student',
         'icon': Icons.person_add,
         'color': Colors.blue,
-        'onTap': () => Get.toNamed('/students'),
-      },
-      {
-        'title': 'Create Invoice',
-        'icon': Icons.receipt_long,
-        'color': Colors.green,
-        'onTap': () => Get.toNamed('/billing'),
+        'route': 'students'
       },
       {
         'title': 'Schedule Lesson',
-        'icon': Icons.schedule,
-        'color': Colors.orange,
-        'onTap': () => Get.toNamed('/schedules'),
+        'subtitle': 'Book a new lesson',
+        'icon': Icons.calendar_today,
+        'color': Colors.green,
+        'route': 'schedule'
       },
       {
-        'title': 'Fleet Management',
+        'title': 'Create Invoice',
+        'subtitle': 'Generate new invoice',
+        'icon': Icons.receipt,
+        'color': Colors.orange,
+        'route': 'billing'
+      },
+      {
+        'title': 'Add Vehicle',
+        'subtitle': 'Register new vehicle',
         'icon': Icons.directions_car,
         'color': Colors.purple,
-        'onTap': () => Get.toNamed('/fleet'),
+        'route': 'fleet'
       },
     ];
 
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: context.isMobile ? 2 : 4,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: context.isMobile ? 1.2 : 1.1,
+    if (context.isMobile) {
+      // Mobile: Simple GridView
+      return GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+          childAspectRatio: 1.1,
+        ),
+        itemCount: actions.length,
+        itemBuilder: (context, index) =>
+            _buildFixedQuickActionCard(context, actions[index]),
+      );
+    } else {
+      // Tablet/Desktop: Simple Row
+      return Row(
+        children: actions.asMap().entries.map((entry) {
+          final index = entry.key;
+          final action = entry.value;
+          return Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(
+                right: index < actions.length - 1 ? 12 : 0,
+              ),
+              child: _buildFixedQuickActionCard(context, action),
+            ),
+          );
+        }).toList(),
+      );
+    }
+  }
+
+  Widget _buildFixedQuickActionCard(
+      BuildContext context, Map<String, dynamic> action) {
+    return Container(
+      padding: ResponsiveUtils.getValue(
+        context,
+        mobile: const EdgeInsets.all(10),
+        tablet: const EdgeInsets.all(12),
+        desktop: const EdgeInsets.all(16),
       ),
-      itemCount: actions.length,
-      itemBuilder: (context, index) {
-        final action = actions[index];
-        return InkWell(
-          onTap: action['onTap'] as VoidCallback,
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.grey.withOpacity(0.1),
-                  spreadRadius: 1,
-                  blurRadius: 3,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  action['icon'] as IconData,
-                  color: action['color'] as Color,
-                  size: 28,
-                ),
-                const SizedBox(height: 8),
-                ResponsiveText(
-                  style: const TextStyle(),
-                  action['title'] as String,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.grey[700],
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            spreadRadius: 1,
+            blurRadius: 3,
+            offset: const Offset(0, 2),
           ),
-        );
-      },
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () {
+            final navController = Get.find<NavigationController>();
+            navController.navigateToPage(action['route']);
+          },
+          borderRadius: BorderRadius.circular(12),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Icon Container
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: (action['color'] as Color).withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(action['icon'],
+                    color: action['color'],
+                    size: ResponsiveUtils.getValue(context,
+                        mobile: 18.0, tablet: 20.0, desktop: 22.0)),
+              ),
+              SizedBox(
+                  height: ResponsiveUtils.getValue(context,
+                      mobile: 6.0, tablet: 8.0, desktop: 10.0)),
+
+              // Title
+              ResponsiveText(
+                style: const TextStyle(),
+                action['title'],
+                fontSize: ResponsiveUtils.getValue(context,
+                    mobile: 11.0, tablet: 12.0, desktop: 14.0),
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[800],
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 2),
+
+              // Subtitle
+              ResponsiveText(
+                style: const TextStyle(),
+                action['subtitle'],
+                fontSize: ResponsiveUtils.getValue(context,
+                    mobile: 9.0, tablet: 10.0, desktop: 12.0),
+                color: Colors.grey[600],
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -456,40 +491,67 @@ class FixedDashboardContent extends StatelessWidget {
     BillingController billingController,
     UserController userController,
   ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        ResponsiveText(
-          style: const TextStyle(),
-          'Recent Activities',
-          fontSize: ResponsiveUtils.getValue(context,
-              mobile: 18.0, tablet: 19.0, desktop: 20.0),
-          fontWeight: FontWeight.bold,
-          color: Colors.grey[800],
-        ),
-        SizedBox(
-            height: ResponsiveUtils.getValue(context,
-                mobile: 12.0, tablet: 14.0, desktop: 16.0)),
-        _buildFixedActivityCards(context, billingController, userController),
-      ],
-    );
+    if (context.isMobile) {
+      // Mobile: Stack vertically
+      return Column(
+        children: [
+          _buildFixedRecentActivitiesCard(
+              context, billingController, userController),
+          const SizedBox(height: 16),
+          _buildFixedQuickStatsCard(context, billingController, userController),
+        ],
+      );
+    } else {
+      // Tablet/Desktop: Side by side
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            flex: 2,
+            child: _buildFixedRecentActivitiesCard(
+                context, billingController, userController),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            flex: 1,
+            child: _buildFixedQuickStatsCard(
+                context, billingController, userController),
+          ),
+        ],
+      );
+    }
   }
 
-  Widget _buildFixedActivityCards(
+  Widget _buildFixedRecentActivitiesCard(
     BuildContext context,
     BillingController billingController,
     UserController userController,
   ) {
-    // Get recent activities
-    final recentPayments = billingController.payments.take(3).toList();
+    // Get recent activities from real data
+    final recentPayments = billingController.payments
+        .where((p) => p.paymentDate
+            .isAfter(DateTime.now().subtract(const Duration(days: 7))))
+        .take(context.isMobile ? 2 : 3)
+        .toList();
 
     final recentStudents = userController.users
-        .where((user) => user.role == 'student')
-        .take(3)
+        .where((u) => u.role == 'student')
+        .where((u) => u.created_at
+            .isAfter(DateTime.now().subtract(const Duration(days: 7))))
+        .take(context.isMobile ? 1 : 2)
         .toList();
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      constraints: BoxConstraints(
+        maxHeight: ResponsiveUtils.getValue(context,
+            mobile: 300.0, tablet: 350.0, desktop: 400.0),
+      ),
+      padding: ResponsiveUtils.getValue(
+        context,
+        mobile: const EdgeInsets.all(16),
+        tablet: const EdgeInsets.all(18),
+        desktop: const EdgeInsets.all(20),
+      ),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -504,112 +566,293 @@ class FixedDashboardContent extends StatelessWidget {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            'Recent Payments',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-              color: Colors.grey[800],
+          ResponsiveText(
+            style: const TextStyle(),
+            'Recent Activities',
+            fontSize: ResponsiveUtils.getValue(context,
+                mobile: 16.0, tablet: 17.0, desktop: 18.0),
+            fontWeight: FontWeight.bold,
+            color: Colors.grey[800],
+          ),
+          SizedBox(
+              height: ResponsiveUtils.getValue(context,
+                  mobile: 12.0, tablet: 14.0, desktop: 16.0)),
+
+          // Scrollable content
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  // Show recent student registrations
+                  ...recentStudents
+                      .map((student) => _buildFixedActivityItem(
+                            context,
+                            'New student ${student.fname} ${student.lname} registered',
+                            _getTimeAgo(student.created_at),
+                            Icons.person_add,
+                            Colors.blue,
+                          ))
+                      .toList(),
+
+                  // Show recent payments
+                  ...recentPayments.map((payment) {
+                    final invoice = billingController.invoices.firstWhereOrNull(
+                      (inv) => inv.id == payment.invoiceId,
+                    );
+                    final student = userController.users.firstWhereOrNull(
+                      (user) => user.id == invoice?.studentId,
+                    );
+
+                    return _buildFixedActivityItem(
+                      context,
+                      'Payment received from ${student?.fname ?? 'Unknown'} - ${payment.formattedAmount}',
+                      _getTimeAgo(payment.paymentDate),
+                      Icons.payment,
+                      Colors.green,
+                    );
+                  }).toList(),
+
+                  // If no recent activities, show placeholder
+                  if (recentPayments.isEmpty && recentStudents.isEmpty)
+                    _buildFixedActivityItem(
+                      context,
+                      'No recent activities',
+                      'Check back later',
+                      Icons.info_outline,
+                      Colors.grey,
+                    ),
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: 12),
-          if (recentPayments.isEmpty)
-            Text(
-              'No recent payments',
-              style: TextStyle(color: Colors.grey[600]),
-            )
-          else
-            ...recentPayments.map((payment) {
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Payment #${payment.receiptNumber}',
-                        style: TextStyle(color: Colors.grey[700]),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    Text(
-                      '\${payment.amount.toStringAsFixed(2)}',
-                      style: TextStyle(
-                        color: Colors.green,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }).toList(),
-          const SizedBox(height: 20),
-          Text(
-            'Recent Students',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-              color: Colors.grey[800],
-            ),
-          ),
-          const SizedBox(height: 12),
-          if (recentStudents.isEmpty)
-            Text(
-              'No recent students',
-              style: TextStyle(color: Colors.grey[600]),
-            )
-          else
-            ...recentStudents.map((student) {
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 16,
-                      backgroundColor: Colors.blue[100],
-                      child: Text(
-                        '${student.fname.isNotEmpty ? student.fname[0] : 'S'}',
-                        style: TextStyle(
-                          color: Colors.blue[700],
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        '${student.fname} ${student.lname}',
-                        style: TextStyle(color: Colors.grey[700]),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: student.status == 'Active'
-                            ? Colors.green[100]
-                            : Colors.red[100],
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        student.status,
-                        style: TextStyle(
-                          color: student.status == 'Active'
-                              ? Colors.green[700]
-                              : Colors.red[700],
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }).toList(),
         ],
       ),
     );
+  }
+
+  Widget _buildFixedActivityItem(
+    BuildContext context,
+    String title,
+    String time,
+    IconData icon,
+    Color color,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Icon container - Fixed size
+          Container(
+            width: 28,
+            height: 28,
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              icon,
+              color: color,
+              size: 16,
+            ),
+          ),
+          const SizedBox(width: 12),
+
+          // Text content - Expanded
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: ResponsiveUtils.getValue(context,
+                        mobile: 12.0, tablet: 13.0, desktop: 14.0),
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey[800],
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  time,
+                  style: TextStyle(
+                    fontSize: ResponsiveUtils.getValue(context,
+                        mobile: 10.0, tablet: 11.0, desktop: 12.0),
+                    color: Colors.grey[600],
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFixedQuickStatsCard(
+    BuildContext context,
+    BillingController billingController,
+    UserController userController,
+  ) {
+    final today = DateTime.now();
+    final todayStart = DateTime(today.year, today.month, today.day);
+    final todayEnd = DateTime(today.year, today.month, today.day, 23, 59, 59);
+
+    // Calculate today's statistics
+    final todaysPayments = billingController.payments
+        .where((p) =>
+            p.paymentDate.isAfter(todayStart) &&
+            p.paymentDate.isBefore(todayEnd))
+        .length;
+
+    final pendingInvoices = billingController.invoices
+        .where((inv) => inv.status == 'pending' || inv.balance > 0)
+        .length;
+
+    final stats = [
+      {
+        'label': 'Today\'s Payments',
+        'value': '$todaysPayments',
+        'color': Colors.green
+      },
+      {
+        'label': 'Pending Invoices',
+        'value': '$pendingInvoices',
+        'color': Colors.orange
+      },
+      {
+        'label': 'Total Students',
+        'value':
+            '${userController.users.where((u) => u.role == 'student').length}',
+        'color': Colors.blue
+      },
+      {
+        'label': 'Active Instructors',
+        'value':
+            '${userController.users.where((u) => u.role == 'instructor' && u.status == 'Active').length}',
+        'color': Colors.purple
+      },
+    ];
+
+    return Container(
+      constraints: BoxConstraints(
+        maxHeight: ResponsiveUtils.getValue(context,
+            mobile: 300.0, tablet: 350.0, desktop: 400.0),
+      ),
+      padding: ResponsiveUtils.getValue(
+        context,
+        mobile: const EdgeInsets.all(16),
+        tablet: const EdgeInsets.all(18),
+        desktop: const EdgeInsets.all(20),
+      ),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            spreadRadius: 1,
+            blurRadius: 3,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ResponsiveText(
+            style: const TextStyle(),
+            'Today\'s Overview',
+            fontSize: ResponsiveUtils.getValue(context,
+                mobile: 16.0, tablet: 17.0, desktop: 18.0),
+            fontWeight: FontWeight.bold,
+            color: Colors.grey[800],
+          ),
+          SizedBox(
+              height: ResponsiveUtils.getValue(context,
+                  mobile: 12.0, tablet: 14.0, desktop: 16.0)),
+          Expanded(
+            child: Column(
+              children: stats
+                  .map((stat) => _buildFixedStatRow(
+                      context,
+                      stat['label'] as String,
+                      stat['value'] as String,
+                      stat['color'] as Color))
+                  .toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFixedStatRow(
+      BuildContext context, String label, String value, Color color) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 3,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: ResponsiveUtils.getValue(context,
+                    mobile: 12.0, tablet: 13.0, desktop: 14.0),
+                color: Colors.grey[700],
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: ResponsiveUtils.getValue(context,
+                  mobile: 8.0, tablet: 10.0, desktop: 12.0),
+              vertical: 4,
+            ),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: ResponsiveUtils.getValue(context,
+                    mobile: 12.0, tablet: 13.0, desktop: 14.0),
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getTimeAgo(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+
+    if (difference.inDays > 0) {
+      return '${difference.inDays} day${difference.inDays == 1 ? '' : 's'} ago';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours} hour${difference.inHours == 1 ? '' : 's'} ago';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes} minute${difference.inMinutes == 1 ? '' : 's'} ago';
+    } else {
+      return 'Just now';
+    }
   }
 }

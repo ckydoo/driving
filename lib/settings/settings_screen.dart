@@ -168,17 +168,6 @@ class _SettingsScreenState extends State<SettingsScreen>
       runSpacing: 8,
       children: [
         if (authController.hasAnyRole(['admin', 'instructor']))
-          ElevatedButton.icon(
-            onPressed: () {
-              Get.to(() => SchoolInfoWidget());
-            },
-            label: Text('About School'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue,
-              foregroundColor: Colors.white,
-            ),
-          ),
-        if (authController.hasAnyRole(['admin', 'instructor']))
           _buildQuickActionButton(
             icon: Icons.bug_report,
             label: 'Seed Data',
@@ -205,17 +194,6 @@ class _SettingsScreenState extends State<SettingsScreen>
             onTap: _showResetConfirmation,
             color: Colors.red[600],
           ),
-        // if (authController.hasAnyRole(['admin', 'instructor']))
-        //   ElevatedButton.icon(
-        //     onPressed: () {
-        //       debugFleetQuery.fixDeviceBFleetSync();
-        //     },
-        //     label: Text('Debug Fleet'),
-        //     style: ElevatedButton.styleFrom(
-        //       backgroundColor: Colors.blue,
-        //       foregroundColor: Colors.white,
-        //     ),
-        //   ),
       ],
     );
   }

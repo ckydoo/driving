@@ -5,6 +5,7 @@ import 'package:driving/screens/auth/login_screen.dart';
 import 'package:driving/services/app_bindings.dart';
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/controllers/pin_controller.dart';
+import 'package:driving/services/app_initialization.dart';
 import 'package:driving/services/database_helper.dart';
 import 'package:driving/services/database_migration.dart';
 import 'package:driving/services/school_config_service.dart';
@@ -27,7 +28,7 @@ void main() async {
   // Initialize database
   final db = await DatabaseHelper.instance.database;
   await DatabaseMigration.runMigrations(db);
-
+  await AppInitialization.initialize();
   // Initialize core services (simplified)
   await _initializeCoreServices();
 
