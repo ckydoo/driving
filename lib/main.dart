@@ -34,7 +34,7 @@ void main() async {
 
   print('✅ === APP INITIALIZATION COMPLETED ===');
 
-  runApp(DrivingSchoolApp()); // Rename to remove "MultiTenant"
+  runApp(DrivingSchoolApp());
 }
 
 Future<void> _initializeCoreServices() async {

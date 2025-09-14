@@ -1,9 +1,11 @@
-// lib/services/app_initialization.dart
+// lib/services/app_initialization.dart - ROBUST VERSION WITH ERROR HANDLING
 import 'package:driving/controllers/navigation_controller.dart';
+import 'package:driving/controllers/settings_controller.dart';
 import 'package:driving/services/auto_seed_initializer.dart'
     show AutoSeedInitializer;
 import 'package:driving/services/lesson_counting_service.dart';
 import 'package:driving/services/schedule_status_migration.dart';
+import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../controllers/auth_controller.dart';
 import '../controllers/schedule_controller.dart';
@@ -16,78 +18,212 @@ import '../services/database_migration.dart';
 
 class AppInitialization {
   static Future<void> initialize() async {
+    print('🚀 === STARTING APP INITIALIZATION ===');
+
     try {
-      print('Initializing app...');
-
-      // Initialize database helper first
+      // Step 1: Initialize database helper first
+      print('📁 Initializing database helper...');
       Get.put(DatabaseHelper.instance, permanent: true);
+      print('✅ Database helper initialized');
 
-      // IMPORTANT: Initialize AuthController early - this was missing!
+      // Step 2: Initialize AuthController early
+      print('🔐 Initializing auth controller...');
       Get.put(AuthController(), permanent: true);
+      print('✅ Auth controller initialized');
 
-      // Run database migration
-      await DatabaseMigration.instance.runFullMigration();
-      print('Enhanced schedules table created');
-      // await ScheduleStatusMigration.instance.runStatusMigration();
-      print('Database migration completed successfully');
-      print('Schedule status migration completed');
-      // Initialize controllers in proper order
+      // Step 3: Run database migration (with error handling)
+      await _runDatabaseMigration();
+
+      // Step 4: Run schedule status migration (with error handling)
+      await _runScheduleStatusMigration();
+
+      // Step 5: Initialize controllers
       await _initializeControllers();
-      // Add auto-seeding for development/testing
-      await AutoSeedInitializer.instance.developmentInit();
-      print('App initialization completed successfully');
+
+      // Step 6: Auto-seed data if needed (FIXED - no more force seeding)
+      await _initializeTestData();
+
+      print('✅ === APP INITIALIZATION COMPLETED SUCCESSFULLY ===');
     } catch (e) {
-      print('Error during app initialization: $e');
-      // Show error to user but don't crash the app
+      print('❌ === CRITICAL ERROR DURING APP INITIALIZATION ===');
+      print('Error: $e');
+      print('Stack trace: ${StackTrace.current}');
+
+      // Show user-friendly error
+      _showInitializationError(e);
+
+      // Don't rethrow - let app continue with minimal functionality
+    }
+  }
+
+  /// Run database migration with error handling
+  static Future<void> _runDatabaseMigration() async {
+    try {
+      print('🔧 Running database migration...');
+      await DatabaseMigration.instance.runFullMigration();
+      print('✅ Database migration completed successfully');
+    } catch (e) {
+      print('❌ Database migration failed: $e');
+      // Continue anyway - app might still work with existing schema
+    }
+  }
+
+  /// Run schedule status migration with error handling
+  static Future<void> _runScheduleStatusMigration() async {
+    try {
+      print('📊 Running schedule status migration...');
+      await ScheduleStatusMigration.instance.runStatusMigration();
+      print('✅ Schedule status migration completed');
+    } catch (e) {
+      print('❌ Schedule status migration failed: $e');
+      // This is not critical - app can continue without this migration
+    }
+  }
+
+  /// Initialize all controllers with error handling
+  static Future<void> _initializeControllers() async {
+    try {
+      print('🎮 Initializing controllers...');
+
+      // Initialize navigation controller
+      Get.put(NavigationController(), permanent: true);
+      print('  ✅ Navigation controller initialized');
+
+      // Initialize data controllers
+      Get.put(UserController(), permanent: true);
+      print('  ✅ User controller initialized');
+
+      Get.put(CourseController(), permanent: true);
+      print('  ✅ Course controller initialized');
+
+      Get.put(FleetController(), permanent: true);
+      print('  ✅ Fleet controller initialized');
+
+      // Initialize operational controllers
+      Get.put(ScheduleController(), permanent: true);
+      print('  ✅ Schedule controller initialized');
+
+      Get.put(BillingController(), permanent: true);
+      print('  ✅ Billing controller initialized');
+      Get.put(SettingsController(), permanent: true);
+      print('  ✅ Settings controller initialized');
+      Get.put(LessonCountingService(), permanent: true);
+      print('✅ All controllers initialized successfully');
+    } catch (e) {
+      print('❌ Error initializing controllers: $e');
+      throw Exception('Failed to initialize controllers: $e');
+    }
+  }
+
+  /// Initialize test data with improved logic
+  static Future<void> _initializeTestData() async {
+    try {
+      print('🌱 Initializing test data...');
+
+      // FIXED: Only seed if database is actually empty
+      await AutoSeedInitializer.instance.initializeWithAutoSeed(
+        seedIfEmpty: true, // Only seed if database is empty
+        forceReseed: false, // NEVER force reseed on normal startup
+      );
+
+      print('✅ Test data initialization completed');
+    } catch (e) {
+      print('❌ Test data initialization failed: $e');
+      // This is not critical - app can work without test data
+    }
+  }
+
+  /// Show user-friendly initialization error
+  static void _showInitializationError(dynamic error) {
+    try {
       Get.snackbar(
-        'Initialization Error',
-        'Some features may not work properly. Please restart the app.',
-        duration: Duration(seconds: 5),
+        'App Initialization',
+        'Some features may not work properly. The app will continue with limited functionality.',
+        duration: const Duration(seconds: 5),
+        snackPosition: SnackPosition.TOP,
+        backgroundColor: Colors.orange[100],
+        colorText: Colors.orange[800],
+        icon: const Icon(Icons.warning, color: Colors.orange),
+      );
+    } catch (e) {
+      // If even snackbar fails, just print
+      print('❌ Could not show error snackbar: $e');
+    }
+  }
+
+  /// FOR DEVELOPMENT ONLY: Force reseed data (call manually when needed)
+  static Future<void> forceReseedForDevelopment() async {
+    print('🔄 DEVELOPMENT: Force reseeding data...');
+
+    try {
+      await AutoSeedInitializer.instance.initializeWithAutoSeed(
+        seedIfEmpty: false, // Don't check if empty
+        forceReseed: true, // Force clear and reseed
+      );
+
+      print('✅ DEVELOPMENT: Force reseed completed');
+
+      // Show success message
+      Get.snackbar(
+        'Development',
+        'Test data has been reseeded successfully',
+        backgroundColor: Colors.green[100],
+        colorText: Colors.green[800],
+        icon: const Icon(Icons.refresh, color: Colors.green),
+      );
+    } catch (e) {
+      print('❌ DEVELOPMENT: Force reseed failed: $e');
+
+      Get.snackbar(
+        'Development Error',
+        'Failed to reseed test data: ${e.toString()}',
+        backgroundColor: Colors.red[100],
+        colorText: Colors.red[800],
+        icon: const Icon(Icons.error, color: Colors.red),
       );
     }
   }
 
-  static Future<void> _initializeControllers() async {
+  /// Check app health status
+  static Future<Map<String, dynamic>> getAppHealthStatus() async {
+    final status = <String, dynamic>{
+      'timestamp': DateTime.now().toIso8601String(),
+      'database_healthy': false,
+      'controllers_healthy': false,
+      'auth_healthy': false,
+      'migration_healthy': false,
+    };
+
     try {
-      // Initialize core controllers
-      Get.put(UserController(), permanent: true);
-      Get.put(CourseController(), permanent: true);
-      Get.put(FleetController(), permanent: true);
-      Get.put(BillingController(), permanent: true);
-      Get.put(NavigationController(), permanent: true);
-      // Initialize schedule controller last since it depends on others
-      Get.put(ScheduleController(), permanent: true);
-      Get.put(LessonCountingService(), permanent: true);
-
-      // Wait for controllers to load their data
-      await Future.wait([
-        Get.find<UserController>().fetchUsers(),
-        Get.find<CourseController>().fetchCourses(),
-        Get.find<FleetController>().fetchFleet(),
-        Get.find<BillingController>().fetchBillingData(),
-      ]);
-
-      // Initialize schedule controller after dependencies are ready
-      await Get.find<ScheduleController>().fetchSchedules();
+      // Check database
+      final db = await DatabaseHelper.instance.database;
+      final users =
+          await db.rawQuery('SELECT COUNT(*) as count FROM users LIMIT 1');
+      status['database_healthy'] = users.isNotEmpty;
     } catch (e) {
-      print('Error initializing controllers: $e');
+      print('Database health check failed: $e');
     }
-  }
 
-  /// Reinitialize controllers if needed
-  static Future<void> reinitialize() async {
     try {
-      // Clear existing controllers
-      Get.delete<ScheduleController>();
-      Get.delete<BillingController>();
-      Get.delete<FleetController>();
-      Get.delete<CourseController>();
-      Get.delete<UserController>();
-
-      // Reinitialize
-      await _initializeControllers();
+      // Check controllers
+      final authController = Get.find<AuthController>();
+      status['controllers_healthy'] = authController != null;
+      status['auth_healthy'] = authController.isLoggedIn.value;
     } catch (e) {
-      print('Error during reinitialization: $e');
+      print('Controllers health check failed: $e');
     }
+
+    try {
+      // Check migration status
+      final migrationStats =
+          await ScheduleStatusMigration.instance.getMigrationStats();
+      status['migration_healthy'] =
+          migrationStats['hasSchedulesTable'] ?? false;
+      status['migration_stats'] = migrationStats;
+    } catch (e) {
+      print('Migration health check failed: $e');
+    }
+
+    return status;
   }
 }

@@ -216,15 +216,6 @@ class DatabaseMigration {
     print('🔄 Running database migrations...');
     await addMissingColumns(db);
     print('✅ Database migrations completed');
-    // For immediate seeding (useful in development)
-    await TestDataSeeder.instance.seedAllTestData();
-
-// Check what exists
-    final status = await AutoSeedInitializer.instance.getStatus();
-    print('Database status: $status');
-
-// Seed only users for auth testing
-    await TestDataSeeder.instance.seedUsersOnly();
   }
 
 // Add this method to your DatabaseMigration class

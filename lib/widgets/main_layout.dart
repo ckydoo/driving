@@ -983,233 +983,186 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
     );
   }
 
-// 5. ADD THIS NEW SAFE LOGOUT METHOD TO YOUR _ResponsiveMainLayoutState CLASS:
+// 1. Replace your _performSafeLogout method:
   Future<void> _performSafeLogout() async {
-    // Show the enhanced confirmation dialog first
-    _showEnhancedLogoutDialog();
-  }
-
-  // ENHANCED LOGOUT CONFIRMATION DIALOG
-  void _showEnhancedLogoutDialog() {
-    Get.dialog(
-      AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        title: Row(
-          children: [
-            Icon(
-              Icons.logout,
-              color: Colors.red.shade600,
-              size: 28,
-            ),
-            const SizedBox(width: 12),
-            const Text(
-              'Confirm Logout',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
+    // Simple confirmation dialog without Obx
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              Icon(
+                Icons.logout,
+                color: Colors.red.shade600,
+                size: 28,
               ),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Are you sure you want to logout?',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Internet connectivity warning
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.orange.shade50,
-                border: Border.all(
-                  color: Colors.orange.shade200,
-                  width: 1,
+              const SizedBox(width: 12),
+              const Text(
+                'Confirm Logout',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
                 ),
-                borderRadius: BorderRadius.circular(8),
               ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            ],
+          ),
+          content: const Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Are you sure you want to logout?',
+                style: TextStyle(fontSize: 16),
+              ),
+              SizedBox(height: 12),
+              Row(
                 children: [
-                  Icon(
-                    Icons.wifi_off,
-                    color: Colors.orange.shade600,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 8),
+                  Icon(Icons.info_outline, color: Colors.orange, size: 16),
+                  SizedBox(width: 8),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Internet Required',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.orange.shade800,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'You may need internet connection to log back in to your account.',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.orange.shade700,
-                          ),
-                        ),
-                      ],
+                    child: Text(
+                      'Any unsaved changes will be lost.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.orange,
+                      ),
                     ),
                   ),
                 ],
               ),
-            ),
-          ],
-        ),
-        actions: [
-          // Cancel Button
-          TextButton(
-            onPressed: () => Get.back(),
-            child: Text(
-              'Cancel',
-              style: TextStyle(
-                color: Colors.grey.shade600,
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
+            ],
+          ),
+          actions: [
+            // Cancel Button
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text(
+                'Cancel',
+                style: TextStyle(
+                  color: Colors.grey.shade600,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
-          ),
-
-          // Logout Button with dynamic state
-          _buildLogoutButton(),
-        ],
-      ),
-      barrierDismissible: false, // Prevent accidental dismissal
-    );
-  }
-
-  // BUILD LOGOUT BUTTON WITH DYNAMIC STATE
-  Widget _buildLogoutButton() {
-    return Obx(() {
-      return ElevatedButton.icon(
-        onPressed: () async {
-          Get.back(); // Close dialog
-          await _executeEnhancedLogout();
-        },
-        icon: const Icon(Icons.logout),
-        label: const Text('Logout'),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.red.shade600,
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(
-            horizontal: 20,
-            vertical: 12,
-          ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
-        ),
-      );
-    });
-  }
-}
-
-// ENHANCED LOGOUT EXECUTION WITH SYNC HANDLING
-Future<void> _executeEnhancedLogout() async {
-  try {
-    final authController = Get.find<AuthController>();
-
-    // Show loading dialog
-    Get.dialog(
-      AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const CircularProgressIndicator(),
-            const SizedBox(height: 16),
-            const Text(
-              'Logging out...',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Finalizing data sync',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey.shade600,
+            // Logout Button - NO OBX HERE
+            ElevatedButton.icon(
+              onPressed: () => Navigator.of(context).pop(true),
+              icon: const Icon(Icons.logout),
+              label: const Text('Logout'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red.shade600,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 12,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
             ),
           ],
-        ),
-      ),
-      barrierDismissible: false,
+        );
+      },
     );
 
-    // Step 2: Perform the actual logout
-    await authController.signOut();
-
-    // Step 3: Close loading dialog if still open
-    if (Get.isDialogOpen ?? false) {
-      Get.back();
+    // If user confirmed logout
+    if (confirmed == true) {
+      await _executeSimpleLogout();
     }
+  }
 
-    // Step 4: Show success message
-    Get.snackbar(
-      'Logged Out',
-      'You have been successfully logged out',
-      backgroundColor: Colors.green.shade100,
-      colorText: Colors.green.shade800,
-      icon: Icon(
-        Icons.check_circle,
-        color: Colors.green.shade600,
-      ),
-      duration: const Duration(seconds: 2),
-    );
-
-    // Step 5: Navigate to login
-    Get.offAllNamed('/login');
-  } catch (e) {
-    print('❌ Error during logout: $e');
-
-    // Close loading dialog on error
-    if (Get.isDialogOpen ?? false) {
-      Get.back();
-    }
-
-    // Show error message but still try to logout
-    Get.snackbar(
-      'Logout Warning',
-      'There was an issue during logout, but you have been signed out.',
-      backgroundColor: Colors.orange.shade100,
-      colorText: Colors.orange.shade800,
-      icon: Icon(
-        Icons.warning,
-        color: Colors.orange.shade600,
-      ),
-      duration: const Duration(seconds: 4),
-    );
-
-    // Force navigation to login even on error
+  // 2. Replace your logout execution method:
+  Future<void> _executeSimpleLogout() async {
     try {
+      // Show simple loading dialog without Obx
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            content: const Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text(
+                  'Logging out...',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      );
+
+      // Wait a moment for UI to update
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      // Perform the actual logout
       final authController = Get.find<AuthController>();
       await authController.signOut();
-    } catch (_) {}
 
-    Get.offAllNamed('/login');
+      // Close loading dialog if still open
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+
+      // Navigate to login immediately
+      Get.offAllNamed('/login');
+
+      // Show success message after navigation
+      Future.delayed(const Duration(milliseconds: 300), () {
+        Get.snackbar(
+          'Logged Out',
+          'You have been successfully logged out',
+          backgroundColor: Colors.green.shade100,
+          colorText: Colors.green.shade800,
+          icon: Icon(
+            Icons.check_circle,
+            color: Colors.green.shade600,
+          ),
+          duration: const Duration(seconds: 2),
+        );
+      });
+    } catch (e) {
+      print('❌ Error during logout: $e');
+
+      // Close loading dialog on error
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+
+      // Force navigation to login even on error
+      Get.offAllNamed('/login');
+
+      // Show error message after navigation
+      Future.delayed(const Duration(milliseconds: 300), () {
+        Get.snackbar(
+          'Logout Complete',
+          'You have been logged out',
+          backgroundColor: Colors.orange.shade100,
+          colorText: Colors.orange.shade800,
+          icon: Icon(
+            Icons.warning,
+            color: Colors.orange.shade600,
+          ),
+          duration: const Duration(seconds: 3),
+        );
+      });
+    }
   }
 }
 
