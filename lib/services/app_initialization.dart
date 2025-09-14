@@ -2,6 +2,7 @@
 import 'package:driving/controllers/navigation_controller.dart';
 import 'package:driving/services/auto_seed_initializer.dart'
     show AutoSeedInitializer;
+import 'package:driving/services/lesson_counting_service.dart';
 import 'package:driving/services/schedule_status_migration.dart';
 import 'package:get/get.dart';
 import '../controllers/auth_controller.dart';
@@ -54,9 +55,9 @@ class AppInitialization {
       Get.put(FleetController(), permanent: true);
       Get.put(BillingController(), permanent: true);
       Get.put(NavigationController(), permanent: true);
-
       // Initialize schedule controller last since it depends on others
       Get.put(ScheduleController(), permanent: true);
+      Get.put(LessonCountingService(), permanent: true);
 
       // Wait for controllers to load their data
       await Future.wait([
