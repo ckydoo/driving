@@ -1,4 +1,4 @@
-// lib/middleware/auth_middleware.dart - Updated for Local-Only authentication
+// lib/middleware/auth_middleware.dart - COMPLETELY FIXED VERSION
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/screens/auth/login_screen.dart';
 import 'package:flutter/material.dart';
@@ -59,7 +59,7 @@ class AuthMiddleware extends GetMiddleware {
   }
 }
 
-// Updated Role-based middleware (Firebase references removed)
+// Updated Role-based middleware - FIXED NULL SAFETY
 class RoleMiddleware extends GetMiddleware {
   final List<String> allowedRoles;
 
@@ -79,9 +79,11 @@ class RoleMiddleware extends GetMiddleware {
         return const RouteSettings(name: '/login');
       }
 
-      // Check user role
+      // Check user role - FIXED: Use safe null-aware access
       if (authController.currentUser.value != null) {
-        final userRole = authController.currentUser.value!.role.toLowerCase();
+        // FIXED: Replace ! with safe null-aware operator
+        final userRole =
+            authController.currentUser.value?.role?.toLowerCase() ?? 'guest';
         final hasRequiredRole =
             allowedRoles.any((role) => role.toLowerCase() == userRole);
 

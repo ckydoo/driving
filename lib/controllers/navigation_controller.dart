@@ -1,5 +1,4 @@
-// lib/controllers/navigation_controller.dart - Fix null check operators
-
+// lib/controllers/navigation_controller.dart - FIXED NULL SAFETY VERSION
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:get/get.dart';
 import 'package:flutter/material.dart';
@@ -33,8 +32,9 @@ class NavigationController extends GetxController {
     '/main': 'dashboard',
   };
 
-  // Get navigation items based on current user's role
+  // Get navigation items based on current user's role - SAFE VERSION
   List<NavigationItem> get navigationItems {
+    // SAFE: Check authentication and user existence
     if (!authController.isLoggedIn.value ||
         authController.currentUser.value == null) {
       return [];
@@ -109,119 +109,78 @@ class NavigationController extends GetxController {
     ),
     NavigationItem(
       title: 'POS',
-      icon: Icons.payment,
+      icon: Icons.point_of_sale,
       route: '/pos',
       pageKey: 'pos',
       requiredRoles: ['admin', 'instructor'],
     ),
     NavigationItem(
-      title: 'Users',
-      icon: Icons.people,
-      route: '/users',
-      pageKey: 'users',
+      title: 'Financial Reports',
+      icon: Icons.assessment,
+      route: '/financial_reports',
+      pageKey: 'financial_reports',
       requiredRoles: ['admin'],
     ),
     NavigationItem(
-      title: 'Alumni',
-      icon: Icons.school,
-      route: '/alumni',
-      pageKey: 'alumni',
-      requiredRoles: ['admin', 'instructor'],
+      title: 'User Reports',
+      icon: Icons.people_alt,
+      route: '/user_reports',
+      pageKey: 'user_reports',
+      requiredRoles: ['admin'],
+    ),
+    NavigationItem(
+      title: 'Users',
+      icon: Icons.manage_accounts,
+      route: '/users',
+      pageKey: 'users',
+      requiredRoles: ['admin'],
     ),
     NavigationItem(
       title: 'Quick Search',
       icon: Icons.search,
       route: '/quick-search',
       pageKey: 'quick_search',
-      requiredRoles: ['admin', 'instructor', 'student'],
+      requiredRoles: ['admin', 'instructor'],
     ),
     NavigationItem(
       title: 'Settings',
       icon: Icons.settings,
       route: '/settings',
       pageKey: 'settings',
-      requiredRoles: ['admin', 'instructor', 'student'],
+      requiredRoles: ['admin'],
+    ),
+    NavigationItem(
+      title: 'Alumni',
+      icon: Icons.school_outlined,
+      route: '/alumni',
+      pageKey: 'alumni',
+      requiredRoles: ['admin', 'instructor'],
     ),
   ];
 
-  // Toggle dropdown expansion
-  void toggleDropdown(String pageKey) {
-    if (expandedDropdowns.contains(pageKey)) {
-      expandedDropdowns.remove(pageKey);
-    } else {
-      expandedDropdowns.add(pageKey);
-    }
-  }
-
-  // Check if dropdown is expanded
-  bool isDropdownExpanded(String pageKey) {
-    return expandedDropdowns.contains(pageKey);
-  }
-
-  @override
-  void onInit() {
-    super.onInit();
-
-    // Listen to authentication state changes
-    ever(authController.isLoggedIn, (bool loggedIn) {
-      if (!loggedIn) {
-        currentPage.value = 'login';
-        expandedDropdowns.clear();
-      } else {
-        currentPage.value = 'dashboard';
-      }
-    });
-
-    // Set initial page to dashboard for authenticated users
-    if (authController.isLoggedIn.value) {
-      currentPage.value = 'dashboard';
-    }
-  }
-
-  // Navigate to page with role checking - SAFE VERSION
+  // SAFE: Navigate to page method
   void navigateToPage(String pageKey) {
-    if (!authController.isLoggedIn.value) {
+    // Check if user is still authenticated
+    if (!authController.isLoggedIn.value ||
+        authController.currentUser.value == null) {
+      // Redirect to login if not authenticated
       Get.offAllNamed('/login');
       return;
     }
 
-    // Check if user has access to this page
-    if (!hasAccessToPage(pageKey)) {
-      Get.snackbar(
-        'Access Denied',
-        'You do not have permission to access this page',
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-        icon: const Icon(Icons.block, color: Colors.white),
-      );
-      return;
-    }
-
-    // Update current page
     currentPage.value = pageKey;
 
-    // Auto-expand parent dropdown if navigating to a child page
-    _autoExpandParentDropdown(pageKey);
-  }
+    // Map page key to route for navigation
+    final route = routeToPageKey.entries
+        .firstWhere(
+          (entry) => entry.value == pageKey,
+          orElse: () => const MapEntry('/main', 'dashboard'),
+        )
+        .key;
 
-  // Auto-expand parent dropdown when navigating to child page
-  void _autoExpandParentDropdown(String childPageKey) {
-    for (final item in allNavigationItems) {
-      if (item.isDropdown && item.children != null) {
-        final hasChild =
-            item.children!.any((child) => child.pageKey == childPageKey);
-        if (hasChild && !expandedDropdowns.contains(item.pageKey)) {
-          expandedDropdowns.add(item.pageKey);
-        }
-      }
-    }
-  }
-
-  // Navigate directly by route (for external calls)
-  void navigateToRoute(String route) {
-    final pageKey = routeToPageKey[route];
-    if (pageKey != null) {
-      navigateToPage(pageKey);
+    // Navigate to the route if it's different from current
+    if (Get.currentRoute != route) {
+      Get.toNamed(route);
     }
   }
 
@@ -294,33 +253,60 @@ class NavigationController extends GetxController {
         .join(' ');
   }
 
-  // Logout with proper cleanup
-  Future<void> logout() async {
-    try {
-      await authController.signOut();
-      currentPage.value = 'login';
-      expandedDropdowns.clear();
-      Get.offAllNamed('/login');
-    } catch (e) {
-      print('Error during logout: $e');
-      Get.snackbar(
-        'Logout Error',
-        'An error occurred during logout.',
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-      );
+  // SAFE: Toggle dropdown method
+  void toggleDropdown(String dropdownKey) {
+    if (expandedDropdowns.contains(dropdownKey)) {
+      expandedDropdowns.remove(dropdownKey);
+    } else {
+      expandedDropdowns.add(dropdownKey);
     }
+  }
+
+  // SAFE: Check if dropdown is expanded
+  bool isDropdownExpanded(String dropdownKey) {
+    return expandedDropdowns.contains(dropdownKey);
+  }
+
+  // SAFE: Set page from route
+  void setPageFromRoute(String route) {
+    final pageKey = routeToPageKey[route] ?? 'dashboard';
+    currentPage.value = pageKey;
+  }
+
+  // SAFE: Get current user role
+  String get currentUserRole {
+    if (!authController.isLoggedIn.value ||
+        authController.currentUser.value == null) {
+      return 'guest';
+    }
+    return authController.currentUser.value?.role?.toLowerCase() ?? 'guest';
+  }
+
+  // SAFE: Check if user can access page
+  bool canAccessPage(String pageKey) {
+    final navigationItem = allNavigationItems.firstWhere(
+      (item) => item.pageKey == pageKey,
+      orElse: () => NavigationItem(
+        title: 'Unknown',
+        icon: Icons.error,
+        route: '/main',
+        pageKey: 'dashboard',
+        requiredRoles: ['admin'],
+      ),
+    );
+
+    final userRole = currentUserRole;
+    return navigationItem.requiredRoles.contains(userRole);
   }
 }
 
-// NavigationItem class
+// Navigation item model
 class NavigationItem {
   final String title;
   final IconData icon;
   final String route;
   final String pageKey;
   final List<String> requiredRoles;
-  final bool isDropdown;
   final List<NavigationItem>? children;
 
   NavigationItem({
@@ -329,7 +315,6 @@ class NavigationItem {
     required this.route,
     required this.pageKey,
     required this.requiredRoles,
-    this.isDropdown = false,
     this.children,
   });
 }

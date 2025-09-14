@@ -1,8 +1,8 @@
-// lib/controllers/auth_controller_extension.dart
+// lib/controllers/auth_controller_extension.dart - COMPLETELY FIXED VERSION
 import 'package:get/get.dart';
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/services/database_helper.dart';
-import 'package:driving/models/user.dart'; // Add this import
+import 'package:driving/models/user.dart';
 
 /// Extension to AuthController to support the new simple school join flow
 extension SimpleSchoolJoinExtension on AuthController {
@@ -38,33 +38,38 @@ extension SimpleSchoolJoinExtension on AuthController {
     return null;
   }
 
-  /// Check if current user is admin
+  /// Check if current user is admin - FIXED VERSION
   bool isCurrentUserAdmin() {
     if (!isLoggedIn.value || currentUser.value == null) return false;
-    final role = currentUser.value!.role;
-    return role.toLowerCase() == 'admin';
+    // FIXED: Use safe null-aware operator
+    final role = currentUser.value?.role?.toLowerCase() ?? '';
+    return role == 'admin';
   }
 
-  /// Get current user's full name
+  /// Get current user's full name - FIXED VERSION
   String getCurrentUserFullName() {
     if (!isLoggedIn.value || currentUser.value == null) return 'Guest';
 
-    final fname = currentUser.value!.fname;
-    final lname = currentUser.value!.lname;
+    final user =
+        currentUser.value!; // Safe to use ! here because of null check above
+    // FIXED: Use null-aware operators for properties
+    final fname = user.fname ?? '';
+    final lname = user.lname ?? '';
 
     if (fname.isEmpty && lname.isEmpty) {
-      return currentUser.value!.email;
+      return user.email ?? 'Guest';
     }
 
     return '$fname $lname'.trim();
   }
 
-  /// Refresh user data from local database
+  /// Refresh user data from local database - FIXED VERSION
   Future<void> refreshUserData() async {
     if (!isLoggedIn.value || currentUser.value == null) return;
 
     try {
-      final email = currentUser.value!.email;
+      // FIXED: Use safe null-aware access
+      final email = currentUser.value?.email ?? '';
       if (email.isEmpty) return;
 
       // Use a simple database query to refresh user data
@@ -115,23 +120,26 @@ extension SimpleSchoolJoinExtension on AuthController {
     }
   }
 
-  /// Helper method to get user email
+  /// Helper method to get user email - SAFE VERSION
   String? get currentUserEmail {
     return currentUser.value?.email;
   }
 
+  /// Safe getter for user first name - FIXED VERSION
   String get userFirstName {
     final user = currentUser.value;
+    // FIXED: Use safer pattern for nested property access
     if (user?.fname?.isNotEmpty == true) return user!.fname!;
     if (user?.email?.isNotEmpty == true) return user!.email!.split('@').first;
     return 'User';
   }
 
-  // Safe getter for user's full name
+  /// Safe getter for user's full name - FIXED VERSION
   String get userFullName {
     final user = currentUser.value;
     if (user == null) return 'User';
 
+    // FIXED: Use null-aware operators
     final fname = user.fname ?? '';
     final lname = user.lname ?? '';
 
@@ -142,7 +150,7 @@ extension SimpleSchoolJoinExtension on AuthController {
     return '$fname $lname'.trim();
   }
 
-  // Safe getter for user initials
+  /// Safe getter for user initials
   String get userInitials {
     final user = currentUser.value;
     if (user == null) return 'U';
@@ -164,62 +172,64 @@ extension SimpleSchoolJoinExtension on AuthController {
     return initials.isNotEmpty ? initials : 'U';
   }
 
-  // Safe method to check if user data is available
+  /// Safe method to check if user data is available
   bool get isUserDataAvailable {
     return isLoggedIn.value && currentUser.value != null;
   }
 
-  // Safe method to get user role
+  /// Safe method to get user role
   String get userRole {
     final user = currentUser.value;
     return user?.role?.toLowerCase() ?? 'guest';
   }
 
-  // Safe method to check specific roles - FIXED VERSION
+  /// Safe method to check specific roles - FIXED VERSION
   bool hasRole(String role) {
     if (!isUserDataAvailable) return false;
+    // FIXED: Use safe null-aware access
     final currentUserRole = currentUser.value?.role?.toLowerCase() ?? '';
     return currentUserRole == role.toLowerCase();
   }
 
-  // Safe method to check multiple roles - FIXED VERSION
+  /// Safe method to check multiple roles - FIXED VERSION
   bool hasAnyRole(List<String> roles) {
     if (!isUserDataAvailable) return false;
+    // FIXED: Use safe null-aware access
     final currentUserRole = currentUser.value?.role?.toLowerCase() ?? '';
     return roles.any((role) => currentUserRole == role.toLowerCase());
   }
 
-  // Safe method to check if user is admin
+  /// Safe method to check if user is admin
   bool get isAdmin {
     return hasRole('admin');
   }
 
-  // Safe method to check if user is instructor
+  /// Safe method to check if user is instructor
   bool get isInstructor {
     return hasRole('instructor');
   }
 
-  // Safe method to check if user is student
+  /// Safe method to check if user is student
   bool get isStudent {
     return hasRole('student');
   }
 
-  // Safe method to check if user can access admin features
+  /// Safe method to check if user can access admin features
   bool get canAccessAdminFeatures {
     return hasAnyRole(['admin']);
   }
 
-  // Safe method to check if user can access instructor features
+  /// Safe method to check if user can access instructor features
   bool get canAccessInstructorFeatures {
     return hasAnyRole(['admin', 'instructor']);
   }
 
-  // Safe method to get user email
+  /// Safe method to get user email
   String get userEmail {
     return currentUser.value?.email ?? '';
   }
 
-  // Safe method to get user ID
+  /// Safe method to get user ID
   String? get userId {
     return currentUser.value?.id?.toString();
   }
