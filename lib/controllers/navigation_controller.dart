@@ -136,6 +136,33 @@ class NavigationController extends GetxController {
       requiredRoles: ['admin', 'instructor', 'student'],
     ),
     NavigationItem(
+      title: 'Reports',
+      icon: Icons.bar_chart,
+      route: '/reports',
+      pageKey: 'reports',
+      requiredRoles: [
+        'admin',
+        'instructor',
+      ],
+      isDropdown: true,
+      children: [
+        NavigationItem(
+          title: 'Financial Reports',
+          icon: Icons.pie_chart,
+          route: '/financial_reports',
+          pageKey: 'financial_reports',
+          requiredRoles: ['admin'],
+        ),
+        NavigationItem(
+          title: 'User Reports',
+          icon: Icons.person_search,
+          route: '/user_reports',
+          pageKey: 'user_reports',
+          requiredRoles: ['admin'],
+        ),
+      ],
+    ),
+    NavigationItem(
       title: 'Settings',
       icon: Icons.settings,
       route: '/settings',

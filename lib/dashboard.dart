@@ -353,7 +353,7 @@ class FixedDashboardContent extends StatelessWidget {
         'subtitle': 'Book a new lesson',
         'icon': Icons.calendar_today,
         'color': Colors.green,
-        'route': 'schedule'
+        'route': 'schedules'
       },
       {
         'title': 'Create Invoice',
@@ -367,7 +367,7 @@ class FixedDashboardContent extends StatelessWidget {
         'subtitle': 'Register new vehicle',
         'icon': Icons.directions_car,
         'color': Colors.purple,
-        'route': 'fleet'
+        'route': 'vehicles'
       },
     ];
 

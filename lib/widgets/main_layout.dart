@@ -1247,7 +1247,10 @@ Widget _getCurrentPageWidget(String pageKey) {
       return const QuickSearchScreen();
     case 'settings':
       return SettingsScreen();
-
+    case 'reports':
+      return FinancialReportsScreen();
+    case 'course_reports':
+      return const CourseReportsScreen();
     case 'alumni':
       return const AlumniScreen();
     default:
