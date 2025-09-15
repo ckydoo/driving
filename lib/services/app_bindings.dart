@@ -1,4 +1,4 @@
-// lib/services/app_bindings.dart - Updated for Firebase-First architecture
+// lib/services/app_bindings.dart - Updated with Sync Service Integration
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/controllers/billing_controller.dart';
 import 'package:driving/controllers/course_controller.dart';
@@ -13,22 +13,31 @@ import 'package:driving/services/database_helper.dart';
 import 'package:driving/services/database_migration.dart';
 import 'package:driving/services/lesson_counting_service.dart';
 import 'package:driving/services/school_config_service.dart';
+import 'package:driving/services/sync_service.dart'; // ADD THIS
+import 'package:driving/controllers/sync_controller.dart'; // ADD THIS
 import 'package:get/get.dart';
 
-/// Enhanced App Bindings with Firebase-First Architecture
+/// Enhanced App Bindings with Sync Service Integration
 class EnhancedAppBindings extends Bindings {
   @override
   Future<void> dependencies() async {
-    print('🚀 === STARTING FIREBASE-FIRST APP BINDINGS ===');
+    print('🚀 === STARTING APP BINDINGS WITH SYNC ===');
 
     try {
       // STEP 1: Initialize core services first
-      await emergencyTriggerFix(); // EMERGENCY: Drop problematic trigger
+      await emergencyTriggerFix();
+
       // STEP 2: Initialize PIN authentication (before auth controller)
       await _initializePinAuthentication();
 
       // STEP 3: Initialize settings and school configuration
       await _initializeConfiguration();
+
+      // STEP 4: Initialize sync services (NEW STEP)
+      await _initializeSyncServices();
+
+      // STEP 5: Initialize Auth Controller (after sync setup)
+      await _initializeAuthController();
 
       // STEP 6: Initialize UI controllers
       await _initializeUIControllers();
@@ -39,45 +48,119 @@ class EnhancedAppBindings extends Bindings {
       // STEP 8: Initialize service controllers
       await _initializeServiceControllers();
 
+      // STEP 9: Start background sync (NEW STEP)
+      await _startBackgroundSync();
+
       // STEP 10: Print summary
       _printInitializationSummary();
 
-      print('✅ === FIREBASE-FIRST APP BINDINGS COMPLETED SUCCESSFULLY ===');
+      print('✅ === APP BINDINGS WITH SYNC COMPLETED SUCCESSFULLY ===');
     } catch (e) {
-      print('❌ === FIREBASE-FIRST APP BINDINGS FAILED ===');
+      print('❌ === APP BINDINGS FAILED ===');
       print('Error: $e');
-
-      // Attempt emergency initialization
       await _attemptEmergencyInitialization();
     }
   }
 
-// Add this to your app startup or call it immediately:
-  Future<void> emergencyTriggerFix() async {
-    final db = await DatabaseHelper.instance.database;
+  // NEW: Initialize sync services
+  Future<void> _initializeSyncServices() async {
+    print('🔄 Initializing sync services...');
 
-    // Drop the problematic fleet trigger immediately
-    await db.execute('DROP TRIGGER IF EXISTS update_fleet_timestamp');
+    try {
+      // Initialize SyncController (manages sync state and UI)
+      if (!Get.isRegistered<SyncController>()) {
+        Get.put<SyncController>(SyncController(), permanent: true);
+        print('✅ SyncController initialized');
+      }
 
-    print('🚨 EMERGENCY: Dropped problematic fleet trigger');
-    print('✅ Your next sync should work correctly');
+      // Initialize sync service (actual sync operations)
+      // Note: SyncService is static, so no initialization needed
+      print('✅ SyncService available (static methods)');
+
+      print('✅ Sync services initialization completed');
+    } catch (e) {
+      print('❌ Sync services initialization failed: $e');
+      print('⚠️ App will continue without sync functionality');
+    }
   }
 
-  /// STEP 2: Initialize PIN authentication (before auth controller)
+  // UPDATED: Initialize Auth Controller after sync setup
+  Future<void> _initializeAuthController() async {
+    print('👤 Initializing auth controller...');
+
+    try {
+      if (!Get.isRegistered<AuthController>()) {
+        Get.put<AuthController>(AuthController(), permanent: true);
+        print('✅ AuthController initialized');
+
+        // Connect auth events to sync
+        final authController = Get.find<AuthController>();
+        final syncController = Get.find<SyncController>();
+
+        // Listen to auth state changes for sync
+        ever(authController.isLoggedIn, (bool isLoggedIn) {
+          if (isLoggedIn) {
+            print('🔄 User logged in - starting initial sync...');
+            syncController.performInitialSync();
+          } else {
+            print('🔄 User logged out - stopping sync...');
+            syncController.stopSync();
+          }
+        });
+
+        print('✅ Auth-Sync integration configured');
+      }
+
+      print('✅ Auth controller initialization completed');
+    } catch (e) {
+      print('❌ Auth controller initialization failed: $e');
+      throw e; // Auth is critical
+    }
+  }
+
+  // NEW: Start background sync after everything is initialized
+  Future<void> _startBackgroundSync() async {
+    print('🔄 Starting background sync...');
+
+    try {
+      final syncController = Get.find<SyncController>();
+      final authController = Get.find<AuthController>();
+
+      // Only start sync if user is logged in
+      if (authController.isLoggedIn.value) {
+        await syncController.performInitialSync();
+        syncController.startPeriodicSync();
+        print('✅ Background sync started');
+      } else {
+        print('ℹ️ User not logged in - sync will start after login');
+      }
+
+      print('✅ Background sync initialization completed');
+    } catch (e) {
+      print('❌ Background sync initialization failed: $e');
+      print('⚠️ Manual sync will still be available');
+    }
+  }
+
+  // Emergency trigger fix method
+  Future<void> emergencyTriggerFix() async {
+    final db = await DatabaseHelper.instance.database;
+    await db.execute('DROP TRIGGER IF EXISTS update_fleet_timestamp');
+    print('🚨 EMERGENCY: Dropped problematic fleet trigger');
+  }
+
+  /// STEP 2: Initialize PIN authentication
   Future<void> _initializePinAuthentication() async {
     print('🔐 Initializing PIN authentication...');
 
     try {
-      // PIN Controller - must be initialized before AuthController
       if (!Get.isRegistered<PinController>()) {
         Get.put<PinController>(PinController(), permanent: true);
         print('✅ PinController initialized');
       }
-
       print('✅ PIN authentication initialization completed');
     } catch (e) {
       print('❌ PIN authentication initialization failed: $e');
-      // Don't throw - PIN is convenience feature
       print('⚠️ App will continue without PIN authentication');
     }
   }
@@ -91,38 +174,27 @@ class EnhancedAppBindings extends Bindings {
       if (!Get.isRegistered<SettingsController>()) {
         Get.put<SettingsController>(SettingsController(), permanent: true);
 
-        // Load settings from database
         final settingsController = Get.find<SettingsController>();
         await settingsController.loadSettingsFromDatabase();
         await settingsController.testSettingsPersistence();
         await settingsController.forceFixAllSettings();
         await DatabaseMigration.instance.runFullMigration();
-        print('   Settings loaded and tested');
         print('✅ SettingsController initialized and loaded');
       }
 
-      print('✅ Firebase services registered');
-      // School Config Service (depends on settings)
+      // School Config Service
       if (!Get.isRegistered<SchoolConfigService>()) {
         Get.put<SchoolConfigService>(SchoolConfigService(), permanent: true);
 
-        // Initialize school configuration
         final schoolConfig = Get.find<SchoolConfigService>();
         await schoolConfig.initializeSchoolConfig();
-
-        if (schoolConfig.isValidConfiguration()) {
-          print('✅ SchoolConfigService initialized successfully');
-          print('   School ID: ${schoolConfig.schoolId.value}');
-          print('   School Name: ${schoolConfig.schoolName.value}');
-        } else {
-          print('⚠️ School configuration incomplete - using fallback values');
-        }
+        print('✅ SchoolConfigService initialized');
       }
 
       print('✅ Configuration initialization completed');
     } catch (e) {
       print('❌ Configuration initialization failed: $e');
-      throw Exception('Configuration failed to initialize: $e');
+      print('⚠️ App will continue with default settings');
     }
   }
 
@@ -131,7 +203,7 @@ class EnhancedAppBindings extends Bindings {
     print('🎨 Initializing UI controllers...');
 
     try {
-      // Navigation Controller (depends on AuthController)
+      // Navigation Controller
       if (!Get.isRegistered<NavigationController>()) {
         Get.put<NavigationController>(NavigationController(), permanent: true);
         print('✅ NavigationController initialized');
@@ -140,8 +212,7 @@ class EnhancedAppBindings extends Bindings {
       print('✅ UI controllers initialization completed');
     } catch (e) {
       print('❌ UI controllers initialization failed: $e');
-      print('⚠️ App will continue with limited UI functionality');
-      // Don't throw - app can still work
+      print('⚠️ Navigation may not work properly');
     }
   }
 
@@ -168,7 +239,7 @@ class EnhancedAppBindings extends Bindings {
         print('✅ FleetController initialized');
       }
 
-      // Schedule Controller (depends on User and Course controllers)
+      // Schedule Controller
       if (!Get.isRegistered<ScheduleController>()) {
         Get.put<ScheduleController>(ScheduleController(), permanent: true);
         print('✅ ScheduleController initialized');
@@ -184,7 +255,6 @@ class EnhancedAppBindings extends Bindings {
     } catch (e) {
       print('❌ Business logic controllers initialization failed: $e');
       print('⚠️ Some app features may not work properly');
-      // Don't throw - core functionality should still work
     }
   }
 
@@ -211,7 +281,6 @@ class EnhancedAppBindings extends Bindings {
     } catch (e) {
       print('❌ Service controllers initialization failed: $e');
       print('⚠️ Some background services may not work');
-      // Don't throw - these are optional services
     }
   }
 
@@ -223,8 +292,8 @@ class EnhancedAppBindings extends Bindings {
       'PinController',
       'SettingsController',
       'SchoolConfigService',
+      'SyncController', // NEW
       'AuthController',
-      'FixedLocalFirstSyncService', // CHANGED FROM FixedLocalFirstSyncService
       'NavigationController',
       'UserController',
       'CourseController',
@@ -255,10 +324,9 @@ class EnhancedAppBindings extends Bindings {
           '🚨 Multiple service failures - app may have limited functionality');
     }
 
-    print('\n🚀 === FIXED APP READY FOR USE ===');
+    print('\n🚀 === APP READY FOR USE WITH SYNC ===');
   }
 
-// 5. ADD/UPDATE HELPER METHOD:
   /// Check if a service is initialized
   bool _isServiceInitialized(String serviceName) {
     try {
@@ -271,6 +339,8 @@ class EnhancedAppBindings extends Bindings {
           return Get.isRegistered<SettingsController>();
         case 'SchoolConfigService':
           return Get.isRegistered<SchoolConfigService>();
+        case 'SyncController': // NEW
+          return Get.isRegistered<SyncController>();
         case 'AuthController':
           return Get.isRegistered<AuthController>();
         case 'NavigationController':
@@ -298,7 +368,6 @@ class EnhancedAppBindings extends Bindings {
     print('🚨 === EMERGENCY INITIALIZATION ===');
 
     try {
-      // Initialize only critical services for basic app functionality
       final criticalServices = [
         'DatabaseHelper',
         'PinController',
@@ -325,7 +394,6 @@ class EnhancedAppBindings extends Bindings {
       }
     } catch (e) {
       print('❌ Emergency initialization failed: $e');
-      print('💀 App may have severe functionality issues');
     }
   }
 
@@ -335,74 +403,24 @@ class EnhancedAppBindings extends Bindings {
       switch (serviceName) {
         case 'DatabaseHelper':
           Get.put<DatabaseHelper>(DatabaseHelper.instance, permanent: true);
-          print('🚨 Emergency: DatabaseHelper initialized');
           break;
         case 'PinController':
           Get.put<PinController>(PinController(), permanent: true);
-          print('🚨 Emergency: PinController initialized');
           break;
         case 'SettingsController':
           Get.put<SettingsController>(SettingsController(), permanent: true);
-          print('🚨 Emergency: SettingsController initialized');
           break;
         case 'AuthController':
           Get.put<AuthController>(AuthController(), permanent: true);
-          print('🚨 Emergency: AuthController initialized');
           break;
         case 'NavigationController':
           Get.put<NavigationController>(NavigationController(),
               permanent: true);
-          print('🚨 Emergency: NavigationController initialized');
           break;
-        default:
-          print('🚨 Unknown critical service: $serviceName');
       }
+      print('🚨 Emergency: $serviceName initialized');
     } catch (e) {
       print('❌ Failed to initialize critical service $serviceName: $e');
-    }
-  }
-}
-
-/// Emergency bindings for critical services only
-class EmergencyBindings {
-  static void initializeMissingControllers() {
-    print('🚨 === EMERGENCY BINDINGS ===');
-    print('🚨 Initializing missing critical controllers...');
-
-    final criticalControllers = {
-      'DatabaseHelper': () =>
-          Get.put<DatabaseHelper>(DatabaseHelper.instance, permanent: true),
-      'PinController': () =>
-          Get.put<PinController>(PinController(), permanent: true),
-      'AuthController': () =>
-          Get.put<AuthController>(AuthController(), permanent: true),
-      'NavigationController': () => Get.put<NavigationController>(
-          NavigationController(),
-          permanent: true),
-    };
-
-    int successCount = 0;
-
-    criticalControllers.forEach((name, initializer) {
-      try {
-        if (!Get.isRegistered(tag: name)) {
-          initializer();
-          print('✅ Emergency: $name initialized');
-          successCount++;
-        } else {
-          print('ℹ️ Emergency: $name already exists');
-          successCount++;
-        }
-      } catch (e) {
-        print('❌ Emergency: Failed to initialize $name: $e');
-      }
-    });
-
-    if (successCount >= 3) {
-      print('✅ Emergency controllers initialized successfully');
-    } else {
-      print('❌ Emergency controller initialization insufficient');
-      print('💀 App functionality will be severely limited');
     }
   }
 }

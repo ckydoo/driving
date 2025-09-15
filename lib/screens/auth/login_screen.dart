@@ -63,18 +63,18 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _handleLogin() async {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
+    if (_formKey.currentState!.validate()) {
+      // Use the new API-based login method
+      final success = await _authController.loginWithApi(
+        _emailController.text.trim(),
+        _passwordController.text,
+      );
 
-    final success = await _authController.login(
-      _emailController.text.trim(),
-      _passwordController.text,
-    );
-
-    if (success) {
-      // Navigate to main app
-      Get.offAllNamed('/main');
+      if (success) {
+        // Navigate to main app
+        Get.offAllNamed('/main');
+      }
+      // Error handling is already done in the AuthController
     }
   }
 

@@ -1,9 +1,11 @@
-// lib/services/sync_service.dart - CORRECTED VERSION
+// lib/services/sync_service.dart - FIXED VERSION
 
 import 'dart:convert';
+import 'dart:io';
 import 'package:driving/services/api_service.dart';
 import 'package:driving/services/database_helper.dart';
 import 'package:driving/controllers/auth_controller.dart';
+import 'package:driving/models/sync_result.dart'; // Import shared SyncResult
 import 'package:driving/models/user.dart';
 import 'package:driving/models/course.dart';
 import 'package:driving/models/schedule.dart';
@@ -18,14 +20,116 @@ class SyncService {
   static const String _lastSyncKey = 'last_sync_timestamp';
   static const String _pendingChangesKey = 'pending_changes';
 
-  // Check if device is online and can reach the API
+  // Improved connectivity check
   static Future<bool> isOnline() async {
-    return await ApiService.checkConnectivity();
+    try {
+      print('🔍 Checking internet connectivity...');
+
+      // Method 1: Try to reach Google's DNS (simple and fast)
+      try {
+        final result = await InternetAddress.lookup('google.com')
+            .timeout(Duration(seconds: 5));
+        if (result.isNotEmpty && result[0].rawAddress.isNotEmpty) {
+          print('✅ Internet connection confirmed');
+          return true;
+        }
+      } catch (e) {
+        print('⚠️ DNS lookup failed, trying alternative method...');
+      }
+
+      // Method 2: Try your API health endpoint if DNS fails
+      try {
+        final response = await ApiService.checkConnectivity();
+        if (response) {
+          print('✅ API connectivity confirmed');
+          return true;
+        }
+      } catch (e) {
+        print('⚠️ API connectivity check failed: $e');
+      }
+
+      print('❌ No internet connection detected');
+      return false;
+    } catch (e) {
+      print('❌ Connectivity check error: $e');
+      return false;
+    }
   }
 
   // Full sync - download all data from server
   static Future<SyncResult> fullSync() async {
     try {
+      print('🔄 Starting full sync...');
+
+      // Check authentication first
+      final authController = Get.find<AuthController>();
+      if (!authController.isLoggedIn.value) {
+        print('❌ User not authenticated');
+        return SyncResult(false, 'User not authenticated');
+      }
+
+      // Check connectivity
+      if (!await isOnline()) {
+        print('❌ No internet connection');
+        return SyncResult(false, 'No internet connection');
+      }
+
+      print('✅ Prerequisites met, proceeding with sync...');
+
+      // Get last sync timestamp
+      final prefs = await SharedPreferences.getInstance();
+      final lastSync = prefs.getString(_lastSyncKey);
+      print('📅 Last sync: ${lastSync ?? 'Never'}');
+
+      try {
+        // Download data from server
+        print('⬇️ Downloading data from server...');
+        final serverData = await ApiService.syncDownload(lastSync: lastSync);
+        print('✅ Server data downloaded successfully');
+
+        // Update local database
+        print('💾 Updating local database...');
+        await _updateLocalDatabase(serverData);
+        print('✅ Local database updated');
+
+        // Upload pending changes
+        print('⬆️ Uploading pending changes...');
+        final uploadResult = await _uploadPendingChanges();
+        print('✅ Pending changes uploaded');
+
+        // Update last sync timestamp
+        final syncTimestamp =
+            serverData['sync_timestamp'] ?? DateTime.now().toIso8601String();
+        await prefs.setString(_lastSyncKey, syncTimestamp);
+        print('✅ Sync timestamp updated');
+
+        final downloadedCount = _countSyncedRecords(serverData);
+        final uploadedCount = uploadResult.uploadedCount;
+
+        print('🎉 Full sync completed successfully');
+        print('📊 Downloaded: $downloadedCount records');
+        print('📊 Uploaded: $uploadedCount records');
+
+        return SyncResult(true, 'Sync completed successfully', details: {
+          'downloaded': downloadedCount,
+          'uploaded': uploadedCount,
+          'sync_timestamp': syncTimestamp,
+        });
+      } catch (e) {
+        print('❌ Sync operation failed: $e');
+        return SyncResult(false, 'Sync failed: ${e.toString()}');
+      }
+    } catch (e) {
+      print('❌ Full sync error: $e');
+      return SyncResult(false, 'Sync error: ${e.toString()}');
+    }
+  }
+
+  // Upload pending changes to server
+  static Future<SyncResult> uploadPendingChanges() async {
+    try {
+      print('⬆️ Starting upload of pending changes...');
+
       if (!await isOnline()) {
         return SyncResult(false, 'No internet connection');
       }
@@ -35,46 +139,22 @@ class SyncService {
         return SyncResult(false, 'User not authenticated');
       }
 
-      // Get last sync timestamp
-      final prefs = await SharedPreferences.getInstance();
-      final lastSync = prefs.getString(_lastSyncKey);
-
-      // Download data from server
-      final serverData = await ApiService.syncDownload(lastSync: lastSync);
-
-      // Update local database
-      await _updateLocalDatabase(serverData);
-
-      // Upload pending changes
-      final uploadResult = await _uploadPendingChanges();
-
-      // Update last sync timestamp
-      await prefs.setString(_lastSyncKey, serverData['sync_timestamp']);
-
-      return SyncResult(true, 'Sync completed successfully', details: {
-        'downloaded': _countSyncedRecords(serverData),
-        'uploaded': uploadResult.details?['uploaded'] ?? 0,
-      });
-    } catch (e) {
-      return SyncResult(false, 'Sync failed: ${e.toString()}');
-    }
-  }
-
-  // Upload local changes to server
-  static Future<SyncResult> _uploadPendingChanges() async {
-    try {
       final prefs = await SharedPreferences.getInstance();
       final pendingChangesJson = prefs.getString(_pendingChangesKey);
 
-      if (pendingChangesJson == null) {
-        return SyncResult(true, 'No pending changes');
+      if (pendingChangesJson == null || pendingChangesJson.isEmpty) {
+        print('ℹ️ No pending changes to upload');
+        return SyncResult(true, 'No pending changes to upload');
       }
 
       final pendingChanges = json.decode(pendingChangesJson);
 
       if (pendingChanges.isEmpty) {
-        return SyncResult(true, 'No pending changes');
+        print('ℹ️ Pending changes empty');
+        return SyncResult(true, 'No pending changes to upload');
       }
+
+      print('📤 Uploading ${pendingChanges.length} change groups...');
 
       // Upload to server
       final result = await ApiService.syncUpload(pendingChanges);
@@ -82,10 +162,20 @@ class SyncService {
       // Clear pending changes on successful upload
       await prefs.remove(_pendingChangesKey);
 
-      return SyncResult(true, 'Upload completed', details: result);
+      print('✅ Upload completed successfully');
+
+      return SyncResult(true, 'Upload completed', details: {
+        'uploaded': result['uploaded'] ?? 0,
+      });
     } catch (e) {
+      print('❌ Upload failed: $e');
       return SyncResult(false, 'Upload failed: ${e.toString()}');
     }
+  }
+
+  // Internal method for uploading pending changes (used by fullSync)
+  static Future<SyncResult> _uploadPendingChanges() async {
+    return await uploadPendingChanges();
   }
 
   // Update local database with server data
@@ -97,7 +187,6 @@ class SyncService {
       // Update users
       if (serverData['users'] != null) {
         for (var userData in serverData['users']) {
-          // Convert API format to local format before storing
           final localUserData = _convertUserApiToLocal(userData);
           await txn.insert(
             'users',
@@ -172,21 +261,26 @@ class SyncService {
   // Track changes for later sync
   static Future<void> trackChange(
       String table, Map<String, dynamic> data, String operation) async {
-    final prefs = await SharedPreferences.getInstance();
-    final existingChangesJson = prefs.getString(_pendingChangesKey) ?? '{}';
-    final existingChanges = json.decode(existingChangesJson);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final existingChangesJson = prefs.getString(_pendingChangesKey) ?? '{}';
+      final existingChanges = json.decode(existingChangesJson);
 
-    if (existingChanges[table] == null) {
-      existingChanges[table] = [];
+      if (existingChanges[table] == null) {
+        existingChanges[table] = [];
+      }
+
+      existingChanges[table].add({
+        'data': data,
+        'operation': operation, // 'create', 'update', 'delete'
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+
+      await prefs.setString(_pendingChangesKey, json.encode(existingChanges));
+      print('📝 Tracked $operation change for $table');
+    } catch (e) {
+      print('❌ Failed to track change: $e');
     }
-
-    existingChanges[table].add({
-      'data': data,
-      'operation': operation, // 'create', 'update', 'delete'
-      'timestamp': DateTime.now().toIso8601String(),
-    });
-
-    await prefs.setString(_pendingChangesKey, json.encode(existingChanges));
   }
 
   // Get sync status
@@ -196,7 +290,15 @@ class SyncService {
     final pendingChanges = prefs.getString(_pendingChangesKey);
 
     final isConnected = await isOnline();
-    final serverStatus = isConnected ? await ApiService.getSyncStatus() : null;
+    Map<String, dynamic>? serverStatus;
+
+    if (isConnected) {
+      try {
+        serverStatus = await ApiService.getSyncStatus();
+      } catch (e) {
+        print('❌ Failed to get server status: $e');
+      }
+    }
 
     return {
       'last_sync': lastSync,
@@ -206,48 +308,59 @@ class SyncService {
     };
   }
 
-  // Count synced records
-  static int _countSyncedRecords(Map<String, dynamic> data) {
+  // Get/Save sync settings
+  static Future<Map<String, dynamic>> getSyncSettings() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return {
+        'autoSync': prefs.getBool('auto_sync') ?? true,
+        'interval': prefs.getInt('sync_interval') ?? 30,
+        'lastSync': prefs.getString(_lastSyncKey) ?? 'Never',
+      };
+    } catch (e) {
+      return {
+        'autoSync': true,
+        'interval': 30,
+        'lastSync': 'Never',
+      };
+    }
+  }
+
+  static Future<void> saveSyncSettings(Map<String, dynamic> settings) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('auto_sync', settings['autoSync'] ?? true);
+      await prefs.setInt('sync_interval', settings['interval'] ?? 30);
+      if (settings['lastSync'] != null) {
+        await prefs.setString(_lastSyncKey, settings['lastSync']);
+      }
+    } catch (e) {
+      print('❌ Failed to save sync settings: $e');
+    }
+  }
+
+  // Count synced records helper
+  static int _countSyncedRecords(Map<String, dynamic> serverData) {
     int count = 0;
-    for (String key in [
+
+    final dataTypes = [
       'users',
       'courses',
       'schedules',
       'invoices',
       'payments',
       'fleet'
-    ]) {
-      if (data[key] != null) {
-        count += (data[key] as List).length;
+    ];
+    for (String type in dataTypes) {
+      if (serverData[type] != null && serverData[type] is List) {
+        count += (serverData[type] as List).length;
       }
     }
+
     return count;
   }
 
-  // Auto sync when coming online
-  static Future<void> autoSync() async {
-    if (await isOnline()) {
-      final status = await getSyncStatus();
-
-      // Sync if we have pending changes or haven't synced in 24 hours
-      final shouldSync = status['has_pending_changes'] == true ||
-          status['last_sync'] == null ||
-          DateTime.now()
-                  .difference(DateTime.parse(status['last_sync']))
-                  .inHours >
-              24;
-
-      if (shouldSync) {
-        await fullSync();
-      }
-    }
-  }
-
-  // ========================================
-  // DATA CONVERSION METHODS (Same as ApiService)
-  // ========================================
-
-  // User conversions
+  // Data conversion methods
   static Map<String, dynamic> _convertUserApiToLocal(
       Map<String, dynamic> apiData) {
     return {
@@ -260,100 +373,89 @@ class SyncService {
       'role': apiData['role'],
       'status': apiData['status'],
       'created_at': apiData['created_at'],
+      'updated_at': apiData['updated_at'],
       'gender': apiData['gender'],
       'phone': apiData['phone'],
       'address': apiData['address'],
       'idnumber': apiData['idnumber'],
+      'email_verified_at': apiData['email_verified_at'],
+      'profile_picture': apiData['profile_picture'],
+      'emergency_contact': apiData['emergency_contact'],
+      'remember_token': apiData['remember_token'],
     };
   }
 
-  // Schedule conversions
-  static Map<String, dynamic> _convertScheduleApiToLocal(
-      Map<String, dynamic> apiData) {
-    return {
-      'id': apiData['id'],
-      'start': apiData['start'],
-      'end': apiData['end'],
-      'course': apiData['course_id'],
-      'student': apiData['student_id'],
-      'instructor': apiData['instructor_id'],
-      'car': apiData['car_id'],
-      'class_type': apiData['class_type'],
-      'status': apiData['status'],
-      'attended': apiData['attended'],
-      'lessonsDeducted': apiData['lessons_deducted'],
-      'is_recurring': apiData['is_recurring'],
-      'recurrence_pattern': apiData['recurring_pattern'],
-      'recurrence_end_date': apiData['recurring_end_date'],
-    };
-  }
-
-  // Course conversions
   static Map<String, dynamic> _convertCourseApiToLocal(
       Map<String, dynamic> apiData) {
     return {
       'id': apiData['id'],
       'name': apiData['name'],
-      'description': apiData['description'],
       'price': apiData['price'],
-      'lessons': apiData['lessons'],
-      'type': apiData['type'],
       'status': apiData['status'],
-      'duration_minutes': apiData['duration_minutes'],
+      'created_at': apiData['created_at'],
+      'updated_at': apiData['updated_at'],
     };
   }
 
-  // Fleet conversions
-  static Map<String, dynamic> _convertFleetApiToLocal(
+  static Map<String, dynamic> _convertScheduleApiToLocal(
       Map<String, dynamic> apiData) {
     return {
       'id': apiData['id'],
-      'carplate': apiData['registration'],
-      'make': apiData['make'],
-      'model': apiData['model'],
-      'modelyear': apiData['year'].toString(),
-      'instructor': apiData['assigned_instructor_id'] ?? 0,
+      'student_id': apiData['student_id'],
+      'instructor_id': apiData['instructor_id'],
+      'course_id': apiData['course_id'],
+      'vehicle_id': apiData['vehicle_id'],
+      'lesson_date': apiData['lesson_date'],
+      'lesson_time': apiData['lesson_time'],
+      'duration': apiData['duration'],
+      'status': apiData['status'],
+      'lesson_type': apiData['lesson_type'],
+      'notes': apiData['notes'],
+      'created_at': apiData['created_at'],
+      'updated_at': apiData['updated_at'],
     };
   }
 
-  // Invoice conversions
   static Map<String, dynamic> _convertInvoiceApiToLocal(
       Map<String, dynamic> apiData) {
     return {
       'id': apiData['id'],
-      'invoice_number': apiData['invoice_number'],
       'student': apiData['student_id'],
       'course': apiData['course_id'],
-      'lessons': apiData['lessons'],
-      'price_per_lesson': apiData['price_per_lesson'],
-      'amountpaid': apiData['amount_paid'],
-      'created_at': apiData['created_at'],
-      'due_date': apiData['due_date'],
+      'amount': apiData['amount'],
       'status': apiData['status'],
-      'total_amount': apiData['total_amount'],
+      'due_date': apiData['due_date'],
+      'created_at': apiData['created_at'],
+      'updated_at': apiData['updated_at'],
     };
   }
 
-  // Payment conversions
   static Map<String, dynamic> _convertPaymentApiToLocal(
       Map<String, dynamic> apiData) {
     return {
       'id': apiData['id'],
-      'invoiceId': apiData['invoice_id'],
+      'invoice_id': apiData['invoice_id'],
+      'student_id': apiData['student_id'],
       'amount': apiData['amount'],
-      'method': apiData['payment_method'],
-      'paymentDate': apiData['payment_date'],
-      'notes': apiData['notes'],
-      'reference': apiData['reference_number'],
-      'receipt_path': apiData['receipt_path'],
+      'payment_method': apiData['payment_method'],
+      'payment_date': apiData['payment_date'],
+      'status': apiData['status'],
+      'created_at': apiData['created_at'],
+      'updated_at': apiData['updated_at'],
     };
   }
-}
 
-class SyncResult {
-  final bool success;
-  final String message;
-  final Map<String, dynamic>? details;
-
-  SyncResult(this.success, this.message, {this.details});
+  static Map<String, dynamic> _convertFleetApiToLocal(
+      Map<String, dynamic> apiData) {
+    return {
+      'id': apiData['id'],
+      'make': apiData['make'],
+      'model': apiData['model'],
+      'year': apiData['year'],
+      'license_plate': apiData['license_plate'],
+      'status': apiData['status'],
+      'created_at': apiData['created_at'],
+      'updated_at': apiData['updated_at'],
+    };
+  }
 }

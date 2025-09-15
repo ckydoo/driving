@@ -1,7 +1,9 @@
 import 'package:driving/controllers/navigation_controller.dart';
 import 'package:driving/controllers/settings_controller.dart';
+import 'package:driving/controllers/sync_controller.dart';
 import 'package:driving/routes/app_routes.dart';
 import 'package:driving/screens/auth/login_screen.dart';
+import 'package:driving/services/api_service.dart';
 import 'package:driving/services/app_bindings.dart';
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/controllers/pin_controller.dart';
@@ -41,6 +43,8 @@ Future<void> _initializeCoreServices() async {
   try {
     print('⚙️ Initializing core services...');
 
+    // Initialize API Service configuration
+    _configureApiService();
     // Initialize PIN Controller early
     if (!Get.isRegistered<PinController>()) {
       Get.put<PinController>(PinController(), permanent: true);
@@ -65,10 +69,63 @@ Future<void> _initializeCoreServices() async {
       Get.put<NavigationController>(NavigationController(), permanent: true);
       print('✅ NavigationController initialized');
     }
+
+    // Initialize Sync Controller (before Auth)
+    if (!Get.isRegistered<SyncController>()) {
+      Get.put<SyncController>(SyncController(), permanent: true);
+      print('✅ Sync Controller initialized');
+    }
+
+    // Initialize Auth Controller (after sync)
+    if (!Get.isRegistered<AuthController>()) {
+      Get.put<AuthController>(AuthController(), permanent: true);
+      print('✅ Auth Controller initialized');
+
+      // Set up auth-sync integration
+      _setupAuthSyncIntegration();
+    }
     print('✅ Core services initialization completed');
   } catch (e) {
     print('❌ Core services initialization failed: $e');
     // Continue anyway - app should still work with basic functionality
+  }
+}
+
+void _configureApiService() {
+  // Configure your API base URL here
+  // You should replace this with your actual Laravel API URL
+  const String apiBaseUrl = 'http://192.168.9.103:8000/api';
+
+  // Set up API configuration
+  ApiService.configure(baseUrl: apiBaseUrl);
+
+  print('✅ API Service configured with base URL: $apiBaseUrl');
+}
+
+void _setupAuthSyncIntegration() {
+  try {
+    final authController = Get.find<AuthController>();
+    final syncController = Get.find<SyncController>();
+
+    // Listen to auth state changes
+    ever(authController.isLoggedIn, (bool isLoggedIn) {
+      if (isLoggedIn) {
+        print('🔄 User logged in - sync will use existing API token');
+
+        // Token is already set by ApiService.login()
+        // Start sync after login
+        Future.delayed(Duration(seconds: 2), () {
+          syncController.performInitialSync();
+        });
+      } else {
+        print('🔄 User logged out - clearing sync...');
+        syncController.stopSync();
+      }
+    });
+
+    print('✅ Auth-Sync integration configured');
+  } catch (e) {
+    print('❌ Auth-Sync integration failed: $e');
   }
 }
 

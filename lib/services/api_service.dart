@@ -11,22 +11,79 @@ import 'package:driving/models/payment.dart';
 import 'package:driving/models/fleet.dart';
 
 class ApiService {
-  static const String baseUrl = 'http://your-domain.com/api';
   static String? _token;
+  static String baseUrl = 'http://192.168.9.103:8000/api'; // CHANGE THIS
 
-  // Headers
-  static Map<String, String> get _headers => {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        if (_token != null) 'Authorization': 'Bearer $_token',
-      };
+  static void configure({required String baseUrl}) {
+    ApiService.baseUrl = baseUrl;
+  }
+
+  static void setToken(String token) {
+    _token = token;
+  }
+
+  static void clearToken() {
+    _token = null;
+  }
+
+  static Map<String, String> get _headers {
+    final headers = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    };
+
+    if (_token != null) {
+      headers['Authorization'] = 'Bearer $_token';
+    }
+
+    return headers;
+  }
+
+// Sync-specific methods
+  static Future<Map<String, dynamic>> syncDownload({String? lastSync}) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/sync/download'),
+      headers: {
+        ..._headers,
+        if (lastSync != null) 'Last-Sync': lastSync,
+      },
+    );
+
+    final data = json.decode(response.body);
+
+    if (response.statusCode == 200 && data['success']) {
+      return data['data'];
+    } else {
+      throw Exception(data['message'] ?? 'Sync download failed');
+    }
+  }
+
+  static Future<Map<String, dynamic>> syncUpload(
+      Map<String, dynamic> changes) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/sync/upload'),
+      headers: _headers,
+      body: json.encode(changes),
+    );
+
+    final data = json.decode(response.body);
+
+    if (response.statusCode == 200 && data['success']) {
+      return data['data'];
+    } else {
+      throw Exception(data['message'] ?? 'Sync upload failed');
+    }
+  }
 
   // Authentication
   static Future<Map<String, dynamic>> login(
       String email, String password) async {
     final response = await http.post(
       Uri.parse('$baseUrl/auth/login'),
-      headers: _headers,
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
       body: json.encode({
         'email': email,
         'password': password,
@@ -36,20 +93,24 @@ class ApiService {
     final data = json.decode(response.body);
 
     if (response.statusCode == 200 && data['success']) {
-      _token = data['data']['token'];
-      return data;
+      // Store the token
+      setToken(data['data']['token']);
+      return data['data'];
     } else {
       throw Exception(data['message'] ?? 'Login failed');
     }
   }
 
   static Future<void> logout() async {
-    if (_token != null) {
+    try {
       await http.post(
         Uri.parse('$baseUrl/auth/logout'),
         headers: _headers,
       );
-      _token = null;
+    } catch (e) {
+      print('Logout API call failed: $e');
+    } finally {
+      clearToken();
     }
   }
 
@@ -317,44 +378,6 @@ class ApiService {
     }
   }
 
-  // Sync Methods
-  static Future<Map<String, dynamic>> syncDownload({String? lastSync}) async {
-    final headers = Map<String, String>.from(_headers);
-    if (lastSync != null) {
-      headers['Last-Sync'] = lastSync;
-    }
-
-    final response = await http.get(
-      Uri.parse('$baseUrl/sync/download'),
-      headers: headers,
-    );
-
-    final data = json.decode(response.body);
-
-    if (response.statusCode == 200 && data['success']) {
-      return data['data'];
-    } else {
-      throw Exception(data['message'] ?? 'Sync download failed');
-    }
-  }
-
-  static Future<Map<String, dynamic>> syncUpload(
-      Map<String, dynamic> localData) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/sync/upload'),
-      headers: _headers,
-      body: json.encode(localData),
-    );
-
-    final data = json.decode(response.body);
-
-    if (response.statusCode == 200 && data['success']) {
-      return data['data'];
-    } else {
-      throw Exception(data['message'] ?? 'Sync upload failed');
-    }
-  }
-
   static Future<Map<String, dynamic>> getSyncStatus() async {
     final response = await http.get(
       Uri.parse('$baseUrl/sync/status'),
@@ -384,16 +407,6 @@ class ApiService {
     } catch (e) {
       return false;
     }
-  }
-
-  // Set token for authentication
-  static void setToken(String token) {
-    _token = token;
-  }
-
-  // Clear token
-  static void clearToken() {
-    _token = null;
   }
 
   // ========================================
@@ -484,12 +497,8 @@ class ApiService {
     return {
       'id': apiData['id'],
       'name': apiData['name'],
-      'description': apiData['description'],
       'price': apiData['price'],
-      'lessons': apiData['lessons'],
-      'type': apiData['type'],
       'status': apiData['status'],
-      'duration_minutes': apiData['duration_minutes'],
     };
   }
 
@@ -514,7 +523,6 @@ class ApiService {
       'registration': localData['carplate'],
       'year': int.tryParse(localData['modelyear'].toString()) ??
           DateTime.now().year,
-      'transmission': 'manual', // Default transmission
       'assigned_instructor_id': localData['instructor'],
     };
   }

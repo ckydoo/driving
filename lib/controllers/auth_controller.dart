@@ -1,6 +1,7 @@
 // lib/controllers/auth_controller.dart - Local-Only Authentication
 import 'package:crypto/crypto.dart';
 import 'package:driving/models/user.dart';
+import 'package:driving/services/api_service.dart';
 import 'package:driving/services/database_helper.dart';
 import 'package:driving/controllers/pin_controller.dart';
 import 'package:driving/services/school_config_service.dart';
@@ -640,6 +641,93 @@ class AuthController extends GetxController {
     } catch (e) {
       print('❌ userRole Error: $e');
       return 'guest';
+    }
+  }
+// Add this method to your AuthController class:
+
+  /// API-based login method
+  Future<bool> loginWithApi(String email, String password) async {
+    try {
+      isLoading.value = true;
+      error.value = '';
+
+      print('\n🔐 === API LOGIN ATTEMPT ===');
+      print('📧 Email: $email');
+
+      if (email.isEmpty || password.isEmpty) {
+        error.value = 'Email and password are required';
+        return false;
+      }
+
+      // Call Laravel API for authentication
+      final loginResponse = await ApiService.login(email, password);
+
+      // Extract user data and token
+      final userData = loginResponse['user'];
+      final token = loginResponse['token'];
+
+      print('✅ API authentication successful');
+      print('🔑 Token received: ${token.substring(0, 10)}...');
+
+      // Set user as logged in
+      final user = User.fromJson(userData);
+      currentUser.value = user;
+      isLoggedIn.value = true;
+
+      // Save email for future sessions if remember me is enabled
+      if (rememberMe.value) {
+        userEmail.value = email;
+      }
+
+      // Also save to local database for offline access
+      await _saveUserToLocal(userData);
+
+      print('✅ User: ${user.fname} ${user.lname} (${user.role})');
+      return true;
+    } catch (e) {
+      print('❌ API Login error: $e');
+      error.value = 'Login failed: ${e.toString()}';
+
+      // Fallback to local login if API fails
+      print('🔄 Attempting local fallback login...');
+      return await login(email, password);
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  /// Save user to local database for offline access
+  Future<void> _saveUserToLocal(Map<String, dynamic> userData) async {
+    try {
+      // Now we can save all Laravel fields since we added them to local DB
+      await DatabaseHelper.instance.insertUser(userData);
+      print('✅ User saved to local database with all Laravel fields');
+    } catch (e) {
+      print('⚠️ Failed to save user locally: $e');
+      // Don't throw error - local save is optional
+    }
+  }
+
+  /// Enhanced logout with API call
+  Future<void> logoutWithApi() async {
+    try {
+      isLoading.value = true;
+
+      // Call API logout
+      await ApiService.logout();
+
+      // Clear local state
+      currentUser.value = null;
+      isLoggedIn.value = false;
+
+      print('✅ Logged out successfully');
+    } catch (e) {
+      print('❌ Logout error: $e');
+      // Clear local state even if API call fails
+      currentUser.value = null;
+      isLoggedIn.value = false;
+    } finally {
+      isLoading.value = false;
     }
   }
 
