@@ -73,34 +73,73 @@ class SyncController extends GetxController {
       final settings = await SyncService.getSyncSettings();
       autoSyncEnabled.value = settings['autoSync'] ?? true;
       syncIntervalMinutes.value = settings['interval'] ?? 30;
-      lastSyncTime.value = settings['lastSync'] ?? 'Never';
+
+      // Get the ISO timestamp from storage and format it for display
+      final lastSyncStored = settings['lastSync'];
+      lastSyncTime.value = _formatLastSyncForDisplay(lastSyncStored);
     } catch (e) {
       print('❌ Failed to load sync settings: $e');
+      lastSyncTime.value = 'Never';
     }
   }
 
-  /// Save sync settings
+  /// Format last sync timestamp for display (but don't save this format)
+  String _formatLastSyncForDisplay(String? isoTimestamp) {
+    if (isoTimestamp == null ||
+        isoTimestamp == 'Never' ||
+        isoTimestamp.isEmpty ||
+        !isoTimestamp.contains('T')) {
+      return 'Never';
+    }
+
+    try {
+      final dateTime = DateTime.parse(isoTimestamp);
+      final now = DateTime.now();
+      final difference = now.difference(dateTime);
+
+      if (difference.inDays == 0) {
+        // Today - show as "Today HH:MM"
+        return 'Today ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
+      } else if (difference.inDays == 1) {
+        // Yesterday
+        return 'Yesterday ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
+      } else if (difference.inDays < 7) {
+        // This week
+        return '${_getDayName(dateTime.weekday)} ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
+      } else {
+        // Older dates
+        return '${dateTime.day}/${dateTime.month}/${dateTime.year} ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
+      }
+    } catch (e) {
+      print('⚠️ Failed to parse last sync timestamp: $e');
+      return 'Never';
+    }
+  }
+
+  String _getDayName(int weekday) {
+    const days = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    return days[weekday];
+  }
+
+  /// Save sync settings - DO NOT save the display format
   Future<void> _saveSyncSettings() async {
     try {
+      // DON'T save lastSyncTime.value (display format)
+      // The ISO timestamp is saved directly by SyncService
       await SyncService.saveSyncSettings({
         'autoSync': autoSyncEnabled.value,
         'interval': syncIntervalMinutes.value,
-        'lastSync': lastSyncTime.value,
+        // Don't save 'lastSync' here - it's handled by SyncService
       });
     } catch (e) {
       print('❌ Failed to save sync settings: $e');
     }
   }
 
-  /// Perform initial sync when user logs in
-  Future<void> performInitialSync() async {
-    if (!Get.find<AuthController>().isLoggedIn.value) {
-      print('❌ Cannot sync: User not logged in');
-      return;
-    }
-
-    print('🔄 Starting initial sync...');
-    await performFullSync();
+  /// Update last sync time display after successful sync
+  void updateLastSyncDisplay() {
+    // Reload from storage to get the latest ISO timestamp and format for display
+    _loadSyncSettings();
   }
 
   /// Perform full sync
@@ -132,8 +171,10 @@ class SyncController extends GetxController {
 
       if (result.success) {
         syncStatus.value = 'Sync completed';
-        syncProgressText.value = 'Sync successful';
-        lastSyncTime.value = _formatDateTime(DateTime.now());
+        syncProgressText.value = 'Sync completed successfully';
+
+        // Update the display format after successful sync
+        updateLastSyncDisplay();
 
         // Show success message
         Get.snackbar(
@@ -144,8 +185,6 @@ class SyncController extends GetxController {
           colorText: Colors.white,
           duration: Duration(seconds: 2),
         );
-
-        print('✅ Full sync completed successfully');
       } else {
         syncStatus.value = 'Sync failed';
         syncProgressText.value = result.message;
@@ -159,16 +198,15 @@ class SyncController extends GetxController {
           colorText: Colors.white,
           duration: Duration(seconds: 3),
         );
-
-        print('❌ Full sync failed: ${result.message}');
       }
 
+      // Save settings (but not the display format)
       await _saveSyncSettings();
     } catch (e) {
-      syncStatus.value = 'Sync error';
-      syncProgressText.value = 'Sync failed: ${e.toString()}';
+      syncStatus.value = 'Sync failed';
+      syncProgressText.value = e.toString();
+      lastSyncResult.value = SyncResult(false, e.toString());
 
-      // Show error message
       Get.snackbar(
         'Sync Error',
         e.toString(),
@@ -178,16 +216,69 @@ class SyncController extends GetxController {
         duration: Duration(seconds: 3),
       );
 
-      print('❌ Sync error: $e');
+      print('❌ Sync failed: $e');
     } finally {
       isSyncing.value = false;
-
-      // Reset progress after delay
-      Timer(Duration(seconds: 2), () {
-        syncProgress.value = 0.0;
-        syncProgressText.value = '';
-      });
     }
+  }
+
+  /// Format sync time for display
+  String _formatSyncTime(DateTime dateTime) {
+    // Format as: "Today 16:13" or "15 Sep 16:13" etc.
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+
+    if (difference.inDays == 0) {
+      // Today
+      return 'Today ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
+    } else if (difference.inDays == 1) {
+      // Yesterday
+      return 'Yesterday ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
+    } else {
+      // Older dates
+      return '${dateTime.day} ${_getMonthName(dateTime.month)} ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
+    }
+  }
+
+  String _getMonthName(int month) {
+    const months = [
+      '',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec'
+    ];
+    return months[month];
+  }
+
+  /// Update last sync time after successful sync
+  void updateLastSyncTime(String isoTimestamp) {
+    try {
+      final syncDateTime = DateTime.parse(isoTimestamp);
+      lastSyncTime.value = _formatSyncTime(syncDateTime);
+    } catch (e) {
+      print('⚠️ Failed to update last sync time display: $e');
+      lastSyncTime.value = 'Just now';
+    }
+  }
+
+  /// Perform initial sync when user logs in
+  Future<void> performInitialSync() async {
+    if (!Get.find<AuthController>().isLoggedIn.value) {
+      print('❌ Cannot sync: User not logged in');
+      return;
+    }
+
+    print('🔄 Starting initial sync...');
+    await performFullSync();
   }
 
   /// Start periodic sync

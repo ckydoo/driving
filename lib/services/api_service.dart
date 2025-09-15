@@ -39,21 +39,44 @@ class ApiService {
     return headers;
   }
 
-// Sync-specific methods
+  // Sync-specific methods
+
   static Future<Map<String, dynamic>> syncDownload({String? lastSync}) async {
+    print('🔍 Making sync download request...');
+    print('🔍 URL: $baseUrl/sync/download');
+
+    // Build headers - only include Last-Sync if we have a valid timestamp
+    final headers = Map<String, String>.from(_headers);
+
+    // Only add Last-Sync header if lastSync is not null and not "Never"
+    if (lastSync != null && lastSync.isNotEmpty && lastSync != 'Never') {
+      headers['Last-Sync'] = lastSync;
+      print('🔍 Last-Sync: $lastSync');
+    } else {
+      print('🔍 No Last-Sync header (first sync)');
+    }
+
+    print('🔍 Headers: $headers');
+
     final response = await http.get(
       Uri.parse('$baseUrl/sync/download'),
-      headers: {
-        ..._headers,
-        if (lastSync != null) 'Last-Sync': lastSync,
-      },
+      headers: headers,
     );
+
+    print('🔍 Response Status: ${response.statusCode}');
+    print('🔍 Response Body: ${response.body}');
 
     final data = json.decode(response.body);
 
     if (response.statusCode == 200 && data['success']) {
+      print('✅ Sync download successful');
       return data['data'];
     } else {
+      print('❌ Sync download failed');
+      print('❌ Error details: ${data['message']}');
+      if (data.containsKey('data') && data['data'] != null) {
+        print('❌ Additional error info: ${data['data']}');
+      }
       throw Exception(data['message'] ?? 'Sync download failed');
     }
   }

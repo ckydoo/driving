@@ -56,7 +56,6 @@ class SyncService {
     }
   }
 
-  // Full sync - download all data from server
   static Future<SyncResult> fullSync() async {
     try {
       print('🔄 Starting full sync...');
@@ -78,8 +77,21 @@ class SyncService {
 
       // Get last sync timestamp
       final prefs = await SharedPreferences.getInstance();
-      final lastSync = prefs.getString(_lastSyncKey);
-      print('📅 Last sync: ${lastSync ?? 'Never'}');
+      final lastSyncStored = prefs.getString(_lastSyncKey);
+
+      // Only use lastSync if it's a valid ISO timestamp
+      String? lastSync;
+      if (lastSyncStored != null &&
+          lastSyncStored != 'Never' &&
+          lastSyncStored.isNotEmpty &&
+          lastSyncStored.contains('T')) {
+        // Check if it's ISO format
+        lastSync = lastSyncStored;
+        print('📅 Last sync: $lastSync');
+      } else {
+        lastSync = null; // This will result in no Last-Sync header being sent
+        print('📅 Last sync: Never (first sync or invalid format)');
+      }
 
       try {
         // Download data from server
@@ -97,11 +109,21 @@ class SyncService {
         final uploadResult = await _uploadPendingChanges();
         print('✅ Pending changes uploaded');
 
-        // Update last sync timestamp
+        // Update last sync timestamp - ENSURE ISO FORMAT
         final syncTimestamp =
             serverData['sync_timestamp'] ?? DateTime.now().toIso8601String();
-        await prefs.setString(_lastSyncKey, syncTimestamp);
-        print('✅ Sync timestamp updated');
+
+        // Double-check that we're storing ISO format
+        String finalTimestamp;
+        if (syncTimestamp is String && syncTimestamp.contains('T')) {
+          finalTimestamp = syncTimestamp;
+        } else {
+          // Fallback to current time in ISO format
+          finalTimestamp = DateTime.now().toIso8601String();
+        }
+
+        await prefs.setString(_lastSyncKey, finalTimestamp);
+        print('✅ Sync timestamp updated: $finalTimestamp');
 
         final downloadedCount = _countSyncedRecords(serverData);
         final uploadedCount = uploadResult.uploadedCount;
@@ -113,7 +135,7 @@ class SyncService {
         return SyncResult(true, 'Sync completed successfully', details: {
           'downloaded': downloadedCount,
           'uploaded': uploadedCount,
-          'sync_timestamp': syncTimestamp,
+          'sync_timestamp': finalTimestamp,
         });
       } catch (e) {
         print('❌ Sync operation failed: $e');
@@ -308,14 +330,15 @@ class SyncService {
     };
   }
 
-  // Get/Save sync settings
-  static Future<Map<String, dynamic>> getSyncSettings() async {
+// Load sync settings - return ISO timestamps, not display format
+  static Future<Map<String, dynamic>> loadSyncSettings() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       return {
         'autoSync': prefs.getBool('auto_sync') ?? true,
         'interval': prefs.getInt('sync_interval') ?? 30,
-        'lastSync': prefs.getString(_lastSyncKey) ?? 'Never',
+        'lastSync':
+            prefs.getString(_lastSyncKey) ?? 'Never', // Return ISO timestamp
       };
     } catch (e) {
       return {
@@ -326,17 +349,29 @@ class SyncService {
     }
   }
 
+// Save sync settings - only save non-timestamp settings here
   static Future<void> saveSyncSettings(Map<String, dynamic> settings) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('auto_sync', settings['autoSync'] ?? true);
-      await prefs.setInt('sync_interval', settings['interval'] ?? 30);
-      if (settings['lastSync'] != null) {
-        await prefs.setString(_lastSyncKey, settings['lastSync']);
+
+      if (settings.containsKey('autoSync')) {
+        await prefs.setBool('auto_sync', settings['autoSync'] ?? true);
       }
+
+      if (settings.containsKey('interval')) {
+        await prefs.setInt('sync_interval', settings['interval'] ?? 30);
+      }
+
+      // DON'T save lastSync here - it's handled separately by fullSync()
+      // The timestamp should only be saved in ISO format by the sync process
     } catch (e) {
       print('❌ Failed to save sync settings: $e');
     }
+  }
+
+// Alternative method for getting settings for display
+  static Future<Map<String, dynamic>> getSyncSettings() async {
+    return await loadSyncSettings();
   }
 
   // Count synced records helper
