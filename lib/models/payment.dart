@@ -27,22 +27,17 @@ class Payment {
 
   factory Payment.fromJson(Map<String, dynamic> json) {
     try {
-      print('📄 Parsing payment from JSON: $json');
-
       return Payment(
-        id: _parseInt(json['id']),
-        invoiceId: _parseInt(json['invoiceId']) ?? 0,
-        amount: _parseDouble(json['amount']) ?? 0.0,
-        method: json['method']?.toString() ?? 'cash',
-        // ✅ FIX: Use paymentDate field first, then fall back to created_at
-        paymentDate:
-            _parseDateTime(json['paymentDate'] ?? json['created_at']) ??
-                DateTime.now(),
+        id: json['id'],
+        invoiceId: json['invoiceId'] ?? 0,
+        amount: _parseDouble(json['amount']), // Safe parsing
+        method: json['method']?.toString() ?? 'Cash',
+        paymentDate: _parseDateTime(json['paymentDate']) ?? DateTime.now(),
         notes: json['notes']?.toString(),
         reference: json['reference']?.toString(),
         receiptPath: json['receipt_path']?.toString(),
         receiptGenerated: _parseBool(json['receipt_generated']),
-        userId: _parseInt(json['userId'] ?? json['user_id']),
+        userId: json['userId'],
       );
     } catch (e) {
       print('❌ Error parsing Payment from JSON: $e');
@@ -51,21 +46,16 @@ class Payment {
     }
   }
 
-// ✅ ENHANCED: Better parsing methods that handle your data structure
-  static int? _parseInt(dynamic value) {
-    if (value == null) return null;
-    if (value is int) return value;
-    if (value is String) return int.tryParse(value);
-    if (value is double) return value.toInt();
-    return null;
-  }
-
-  static double? _parseDouble(dynamic value) {
-    if (value == null) return null;
+// Safe parsing methods for Payment class
+  static double _parseDouble(dynamic value) {
+    if (value == null) return 0.0;
     if (value is double) return value;
     if (value is int) return value.toDouble();
-    if (value is String) return double.tryParse(value);
-    return null;
+    if (value is String) {
+      final parsed = double.tryParse(value);
+      return parsed ?? 0.0;
+    }
+    return 0.0;
   }
 
   static DateTime? _parseDateTime(dynamic value) {

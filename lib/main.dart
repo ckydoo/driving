@@ -94,7 +94,7 @@ Future<void> _initializeCoreServices() async {
 void _configureApiService() {
   // Configure your API base URL here
   // You should replace this with your actual Laravel API URL
-  const String apiBaseUrl = 'http://192.168.9.103:8000/api';
+  const String apiBaseUrl = 'http://192.168.8.172:8000/api';
 
   // Set up API configuration
   ApiService.configure(baseUrl: apiBaseUrl);

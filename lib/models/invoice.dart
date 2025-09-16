@@ -36,17 +36,43 @@ class Invoice {
   factory Invoice.fromMap(Map<String, dynamic> map) {
     return Invoice(
       id: map['id'],
-      invoiceNumber: map['invoice_number'] ?? '', // Add this line
-      studentId: map['student'],
-      courseId: map['course'],
-      lessons: map['lessons'],
-      pricePerLesson: map['price_per_lesson']?.toDouble() ?? 0.0,
-      amountPaid: map['amountpaid']?.toDouble() ?? 0.0,
+      invoiceNumber: map['invoice_number']?.toString() ?? '',
+      studentId: map['student'] ?? 0,
+      courseId: map['course'] ?? 0,
+      lessons: map['lessons'] ?? 1,
+      pricePerLesson: _parseDouble(map['price_per_lesson']),
+      amountPaid: _parseDouble(map['amountpaid']),
       createdAt: DateTime.parse(map['created_at']),
       dueDate: DateTime.parse(map['due_date']),
-      status: map['status'] ?? 'unpaid',
-      totalAmount: map['total_amount']?.toDouble() ?? 0.0,
+      status: map['status']?.toString() ?? 'unpaid',
+      totalAmount: _parseDouble(map['total_amount']),
     );
+  }
+
+// Add these safe parsing methods to your Invoice class
+  static double _parseDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) {
+      final parsed = double.tryParse(value);
+      return parsed ?? 0.0;
+    }
+    return 0.0;
+  }
+
+  static int _parseInteger(dynamic value) {
+    if (value == null) return 0;
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    if (value is String) {
+      final parsed = int.tryParse(value);
+      if (parsed != null) return parsed;
+      // Try parsing as double first, then convert to int
+      final doubleValue = double.tryParse(value);
+      return doubleValue?.toInt() ?? 0;
+    }
+    return 0;
   }
 
   Map<String, dynamic> toMap() {
@@ -132,14 +158,6 @@ class Invoice {
     if (value is int) return value;
     if (value is String) return int.tryParse(value);
     if (value is double) return value.toInt();
-    return null;
-  }
-
-  static double? _parseDouble(dynamic value) {
-    if (value == null) return null;
-    if (value is double) return value;
-    if (value is int) return value.toDouble();
-    if (value is String) return double.tryParse(value);
     return null;
   }
 

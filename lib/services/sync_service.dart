@@ -395,102 +395,241 @@ class SyncService {
     return count;
   }
 
-  // Data conversion methods
-  static Map<String, dynamic> _convertUserApiToLocal(
-      Map<String, dynamic> apiData) {
-    return {
-      'id': apiData['id'],
-      'fname': apiData['fname'],
-      'lname': apiData['lname'],
-      'email': apiData['email'],
-      'date_of_birth': apiData['date_of_birth'],
-      'password': '', // Don't store password locally
-      'role': apiData['role'],
-      'status': apiData['status'],
-      'created_at': apiData['created_at'],
-      'updated_at': apiData['updated_at'],
-      'gender': apiData['gender'],
-      'phone': apiData['phone'],
-      'address': apiData['address'],
-      'idnumber': apiData['idnumber'],
-      'email_verified_at': apiData['email_verified_at'],
-      'profile_picture': apiData['profile_picture'],
-      'emergency_contact': apiData['emergency_contact'],
-      'remember_token': apiData['remember_token'],
-    };
+  static int? _parseInt(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    if (value is String) {
+      try {
+        return int.parse(value);
+      } catch (e) {
+        // Try parsing as double first, then convert to int
+        try {
+          return double.parse(value).toInt();
+        } catch (e2) {
+          print('⚠️ Could not parse int from string: $value');
+          return null;
+        }
+      }
+    }
+    print('⚠️ Could not parse int from: $value (${value.runtimeType})');
+    return null;
   }
 
-  static Map<String, dynamic> _convertCourseApiToLocal(
-      Map<String, dynamic> apiData) {
-    return {
-      'id': apiData['id'],
-      'name': apiData['name'],
-      'price': apiData['price'],
-      'status': apiData['status'],
-      'created_at': apiData['created_at'],
-      'updated_at': apiData['updated_at'],
-    };
-  }
+  // Update your schedule conversion functions in lib/services/sync_service.dart or api_service.dart
 
   static Map<String, dynamic> _convertScheduleApiToLocal(
       Map<String, dynamic> apiData) {
     return {
       'id': apiData['id'],
-      'student_id': apiData['student_id'],
-      'instructor_id': apiData['instructor_id'],
-      'course_id': apiData['course_id'],
-      'vehicle_id': apiData['vehicle_id'],
-      'lesson_date': apiData['lesson_date'],
-      'lesson_time': apiData['lesson_time'],
-      'duration': apiData['duration'],
-      'status': apiData['status'],
-      'lesson_type': apiData['lesson_type'],
+      'start': apiData['start'],
+      'end': apiData['end'],
+      'course': apiData['course'] ?? apiData['course_id'],
+      'student': apiData['student'] ?? apiData['student_id'],
+      'instructor': apiData['instructor'] ?? apiData['instructor_id'],
+      'car': apiData['vehicle'] ?? apiData['vehicle_id'] ?? apiData['car'] ?? 0,
+      'class_type': apiData['class_type'] ?? 'Practical',
+      'status': apiData['status'] ?? 'Scheduled',
+      'attended': apiData['attended'] == 1 || apiData['attended'] == true,
+      'lessonsCompleted': apiData['lessons_completed'] ?? 0,
+      'lessonsDeducted': _parseInteger(apiData['lessons_deducted']) ?? 1,
+      'is_recurring':
+          apiData['is_recurring'] == 1 || apiData['is_recurring'] == true,
+      'recurrence_pattern':
+          apiData['recurring_pattern'] ?? apiData['recurrence_pattern'],
+      'recurrence_end_date':
+          apiData['recurring_end_date'] ?? apiData['recurrence_end_date'],
       'notes': apiData['notes'],
       'created_at': apiData['created_at'],
       'updated_at': apiData['updated_at'],
     };
   }
 
-  static Map<String, dynamic> _convertInvoiceApiToLocal(
+  static Map<String, dynamic> _convertScheduleLocalToApi(
+      Map<String, dynamic> localData) {
+    return {
+      'student': localData['student'], // Keep Flutter field names
+      'instructor': localData['instructor'], // Laravel will map these
+      'course': localData['course'], // in the upsertSchedule method
+      'car': localData['car'] ?? 0,
+      'start': localData['start'],
+      'end': localData['end'],
+      'class_type': localData['class_type'] ?? 'Practical',
+      'status': localData['status'] ?? 'Scheduled',
+      'attended': localData['attended'] == true ? 1 : 0,
+      'lessonsCompleted': localData['lessonsCompleted'] ?? 0,
+      'lessonsDeducted': localData['lessonsDeducted'] ?? 1,
+      'is_recurring': localData['is_recurring'] == true ? 1 : 0,
+      'recurrence_pattern': localData['recurrence_pattern'],
+      'recurrence_end_date': localData['recurrence_end_date'],
+      'notes': localData['notes'],
+    };
+  }
+
+// Safe integer parsing helper
+  static int _parseInteger(dynamic value) {
+    if (value == null) return 0;
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    if (value is String) {
+      final parsed = int.tryParse(value);
+      if (parsed != null) return parsed;
+      final doubleValue = double.tryParse(value);
+      return doubleValue?.toInt() ?? 0;
+    }
+    return 0;
+  }
+
+  // ✅ FIXED: Fleet conversion method with null safety
+  static Map<String, dynamic> _convertFleetApiToLocal(
       Map<String, dynamic> apiData) {
     return {
       'id': apiData['id'],
-      'student': apiData['student_id'],
-      'course': apiData['course_id'],
-      'amount': apiData['amount'],
-      'status': apiData['status'],
-      'due_date': apiData['due_date'],
+      'carplate': apiData['carplate'] ?? '',
+      'make': apiData['make'] ?? '',
+      'model': apiData['model'] ?? '',
+      'modelyear': apiData['modelyear'] ?? DateTime.now().year,
+      'instructor': apiData['instructor'] ?? 0,
       'created_at': apiData['created_at'],
+      'updated_at': apiData['updated_at'],
+    };
+  }
+
+// Updated conversion functions in lib/services/sync_service.dart
+
+  static Map<String, dynamic> _convertInvoiceApiToLocal(
+      Map<String, dynamic> apiData) {
+    // Extract student ID from nested student object or direct field
+    int studentId;
+    if (apiData['student'] is Map<String, dynamic>) {
+      studentId = apiData['student']['id'];
+    } else if (apiData['student'] is int) {
+      studentId = apiData['student'];
+    } else if (apiData['student_id'] != null) {
+      studentId = apiData['student_id'];
+    } else {
+      throw Exception('Cannot extract student ID from invoice data');
+    }
+
+    // Extract course ID from nested course object or direct field
+    int courseId;
+    if (apiData['course'] is Map<String, dynamic>) {
+      courseId = apiData['course']['id'];
+    } else if (apiData['course'] is int) {
+      courseId = apiData['course'];
+    } else if (apiData['course_id'] != null) {
+      courseId = apiData['course_id'];
+    } else {
+      throw Exception('Cannot extract course ID from invoice data');
+    }
+
+    return {
+      'id': apiData['id'],
+      'invoice_number': apiData['invoice_number'] ?? '',
+      'student': studentId,
+      'course': courseId,
+      'lessons': _parseInteger(apiData['lessons']),
+      'price_per_lesson': _parseDouble(apiData['price_per_lesson']),
+      'amountpaid': _parseDouble(apiData['amountpaid']),
+      'created_at': apiData['created_at'],
+      'due_date': apiData['due_date'],
+      'status': apiData['status'] ?? 'unpaid',
+      'total_amount': _parseDouble(apiData['total_amount']),
+      'used_lessons': _parseInteger(apiData['used_lessons'] ?? 0),
       'updated_at': apiData['updated_at'],
     };
   }
 
   static Map<String, dynamic> _convertPaymentApiToLocal(
       Map<String, dynamic> apiData) {
+    // Extract invoice ID from nested invoice object or direct field
+    int invoiceId;
+    if (apiData['invoice'] is Map<String, dynamic>) {
+      invoiceId = apiData['invoice']['id'];
+    } else if (apiData['invoice_id'] != null) {
+      invoiceId = apiData['invoice_id'];
+    } else if (apiData['invoiceId'] != null) {
+      invoiceId = apiData['invoiceId'];
+    } else {
+      throw Exception('Cannot extract invoice ID from payment data');
+    }
+
+    // Extract user ID from nested user object or direct field (optional)
+    int? userId;
+    if (apiData['user'] is Map<String, dynamic>) {
+      userId = apiData['user']['id'];
+    } else if (apiData['user_id'] != null) {
+      userId = apiData['user_id'];
+    } else if (apiData['userId'] != null) {
+      userId = apiData['userId'];
+    }
+
     return {
       'id': apiData['id'],
-      'invoice_id': apiData['invoice_id'],
-      'student_id': apiData['student_id'],
-      'amount': apiData['amount'],
-      'payment_method': apiData['payment_method'],
-      'payment_date': apiData['payment_date'],
-      'status': apiData['status'],
+      'invoiceId': invoiceId,
+      'amount': _parseDouble(apiData['amount']), // Safe conversion
+      'method': apiData['method'] ?? apiData['payment_method'] ?? 'Cash',
+      'paymentDate': apiData['paymentDate'] ?? apiData['payment_date'],
+      'status': apiData['status'] ?? 'Paid',
+      'notes': apiData['notes'],
+      'reference': apiData['reference'],
+      'receipt_path': apiData['receipt_path'],
+      'receipt_generated_at': apiData['receipt_generated_at'],
+      'cloud_storage_path': apiData['cloud_storage_path'],
+      'receipt_file_size': apiData['receipt_file_size'],
+      'receipt_type': apiData['receipt_type'],
+      'receipt_generated': apiData['receipt_generated'] == true ||
+          apiData['receipt_generated'] == 1,
+      'userId': userId,
       'created_at': apiData['created_at'],
       'updated_at': apiData['updated_at'],
     };
   }
 
-  static Map<String, dynamic> _convertFleetApiToLocal(
+  static double _parseDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) {
+      final parsed = double.tryParse(value);
+      return parsed ?? 0.0;
+    }
+    return 0.0;
+  }
+
+// Also add safe conversions for other data types
+  static Map<String, dynamic> _convertCourseApiToLocal(
       Map<String, dynamic> apiData) {
     return {
       'id': apiData['id'],
-      'make': apiData['make'],
-      'model': apiData['model'],
-      'year': apiData['year'],
-      'license_plate': apiData['license_plate'],
-      'status': apiData['status'],
+      'name': apiData['name'] ?? '',
+      'price': _parseDouble(apiData['price']), // Safe conversion
+      'status': apiData['status'] ?? 'active',
       'created_at': apiData['created_at'],
       'updated_at': apiData['updated_at'],
+    };
+  }
+
+  static Map<String, dynamic> _convertUserApiToLocal(
+      Map<String, dynamic> apiData) {
+    return {
+      'id': apiData['id'],
+      'fname': apiData['fname'] ?? '',
+      'lname': apiData['lname'] ?? '',
+      'email': apiData['email'] ?? '',
+      'date_of_birth': apiData['date_of_birth'],
+      'role': apiData['role'] ?? 'student',
+      'status': apiData['status'] ?? 'active',
+      'created_at': apiData['created_at'],
+      'updated_at': apiData['updated_at'],
+      'gender': apiData['gender'] ?? '',
+      'phone': apiData['phone'] ?? '',
+      'address': apiData['address'] ?? '',
+      'idnumber': apiData['idnumber'] ?? '',
+      'email_verified_at': apiData['email_verified_at'],
+      'profile_picture': apiData['profile_picture'],
+      'emergency_contact': apiData['emergency_contact'],
+      'remember_token': apiData['remember_token'],
     };
   }
 }
