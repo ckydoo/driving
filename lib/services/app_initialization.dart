@@ -1,8 +1,7 @@
 // lib/services/app_initialization.dart - ROBUST VERSION WITH ERROR HANDLING
 import 'package:driving/controllers/navigation_controller.dart';
 import 'package:driving/controllers/settings_controller.dart';
-import 'package:driving/services/auto_seed_initializer.dart'
-    show AutoSeedInitializer;
+
 import 'package:driving/services/lesson_counting_service.dart';
 import 'package:driving/services/schedule_status_migration.dart';
 import 'package:flutter/material.dart';
@@ -41,7 +40,6 @@ class AppInitialization {
       await _initializeControllers();
 
       // Step 6: Auto-seed data if needed (FIXED - no more force seeding)
-      await _initializeTestData();
 
       print('✅ === APP INITIALIZATION COMPLETED SUCCESSFULLY ===');
     } catch (e) {
@@ -115,24 +113,6 @@ class AppInitialization {
     }
   }
 
-  /// Initialize test data with improved logic
-  static Future<void> _initializeTestData() async {
-    try {
-      print('🌱 Initializing test data...');
-
-      // FIXED: Only seed if database is actually empty
-      await AutoSeedInitializer.instance.initializeWithAutoSeed(
-        seedIfEmpty: true, // Only seed if database is empty
-        forceReseed: false, // NEVER force reseed on normal startup
-      );
-
-      print('✅ Test data initialization completed');
-    } catch (e) {
-      print('❌ Test data initialization failed: $e');
-      // This is not critical - app can work without test data
-    }
-  }
-
   /// Show user-friendly initialization error
   static void _showInitializationError(dynamic error) {
     try {
@@ -148,39 +128,6 @@ class AppInitialization {
     } catch (e) {
       // If even snackbar fails, just print
       print('❌ Could not show error snackbar: $e');
-    }
-  }
-
-  /// FOR DEVELOPMENT ONLY: Force reseed data (call manually when needed)
-  static Future<void> forceReseedForDevelopment() async {
-    print('🔄 DEVELOPMENT: Force reseeding data...');
-
-    try {
-      await AutoSeedInitializer.instance.initializeWithAutoSeed(
-        seedIfEmpty: false, // Don't check if empty
-        forceReseed: true, // Force clear and reseed
-      );
-
-      print('✅ DEVELOPMENT: Force reseed completed');
-
-      // Show success message
-      Get.snackbar(
-        'Development',
-        'Test data has been reseeded successfully',
-        backgroundColor: Colors.green[100],
-        colorText: Colors.green[800],
-        icon: const Icon(Icons.refresh, color: Colors.green),
-      );
-    } catch (e) {
-      print('❌ DEVELOPMENT: Force reseed failed: $e');
-
-      Get.snackbar(
-        'Development Error',
-        'Failed to reseed test data: ${e.toString()}',
-        backgroundColor: Colors.red[100],
-        colorText: Colors.red[800],
-        icon: const Icon(Icons.error, color: Colors.red),
-      );
     }
   }
 

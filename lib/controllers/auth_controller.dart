@@ -699,12 +699,17 @@ class AuthController extends GetxController {
   /// Save user to local database for offline access
   Future<void> _saveUserToLocal(Map<String, dynamic> userData) async {
     try {
-      // Now we can save all Laravel fields since we added them to local DB
+      print('📝 Inserting user data: ${userData['email']}');
+
+      // Add password placeholder for API users
+      userData['password'] = 'admin123'; // Or any placeholder
+      userData['updated_at'] = DateTime.now().toIso8601String();
+
       await DatabaseHelper.instance.insertUser(userData);
-      print('✅ User saved to local database with all Laravel fields');
+      print('✅ User saved to local database successfully');
     } catch (e) {
-      print('⚠️ Failed to save user locally: $e');
-      // Don't throw error - local save is optional
+      print('! Failed to save user locally: $e');
+      // Don't throw error - local save is optional for API users
     }
   }
 
