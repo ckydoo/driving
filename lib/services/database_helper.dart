@@ -111,7 +111,7 @@ class DatabaseHelper {
         make TEXT NOT NULL,
         model TEXT NOT NULL,
         modelyear TEXT NOT NULL,
-        instructor INTEGER NOT NULL
+        instructor INTEGER
       )
     ''');
 

@@ -56,41 +56,41 @@ class SyncService {
     }
   }
 
-  static Future<SyncResult> fullSync() async {
+  // Also update your SyncService.fullSync method:
+
+  static Future<SyncResult> fullSync({bool forceFullDownload = false}) async {
     try {
       print('🔄 Starting full sync...');
 
-      // Check authentication first
-      final authController = Get.find<AuthController>();
-      if (!authController.isLoggedIn.value) {
-        print('❌ User not authenticated');
-        return SyncResult(false, 'User not authenticated');
-      }
-
-      // Check connectivity
       if (!await isOnline()) {
-        print('❌ No internet connection');
         return SyncResult(false, 'No internet connection');
       }
 
-      print('✅ Prerequisites met, proceeding with sync...');
+      final authController = Get.find<AuthController>();
+      if (!authController.isLoggedIn.value) {
+        return SyncResult(false, 'User not authenticated');
+      }
+
+      final prefs = await SharedPreferences.getInstance();
 
       // Get last sync timestamp
-      final prefs = await SharedPreferences.getInstance();
-      final lastSyncStored = prefs.getString(_lastSyncKey);
-
-      // Only use lastSync if it's a valid ISO timestamp
       String? lastSync;
-      if (lastSyncStored != null &&
-          lastSyncStored != 'Never' &&
-          lastSyncStored.isNotEmpty &&
-          lastSyncStored.contains('T')) {
-        // Check if it's ISO format
-        lastSync = lastSyncStored;
-        print('📅 Last sync: $lastSync');
+      if (!forceFullDownload) {
+        final lastSyncStored = prefs.getString(_lastSyncKey);
+        if (lastSyncStored != null &&
+            lastSyncStored != 'Never' &&
+            lastSyncStored.isNotEmpty &&
+            lastSyncStored.contains('T')) {
+          lastSync = lastSyncStored;
+          print('📅 Last sync: $lastSync');
+        } else {
+          lastSync = null;
+          print('📅 Last sync: Never (first sync or invalid format)');
+        }
       } else {
-        lastSync = null; // This will result in no Last-Sync header being sent
-        print('📅 Last sync: Never (first sync or invalid format)');
+        // Force full download by not sending Last-Sync header
+        lastSync = null;
+        print('📅 Forcing full download - ignoring last sync');
       }
 
       try {
@@ -104,21 +104,23 @@ class SyncService {
         await _updateLocalDatabase(serverData);
         print('✅ Local database updated');
 
-        // Upload pending changes
-        print('⬆️ Uploading pending changes...');
-        final uploadResult = await _uploadPendingChanges();
-        print('✅ Pending changes uploaded');
+        // Upload pending changes ONLY if not forcing full download
+        if (!forceFullDownload) {
+          print('⬆️ Uploading pending changes...');
+          final uploadResult = await _uploadPendingChanges();
+          print('✅ Pending changes uploaded');
+        } else {
+          print('ℹ️ Skipping upload during forced full download');
+        }
 
-        // Update last sync timestamp - ENSURE ISO FORMAT
+        // Update last sync timestamp
         final syncTimestamp =
             serverData['sync_timestamp'] ?? DateTime.now().toIso8601String();
 
-        // Double-check that we're storing ISO format
         String finalTimestamp;
         if (syncTimestamp is String && syncTimestamp.contains('T')) {
           finalTimestamp = syncTimestamp;
         } else {
-          // Fallback to current time in ISO format
           finalTimestamp = DateTime.now().toIso8601String();
         }
 
@@ -126,15 +128,13 @@ class SyncService {
         print('✅ Sync timestamp updated: $finalTimestamp');
 
         final downloadedCount = _countSyncedRecords(serverData);
-        final uploadedCount = uploadResult.uploadedCount;
 
         print('🎉 Full sync completed successfully');
         print('📊 Downloaded: $downloadedCount records');
-        print('📊 Uploaded: $uploadedCount records');
 
         return SyncResult(true, 'Sync completed successfully', details: {
           'downloaded': downloadedCount,
-          'uploaded': uploadedCount,
+          'uploaded': 0,
           'sync_timestamp': finalTimestamp,
         });
       } catch (e) {

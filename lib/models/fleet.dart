@@ -5,6 +5,8 @@ class Fleet {
   final String model;
   final String modelYear;
   final int instructor;
+  DateTime? created_at;
+  DateTime? updated_at;
 
   Fleet({
     this.id,
@@ -13,6 +15,8 @@ class Fleet {
     required this.model,
     required this.modelYear,
     required this.instructor,
+    this.created_at,
+    this.updated_at,
   });
   // Convert a Fleet object into a Map
   Map<String, dynamic> toMap() {
@@ -23,6 +27,8 @@ class Fleet {
       'carPlate': carPlate,
       'instructor': instructor,
       'modelYear': modelYear,
+      'created_at': created_at?.toIso8601String(),
+      'updated_at': updated_at?.toIso8601String(),
     };
   }
 
@@ -35,26 +41,40 @@ class Fleet {
       carPlate: map['carPlate'],
       instructor: map['instructor'],
       modelYear: map['modelYear'],
+      created_at: map['created_at'],
+      updated_at: map['updated_at'],
     );
   }
-  factory Fleet.fromJson(Map<String, dynamic> json) => Fleet(
-        id: json['id'],
-        carPlate: json['carplate'],
-        make: json['make'],
-        model: json['model'],
-        modelYear: json['modelyear'],
-        instructor: json['instructor'],
-      );
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'carplate': carPlate,
+      'make': make,
+      'model': model,
+      'modelyear': modelYear,
+      'instructor': instructor == 0 ? null : instructor, // Convert 0 to null
+      'created_at': created_at?.toIso8601String(),
+      'updated_at': updated_at?.toIso8601String(),
+    };
+  }
 
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'carplate': carPlate,
-        'make': make,
-        'model': model,
-        'modelyear': modelYear,
-        'instructor': instructor,
-      };
-
+// And update the fromJson constructor to handle null instructor
+  factory Fleet.fromJson(Map<String, dynamic> json) {
+    return Fleet(
+      id: json['id'],
+      carPlate: json['carplate'] ?? json['carPlate'] ?? '',
+      make: json['make'] ?? '',
+      model: json['model'] ?? '',
+      modelYear: json['modelyear'] ?? json['modelYear'] ?? '',
+      instructor: json['instructor'] ?? 0, // Default to 0 if null
+      created_at: json['created_at'] != null
+          ? DateTime.parse(json['created_at'])
+          : null,
+      updated_at: json['updated_at'] != null
+          ? DateTime.parse(json['updated_at'])
+          : null,
+    );
+  }
   copyWith({
     int? id,
     String? carPlate,

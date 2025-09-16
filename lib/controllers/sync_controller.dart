@@ -142,6 +142,57 @@ class SyncController extends GetxController {
     _loadSyncSettings();
   }
 
+// Perform a complete data reset and fresh sync
+  Future<void> performFullDataSync() async {
+    if (isSyncing.value) return;
+
+    try {
+      isSyncing.value = true;
+      syncStatus.value = 'Performing full data sync...';
+
+      // Step 1: Download all data from server (ignoring last sync)
+      print('🔄 Starting full data download...');
+      final result = await SyncService.fullSync(forceFullDownload: true);
+      lastSyncResult.value = result;
+
+      if (result.success) {
+        syncStatus.value = 'Full sync completed';
+        lastSyncTime.value = _formatDateTime(DateTime.now());
+
+        Get.snackbar(
+          'Full Sync Complete',
+          'All data synchronized successfully',
+          icon: Icon(Icons.sync, color: Colors.white),
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+          duration: Duration(seconds: 3),
+        );
+      } else {
+        syncStatus.value = 'Full sync failed';
+        Get.snackbar(
+          'Full Sync Failed',
+          result.message,
+          icon: Icon(Icons.error, color: Colors.white),
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+          duration: Duration(seconds: 3),
+        );
+      }
+    } catch (e) {
+      syncStatus.value = 'Full sync error';
+      Get.snackbar(
+        'Sync Error',
+        e.toString(),
+        icon: Icon(Icons.error, color: Colors.white),
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+        duration: Duration(seconds: 3),
+      );
+    } finally {
+      isSyncing.value = false;
+    }
+  }
+
   /// Perform full sync
   Future<void> performFullSync() async {
     if (isSyncing.value) {

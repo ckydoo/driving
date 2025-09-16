@@ -77,18 +77,6 @@ class BillingController extends GetxController {
     return await db.insert('billing_records_history', billingRecord.toJson());
   }
 
-  // Delete an invoice
-  Future<void> deleteInvoice(int invoiceId) async {
-    await DatabaseHelper.instance.deleteInvoice(invoiceId);
-    fetchBillingData(); // Refresh the list of invoices
-  }
-
-  // Edit an invoice
-  Future<void> editInvoice(Invoice invoice) async {
-    await DatabaseHelper.instance.updateInvoice(invoice.toMap());
-    fetchBillingData(); // Refresh the list of invoices
-  }
-
 // Enhanced getCourseName method with better error handling
   Future<String> getCourseName(int courseId) async {
     try {
@@ -116,39 +104,6 @@ class BillingController extends GetxController {
           'BillingController: Invoices after assignAll: $invoices'); // ADD THIS
     } finally {
       isLoading(false);
-    }
-  }
-
-  Future<void> generateInvoice({
-    required int studentId,
-    required int courseId,
-    required int lessons,
-    required double pricePerLesson,
-  }) async {
-    try {
-      final db = await DatabaseHelper().database;
-
-      // Generate a unique invoice number
-      String invoiceNumber = await _generateInvoiceNumber();
-
-      await db.insert('invoices', {
-        'invoice_number': invoiceNumber, // Add this field
-        'student': studentId,
-        'course': courseId,
-        'lessons': lessons,
-        'price_per_lesson': pricePerLesson,
-        'amountpaid': 0.0,
-        'created_at': DateTime.now().toIso8601String(),
-        'due_date': DateTime.now().add(Duration(days: 30)).toIso8601String(),
-        'status': 'unpaid',
-        'total_amount': lessons * pricePerLesson,
-      });
-
-      // Refresh the invoice list
-      await fetchBillingData();
-    } catch (e) {
-      Get.snackbar('Error', 'Failed to create invoice: ${e.toString()}');
-      throw e;
     }
   }
 
@@ -294,53 +249,6 @@ class BillingController extends GetxController {
     }
   }
 
-// Add this helper method to fix amountpaid mismatches
-  Future<void> _updateInvoiceAmountPaid(
-      int invoiceId, double correctAmountPaid) async {
-    try {
-      final db = await _dbHelper.database;
-
-      // Calculate new status
-      final invoiceResults = await db.query(
-        'invoices',
-        where: 'id = ?',
-        whereArgs: [invoiceId],
-      );
-
-      if (invoiceResults.isNotEmpty) {
-        final invoiceData = invoiceResults.first;
-        final totalAmount = (invoiceData['total_amount'] as num?)?.toDouble() ??
-            ((invoiceData['lessons'] as num).toDouble() *
-                (invoiceData['price_per_lesson'] as num).toDouble());
-
-        String newStatus;
-        if (correctAmountPaid >= totalAmount) {
-          newStatus = 'paid';
-        } else if (correctAmountPaid > 0) {
-          newStatus = 'partial';
-        } else {
-          newStatus = 'unpaid';
-        }
-
-        // Update the database
-        await db.update(
-          'invoices',
-          {
-            'amountpaid': correctAmountPaid,
-            'status': newStatus,
-          },
-          where: 'id = ?',
-          whereArgs: [invoiceId],
-        );
-
-        print(
-            '✓ Fixed invoice $invoiceId: amountpaid = $correctAmountPaid, status = $newStatus');
-      }
-    } catch (e) {
-      print('ERROR updating invoice amount paid: $e');
-    }
-  }
-
 // Also add a method to verify and fix all invoice payment amounts
   Future<void> repairAllInvoicePayments() async {
     try {
@@ -459,223 +367,6 @@ class BillingController extends GetxController {
     }
   }
 
-  Future<void> recordPayment(Payment payment, {bool silent = false}) async {
-    print('=== STARTING recordPayment ===');
-    print(
-        'Payment details: Invoice ID: ${payment.invoiceId}, Amount: ${payment.amount}');
-
-    try {
-      isLoading(true);
-      print('Setting isLoading to true');
-
-      // Insert payment with debug
-      print('About to insert payment into database...');
-      print('Payment data to insert: ${payment.toJson()}');
-
-      final paymentId = await _dbHelper.insertPayment(payment.toJson());
-      print('✓ Payment inserted successfully with ID: $paymentId');
-
-      // Verify payment was inserted
-      final db = await _dbHelper.database;
-      final insertedPayment =
-          await db.query('payments', where: 'id = ?', whereArgs: [paymentId]);
-      print('✓ Verified inserted payment: $insertedPayment');
-
-      // Update invoice status with debug
-      print('About to call _updateInvoiceStatus...');
-      await _updateInvoiceStatus(payment.invoiceId, payment.amount);
-      print('✓ _updateInvoiceStatus completed successfully');
-
-      // Refresh billing data
-      print('About to refresh billing data...');
-      await fetchBillingData();
-      print('✓ Billing data refreshed');
-
-      print('=== recordPayment COMPLETED SUCCESSFULLY ===');
-      if (!silent) {
-        Get.snackbar(
-          'Payment Recorded',
-          'Payment of \$${payment.amount.toStringAsFixed(2)} recorded successfully',
-          backgroundColor: Colors.green,
-          colorText: Colors.white,
-        );
-      }
-    } catch (e) {
-      print('=== ERROR in recordPayment ===');
-      if (!silent) {
-        Get.snackbar('Error', 'Failed to record payment: ${e.toString()}');
-      }
-      throw e;
-    } finally {
-      isLoading(false);
-      print('Setting isLoading to false');
-    }
-  }
-
-// STEP 3: Updated _updateInvoiceStatus that gets data from database directly
-  Future<void> _updateInvoiceStatus(int invoiceId, double amount) async {
-    print('=== STARTING _updateInvoiceStatus ===');
-    print('Invoice ID: $invoiceId, Payment Amount: $amount');
-
-    try {
-      final db = await _dbHelper.database;
-
-      // Get current invoice data from database (not memory)
-      final invoiceResults = await db.query(
-        'invoices',
-        where: 'id = ?',
-        whereArgs: [invoiceId],
-      );
-
-      if (invoiceResults.isEmpty) {
-        throw Exception('Invoice $invoiceId not found in database');
-      }
-
-      final invoiceData = invoiceResults.first;
-      print('Current invoice data from DB: $invoiceData');
-
-      // Get current amount paid
-      final currentAmountPaid =
-          (invoiceData['amountpaid'] as num?)?.toDouble() ?? 0.0;
-      print('Current amount paid: $currentAmountPaid');
-
-      // Calculate new amounts
-      final newAmountPaid = currentAmountPaid + amount;
-      print('New amount paid will be: $newAmountPaid');
-
-      // Calculate total amount
-      final totalAmount = (invoiceData['total_amount'] as num?)?.toDouble() ??
-          ((invoiceData['lessons'] as num).toDouble() *
-              (invoiceData['price_per_lesson'] as num).toDouble());
-      print('Total amount: $totalAmount');
-
-      // Determine new status
-      String newStatus;
-      if (newAmountPaid >= totalAmount) {
-        newStatus = 'paid';
-      } else if (newAmountPaid > 0) {
-        newStatus = 'partial';
-      } else {
-        newStatus = 'unpaid';
-      }
-
-      print('New status will be: $newStatus');
-
-      // Update the invoice
-      final updateData = {
-        'amountpaid': newAmountPaid,
-        'status': newStatus,
-      };
-
-      print('Updating invoice with data: $updateData');
-
-      final rowsUpdated = await db.update(
-        'invoices',
-        updateData,
-        where: 'id = ?',
-        whereArgs: [invoiceId],
-      );
-
-      print('✓ Database update completed. Rows affected: $rowsUpdated');
-
-      // Verify the update
-      final verifyResults = await db.query(
-        'invoices',
-        where: 'id = ?',
-        whereArgs: [invoiceId],
-      );
-
-      if (verifyResults.isNotEmpty) {
-        final updatedData = verifyResults.first;
-        print(
-            '✓ Verification - Updated invoice: amountpaid = ${updatedData['amountpaid']}, status = ${updatedData['status']}');
-      }
-
-      print('=== _updateInvoiceStatus COMPLETED ===');
-    } catch (e) {
-      print('=== ERROR in _updateInvoiceStatus ===');
-      print('Error: $e');
-      rethrow;
-    }
-  }
-
-  Future<void> recordPaymentWithReceipt(
-      Payment payment, Invoice invoice, User student) async {
-    print('=== STARTING recordPaymentWithReceipt ===');
-
-    try {
-      isLoading(true);
-
-      // Generate reference if not provided
-      final reference = payment.reference ?? ReceiptService.generateReference();
-
-      // Create payment with reference
-      final paymentWithReference = payment.copyWith(reference: reference);
-
-      // Insert payment
-      final paymentId =
-          await _dbHelper.insertPayment(paymentWithReference.toJson());
-      print('✓ Payment inserted with ID: $paymentId');
-
-      // Update invoice status
-      await _updateInvoiceStatus(payment.invoiceId, payment.amount);
-      print('✓ Invoice status updated');
-
-      // Generate receipt
-      try {
-        final receiptPath = await ReceiptService.generateAndUploadReceipt(
-          paymentWithReference.copyWith(id: paymentId),
-          invoice,
-          student,
-        );
-
-        // Update payment with receipt path
-        await _dbHelper.updatePayment({
-          'id': paymentId,
-          'receipt_path': receiptPath,
-          'receipt_generated': 1,
-        });
-
-        print('✓ Receipt generated at: $receiptPath');
-
-        // Refresh billing data
-        await fetchBillingData();
-
-        // Show success with receipt options
-        Get.snackbar(
-          'Payment Recorded',
-          'Payment recorded and receipt generated successfully',
-          snackPosition: SnackPosition.TOP,
-          backgroundColor: Colors.green.shade600,
-          colorText: Colors.white,
-          duration: const Duration(seconds: 5),
-          mainButton: TextButton(
-            onPressed: () => ReceiptService.printReceiptFromCloud(receiptPath),
-            child: const Text('Print Receipt',
-                style: TextStyle(color: Colors.white)),
-          ),
-        );
-      } catch (receiptError) {
-        print('Warning: Receipt generation failed: $receiptError');
-        // Still refresh data even if receipt fails
-        await fetchBillingData();
-
-        Get.snackbar(
-          'Payment Recorded',
-          'Payment recorded but receipt generation failed',
-          snackPosition: SnackPosition.TOP,
-          backgroundColor: Colors.orange.shade600,
-          colorText: Colors.white,
-        );
-      }
-    } catch (e) {
-      print('ERROR in recordPaymentWithReceipt: $e');
-      rethrow;
-    } finally {
-      isLoading(false);
-    }
-  }
-
   /// Creates an invoice directly (used during student enrollment)
   Future<void> createInvoice(Invoice invoice) async {
     try {
@@ -694,57 +385,6 @@ class BillingController extends GetxController {
       print('Error creating invoice: $e');
       Get.snackbar('Error', 'Failed to create invoice: ${e.toString()}',
           backgroundColor: Colors.red);
-    } finally {
-      isLoading(false);
-    }
-  }
-
-  /// Enhanced version that also handles course name lookup
-  Future<int> createInvoiceWithCourse(
-      int studentId, Course course, int lessons, DateTime dueDate) async {
-    try {
-      isLoading(true);
-
-      final invoice = Invoice(
-        studentId: studentId,
-        courseId: course.id!,
-        lessons: lessons,
-        pricePerLesson: course.price.toDouble(),
-        createdAt: DateTime.now(),
-        dueDate: dueDate,
-        status: 'unpaid',
-        invoiceNumber: await _generateInvoiceNumber(),
-        amountPaid: 0.0,
-        totalAmount: lessons * course.price.toDouble(),
-      );
-
-      final invoiceId = await _dbHelper.insertInvoice(invoice.toJson());
-
-      // Add to local list
-      final newInvoice = invoice.copyWith(id: invoiceId);
-      invoices.add(newInvoice);
-      invoices.refresh();
-
-      // Log the creation for audit trail
-      print('✓ Auto-invoice created during enrollment:');
-      print('  Student ID: $studentId');
-      print('  Course: ${course.name}');
-      print('  Lessons: $lessons');
-      print('  Price per lesson: \$${course.price}');
-      print('  Total: \$${invoice.totalAmountCalculated}');
-      print('  Due date: ${dueDate.toString().split(' ')[0]}');
-
-      return invoiceId;
-    } catch (e) {
-      print('ERROR in createInvoiceWithCourse: $e');
-      Get.snackbar(
-        'Invoice Creation Failed',
-        'Student was created but invoice creation failed: ${e.toString()}',
-        backgroundColor: Colors.orange,
-        colorText: Colors.white,
-        duration: Duration(seconds: 5),
-      );
-      rethrow;
     } finally {
       isLoading(false);
     }
@@ -843,53 +483,6 @@ class BillingController extends GetxController {
           backgroundColor: Colors.red);
     } finally {
       isLoading(false);
-    }
-  }
-
-  // Enhanced addLessonsBack method
-  Future<void> addLessonsBack(int studentId, int lessonsToAdd) async {
-    try {
-      print(
-          'BillingController: addLessonsBack called with studentId: $studentId, lessonsToAdd: $lessonsToAdd');
-
-      final index = invoices.indexWhere((inv) => inv.studentId == studentId);
-      print('BillingController: index of invoice: $index');
-
-      if (index == -1) {
-        print('BillingController: Invoice not found for studentId: $studentId');
-        Get.snackbar('Error', 'No invoice found for this student');
-        return;
-      }
-
-      final invoice = invoices[index];
-      print('BillingController: Found invoice with ${invoice.lessons} lessons');
-
-      final updatedLessons = invoice.lessons + lessonsToAdd;
-      print('BillingController: Updated lessons count: $updatedLessons');
-
-      // Update in the database
-      await _dbHelper.updateInvoice({
-        'id': invoice.id,
-        'lessons': updatedLessons,
-      });
-      print('✓ Invoice updated in DB');
-
-      // Force refresh all data instead of just local update
-      await fetchBillingData();
-      print('✓ Billing data refreshed');
-
-      // Notify schedule controller
-      Get.find<ScheduleController>().refreshBillingData();
-
-      Get.snackbar(
-        'Success',
-        'Added $lessonsToAdd lessons. Total now: $updatedLessons',
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
-      );
-    } catch (e) {
-      print('BillingController: Error in addLessonsBack: ${e.toString()}');
-      Get.snackbar('Error', 'Failed to update billing info: ${e.toString()}');
     }
   }
 
@@ -1838,22 +1431,6 @@ class BillingController extends GetxController {
     }
   }
 
-  // Update payment record with receipt information
-  Future<void> _updatePaymentWithReceipt(
-      Payment payment, String receiptPath) async {
-    final db = await _dbHelper.database;
-    await db.update(
-      'payments',
-      {
-        'receipt_path': receiptPath,
-        'receipt_generated': 1,
-        'receipt_generated_at': DateTime.now().toIso8601String(),
-      },
-      where: 'id = ?',
-      whereArgs: [payment.id],
-    );
-  }
-
   // Validate business settings before receipt generation
   Future<bool> validateBusinessSettingsForReceipts() async {
     final settingsController = Get.find<SettingsController>();
@@ -2164,5 +1741,511 @@ ${settingsController.businessEmail.value}
       print('Error exporting receipts data: $e');
       rethrow;
     }
+  }
+
+  // Key methods that need SyncService.trackChange integration:
+
+// 1. In recordPayment method - track payment creation
+  Future<void> recordPayment(Payment payment, {bool silent = false}) async {
+    print('=== STARTING recordPayment ===');
+    print(
+        'Payment details: Invoice ID: ${payment.invoiceId}, Amount: ${payment.amount}');
+
+    try {
+      isLoading(true);
+      print('Setting isLoading to true');
+
+      // Insert payment with debug
+      print('About to insert payment into database...');
+      print('Payment data to insert: ${payment.toJson()}');
+
+      final paymentId = await _dbHelper.insertPayment(payment.toJson());
+      print('✅ Payment inserted successfully with ID: $paymentId');
+
+      // 🔄 TRACK THE PAYMENT CREATION FOR SYNC
+      final paymentWithId = payment.copyWith(id: paymentId);
+      await SyncService.trackChange(
+          'payments', paymentWithId.toJson(), 'create');
+      print('📝 Tracked payment creation for sync');
+
+      // Verify payment was inserted
+      final db = await _dbHelper.database;
+      final insertedPayment =
+          await db.query('payments', where: 'id = ?', whereArgs: [paymentId]);
+      print('✅ Verified inserted payment: $insertedPayment');
+
+      // Update invoice status with debug
+      print('About to call _updateInvoiceStatus...');
+      await _updateInvoiceStatus(payment.invoiceId, payment.amount);
+      print('✅ _updateInvoiceStatus completed successfully');
+
+      // Refresh billing data
+      print('About to refresh billing data...');
+      await fetchBillingData();
+      print('✅ Billing data refreshed');
+
+      print('=== recordPayment COMPLETED SUCCESSFULLY ===');
+      if (!silent) {
+        Get.snackbar(
+          'Payment Recorded',
+          'Payment of \$${payment.amount.toStringAsFixed(2)} recorded successfully',
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+        );
+      }
+    } catch (e) {
+      print('=== ERROR in recordPayment ===');
+      if (!silent) {
+        Get.snackbar('Error', 'Failed to record payment: ${e.toString()}');
+      }
+      throw e;
+    } finally {
+      isLoading(false);
+      print('Setting isLoading to false');
+    }
+  }
+
+// 2. In _updateInvoiceStatus method - track invoice updates
+  Future<void> _updateInvoiceStatus(int invoiceId, double amount) async {
+    print('=== STARTING _updateInvoiceStatus ===');
+    print('Invoice ID: $invoiceId, Payment Amount: $amount');
+
+    try {
+      final db = await _dbHelper.database;
+
+      // Get current invoice data from database (not memory)
+      final invoiceResults = await db.query(
+        'invoices',
+        where: 'id = ?',
+        whereArgs: [invoiceId],
+      );
+
+      if (invoiceResults.isEmpty) {
+        throw Exception('Invoice $invoiceId not found in database');
+      }
+
+      final invoiceData = invoiceResults.first;
+      print('Current invoice data from DB: $invoiceData');
+
+      // Get current amount paid
+      final currentAmountPaid =
+          (invoiceData['amountpaid'] as num?)?.toDouble() ?? 0.0;
+      print('Current amount paid: $currentAmountPaid');
+
+      // Calculate new amounts
+      final newAmountPaid = currentAmountPaid + amount;
+      print('New amount paid will be: $newAmountPaid');
+
+      // Calculate total amount
+      final totalAmount = (invoiceData['total_amount'] as num?)?.toDouble() ??
+          ((invoiceData['lessons'] as num).toDouble() *
+              (invoiceData['price_per_lesson'] as num).toDouble());
+      print('Total amount: $totalAmount');
+
+      // Determine new status
+      String newStatus;
+      if (newAmountPaid >= totalAmount) {
+        newStatus = 'paid';
+      } else if (newAmountPaid > 0) {
+        newStatus = 'partial';
+      } else {
+        newStatus = 'unpaid';
+      }
+
+      print('New status will be: $newStatus');
+
+      // Update the invoice
+      final updateData = {
+        'id': invoiceId,
+        'amountpaid': newAmountPaid,
+        'status': newStatus,
+      };
+
+      print('Updating invoice with data: $updateData');
+
+      final rowsUpdated = await db.update(
+        'invoices',
+        {'amountpaid': newAmountPaid, 'status': newStatus},
+        where: 'id = ?',
+        whereArgs: [invoiceId],
+      );
+
+      print('✅ Database update completed. Rows affected: $rowsUpdated');
+
+      // 🔄 TRACK THE INVOICE UPDATE FOR SYNC
+      await SyncService.trackChange('invoices', updateData, 'update');
+      print('📝 Tracked invoice update for sync');
+
+      // Verify the update
+      final verifyResults = await db.query(
+        'invoices',
+        where: 'id = ?',
+        whereArgs: [invoiceId],
+      );
+
+      if (verifyResults.isNotEmpty) {
+        final updatedData = verifyResults.first;
+        print(
+            '✅ Verification - Updated invoice: amountpaid = ${updatedData['amountpaid']}, status = ${updatedData['status']}');
+      }
+
+      print('=== _updateInvoiceStatus COMPLETED ===');
+    } catch (e) {
+      print('=== ERROR in _updateInvoiceStatus ===');
+      print('Error: $e');
+      rethrow;
+    }
+  }
+
+// 3. In recordPaymentWithReceipt method - track payment creation
+  Future<void> recordPaymentWithReceipt(
+      Payment payment, Invoice invoice, User student) async {
+    print('=== STARTING recordPaymentWithReceipt ===');
+
+    try {
+      isLoading(true);
+
+      // Generate reference if not provided
+      final reference = payment.reference ?? ReceiptService.generateReference();
+
+      // Create payment with reference
+      final paymentWithReference = payment.copyWith(reference: reference);
+
+      // Insert payment
+      final paymentId =
+          await _dbHelper.insertPayment(paymentWithReference.toJson());
+      print('✅ Payment inserted with ID: $paymentId');
+
+      // 🔄 TRACK THE PAYMENT CREATION FOR SYNC
+      final paymentWithId = paymentWithReference.copyWith(id: paymentId);
+      await SyncService.trackChange(
+          'payments', paymentWithId.toJson(), 'create');
+      print('📝 Tracked payment creation for sync');
+
+      // Update invoice status
+      await _updateInvoiceStatus(payment.invoiceId, payment.amount);
+      print('✅ Invoice status updated');
+
+      // Generate receipt
+      try {
+        final receiptPath = await ReceiptService.generateAndUploadReceipt(
+          paymentWithReference.copyWith(id: paymentId),
+          invoice,
+          student,
+        );
+
+        // Update payment with receipt path
+        await _dbHelper.updatePayment({
+          'id': paymentId,
+          'receipt_path': receiptPath,
+          'receipt_generated': 1,
+        });
+
+        // 🔄 TRACK THE PAYMENT UPDATE FOR SYNC (receipt info)
+        await SyncService.trackChange(
+            'payments',
+            {
+              'id': paymentId,
+              'receipt_path': receiptPath,
+              'receipt_generated': 1,
+            },
+            'update');
+        print('📝 Tracked payment receipt update for sync');
+
+        print('✅ Receipt generated at: $receiptPath');
+
+        // Refresh billing data
+        await fetchBillingData();
+
+        // Show success with receipt options
+        Get.snackbar(
+          'Payment Recorded',
+          'Payment recorded and receipt generated successfully',
+          snackPosition: SnackPosition.TOP,
+          backgroundColor: Colors.green.shade600,
+          colorText: Colors.white,
+          duration: const Duration(seconds: 5),
+          mainButton: TextButton(
+            onPressed: () => ReceiptService.printReceiptFromCloud(receiptPath),
+            child: const Text('Print Receipt',
+                style: TextStyle(color: Colors.white)),
+          ),
+        );
+      } catch (receiptError) {
+        print('Warning: Receipt generation failed: $receiptError');
+        // Still refresh data even if receipt fails
+        await fetchBillingData();
+
+        Get.snackbar(
+          'Payment Recorded',
+          'Payment recorded but receipt generation failed',
+          snackPosition: SnackPosition.TOP,
+          backgroundColor: Colors.orange.shade600,
+          colorText: Colors.white,
+        );
+      }
+    } catch (e) {
+      print('ERROR in recordPaymentWithReceipt: $e');
+      rethrow;
+    } finally {
+      isLoading(false);
+    }
+  }
+
+// 4. In generateInvoice method - track invoice creation
+  Future<void> generateInvoice({
+    required int studentId,
+    required int courseId,
+    required int lessons,
+    required double pricePerLesson,
+  }) async {
+    try {
+      final db = await DatabaseHelper().database;
+
+      // Generate a unique invoice number
+      String invoiceNumber = await _generateInvoiceNumber();
+
+      final invoiceData = {
+        'invoice_number': invoiceNumber,
+        'student': studentId,
+        'course': courseId,
+        'lessons': lessons,
+        'price_per_lesson': pricePerLesson,
+        'amountpaid': 0.0,
+        'created_at': DateTime.now().toIso8601String(),
+        'due_date': DateTime.now().add(Duration(days: 30)).toIso8601String(),
+        'status': 'unpaid',
+        'total_amount': lessons * pricePerLesson,
+      };
+
+      final invoiceId = await db.insert('invoices', invoiceData);
+
+      // 🔄 TRACK THE INVOICE CREATION FOR SYNC
+      final invoiceWithId = {...invoiceData, 'id': invoiceId};
+      await SyncService.trackChange('invoices', invoiceWithId, 'create');
+      print('📝 Tracked invoice creation for sync');
+
+      // Refresh the invoice list
+      await fetchBillingData();
+    } catch (e) {
+      Get.snackbar('Error', 'Failed to create invoice: ${e.toString()}');
+      throw e;
+    }
+  }
+
+// 5. In createInvoiceWithCourse method - track invoice creation
+  Future<int> createInvoiceWithCourse(
+      int studentId, Course course, int lessons, DateTime dueDate) async {
+    try {
+      isLoading(true);
+
+      final invoice = Invoice(
+        studentId: studentId,
+        courseId: course.id!,
+        lessons: lessons,
+        pricePerLesson: course.price.toDouble(),
+        createdAt: DateTime.now(),
+        dueDate: dueDate,
+        status: 'unpaid',
+        invoiceNumber: await _generateInvoiceNumber(),
+        amountPaid: 0.0,
+        totalAmount: lessons * course.price.toDouble(),
+      );
+
+      final invoiceId = await _dbHelper.insertInvoice(invoice.toJson());
+
+      // 🔄 TRACK THE INVOICE CREATION FOR SYNC
+      final invoiceWithId = invoice.copyWith(id: invoiceId);
+      await SyncService.trackChange(
+          'invoices', invoiceWithId.toJson(), 'create');
+      print('📝 Tracked invoice creation for sync');
+
+      // Add to local list
+      final newInvoice = invoice.copyWith(id: invoiceId);
+      invoices.add(newInvoice);
+      invoices.refresh();
+
+      // Log the creation for audit trail
+      print('✅ Auto-invoice created during enrollment:');
+      print('  Student ID: $studentId');
+      print('  Course: ${course.name}');
+      print('  Lessons: $lessons');
+      print('  Price per lesson: \$${course.price}');
+      print('  Total: \$${invoice.totalAmountCalculated}');
+      print('  Due date: ${dueDate.toString().split(' ')[0]}');
+
+      return invoiceId;
+    } catch (e) {
+      print('ERROR in createInvoiceWithCourse: $e');
+      Get.snackbar(
+        'Invoice Creation Failed',
+        'Student was created but invoice creation failed: ${e.toString()}',
+        backgroundColor: Colors.orange,
+        colorText: Colors.white,
+        duration: Duration(seconds: 5),
+      );
+      rethrow;
+    } finally {
+      isLoading(false);
+    }
+  }
+
+// 6. In deleteInvoice method - track invoice deletion
+  Future<void> deleteInvoice(int invoiceId) async {
+    // 🔄 TRACK THE INVOICE DELETION FOR SYNC
+    await SyncService.trackChange('invoices', {'id': invoiceId}, 'delete');
+    print('📝 Tracked invoice deletion for sync');
+
+    await DatabaseHelper.instance.deleteInvoice(invoiceId);
+    fetchBillingData(); // Refresh the list of invoices
+  }
+
+// 7. In editInvoice method - track invoice updates
+  Future<void> editInvoice(Invoice invoice) async {
+    await DatabaseHelper.instance.updateInvoice(invoice.toMap());
+
+    // 🔄 TRACK THE INVOICE UPDATE FOR SYNC
+    await SyncService.trackChange('invoices', invoice.toMap(), 'update');
+    print('📝 Tracked invoice update for sync');
+
+    fetchBillingData(); // Refresh the list of invoices
+  }
+
+// 8. In _updateInvoiceAmountPaid method - track invoice updates
+  Future<void> _updateInvoiceAmountPaid(
+      int invoiceId, double correctAmountPaid) async {
+    try {
+      final db = await _dbHelper.database;
+
+      // Calculate new status
+      final invoiceResults = await db.query(
+        'invoices',
+        where: 'id = ?',
+        whereArgs: [invoiceId],
+      );
+
+      if (invoiceResults.isNotEmpty) {
+        final invoiceData = invoiceResults.first;
+        final totalAmount = (invoiceData['total_amount'] as num?)?.toDouble() ??
+            ((invoiceData['lessons'] as num).toDouble() *
+                (invoiceData['price_per_lesson'] as num).toDouble());
+
+        String newStatus;
+        if (correctAmountPaid >= totalAmount) {
+          newStatus = 'paid';
+        } else if (correctAmountPaid > 0) {
+          newStatus = 'partial';
+        } else {
+          newStatus = 'unpaid';
+        }
+
+        // Update the database
+        final updateData = {
+          'id': invoiceId,
+          'amountpaid': correctAmountPaid,
+          'status': newStatus,
+        };
+
+        await db.update(
+          'invoices',
+          {
+            'amountpaid': correctAmountPaid,
+            'status': newStatus,
+          },
+          where: 'id = ?',
+          whereArgs: [invoiceId],
+        );
+
+        // 🔄 TRACK THE INVOICE UPDATE FOR SYNC
+        await SyncService.trackChange('invoices', updateData, 'update');
+        print('📝 Tracked invoice amount correction for sync');
+
+        print(
+            '✅ Fixed invoice $invoiceId: amountpaid = $correctAmountPaid, status = $newStatus');
+      }
+    } catch (e) {
+      print('ERROR updating invoice amount paid: $e');
+    }
+  }
+
+// 9. In addLessonsBack method - track invoice updates
+  Future<void> addLessonsBack(int studentId, int lessonsToAdd) async {
+    try {
+      print(
+          'BillingController: addLessonsBack called with studentId: $studentId, lessonsToAdd: $lessonsToAdd');
+
+      final index = invoices.indexWhere((inv) => inv.studentId == studentId);
+      print('BillingController: index of invoice: $index');
+
+      if (index == -1) {
+        print('BillingController: Invoice not found for studentId: $studentId');
+        Get.snackbar('Error', 'No invoice found for this student');
+        return;
+      }
+
+      final invoice = invoices[index];
+      print('BillingController: Found invoice with ${invoice.lessons} lessons');
+
+      final updatedLessons = invoice.lessons + lessonsToAdd;
+      print('BillingController: Updated lessons count: $updatedLessons');
+
+      // Update in the database
+      final updateData = {
+        'id': invoice.id,
+        'lessons': updatedLessons,
+      };
+
+      await _dbHelper.updateInvoice(updateData);
+      print('✅ Invoice updated in DB');
+
+      // 🔄 TRACK THE INVOICE UPDATE FOR SYNC
+      await SyncService.trackChange('invoices', updateData, 'update');
+      print('📝 Tracked invoice lessons update for sync');
+
+      // Force refresh all data instead of just local update
+      await fetchBillingData();
+      print('✅ Billing data refreshed');
+
+      // Notify schedule controller
+      Get.find<ScheduleController>().refreshBillingData();
+
+      Get.snackbar(
+        'Success',
+        'Added $lessonsToAdd lessons. Total now: $updatedLessons',
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
+    } catch (e) {
+      print('BillingController: Error in addLessonsBack: ${e.toString()}');
+      Get.snackbar('Error', 'Failed to update billing info: ${e.toString()}');
+    }
+  }
+
+// 10. In _updatePaymentWithReceipt method - track payment updates
+  Future<void> _updatePaymentWithReceipt(
+      Payment payment, String receiptPath) async {
+    final db = await _dbHelper.database;
+
+    final updateData = {
+      'id': payment.id,
+      'receipt_path': receiptPath,
+      'receipt_generated': 1,
+      'receipt_generated_at': DateTime.now().toIso8601String(),
+    };
+
+    await db.update(
+      'payments',
+      {
+        'receipt_path': receiptPath,
+        'receipt_generated': 1,
+        'receipt_generated_at': DateTime.now().toIso8601String(),
+      },
+      where: 'id = ?',
+      whereArgs: [payment.id],
+    );
+
+    // 🔄 TRACK THE PAYMENT UPDATE FOR SYNC
+    await SyncService.trackChange('payments', updateData, 'update');
+    print('📝 Tracked payment receipt update for sync');
   }
 }

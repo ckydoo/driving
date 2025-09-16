@@ -1,5 +1,6 @@
 import 'package:driving/models/user.dart';
 import 'package:driving/services/database_helper.dart';
+import 'package:driving/services/sync_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -223,48 +224,6 @@ class UserController extends GetxController {
     }
   }
 
-  Future<void> deleteMultipleUsers(List<int> userIds) async {
-    try {
-      isLoading(true);
-      error('');
-
-      print('UserController: Deleting ${userIds.length} users');
-
-      for (int id in userIds) {
-        await DatabaseHelper.instance.deleteUser(id);
-        _users.removeWhere((user) => user.id == id);
-      }
-
-      // Clear selections
-      selectedUser.clear();
-      isMultiSelectionActive.value = false;
-      isAllSelected(false);
-
-      print('UserController: Successfully deleted ${userIds.length} users');
-
-      Get.snackbar(
-        'Success',
-        'Successfully deleted ${userIds.length} users',
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
-        duration: const Duration(seconds: 3),
-      );
-    } catch (e) {
-      error(e.toString());
-      print('UserController: Error deleting multiple users - ${e.toString()}');
-      Get.snackbar(
-        'Error',
-        'Failed to delete users: ${e.toString()}',
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-        duration: const Duration(seconds: 4),
-      );
-      rethrow;
-    } finally {
-      isLoading(false);
-    }
-  }
-
   // Search functionality
   void searchUsers(String query) {
     searchQuery.value = query;
@@ -319,7 +278,7 @@ class UserController extends GetxController {
     }
   }
 
-  /// Handle user update - LOCAL ONLY
+// 1. In _handleUserUpdate method - track user updates
   Future<void> _handleUserUpdate(User user) async {
     // Check for duplicates first (excluding the current user)
     final duplicateErrors = await checkForDuplicates(user, isUpdate: true);
@@ -333,6 +292,10 @@ class UserController extends GetxController {
 
     // Update in local database
     await DatabaseHelper.instance.updateUser(userMap);
+
+    // 🔄 TRACK THE USER UPDATE FOR SYNC
+    await SyncService.trackChange('users', userMap, 'update');
+    print('📝 Tracked user update for sync');
 
     // Update the user in the local observable list
     final index = _users.indexWhere((u) => u.id == user.id);
@@ -351,7 +314,7 @@ class UserController extends GetxController {
     );
   }
 
-  /// Handle new user creation - LOCAL ONLY
+// 2. In _handleNewUserCreation method - track user creation
   Future<void> _handleNewUserCreation(User user) async {
     // Step 1: Check for duplicates first
     final duplicateErrors = await checkForDuplicates(user, isUpdate: false);
@@ -376,6 +339,10 @@ class UserController extends GetxController {
 
     final createdUser = user.copyWith(id: newUserId);
 
+    // 🔄 TRACK THE USER CREATION FOR SYNC
+    await SyncService.trackChange('users', createdUser.toJson(), 'create');
+    print('📝 Tracked user creation for sync');
+
     // Add to local observable list for immediate UI update
     _users.add(createdUser);
     print('✅ User saved locally with ID: $newUserId');
@@ -392,7 +359,7 @@ class UserController extends GetxController {
     print('✅ User creation completed');
   }
 
-  /// Delete user - LOCAL ONLY
+// 3. In deleteUser method - track user deletion
   Future<void> deleteUser(int userId) async {
     try {
       isLoading(true);
@@ -421,6 +388,10 @@ class UserController extends GetxController {
         'UserController: Deleting user: ${userToDelete.fname} ${userToDelete.lname}',
       );
 
+      // 🔄 TRACK THE USER DELETION FOR SYNC
+      await SyncService.trackChange('users', {'id': userId}, 'delete');
+      print('📝 Tracked user deletion for sync');
+
       // Delete from local database
       await DatabaseHelper.instance.deleteUser(userId);
 
@@ -448,6 +419,56 @@ class UserController extends GetxController {
       isLoading(false);
     }
   }
+
+// 4. In deleteMultipleUsers method - track multiple user deletions
+  Future<void> deleteMultipleUsers(List<int> userIds) async {
+    try {
+      isLoading(true);
+      error('');
+
+      print('UserController: Deleting ${userIds.length} users');
+
+      for (int id in userIds) {
+        // 🔄 TRACK EACH USER DELETION FOR SYNC
+        await SyncService.trackChange('users', {'id': id}, 'delete');
+        print('📝 Tracked user deletion for sync: $id');
+
+        await DatabaseHelper.instance.deleteUser(id);
+        _users.removeWhere((user) => user.id == id);
+      }
+
+      // Clear selections
+      selectedUser.clear();
+      isMultiSelectionActive.value = false;
+      isAllSelected(false);
+
+      print('UserController: Successfully deleted ${userIds.length} users');
+
+      Get.snackbar(
+        'Success',
+        'Successfully deleted ${userIds.length} users',
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+        duration: const Duration(seconds: 3),
+      );
+    } catch (e) {
+      error(e.toString());
+      print('UserController: Error deleting multiple users - ${e.toString()}');
+      Get.snackbar(
+        'Error',
+        'Failed to delete users: ${e.toString()}',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+        duration: const Duration(seconds: 4),
+      );
+      rethrow;
+    } finally {
+      isLoading(false);
+    }
+  }
+
+// Don't forget to import SyncService at the top of your file:
+// import 'package:driving/services/sync_service.dart';
 
   // Clear all data (useful for logout)
   void clearData() {
