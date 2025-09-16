@@ -317,6 +317,7 @@ class SyncController extends GetxController {
   }
 
   /// Upload pending changes only
+// Updated uploadPendingChanges method in lib/controllers/sync_controller.dart
   Future<void> uploadPendingChanges() async {
     if (isSyncing.value) return;
 
@@ -328,17 +329,34 @@ class SyncController extends GetxController {
       lastSyncResult.value = result;
 
       if (result.success) {
-        syncStatus.value = 'Upload completed';
+        final uploaded = result.details?['uploaded'] ?? 0;
+        final errors = result.details?['errors'] ?? [];
+        final isPartial = result.details?['partial'] ?? false;
+
+        syncStatus.value =
+            isPartial ? 'Upload partially completed' : 'Upload completed';
         lastSyncTime.value = _formatDateTime(DateTime.now());
 
-        Get.snackbar(
-          'Upload Complete',
-          'Changes uploaded successfully',
-          icon: Icon(Icons.cloud_upload, color: Colors.white),
-          backgroundColor: Colors.blue,
-          colorText: Colors.white,
-          duration: Duration(seconds: 2),
-        );
+        // Show appropriate success message
+        if (isPartial && errors.isNotEmpty) {
+          Get.snackbar(
+            'Upload Partially Complete',
+            '$uploaded items uploaded, ${errors.length} failed',
+            icon: Icon(Icons.warning, color: Colors.white),
+            backgroundColor: Colors.amber,
+            colorText: Colors.white,
+            duration: Duration(seconds: 4),
+          );
+        } else {
+          Get.snackbar(
+            'Upload Complete',
+            'Changes uploaded successfully',
+            icon: Icon(Icons.cloud_upload, color: Colors.white),
+            backgroundColor: Colors.green,
+            colorText: Colors.white,
+            duration: Duration(seconds: 2),
+          );
+        }
       } else {
         syncStatus.value = 'Upload failed';
 
@@ -346,7 +364,7 @@ class SyncController extends GetxController {
           'Upload Failed',
           result.message,
           icon: Icon(Icons.cloud_off, color: Colors.white),
-          backgroundColor: Colors.orange,
+          backgroundColor: Colors.red,
           colorText: Colors.white,
           duration: Duration(seconds: 3),
         );

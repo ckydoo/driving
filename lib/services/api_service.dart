@@ -81,19 +81,52 @@ class ApiService {
     }
   }
 
+  // Updated syncUpload method in lib/services/api_service.dart
   static Future<Map<String, dynamic>> syncUpload(
       Map<String, dynamic> changes) async {
+    print('🔍 Making sync upload request...');
+    print('🔍 URL: $baseUrl/sync/upload');
+    print('🔍 Changes to upload: ${json.encode(changes)}');
+
     final response = await http.post(
       Uri.parse('$baseUrl/sync/upload'),
       headers: _headers,
       body: json.encode(changes),
     );
 
+    print('🔍 Upload Response Status: ${response.statusCode}');
+    print('🔍 Upload Response Body: ${response.body}');
+
     final data = json.decode(response.body);
 
+    // Handle different response scenarios
     if (response.statusCode == 200 && data['success']) {
-      return data['data'];
+      // Complete success
+      print('✅ Upload completed successfully');
+      return {
+        'success': true,
+        'uploaded': data['data']['uploaded'] ?? 0,
+        'errors': [],
+        'message': 'Upload completed successfully'
+      };
+    } else if (response.statusCode == 422 && !data['success']) {
+      // Partial success - some items uploaded, some failed
+      final uploaded = data['data']['uploaded'] ?? 0;
+      final errors = data['data']['errors'] ?? [];
+
+      print(
+          '⚠️ Upload partially successful: $uploaded uploaded, ${errors.length} errors');
+
+      return {
+        'success': uploaded > 0, // Consider it success if anything was uploaded
+        'uploaded': uploaded,
+        'errors': errors,
+        'message':
+            'Upload partially completed: $uploaded items uploaded, ${errors.length} failed'
+      };
     } else {
+      // Complete failure
+      print('❌ Upload completely failed');
       throw Exception(data['message'] ?? 'Sync upload failed');
     }
   }
