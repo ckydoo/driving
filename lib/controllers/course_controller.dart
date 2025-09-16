@@ -1,3 +1,4 @@
+import 'package:driving/services/sync_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../models/course.dart';
@@ -81,7 +82,6 @@ class CourseController extends GetxController {
     }
   }
 
-  /// ✅ ENHANCED: handleCourse with validation
   Future<void> handleCourse(Course course, {bool isUpdate = false}) async {
     try {
       isLoading(true);
@@ -99,10 +99,26 @@ class CourseController extends GetxController {
       print('📚 ${isUpdate ? 'Updating' : 'Creating'} course: ${course.name}');
 
       if (isUpdate) {
+        // Update existing course
         await DatabaseHelper.instance.updateCourse(course.toJson());
+
+        // 🔄 TRACK THE CHANGE FOR SYNC
+        await SyncService.trackChange('courses', course.toJson(), 'update');
+        print('📝 Tracked course update for sync');
+
         print('✅ Course updated successfully');
       } else {
-        await DatabaseHelper.instance.insertCourse(course.toJson());
+        // Create new course
+        final id = await DatabaseHelper.instance.insertCourse(course.toJson());
+
+        // Create course with ID for tracking
+        final courseWithId = course.copyWith(id: id);
+
+        // 🔄 TRACK THE CHANGE FOR SYNC
+        await SyncService.trackChange(
+            'courses', courseWithId.toJson(), 'create');
+        print('📝 Tracked course creation for sync');
+
         print('✅ Course created successfully');
       }
 
@@ -132,7 +148,17 @@ class CourseController extends GetxController {
     }
   }
 
-  /// ✅ ENHANCED: deleteCourse with confirmation
+  /// 🆕 CREATE COURSE WITH SYNC TRACKING (alternative method)
+  Future<void> createCourse(Course course) async {
+    await handleCourse(course, isUpdate: false);
+  }
+
+  /// 🔄 UPDATE COURSE WITH SYNC TRACKING (alternative method)
+  Future<void> updateCourse(Course course) async {
+    await handleCourse(course, isUpdate: true);
+  }
+
+  /// 🗑️ ENHANCED: deleteCourse with sync tracking
   Future<void> deleteCourse(int id) async {
     try {
       isLoading(true);
@@ -148,7 +174,14 @@ class CourseController extends GetxController {
 
       print('📚 Deleting course: ${course.name} (ID: $id)');
 
+      // Delete from database
       await DatabaseHelper.instance.deleteCourse(id);
+
+      // 🔄 TRACK THE CHANGE FOR SYNC
+      await SyncService.trackChange('courses', {'id': id}, 'delete');
+      print('📝 Tracked course deletion for sync');
+
+      // Remove from local list
       courses.removeWhere((c) => c.id == id);
 
       print('✅ Course deleted successfully');
@@ -175,7 +208,50 @@ class CourseController extends GetxController {
     }
   }
 
-  /// Get course by ID
+  /// 🔄 BULK UPDATE COURSE WITH SYNC TRACKING
+  Future<void> updateCourseField(
+      int courseId, String field, dynamic value) async {
+    try {
+      print('📚 Updating course field: $field for course ID: $courseId');
+
+      // Prepare the update data
+      final updateData = {
+        'id': courseId,
+        field: value,
+      };
+
+      // Update in database
+      await DatabaseHelper.instance.updateCourse(updateData);
+
+      // 🔄 TRACK THE CHANGE FOR SYNC
+      await SyncService.trackChange('courses', updateData, 'update');
+      print('📝 Tracked course field update for sync');
+
+      // Refresh courses
+      await fetchCourses();
+
+      print('✅ Course field updated successfully');
+    } catch (e) {
+      print('❌ Error updating course field: $e');
+      Get.snackbar(
+        'Error',
+        'Failed to update course: ${e.toString()}',
+        backgroundColor: Colors.red.shade100,
+        colorText: Colors.red.shade800,
+      );
+    }
+  }
+
+  /// 🔄 BULK OPERATIONS WITH SYNC TRACKING
+  Future<void> updateCourseStatus(int courseId, String status) async {
+    await updateCourseField(courseId, 'status', status);
+  }
+
+  Future<void> updateCoursePrice(int courseId, double price) async {
+    await updateCourseField(courseId, 'price', price);
+  }
+
+  /// Get course by ID (unchanged)
   Course? getCourseById(int id) {
     try {
       return courses.firstWhere((course) => course.id == id);
@@ -185,12 +261,12 @@ class CourseController extends GetxController {
     }
   }
 
-  /// Get active courses only
+  /// Get active courses only (unchanged)
   List<Course> get activeCourses {
     return courses.where((course) => course.isActive).toList();
   }
 
-  /// Get course options for dropdowns
+  /// Get course options for dropdowns (unchanged)
   List<Map<String, dynamic>> get courseOptions {
     return courses
         .map((course) => {

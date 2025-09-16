@@ -54,4 +54,33 @@ class Fleet {
         'modelyear': modelYear,
         'instructor': instructor,
       };
+
+  copyWith({
+    int? id,
+    String? carPlate,
+    String? make,
+    String? model,
+    String? modelYear,
+    int? instructor,
+  }) {
+    return Fleet(
+      id: id ?? this.id,
+      carPlate: carPlate ?? this.carPlate,
+      make: make ?? this.make,
+      model: model ?? this.model,
+      modelYear: modelYear ?? this.modelYear,
+      instructor: instructor ?? this.instructor,
+    );
+  }
+
+  Fleet to({int? id}) {
+    return Fleet(
+      id: id ?? this.id,
+      carPlate: carPlate,
+      make: make,
+      model: model,
+      modelYear: modelYear,
+      instructor: instructor,
+    );
+  }
 }

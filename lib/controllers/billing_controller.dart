@@ -10,6 +10,7 @@ import 'package:driving/models/invoice.dart';
 import 'package:driving/models/payment.dart';
 import 'package:driving/models/user.dart';
 import 'package:driving/services/receipt_service.dart';
+import 'package:driving/services/sync_service.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -676,25 +677,23 @@ class BillingController extends GetxController {
   }
 
   /// Creates an invoice directly (used during student enrollment)
-  Future<int> createInvoice(Invoice invoice) async {
+  Future<void> createInvoice(Invoice invoice) async {
     try {
       isLoading(true);
+      final id = await _dbHelper.insertInvoice(invoice.toMap());
 
-      // Insert invoice into database
-      final invoiceId = await _dbHelper.insertInvoice(invoice.toJson());
+      // Track the change for sync
+      final invoiceWithId = invoice.copyWith(id: id);
+      await SyncService.trackChange(
+          'invoices', invoiceWithId.toMap(), 'create');
 
-      // Add to local list for immediate UI update
-      final newInvoice = invoice.copyWith(id: invoiceId);
-      invoices.add(newInvoice);
-      invoices.refresh();
-
-      print(
-          '✓ Invoice created successfully: ID $invoiceId, Amount: \$${invoice.totalAmountCalculated}');
-
-      return invoiceId;
+      await fetchBillingData(); // Refresh UI
+      Get.snackbar('Success', 'Invoice created successfully',
+          backgroundColor: Colors.green);
     } catch (e) {
-      print('ERROR creating invoice: $e');
-      rethrow;
+      print('Error creating invoice: $e');
+      Get.snackbar('Error', 'Failed to create invoice: ${e.toString()}',
+          backgroundColor: Colors.red);
     } finally {
       isLoading(false);
     }
@@ -827,32 +826,21 @@ class BillingController extends GetxController {
     }
   }
 
-  Future<void> updateInvoice(Map<String, dynamic> updatedInvoiceData) async {
+  Future<void> updateInvoice(Map<String, dynamic> invoiceData) async {
     try {
       isLoading(true);
-      print(
-          'BillingController: updateInvoice called with data: $updatedInvoiceData');
+      await _dbHelper.updateInvoice(invoiceData);
 
-      // Update in database
-      await _dbHelper.updateInvoice(updatedInvoiceData);
-      print('✓ Invoice updated in database');
+      // Track the change for sync
+      await SyncService.trackChange('invoices', invoiceData, 'update');
 
-      // Force refresh all billing data
-      await fetchBillingData();
-      print('✓ Billing data refreshed after update');
-
-      // Notify other controllers that billing data has changed
-      Get.find<ScheduleController>().refreshBillingData();
-
-      Get.snackbar(
-        'Success',
-        'Invoice updated successfully',
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
-      );
+      await fetchBillingData(); // Refresh UI
+      Get.snackbar('Success', 'Invoice updated successfully',
+          backgroundColor: Colors.green);
     } catch (e) {
-      print('BillingController: Error updating invoice: ${e.toString()}');
-      Get.snackbar('Error', 'Failed to update invoice: ${e.toString()}');
+      print('Error updating invoice: $e');
+      Get.snackbar('Error', 'Failed to update invoice: ${e.toString()}',
+          backgroundColor: Colors.red);
     } finally {
       isLoading(false);
     }

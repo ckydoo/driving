@@ -1,4 +1,5 @@
 import 'package:driving/controllers/user_controller.dart';
+import 'package:driving/services/sync_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../models/fleet.dart';
@@ -106,53 +107,355 @@ class FleetController extends GetxController {
     }
   }
 
-  Future<void> saveFleet(List<Fleet> newFleet) async {
-    for (final vehicle in newFleet) {
-      await DatabaseHelper.instance.insertFleet(
-        Fleet.fromJson(vehicle.toJson()).toJson(),
-      );
-    }
-    await fetchFleet(); // Refresh the list after saving
-  }
-
+  /// 🔄 ENHANCED: handleFleet with sync tracking
   Future<void> handleFleet(Fleet vehicle, {bool isUpdate = false}) async {
     try {
       isLoading(true);
+      print(
+          '🚗 ${isUpdate ? 'Updating' : 'Creating'} vehicle: ${vehicle.make} ${vehicle.model}');
+
       if (isUpdate) {
+        // Update existing vehicle
         await DatabaseHelper.instance.updateFleet(vehicle.toJson());
+
+        // 🔄 TRACK THE CHANGE FOR SYNC
+        await SyncService.trackChange('fleet', vehicle.toJson(), 'update');
+        print('📝 Tracked vehicle update for sync');
+
+        print('✅ Vehicle updated successfully');
       } else {
-        await DatabaseHelper.instance.insertFleet(vehicle.toJson());
+        // Create new vehicle
+        final id = await DatabaseHelper.instance.insertFleet(vehicle.toJson());
+
+        // Create vehicle with ID for tracking
+        final vehicleWithId = vehicle.copyWith(id: id);
+
+        // 🔄 TRACK THE CHANGE FOR SYNC
+        await SyncService.trackChange(
+            'fleet', vehicleWithId.toJson(), 'create');
+        print('📝 Tracked vehicle creation for sync');
+
+        print('✅ Vehicle created successfully');
       }
+
+      // Refresh the fleet list
       await fetchFleet();
+
+      Get.snackbar(
+        'Success',
+        isUpdate
+            ? 'Vehicle "${vehicle.make} ${vehicle.model}" updated successfully'
+            : 'Vehicle "${vehicle.make} ${vehicle.model}" created successfully',
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
     } catch (e) {
+      error('Fleet operation failed: ${e.toString()}');
+      print('❌ handleFleet error: $e');
+
+      Get.snackbar(
+        'Error',
+        'Fleet operation failed: ${e.toString()}',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
       throw Exception('Fleet operation failed: ${e.toString()}');
     } finally {
       isLoading(false);
     }
   }
 
+  /// 🆕 CREATE VEHICLE WITH SYNC TRACKING (alternative method)
+  Future<void> createVehicle(Fleet vehicle) async {
+    await handleFleet(vehicle, isUpdate: false);
+  }
+
+  /// 🔄 UPDATE VEHICLE WITH SYNC TRACKING (alternative method)
+  Future<void> updateVehicle(Fleet vehicle) async {
+    await handleFleet(vehicle, isUpdate: true);
+  }
+
+  /// 🗑️ ENHANCED: deleteFleet with sync tracking
   Future<void> deleteFleet(int id) async {
     try {
       isLoading(true);
+
+      // Find the vehicle to get its details for confirmation
+      final vehicle = _fleet.firstWhere((v) => v.id == id,
+          orElse: () => Fleet(
+              id: id,
+              carPlate: 'Unknown',
+              make: 'Unknown',
+              model: 'Vehicle',
+              modelYear: '',
+              instructor: 1));
+
+      print(
+          '🚗 Deleting vehicle: ${vehicle.make} ${vehicle.model} (${vehicle.carPlate})');
+
+      // Delete from database
       await DatabaseHelper.instance.deleteFleet(id);
+
+      // 🔄 TRACK THE CHANGE FOR SYNC
+      await SyncService.trackChange('fleet', {'id': id}, 'delete');
+      print('📝 Tracked vehicle deletion for sync');
+
+      // Remove from local list
       _fleet.removeWhere((vehicle) => vehicle.id == id);
+
+      print('✅ Vehicle deleted successfully');
+
+      Get.snackbar(
+        'Success',
+        'Vehicle "${vehicle.make} ${vehicle.model}" deleted successfully',
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
     } catch (e) {
+      error('Delete failed: ${e.toString()}');
+      print('❌ deleteFleet error: $e');
+
+      Get.snackbar(
+        'Error',
+        'Failed to delete vehicle: ${e.toString()}',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
       throw Exception('Delete failed: ${e.toString()}');
     } finally {
       isLoading(false);
     }
   }
 
-  // Add this to your FleetController
+  /// 🔄 ENHANCED: assignVehicleToInstructor with sync tracking
   Future<void> assignVehicleToInstructor(
       int vehicleId, int instructorId) async {
-    // Implementation to update vehicle assignment in database
-    final db = await DatabaseHelper.instance.database;
-    await db.update(
-      'fleet',
-      {'instructor': instructorId},
-      where: 'id = ?',
-      whereArgs: [vehicleId],
-    );
+    try {
+      print('🚗 Assigning vehicle $vehicleId to instructor $instructorId');
+
+      // Prepare the update data
+      final updateData = {
+        'id': vehicleId,
+        'instructor': instructorId,
+      };
+
+      // Update vehicle assignment in database
+      final db = await DatabaseHelper.instance.database;
+      await db.update(
+        'fleet',
+        {'instructor': instructorId},
+        where: 'id = ?',
+        whereArgs: [vehicleId],
+      );
+
+      // 🔄 TRACK THE CHANGE FOR SYNC
+      await SyncService.trackChange('fleet', updateData, 'update');
+      print('📝 Tracked vehicle assignment for sync');
+
+      // Refresh fleet data
+      await fetchFleet();
+
+      print('✅ Vehicle assigned successfully');
+
+      Get.snackbar(
+        'Success',
+        'Vehicle assigned to instructor successfully',
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
+    } catch (e) {
+      print('❌ Error assigning vehicle: $e');
+      Get.snackbar(
+        'Error',
+        'Failed to assign vehicle: ${e.toString()}',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    }
+  }
+
+  /// 🔄 UPDATE VEHICLE STATUS WITH SYNC TRACKING
+  Future<void> updateVehicleStatus(int vehicleId, String status) async {
+    try {
+      print('🚗 Updating vehicle status: $vehicleId to $status');
+
+      // Prepare the update data
+      final updateData = {
+        'id': vehicleId,
+        'status': status,
+      };
+
+      // Update in database
+      final db = await DatabaseHelper.instance.database;
+      await db.update(
+        'fleet',
+        {'status': status},
+        where: 'id = ?',
+        whereArgs: [vehicleId],
+      );
+
+      // 🔄 TRACK THE CHANGE FOR SYNC
+      await SyncService.trackChange('fleet', updateData, 'update');
+      print('📝 Tracked vehicle status update for sync');
+
+      // Refresh fleet data
+      await fetchFleet();
+
+      print('✅ Vehicle status updated successfully');
+    } catch (e) {
+      print('❌ Error updating vehicle status: $e');
+      Get.snackbar(
+        'Error',
+        'Failed to update vehicle status: ${e.toString()}',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    }
+  }
+
+  /// 🔄 BULK UPDATE VEHICLE FIELD WITH SYNC TRACKING
+  Future<void> updateVehicleField(
+      int vehicleId, String field, dynamic value) async {
+    try {
+      print('🚗 Updating vehicle field: $field for vehicle ID: $vehicleId');
+
+      // Prepare the update data
+      final updateData = {
+        'id': vehicleId,
+        field: value,
+      };
+
+      // Update in database
+      final db = await DatabaseHelper.instance.database;
+      await db.update(
+        'fleet',
+        {field: value},
+        where: 'id = ?',
+        whereArgs: [vehicleId],
+      );
+
+      // 🔄 TRACK THE CHANGE FOR SYNC
+      await SyncService.trackChange('fleet', updateData, 'update');
+      print('📝 Tracked vehicle field update for sync');
+
+      // Refresh fleet
+      await fetchFleet();
+
+      print('✅ Vehicle field updated successfully');
+    } catch (e) {
+      print('❌ Error updating vehicle field: $e');
+      Get.snackbar(
+        'Error',
+        'Failed to update vehicle: ${e.toString()}',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    }
+  }
+
+  /// 🔄 BULK OPERATIONS WITH SYNC TRACKING
+  Future<void> bulkUpdateVehicleStatus(
+      List<int> vehicleIds, String status) async {
+    try {
+      isLoading(true);
+      print(
+          '🚗 Bulk updating ${vehicleIds.length} vehicles to status: $status');
+
+      for (int vehicleId in vehicleIds) {
+        await updateVehicleStatus(vehicleId, status);
+      }
+
+      Get.snackbar(
+        'Bulk Update Complete',
+        'Updated ${vehicleIds.length} vehicles successfully',
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
+    } catch (e) {
+      print('❌ Error in bulk update: $e');
+      Get.snackbar(
+        'Bulk Update Failed',
+        'Failed to update vehicles: ${e.toString()}',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    } finally {
+      isLoading(false);
+    }
+  }
+
+  /// 🔄 BULK DELETE WITH SYNC TRACKING
+  Future<void> bulkDeleteVehicles(List<int> vehicleIds) async {
+    try {
+      isLoading(true);
+      print('🚗 Bulk deleting ${vehicleIds.length} vehicles');
+
+      for (int vehicleId in vehicleIds) {
+        await deleteFleet(vehicleId);
+      }
+
+      // Clear selections
+      selectedFleet.clear();
+      isMultiSelectionActive.value = false;
+
+      Get.snackbar(
+        'Bulk Delete Complete',
+        'Deleted ${vehicleIds.length} vehicles successfully',
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
+    } catch (e) {
+      print('❌ Error in bulk delete: $e');
+      Get.snackbar(
+        'Bulk Delete Failed',
+        'Failed to delete vehicles: ${e.toString()}',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    } finally {
+      isLoading(false);
+    }
+  }
+
+  /// 🔄 SAVE FLEET (for bulk imports) WITH SYNC TRACKING
+  Future<void> saveFleet(List<Fleet> newFleet) async {
+    try {
+      isLoading(true);
+      print('🚗 Saving ${newFleet.length} vehicles to database');
+
+      for (final vehicle in newFleet) {
+        // Insert and get ID
+        final id = await DatabaseHelper.instance.insertFleet(vehicle.toJson());
+
+        // Create vehicle with ID for tracking
+        final vehicleWithId = vehicle.copyWith(id: id);
+
+        // 🔄 TRACK THE CHANGE FOR SYNC
+        await SyncService.trackChange(
+            'fleet', vehicleWithId.toJson(), 'create');
+      }
+
+      print('📝 Tracked ${newFleet.length} vehicle creations for sync');
+
+      // Refresh the list after saving
+      await fetchFleet();
+
+      Get.snackbar(
+        'Import Complete',
+        'Successfully imported ${newFleet.length} vehicles',
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
+    } catch (e) {
+      print('❌ Error saving fleet: $e');
+      Get.snackbar(
+        'Import Failed',
+        'Failed to import vehicles: ${e.toString()}',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    } finally {
+      isLoading(false);
+    }
   }
 }
