@@ -52,7 +52,7 @@ class Fleet {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'carplate': carPlate,
+      'carPlate': carPlate,
       'make': make,
       'model': model,
       'modelyear': modelYear,
@@ -67,7 +67,7 @@ class Fleet {
   factory Fleet.fromJson(Map<String, dynamic> json) {
     return Fleet(
       id: json['id'],
-      carPlate: json['carplate'] ?? json['carPlate'] ?? '',
+      carPlate: json['carPlate'] ?? json['carPlate'] ?? '',
       make: json['make'] ?? '',
       model: json['model'] ?? '',
       modelYear: json['modelyear'] ?? json['modelYear'] ?? '',
