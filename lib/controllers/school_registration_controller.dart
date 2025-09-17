@@ -279,11 +279,13 @@ class SchoolRegistrationController extends GetxController {
           id TEXT PRIMARY KEY,
           school_id TEXT NOT NULL,
           email TEXT NOT NULL UNIQUE,
-          password_hash TEXT NOT NULL,
+          password TEXT NOT NULL,
           role TEXT DEFAULT 'staff',
-          first_name TEXT,
-          last_name TEXT,
+          fname TEXT,
+          lname TEXT,
           phone TEXT,
+          date_of_birth TEXT,
+          gender TEXT DEFAULT 'other',
           status TEXT DEFAULT 'active',
           created_at TEXT DEFAULT CURRENT_TIMESTAMP,
           updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -298,13 +300,18 @@ class SchoolRegistrationController extends GetxController {
             'id': admin['id'].toString(),
             'school_id': school['id'].toString(),
             'email': admin['email'],
-            'password_hash':
-                adminPasswordController.text, // Store for local auth
+            'password': adminPasswordController
+                .text, // Use 'password' field name to match your local table
             'role': admin['role'],
-            'first_name': admin['fname'],
-            'last_name': admin['lname'],
+            'fname': admin['fname'], // Use 'fname' to match your local table
+            'lname': admin['lname'], // Use 'lname' to match your local table
             'phone': admin['phone'],
             'status': 'active',
+            'date_of_birth': DateTime.now()
+                .subtract(Duration(days: 365 * 30))
+                .toIso8601String()
+                .split('T')[0], // Just date part
+            'gender': 'other', // Default value
             'created_at': DateTime.now().toIso8601String(),
           },
           conflictAlgorithm: ConflictAlgorithm.replace);
@@ -339,16 +346,15 @@ class SchoolRegistrationController extends GetxController {
       settingsController.setBusinessPhone(school['phone']?.toString() ?? '');
       settingsController.setBusinessEmail(school['email']?.toString() ?? '');
 
-      // Save settings to local database
+      // Save settings to local database FIRST
       await settingsController.saveAllBusinessSettings();
 
-      // Initialize or update school configuration
+      // Then initialize/update school configuration
       if (Get.isRegistered<SchoolConfigService>()) {
         final schoolConfig = Get.find<SchoolConfigService>();
-        await schoolConfig
-            .updateSchoolConfig(); // Use updateSchoolConfig instead
+        await schoolConfig.updateSchoolConfig();
       } else {
-        // If not registered, create instance (it will auto-initialize)
+        // Create instance - it will auto-initialize from the saved settings
         Get.put<SchoolConfigService>(SchoolConfigService(), permanent: true);
       }
 

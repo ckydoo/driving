@@ -1,13 +1,13 @@
-// lib/services/school_api_service.dart
+// lib/services/school_api_service.dart - ENHANCED WITH DETAILED ERROR LOGGING
+
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'api_service.dart';
 
 class SchoolApiService {
-  static const String baseUrl =
-      'http://192.168.9.103:8000/api'; // Update with your Laravel URL
+  static const String baseUrl = 'http://192.168.9.103:8000/api';
 
-  /// Register a new school online
+  /// Register a new school online with enhanced error handling
   static Future<Map<String, dynamic>> registerSchool({
     required String schoolName,
     required String schoolEmail,
@@ -26,7 +26,32 @@ class SchoolApiService {
     required String adminPhone,
   }) async {
     try {
-      print('🌐 Registering school online: $schoolName');
+      print('🌐 === SCHOOL REGISTRATION DEBUG ===');
+      print('School Name: $schoolName');
+      print('Admin Email: $adminEmail');
+      print('Admin Password Length: ${adminPassword.length}');
+      print('API URL: $baseUrl/schools/register');
+
+      final requestData = {
+        'name': schoolName,
+        'email': schoolEmail,
+        'phone': schoolPhone,
+        'address': schoolAddress,
+        'city': schoolCity,
+        'country': schoolCountry,
+        'website': schoolWebsite,
+        'start_time': startTime,
+        'end_time': endTime,
+        'operating_days': operatingDays,
+        'admin_first_name': adminFirstName,
+        'admin_last_name': adminLastName,
+        'admin_email': adminEmail,
+        'admin_password': adminPassword,
+        'admin_password_confirmation': adminPassword,
+        'admin_phone': adminPhone,
+      };
+
+      print('📤 Request Data: ${json.encode(requestData)}');
 
       final response = await http.post(
         Uri.parse('$baseUrl/schools/register'),
@@ -34,50 +59,110 @@ class SchoolApiService {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
         },
-        body: json.encode({
-          'name': schoolName,
-          'email': schoolEmail,
-          'phone': schoolPhone,
-          'address': schoolAddress,
-          'city': schoolCity,
-          'country': schoolCountry,
-          'website': schoolWebsite,
-          'start_time': startTime,
-          'end_time': endTime,
-          'operating_days': operatingDays,
-          'admin_first_name': adminFirstName,
-          'admin_last_name': adminLastName,
-          'admin_email': adminEmail,
-          'admin_password': adminPassword,
-          'admin_password_confirmation': adminPassword,
-          'admin_phone': adminPhone,
-        }),
+        body: json.encode(requestData),
       );
 
       print('📡 Registration response status: ${response.statusCode}');
+      print('📡 Response headers: ${response.headers}');
+      print('📡 Response body: ${response.body}');
 
-      if (response.statusCode == 200) {
+      if (response.statusCode == 200 || response.statusCode == 201) {
         final data = json.decode(response.body);
 
         if (data['success'] == true) {
           print('✅ School registered successfully online');
 
-          // Store the API token using your existing ApiService method
-          final token = data['data']['token'];
-          ApiService.setToken(token);
+          // Store the API token if provided
+          if (data['data']['token'] != null) {
+            final token = data['data']['token'];
+            ApiService.setToken(token);
+            print('🔑 API token stored');
+          }
 
           return data['data'];
         } else {
+          print('❌ Registration failed - Success flag false');
+          print('❌ Error message: ${data['message']}');
           throw Exception(data['message'] ?? 'Registration failed');
         }
       } else {
-        final error = json.decode(response.body);
-        print('❌ Registration failed: ${error['message']}');
-        throw Exception(error['message'] ?? 'Registration failed');
+        // Handle different HTTP error codes
+        String errorMessage = 'Registration failed';
+
+        try {
+          final error = json.decode(response.body);
+          errorMessage = error['message'] ?? errorMessage;
+
+          // Log validation errors if present
+          if (error['errors'] != null) {
+            print('❌ Validation Errors:');
+            final errors = error['errors'] as Map<String, dynamic>;
+            errors.forEach((field, messages) {
+              print('   $field: ${messages.join(', ')}');
+            });
+          }
+
+          // Log exception details if present
+          if (error['exception'] != null) {
+            print('❌ Server Exception: ${error['exception']}');
+          }
+
+          // Log trace if present (for debugging)
+          if (error['trace'] != null) {
+            print('❌ Server Trace: ${error['trace']}');
+          }
+        } catch (e) {
+          print('❌ Failed to parse error response: $e');
+          errorMessage = 'Server returned status ${response.statusCode}';
+        }
+
+        throw Exception(errorMessage);
       }
     } catch (e) {
       print('❌ School registration error: $e');
       throw Exception('Failed to register school: $e');
+    }
+  }
+
+  /// Test API connection
+  static Future<bool> testApiConnection() async {
+    try {
+      print('🔍 Testing API connection to $baseUrl');
+
+      final response = await http.get(
+        Uri.parse('$baseUrl/test'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+      ).timeout(Duration(seconds: 10));
+
+      print('📡 API test response: ${response.statusCode}');
+      return response.statusCode == 200 || response.statusCode == 404;
+    } catch (e) {
+      print('❌ API connection test failed: $e');
+      return false;
+    }
+  }
+
+  /// Check if online with better error detection
+  static Future<bool> isOnline() async {
+    try {
+      // First test basic connectivity
+      final response = await http.get(
+        Uri.parse('https://8.8.8.8'),
+        headers: {'Content-Type': 'application/json'},
+      ).timeout(Duration(seconds: 5));
+
+      // Then test our API specifically
+      if (response.statusCode == 200) {
+        return await testApiConnection();
+      }
+
+      return false;
+    } catch (e) {
+      print('❌ Internet connectivity check failed: $e');
+      return false;
     }
   }
 
@@ -97,6 +182,8 @@ class SchoolApiService {
         }),
       );
 
+      print('📡 School lookup response: ${response.statusCode}');
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
 
@@ -109,8 +196,12 @@ class SchoolApiService {
       } else if (response.statusCode == 404) {
         throw Exception('No school found with that name or code');
       } else {
-        final error = json.decode(response.body);
-        throw Exception(error['message'] ?? 'Failed to find school');
+        try {
+          final error = json.decode(response.body);
+          throw Exception(error['message'] ?? 'Failed to find school');
+        } catch (e) {
+          throw Exception('Server returned status ${response.statusCode}');
+        }
       }
     } catch (e) {
       print('❌ School lookup error: $e');
@@ -125,8 +216,10 @@ class SchoolApiService {
     required String password,
   }) async {
     try {
-      print('🔐 Authenticating user for school: $schoolIdentifier');
-      print('📧 User email: $email');
+      print('🔐 === SCHOOL AUTH DEBUG ===');
+      print('School: $schoolIdentifier');
+      print('Email: $email');
+      print('Password Length: ${password.length}');
 
       final response = await http.post(
         Uri.parse('$baseUrl/schools/authenticate'),
@@ -142,6 +235,7 @@ class SchoolApiService {
       );
 
       print('📡 Auth response status: ${response.statusCode}');
+      print('📡 Auth response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -149,129 +243,29 @@ class SchoolApiService {
         if (data['success'] == true) {
           print('✅ Authentication successful');
 
-          // Store the API token using your existing ApiService method
-          final token = data['data']['token'];
-          ApiService.setToken(token);
+          // Store the API token
+          if (data['data']['token'] != null) {
+            final token = data['data']['token'];
+            ApiService.setToken(token);
+          }
 
           return data['data'];
         } else {
           throw Exception(data['message'] ?? 'Authentication failed');
         }
-      } else if (response.statusCode == 401) {
-        throw Exception('Invalid email or password for this school');
-      } else if (response.statusCode == 404) {
-        throw Exception('School not found or inactive');
-      } else if (response.statusCode == 403) {
-        throw Exception('School subscription has expired');
       } else {
-        final error = json.decode(response.body);
-        throw Exception(error['message'] ?? 'Authentication failed');
-      }
-    } catch (e) {
-      print('❌ School authentication error: $e');
-      rethrow;
-    }
-  }
-
-  /// Get school dashboard data
-  static Future<Map<String, dynamic>> getSchoolDashboard() async {
-    try {
-      // Use the existing ApiService headers which include the token
-      final response = await http.get(
-        Uri.parse('$baseUrl/schools/dashboard'),
-        headers: _getHeaders(),
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-
-        if (data['success'] == true) {
-          return data['data'];
-        } else {
-          throw Exception(data['message'] ?? 'Failed to load dashboard');
+        try {
+          final error = json.decode(response.body);
+          print('❌ Auth error details: ${error}');
+          throw Exception(error['message'] ?? 'Authentication failed');
+        } catch (e) {
+          throw Exception(
+              'Authentication failed - Server error ${response.statusCode}');
         }
-      } else {
-        final error = json.decode(response.body);
-        throw Exception(error['message'] ?? 'Failed to load dashboard');
       }
     } catch (e) {
-      print('❌ Dashboard error: $e');
+      print('❌ Authentication error: $e');
       rethrow;
     }
-  }
-
-  /// Update school settings
-  static Future<Map<String, dynamic>> updateSchoolSettings(
-      Map<String, dynamic> settings) async {
-    try {
-      final response = await http.put(
-        Uri.parse('$baseUrl/schools/settings'),
-        headers: _getHeaders(),
-        body: json.encode(settings),
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-
-        if (data['success'] == true) {
-          return data['data'];
-        } else {
-          throw Exception(data['message'] ?? 'Failed to update settings');
-        }
-      } else {
-        final error = json.decode(response.body);
-        throw Exception(error['message'] ?? 'Failed to update settings');
-      }
-    } catch (e) {
-      print('❌ Settings update error: $e');
-      rethrow;
-    }
-  }
-
-  /// Check if online (test connectivity)
-  static Future<bool> isOnline() async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/health'),
-        headers: {
-          'Accept': 'application/json',
-        },
-      ).timeout(const Duration(seconds: 10));
-
-      return response.statusCode == 200;
-    } catch (e) {
-      print('🔌 Offline - API not reachable: $e');
-      return false;
-    }
-  }
-
-  /// Get API status and version
-  static Future<Map<String, dynamic>> getApiStatus() async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/health'),
-        headers: {
-          'Accept': 'application/json',
-        },
-      );
-
-      if (response.statusCode == 200) {
-        return json.decode(response.body);
-      } else {
-        throw Exception('API not responding');
-      }
-    } catch (e) {
-      throw Exception('Failed to check API status: $e');
-    }
-  }
-
-  /// Private helper to get headers with token (mimics ApiService._headers)
-  static Map<String, String> _getHeaders() {
-    return {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      // Note: The token is automatically included by using ApiService.setToken()
-      // which your existing ApiService handles in its _headers getter
-    };
   }
 }

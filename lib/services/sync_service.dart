@@ -200,81 +200,121 @@ class SyncService {
     return await uploadPendingChanges();
   }
 
-  // Update local database with server data
+// Update local database with server data
   static Future<void> _updateLocalDatabase(
       Map<String, dynamic> serverData) async {
     final db = await DatabaseHelper.instance.database;
 
     await db.transaction((txn) async {
-      // Update users
+      // Update users with school_id support
       if (serverData['users'] != null) {
+        print('💾 Processing ${(serverData['users'] as List).length} users...');
         for (var userData in serverData['users']) {
-          final localUserData = _convertUserApiToLocal(userData);
-          await txn.insert(
-            'users',
-            User.fromJson(localUserData).toJson(),
-            conflictAlgorithm: ConflictAlgorithm.replace,
-          );
+          try {
+            // Convert API format to local format with school_id
+            final localUserData = _convertUserApiToLocalFixed(userData);
+            print(
+                '📝 Converting user: ${userData['email']} (school_id: ${userData['school_id']})');
+
+            await txn.insert(
+              'users',
+              localUserData, // Use converted data directly
+              conflictAlgorithm: ConflictAlgorithm.replace,
+            );
+            print('✅ Synced user: ${userData['email']}');
+          } catch (e) {
+            print('❌ Failed to sync user ${userData['email']}: $e');
+          }
         }
       }
 
       // Update courses
       if (serverData['courses'] != null) {
+        print(
+            '💾 Processing ${(serverData['courses'] as List).length} courses...');
         for (var courseData in serverData['courses']) {
-          final localCourseData = _convertCourseApiToLocal(courseData);
-          await txn.insert(
-            'courses',
-            Course.fromJson(localCourseData).toJson(),
-            conflictAlgorithm: ConflictAlgorithm.replace,
-          );
+          try {
+            final localCourseData = _convertCourseApiToLocal(courseData);
+            await txn.insert(
+              'courses',
+              localCourseData,
+              conflictAlgorithm: ConflictAlgorithm.replace,
+            );
+          } catch (e) {
+            print('❌ Failed to sync course: $e');
+          }
         }
       }
 
       // Update schedules
       if (serverData['schedules'] != null) {
+        print(
+            '💾 Processing ${(serverData['schedules'] as List).length} schedules...');
         for (var scheduleData in serverData['schedules']) {
-          final localScheduleData = _convertScheduleApiToLocal(scheduleData);
-          await txn.insert(
-            'schedules',
-            Schedule.fromJson(localScheduleData).toJson(),
-            conflictAlgorithm: ConflictAlgorithm.replace,
-          );
+          try {
+            final localScheduleData = _convertScheduleApiToLocal(scheduleData);
+            await txn.insert(
+              'schedules',
+              localScheduleData,
+              conflictAlgorithm: ConflictAlgorithm.replace,
+            );
+          } catch (e) {
+            print('❌ Failed to sync schedule: $e');
+          }
         }
       }
 
       // Update invoices
       if (serverData['invoices'] != null) {
+        print(
+            '💾 Processing ${(serverData['invoices'] as List).length} invoices...');
         for (var invoiceData in serverData['invoices']) {
-          final localInvoiceData = _convertInvoiceApiToLocal(invoiceData);
-          await txn.insert(
-            'invoices',
-            Invoice.fromMap(localInvoiceData).toMap(),
-            conflictAlgorithm: ConflictAlgorithm.replace,
-          );
+          try {
+            final localInvoiceData = _convertInvoiceApiToLocal(invoiceData);
+            await txn.insert(
+              'invoices',
+              localInvoiceData,
+              conflictAlgorithm: ConflictAlgorithm.replace,
+            );
+          } catch (e) {
+            print('❌ Failed to sync invoice: $e');
+          }
         }
       }
 
       // Update payments
       if (serverData['payments'] != null) {
+        print(
+            '💾 Processing ${(serverData['payments'] as List).length} payments...');
         for (var paymentData in serverData['payments']) {
-          final localPaymentData = _convertPaymentApiToLocal(paymentData);
-          await txn.insert(
-            'payments',
-            Payment.fromJson(localPaymentData).toJson(),
-            conflictAlgorithm: ConflictAlgorithm.replace,
-          );
+          try {
+            final localPaymentData = _convertPaymentApiToLocal(paymentData);
+            await txn.insert(
+              'payments',
+              localPaymentData,
+              conflictAlgorithm: ConflictAlgorithm.replace,
+            );
+          } catch (e) {
+            print('❌ Failed to sync payment: $e');
+          }
         }
       }
 
       // Update fleet
       if (serverData['fleet'] != null) {
+        print(
+            '💾 Processing ${(serverData['fleet'] as List).length} fleet items...');
         for (var fleetData in serverData['fleet']) {
-          final localFleetData = _convertFleetApiToLocal(fleetData);
-          await txn.insert(
-            'fleet',
-            Fleet.fromJson(localFleetData).toJson(),
-            conflictAlgorithm: ConflictAlgorithm.replace,
-          );
+          try {
+            final localFleetData = _convertFleetApiToLocal(fleetData);
+            await txn.insert(
+              'fleet',
+              localFleetData,
+              conflictAlgorithm: ConflictAlgorithm.replace,
+            );
+          } catch (e) {
+            print('❌ Failed to sync fleet item: $e');
+          }
         }
       }
     });
@@ -610,26 +650,79 @@ class SyncService {
     };
   }
 
-  static Map<String, dynamic> _convertUserApiToLocal(
+  // FIXED: Convert API user format to local format (includes school_id)
+  static Map<String, dynamic> _convertUserApiToLocalFixed(
       Map<String, dynamic> apiData) {
+    // Parse date_of_birth properly
+    String? dateOfBirth;
+    if (apiData['date_of_birth'] != null) {
+      try {
+        if (apiData['date_of_birth'] is String) {
+          // Handle different date formats
+          final dateString = apiData['date_of_birth'] as String;
+          if (dateString.contains('T')) {
+            // ISO format: 2000-09-17T00:00:00.000000Z
+            dateOfBirth =
+                DateTime.parse(dateString).toIso8601String().split('T')[0];
+          } else if (dateString.contains('-') && dateString.length == 10) {
+            // Already in YYYY-MM-DD format
+            dateOfBirth = dateString;
+          } else {
+            // Fallback
+            dateOfBirth =
+                DateTime.parse(dateString).toIso8601String().split('T')[0];
+          }
+        } else {
+          dateOfBirth = DateTime.now()
+              .subtract(Duration(days: 365 * 25))
+              .toIso8601String()
+              .split('T')[0];
+        }
+      } catch (e) {
+        print('⚠️ Error parsing date_of_birth: $e, using default');
+        dateOfBirth = DateTime.now()
+            .subtract(Duration(days: 365 * 25))
+            .toIso8601String()
+            .split('T')[0];
+      }
+    } else {
+      dateOfBirth = DateTime.now()
+          .subtract(Duration(days: 365 * 25))
+          .toIso8601String()
+          .split('T')[0];
+    }
+
     return {
-      'id': apiData['id'],
+      'id': apiData['id']?.toString() ?? '',
+      'school_id':
+          apiData['school_id']?.toString() ?? '', // ✅ INCLUDE SCHOOL_ID
       'fname': apiData['fname'] ?? '',
       'lname': apiData['lname'] ?? '',
       'email': apiData['email'] ?? '',
-      'date_of_birth': apiData['date_of_birth'],
-      'role': apiData['role'] ?? 'student',
-      'status': apiData['status'] ?? 'active',
-      'created_at': apiData['created_at'],
-      'updated_at': apiData['updated_at'],
-      'gender': apiData['gender'] ?? '',
+      'password': '', // Empty password for synced users (they use API auth)
+      'gender': apiData['gender'] ?? 'other',
       'phone': apiData['phone'] ?? '',
       'address': apiData['address'] ?? '',
+      'date_of_birth': dateOfBirth,
+      'role': apiData['role'] ?? 'student',
+      'status': apiData['status'] ?? 'active',
       'idnumber': apiData['idnumber'] ?? '',
-      'email_verified_at': apiData['email_verified_at'],
-      'profile_picture': apiData['profile_picture'],
-      'emergency_contact': apiData['emergency_contact'],
-      'remember_token': apiData['remember_token'],
+      'created_at': _parseDateTime(apiData['created_at']),
+      'updated_at': _parseDateTime(apiData['updated_at']),
     };
+  }
+
+// Helper to parse datetime strings
+  static String _parseDateTime(dynamic dateTime) {
+    if (dateTime == null) return DateTime.now().toIso8601String();
+
+    try {
+      if (dateTime is String) {
+        return DateTime.parse(dateTime).toIso8601String();
+      }
+      return DateTime.now().toIso8601String();
+    } catch (e) {
+      return DateTime.now().toIso8601String();
+    }
   }
 }

@@ -199,8 +199,8 @@ class SchoolSelectionController extends GetxController {
             'email': user['email'],
             'password': 'online_user', // Placeholder for online users
             'role': user['role'],
-            'first_name': user['fname'] ?? '',
-            'last_name': user['lname'] ?? '',
+            'fname': user['fname'] ?? '',
+            'lname': user['lname'] ?? '',
             'phone': user['phone'] ?? '',
             'status': 'active',
             'created_at': DateTime.now().toIso8601String(),

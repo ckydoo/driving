@@ -1099,7 +1099,7 @@ class DatabaseHelper {
         'users',
         where: 'school_id = ? AND status = ?',
         whereArgs: [schoolId, 'active'],
-        orderBy: 'role, first_name, last_name',
+        orderBy: 'role, fname, last_name',
       );
     } catch (e) {
       print('❌ Error getting users for school: $e');
@@ -1116,7 +1116,7 @@ class DatabaseHelper {
         'users',
         where: 'school_id = ? AND role = ? AND status = ?',
         whereArgs: [schoolId, role, 'active'],
-        orderBy: 'first_name, last_name',
+        orderBy: 'fname, last_name',
       );
     } catch (e) {
       print('❌ Error getting users by role: $e');
