@@ -286,10 +286,8 @@ class DatabaseMigration {
         make TEXT NOT NULL,
         model TEXT NOT NULL,
         year INTEGER,
-        license_plate TEXT UNIQUE,
+        carPlate TEXT UNIQUE,
         status TEXT NOT NULL DEFAULT 'available',
-        transmission TEXT,
-        fuel_type TEXT,
         created_at TEXT,
         updated_at TEXT
       )

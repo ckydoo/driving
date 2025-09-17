@@ -1411,6 +1411,9 @@ class _FleetScreenState extends State<FleetScreen>
         model: vehicle.model,
         modelYear: vehicle.modelYear,
         instructor: instructorId,
+        status: vehicle.status,
+        created_at: vehicle.created_at,
+        updated_at: DateTime.now(),
       );
 
       await fleetController.handleFleet(updatedVehicle, isUpdate: true);

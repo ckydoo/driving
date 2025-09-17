@@ -295,6 +295,7 @@ class _FleetDetailsScreenState extends State<FleetDetailsScreen>
           model: '',
           modelYear: '',
           instructor: 0,
+          status: 'available',
         ),
       );
 

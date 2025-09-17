@@ -892,6 +892,8 @@ class _FleetFormDialogState extends State<FleetFormDialog>
         make: _makeController.text.trim(),
         model: _modelController.text.trim(),
         modelYear: _modelYear,
+        status: widget.vehicle?.status ??
+            'available', // KEEP existing status or default to 'available'
         instructor: _selectedInstructorId ?? 0, // CHANGE: Ensure 0 if null
       );
 

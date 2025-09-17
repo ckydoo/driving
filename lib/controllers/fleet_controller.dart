@@ -188,6 +188,7 @@ class FleetController extends GetxController {
               make: 'Unknown',
               model: 'Vehicle',
               modelYear: '',
+              status: 'available',
               instructor: 1));
 
       print(
