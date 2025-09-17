@@ -197,7 +197,7 @@ class SchoolSelectionController extends GetxController {
             'id': user['id'].toString(),
             'school_id': school['id'].toString(),
             'email': user['email'],
-            'password_hash': 'online_user', // Placeholder for online users
+            'password': 'online_user', // Placeholder for online users
             'role': user['role'],
             'first_name': user['fname'] ?? '',
             'last_name': user['lname'] ?? '',
@@ -260,7 +260,7 @@ class SchoolSelectionController extends GetxController {
           id TEXT PRIMARY KEY,
           school_id TEXT NOT NULL,
           email TEXT NOT NULL UNIQUE,
-          password_hash TEXT NOT NULL,
+          password TEXT NOT NULL,
           role TEXT DEFAULT 'staff',
           status TEXT DEFAULT 'active',
           created_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -283,7 +283,7 @@ class SchoolSelectionController extends GetxController {
       if (userResult.isNotEmpty) {
         final user = userResult.first;
         // In real app: return BCrypt.checkpw(password, user['password_hash']);
-        return user['password_hash'] == password; // Simplified for demo
+        return user['password'] == password; // Simplified for demo
       }
 
       return false;
@@ -439,7 +439,7 @@ class SchoolSelectionController extends GetxController {
           'id': 'user_001',
           'school_id': 'school_001',
           'email': 'admin@metro.com',
-          'password_hash': 'admin123', // In real app, this would be hashed
+          'password': 'admin123', // In real app, this would be hashed
           'role': 'admin',
           'status': 'active',
         },
@@ -447,7 +447,7 @@ class SchoolSelectionController extends GetxController {
           'id': 'user_002',
           'school_id': 'school_002',
           'email': 'admin@safedrive.com',
-          'password_hash': 'admin123',
+          'password': 'admin123',
           'role': 'admin',
           'status': 'active',
         },

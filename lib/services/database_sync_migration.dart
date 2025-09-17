@@ -1,83 +1,70 @@
-// lib/services/database_sync_migration.dart - SIMPLIFIED VERSION
+// lib/services/database_sync_migration.dart - FIXED VERSION
+
 import 'package:sqflite/sqflite.dart';
 
 class DatabaseSyncMigration {
-  static const int _targetVersion = 2;
-
-  /// Run sync migrations - only add missing timestamp fields
+  /// Run sync migrations (add timestamp fields only)
   static Future<void> runSyncMigrations(Database db) async {
-    print('🔄 Running sync migrations (timestamp fields only)...');
+    print('🔄 Running sync migrations (timestamps only)...');
 
-    final currentVersion = await db.getVersion();
-    print('📊 Current database version: $currentVersion');
-    print('📊 Target database version: $_targetVersion');
-
-    if (currentVersion < 2) {
-      await _addTimestampFields(db);
-    }
-
-    // Set the new version
-    await db.setVersion(_targetVersion);
-    print('✅ Sync migrations completed. Database version: $_targetVersion');
-  }
-
-  /// Add created_at and updated_at fields to all tables for sync
-  static Future<void> _addTimestampFields(Database db) async {
-    print('⏰ Adding timestamp fields for sync...');
-
-    final tables = [
-      'users',
-      'courses',
-      'schedules',
-      'invoices',
-      'payments',
-      'fleet'
-    ];
-
-    for (String table in tables) {
-      try {
-        await _addTimestampsToTable(db, table);
-      } catch (e) {
-        print('⚠️ Failed to add timestamps to $table: $e');
-        // Continue with other tables
-      }
-    }
-
-    print('✅ Timestamp fields migration completed');
-  }
-
-  /// Add timestamp fields to a specific table
-  static Future<void> _addTimestampsToTable(
-      Database db, String tableName) async {
     try {
-      // Get current table structure
+      // Add timestamp fields to all existing tables
+      final tables = [
+        'users',
+        'courses',
+        'schedules',
+        'invoices',
+        'payments',
+        'fleet'
+      ];
+
+      for (String table in tables) {
+        await _addTimestampFields(db, table);
+      }
+
+      print('✅ Sync migrations completed');
+    } catch (e) {
+      print('❌ Sync migrations failed: $e');
+      throw e;
+    }
+  }
+
+  /// Add timestamp fields to a table if they don't exist
+  static Future<void> _addTimestampFields(Database db, String tableName) async {
+    try {
+      // Check if table exists
+      final tableExists = await db.rawQuery(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+          [tableName]);
+
+      if (tableExists.isEmpty) {
+        print('ℹ️ Table $tableName does not exist, skipping timestamps');
+        return;
+      }
+
       final columns = await _getTableColumns(db, tableName);
-
-      // Add created_at if missing
-      if (!columns.contains('created_at')) {
-        await db.execute('ALTER TABLE $tableName ADD COLUMN created_at TEXT');
-        print('✅ Added created_at to $tableName table');
-      }
-
-      // Add updated_at if missing
-      if (!columns.contains('updated_at')) {
-        await db.execute('ALTER TABLE $tableName ADD COLUMN updated_at TEXT');
-        print('✅ Added updated_at to $tableName table');
-      }
-
-      // Set default timestamp for existing records
       final now = DateTime.now().toIso8601String();
 
+      // Add created_at if it doesn't exist
       if (!columns.contains('created_at')) {
+        await db.execute('ALTER TABLE $tableName ADD COLUMN created_at TEXT');
         await db.execute(
             'UPDATE $tableName SET created_at = ? WHERE created_at IS NULL',
             [now]);
+        print('✅ Added created_at to $tableName');
       }
 
+      // Add updated_at if it doesn't exist
       if (!columns.contains('updated_at')) {
+        await db.execute('ALTER TABLE $tableName ADD COLUMN updated_at TEXT');
         await db.execute(
             'UPDATE $tableName SET updated_at = ? WHERE updated_at IS NULL',
             [now]);
+        print('✅ Added updated_at to $tableName');
+      }
+
+      if (!columns.contains('created_at') || !columns.contains('updated_at')) {
+        print('ℹ️ Timestamp fields already exist in $tableName');
       }
     } catch (e) {
       print('❌ Failed to add timestamps to $tableName: $e');
@@ -96,7 +83,7 @@ class DatabaseSyncMigration {
     }
   }
 
-  /// Create indexes for better sync performance
+  /// Create indexes for better sync performance - REMOVED PROBLEMATIC INDEXES
   static Future<void> createSyncIndexes(Database db) async {
     print('📈 Creating sync performance indexes...');
 
@@ -121,11 +108,28 @@ class DatabaseSyncMigration {
         }
       }
 
-      // Additional useful indexes
-      await db.execute(
-          'CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)');
-      await db.execute(
-          'CREATE INDEX IF NOT EXISTS idx_schedules_date ON schedules(lesson_date)');
+      // ONLY create indexes for columns we know exist
+      try {
+        await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)');
+        print('✅ Created email index for users');
+      } catch (e) {
+        print('⚠️ Failed to create email index: $e');
+      }
+
+      // Check if schedules has 'start' column before creating index
+      final scheduleColumns = await _getTableColumns(db, 'schedules');
+      if (scheduleColumns.contains('start')) {
+        try {
+          await db.execute(
+              'CREATE INDEX IF NOT EXISTS idx_schedules_start ON schedules(start)');
+          print('✅ Created start index for schedules');
+        } catch (e) {
+          print('⚠️ Failed to create start index: $e');
+        }
+      } else {
+        print('ℹ️ Skipping schedules start index - column does not exist');
+      }
 
       print('✅ Sync indexes created successfully');
     } catch (e) {
@@ -154,37 +158,43 @@ class DatabaseSyncMigration {
 
     for (String table in tables) {
       try {
+        // Check if table exists
+        final tableExists = await db.rawQuery(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+            [table]);
+
+        if (tableExists.isEmpty) {
+          continue; // Skip non-existent tables
+        }
+
+        result['tables_checked']++;
         final columns = await _getTableColumns(db, table);
-        final missing = <String>[];
+
+        final missingColumns = <String>[];
 
         if (!columns.contains('created_at')) {
-          missing.add('created_at');
-          result['all_tables_have_timestamps'] = false;
+          missingColumns.add('created_at');
         }
 
         if (!columns.contains('updated_at')) {
-          missing.add('updated_at');
+          missingColumns.add('updated_at');
+        }
+
+        if (missingColumns.isNotEmpty) {
           result['all_tables_have_timestamps'] = false;
+          result['missing_timestamps'][table] = missingColumns;
         }
 
-        if (missing.isNotEmpty) {
-          result['missing_timestamps'][table] = missing;
-        }
-
-        result['tables_checked'] = (result['tables_checked'] as int) + 1;
+        print(
+            '✅ Verified $table: ${missingColumns.isEmpty ? 'OK' : 'Missing: ${missingColumns.join(', ')}'}');
       } catch (e) {
-        print('❌ Failed to check table $table: $e');
+        print('❌ Failed to verify $table: $e');
         result['all_tables_have_timestamps'] = false;
       }
     }
 
-    if (result['all_tables_have_timestamps']) {
-      print('✅ All tables have timestamp fields for sync');
-    } else {
-      print(
-          '⚠️ Some tables missing timestamp fields: ${result['missing_timestamps']}');
-    }
-
+    print(
+        '🔍 Verification complete: ${result['tables_checked']} tables checked');
     return result;
   }
 }

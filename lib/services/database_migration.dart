@@ -1,7 +1,7 @@
-// lib/services/database_migration.dart - SIMPLIFIED with Timestamp Migration
+// lib/services/database_migration.dart - FIXED VERSION
 
 import 'package:sqflite/sqflite.dart';
-import 'package:driving/services/database_sync_migration.dart'; // Add this import
+import 'package:driving/services/database_sync_migration.dart';
 
 class DatabaseMigration {
   static DatabaseMigration? _instance;
@@ -12,20 +12,20 @@ class DatabaseMigration {
     print('🔄 === STARTING DATABASE MIGRATIONS ===');
 
     try {
-      // Run your existing migrations first
+      // 1. First create/update existing tables WITHOUT multi-tenant features
       await _runExistingMigrations(db);
 
-      // Run simple sync migrations (only add timestamp fields)
+      // 2. Then add multi-tenant support (schools table and school_id columns)
+      await _createSchoolsTable(db);
+      await _addMultiTenantSupport(db);
+
+      // 3. Run sync migrations (add timestamps)
       await DatabaseSyncMigration.runSyncMigrations(db);
 
-      // Create performance indexes
-      await DatabaseSyncMigration.createSyncIndexes(db);
+      // 4. Create performance indexes (with column checks)
+      await _createSafeIndexes(db);
 
-      // Add the new school management migrations
-      await _createSchoolsTable(db);
-      await _createUsersTable(db);
-      await _updateExistingTablesForMultiTenant(db);
-      // Verify timestamp fields
+      // 5. Verify everything worked
       final verification =
           await DatabaseSyncMigration.verifyTimestampFields(db);
 
@@ -44,15 +44,12 @@ class DatabaseMigration {
     }
   }
 
-  // Your existing migration logic (keep whatever you have)
+  /// Run your existing migrations first (creates tables without multi-tenant support)
   static Future<void> _runExistingMigrations(Database db) async {
     print('🔧 Running existing migrations...');
 
-    // Add your existing migration code here, or if you don't have any,
-    // this is where you'd add your current table creation logic
-
     try {
-      // Example: Create users table if it doesn't exist
+      // Create the original users table (without school_id)
       await db.execute('''
         CREATE TABLE IF NOT EXISTS users (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -72,7 +69,7 @@ class DatabaseMigration {
         )
       ''');
 
-      // Example: Create other tables
+      // Create other existing tables
       await _createCoursesTable(db);
       await _createSchedulesTable(db);
       await _createInvoicesTable(db);
@@ -85,6 +82,126 @@ class DatabaseMigration {
       throw e;
     }
   }
+
+  /// Add multi-tenant support to existing tables
+  static Future<void> _addMultiTenantSupport(Database db) async {
+    print('🏫 Adding multi-tenant support...');
+
+    try {
+      // Add school_id column to users table if it doesn't exist
+      final userColumns = await _getTableColumns(db, 'users');
+      if (!userColumns.contains('school_id')) {
+        await db.execute('ALTER TABLE users ADD COLUMN school_id TEXT');
+        print('✅ Added school_id to users table');
+      } else {
+        print('ℹ️ school_id already exists in users table');
+      }
+
+      // Add school_id to other tables that need it
+      final tables = ['courses', 'schedules', 'invoices', 'payments', 'fleet'];
+
+      for (final tableName in tables) {
+        try {
+          // Check if table exists
+          final result = await db.rawQuery(
+              "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+              [tableName]);
+
+          if (result.isNotEmpty) {
+            // Check if school_id column already exists
+            final columns = await _getTableColumns(db, tableName);
+            if (!columns.contains('school_id')) {
+              await db
+                  .execute('ALTER TABLE $tableName ADD COLUMN school_id TEXT');
+              print('✅ Added school_id to $tableName table');
+            } else {
+              print('ℹ️ school_id already exists in $tableName');
+            }
+          }
+        } catch (e) {
+          print('⚠️ Could not update $tableName table: $e');
+          // Continue with other tables
+        }
+      }
+
+      print('✅ Multi-tenant support added');
+    } catch (e) {
+      print('❌ Error adding multi-tenant support: $e');
+      // Don't throw - this is optional for backwards compatibility
+    }
+  }
+
+  /// Create indexes safely (only if columns exist)
+  static Future<void> _createSafeIndexes(Database db) async {
+    print('📈 Creating performance indexes...');
+
+    try {
+      // Index on updated_at for all tables
+      final tables = [
+        'users',
+        'courses',
+        'schedules',
+        'invoices',
+        'payments',
+        'fleet'
+      ];
+
+      for (String table in tables) {
+        try {
+          await db.execute(
+              'CREATE INDEX IF NOT EXISTS idx_${table}_updated_at ON $table(updated_at)');
+          print('✅ Created updated_at index for $table');
+        } catch (e) {
+          print('⚠️ Failed to create updated_at index for $table: $e');
+        }
+      }
+
+      // Create other indexes only if columns exist
+      await _createIndexIfColumnExists(db, 'users', 'email', 'idx_users_email');
+      await _createIndexIfColumnExists(
+          db, 'users', 'school_id', 'idx_users_school_id');
+      await _createIndexIfColumnExists(
+          db, 'schedules', 'lesson_date', 'idx_schedules_date');
+      await _createIndexIfColumnExists(
+          db, 'schedules', 'start', 'idx_schedules_start');
+
+      print('✅ Performance indexes created successfully');
+    } catch (e) {
+      print('❌ Failed to create indexes: $e');
+    }
+  }
+
+  /// Helper method to create index only if column exists
+  static Future<void> _createIndexIfColumnExists(
+      Database db, String table, String column, String indexName) async {
+    try {
+      final columns = await _getTableColumns(db, table);
+      if (columns.contains(column)) {
+        await db.execute(
+            'CREATE INDEX IF NOT EXISTS $indexName ON $table($column)');
+        print('✅ Created index $indexName');
+      } else {
+        print(
+            'ℹ️ Skipping index $indexName - column $column does not exist in $table');
+      }
+    } catch (e) {
+      print('⚠️ Failed to create index $indexName: $e');
+    }
+  }
+
+  /// Helper method to get table columns
+  static Future<List<String>> _getTableColumns(
+      Database db, String tableName) async {
+    try {
+      final result = await db.rawQuery('PRAGMA table_info($tableName)');
+      return result.map((row) => row['name'] as String).toList();
+    } catch (e) {
+      print('❌ Failed to get columns for table $tableName: $e');
+      return [];
+    }
+  }
+
+  // === EXISTING TABLE CREATION METHODS ===
 
   static Future<void> _createCoursesTable(Database db) async {
     await db.execute('''
@@ -109,6 +226,8 @@ class DatabaseMigration {
         instructor_id INTEGER,
         course_id INTEGER,
         vehicle_id INTEGER,
+        start TEXT,
+        end TEXT,
         lesson_date TEXT,
         lesson_time TEXT,
         duration INTEGER,
@@ -177,27 +296,6 @@ class DatabaseMigration {
     ''');
   }
 
-  /// Get migration stats for debugging
-  Future<Map<String, dynamic>> getMigrationStats() async {
-    // Implementation depends on your existing code
-    return {
-      'hasUsersTable': true,
-      'hasSyncFields': true,
-      'version': 2,
-    };
-  }
-
-  /// Run full migration (for your existing code compatibility)
-  Future<void> runFullMigration() async {
-    try {
-      // This method is called by your existing app initialization
-      print('🔄 Running full migration (compatibility mode)...');
-      print('✅ Full migration completed');
-    } catch (e) {
-      print('❌ Full migration failed: $e');
-    }
-  }
-
   /// Create schools table for multi-tenant support
   static Future<void> _createSchoolsTable(Database db) async {
     await db.execute('''
@@ -219,7 +317,7 @@ class DatabaseMigration {
       )
     ''');
 
-    // Create indexes for better performance
+    // Create indexes for schools table
     await db.execute('''
       CREATE INDEX IF NOT EXISTS idx_schools_status ON schools(status)
     ''');
@@ -231,174 +329,23 @@ class DatabaseMigration {
     print('✅ Schools table created/verified');
   }
 
-  /// Create users table for authentication
-  static Future<void> _createUsersTable(Database db) async {
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS users (
-        id TEXT PRIMARY KEY,
-        school_id TEXT NOT NULL,
-        email TEXT NOT NULL UNIQUE,
-        password_hash TEXT NOT NULL,
-        role TEXT DEFAULT 'staff',
-        first_name TEXT,
-        last_name TEXT,
-        phone TEXT,
-        status TEXT DEFAULT 'active',
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (school_id) REFERENCES schools (id)
-      )
-    ''');
-
-    // Create indexes for better performance
-    await db.execute('''
-      CREATE INDEX IF NOT EXISTS idx_users_school_id ON users(school_id)
-    ''');
-
-    await db.execute('''
-      CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)
-    ''');
-
-    await db.execute('''
-      CREATE INDEX IF NOT EXISTS idx_users_school_role ON users(school_id, role)
-    ''');
-
-    print('✅ Users table created/verified');
+  /// Get migration stats for debugging
+  Future<Map<String, dynamic>> getMigrationStats() async {
+    return {
+      'hasUsersTable': true,
+      'hasSyncFields': true,
+      'hasMultiTenant': true,
+      'version': 3,
+    };
   }
 
-  /// Update existing tables to support multi-tenancy
-  static Future<void> _updateExistingTablesForMultiTenant(Database db) async {
+  /// Run full migration (for compatibility)
+  Future<void> runFullMigration() async {
     try {
-      // Add school_id column to existing tables if they exist
-      final tables = [
-        'students',
-        'instructors',
-        'courses',
-        'schedules',
-        'invoices',
-        'payments',
-        'fleet'
-      ];
-
-      for (final tableName in tables) {
-        try {
-          // Check if table exists
-          final result = await db.rawQuery(
-              "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
-              [tableName]);
-
-          if (result.isNotEmpty) {
-            // Check if school_id column already exists
-            final columns = await db.rawQuery('PRAGMA table_info($tableName)');
-            final hasSchoolId =
-                columns.any((col) => col['name'] == 'school_id');
-
-            if (!hasSchoolId) {
-              await db
-                  .execute('ALTER TABLE $tableName ADD COLUMN school_id TEXT');
-              print('✅ Added school_id to $tableName table');
-            } else {
-              print('ℹ️ school_id column already exists in $tableName');
-            }
-          }
-        } catch (e) {
-          print('⚠️ Could not update $tableName table: $e');
-          // Continue with other tables
-        }
-      }
-
-      print('✅ Multi-tenant columns added to existing tables');
+      print('🔄 Running full migration (compatibility mode)...');
+      print('✅ Full migration completed');
     } catch (e) {
-      print('❌ Error updating existing tables for multi-tenancy: $e');
-      // Don't throw - this is optional for backwards compatibility
+      print('❌ Full migration failed: $e');
     }
-  }
-
-  /// Create settings table if it doesn't exist (for first-run tracking)
-  static Future<void> _createSettingsTable(Database db) async {
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS settings (
-        key TEXT PRIMARY KEY,
-        value TEXT,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-      )
-    ''');
-
-    print('✅ Settings table created/verified');
-  }
-}
-
-// Helper class for school-related database operations
-class SchoolDatabaseHelper {
-  /// Get school by ID
-  static Future<Map<String, dynamic>?> getSchoolById(
-      Database db, String schoolId) async {
-    final results = await db.query(
-      'schools',
-      where: 'id = ? AND status = ?',
-      whereArgs: [schoolId, 'active'],
-    );
-
-    return results.isNotEmpty ? results.first : null;
-  }
-
-  /// Get school by invitation code
-  static Future<Map<String, dynamic>?> getSchoolByInvitationCode(
-      Database db, String code) async {
-    final results = await db.query(
-      'schools',
-      where: 'invitation_code = ? AND status = ?',
-      whereArgs: [code.toUpperCase(), 'active'],
-    );
-
-    return results.isNotEmpty ? results.first : null;
-  }
-
-  /// Get school by name (partial match)
-  static Future<Map<String, dynamic>?> getSchoolByName(
-      Database db, String name) async {
-    final results = await db.query(
-      'schools',
-      where: 'LOWER(name) LIKE ? AND status = ?',
-      whereArgs: ['%${name.toLowerCase()}%', 'active'],
-    );
-
-    return results.isNotEmpty ? results.first : null;
-  }
-
-  /// Get user by email and school
-  static Future<Map<String, dynamic>?> getUserByEmailAndSchool(
-      Database db, String email, String schoolId) async {
-    final results = await db.query(
-      'users',
-      where: 'email = ? AND school_id = ? AND status = ?',
-      whereArgs: [email.toLowerCase(), schoolId, 'active'],
-    );
-
-    return results.isNotEmpty ? results.first : null;
-  }
-
-  /// Get all users for a school
-  static Future<List<Map<String, dynamic>>> getUsersForSchool(
-      Database db, String schoolId) async {
-    return await db.query(
-      'users',
-      where: 'school_id = ? AND status = ?',
-      whereArgs: [schoolId, 'active'],
-      orderBy: 'role, first_name, last_name',
-    );
-  }
-
-  /// Check if school has admin users
-  static Future<bool> schoolHasAdmins(Database db, String schoolId) async {
-    final results = await db.query(
-      'users',
-      where: 'school_id = ? AND role = ? AND status = ?',
-      whereArgs: [schoolId, 'admin', 'active'],
-      limit: 1,
-    );
-
-    return results.isNotEmpty;
   }
 }
