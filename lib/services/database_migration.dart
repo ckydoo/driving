@@ -21,6 +21,10 @@ class DatabaseMigration {
       // Create performance indexes
       await DatabaseSyncMigration.createSyncIndexes(db);
 
+      // Add the new school management migrations
+      await _createSchoolsTable(db);
+      await _createUsersTable(db);
+      await _updateExistingTablesForMultiTenant(db);
       // Verify timestamp fields
       final verification =
           await DatabaseSyncMigration.verifyTimestampFields(db);
@@ -192,5 +196,209 @@ class DatabaseMigration {
     } catch (e) {
       print('❌ Full migration failed: $e');
     }
+  }
+
+  /// Create schools table for multi-tenant support
+  static Future<void> _createSchoolsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS schools (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        address TEXT,
+        location TEXT,
+        phone TEXT,
+        email TEXT,
+        website TEXT,
+        start_time TEXT,
+        end_time TEXT,
+        operating_days TEXT,
+        invitation_code TEXT UNIQUE,
+        status TEXT DEFAULT 'active',
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )
+    ''');
+
+    // Create indexes for better performance
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_schools_status ON schools(status)
+    ''');
+
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_schools_invitation_code ON schools(invitation_code)
+    ''');
+
+    print('✅ Schools table created/verified');
+  }
+
+  /// Create users table for authentication
+  static Future<void> _createUsersTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        school_id TEXT NOT NULL,
+        email TEXT NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL,
+        role TEXT DEFAULT 'staff',
+        first_name TEXT,
+        last_name TEXT,
+        phone TEXT,
+        status TEXT DEFAULT 'active',
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (school_id) REFERENCES schools (id)
+      )
+    ''');
+
+    // Create indexes for better performance
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_users_school_id ON users(school_id)
+    ''');
+
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)
+    ''');
+
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_users_school_role ON users(school_id, role)
+    ''');
+
+    print('✅ Users table created/verified');
+  }
+
+  /// Update existing tables to support multi-tenancy
+  static Future<void> _updateExistingTablesForMultiTenant(Database db) async {
+    try {
+      // Add school_id column to existing tables if they exist
+      final tables = [
+        'students',
+        'instructors',
+        'courses',
+        'schedules',
+        'invoices',
+        'payments',
+        'fleet'
+      ];
+
+      for (final tableName in tables) {
+        try {
+          // Check if table exists
+          final result = await db.rawQuery(
+              "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+              [tableName]);
+
+          if (result.isNotEmpty) {
+            // Check if school_id column already exists
+            final columns = await db.rawQuery('PRAGMA table_info($tableName)');
+            final hasSchoolId =
+                columns.any((col) => col['name'] == 'school_id');
+
+            if (!hasSchoolId) {
+              await db
+                  .execute('ALTER TABLE $tableName ADD COLUMN school_id TEXT');
+              print('✅ Added school_id to $tableName table');
+            } else {
+              print('ℹ️ school_id column already exists in $tableName');
+            }
+          }
+        } catch (e) {
+          print('⚠️ Could not update $tableName table: $e');
+          // Continue with other tables
+        }
+      }
+
+      print('✅ Multi-tenant columns added to existing tables');
+    } catch (e) {
+      print('❌ Error updating existing tables for multi-tenancy: $e');
+      // Don't throw - this is optional for backwards compatibility
+    }
+  }
+
+  /// Create settings table if it doesn't exist (for first-run tracking)
+  static Future<void> _createSettingsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY,
+        value TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )
+    ''');
+
+    print('✅ Settings table created/verified');
+  }
+}
+
+// Helper class for school-related database operations
+class SchoolDatabaseHelper {
+  /// Get school by ID
+  static Future<Map<String, dynamic>?> getSchoolById(
+      Database db, String schoolId) async {
+    final results = await db.query(
+      'schools',
+      where: 'id = ? AND status = ?',
+      whereArgs: [schoolId, 'active'],
+    );
+
+    return results.isNotEmpty ? results.first : null;
+  }
+
+  /// Get school by invitation code
+  static Future<Map<String, dynamic>?> getSchoolByInvitationCode(
+      Database db, String code) async {
+    final results = await db.query(
+      'schools',
+      where: 'invitation_code = ? AND status = ?',
+      whereArgs: [code.toUpperCase(), 'active'],
+    );
+
+    return results.isNotEmpty ? results.first : null;
+  }
+
+  /// Get school by name (partial match)
+  static Future<Map<String, dynamic>?> getSchoolByName(
+      Database db, String name) async {
+    final results = await db.query(
+      'schools',
+      where: 'LOWER(name) LIKE ? AND status = ?',
+      whereArgs: ['%${name.toLowerCase()}%', 'active'],
+    );
+
+    return results.isNotEmpty ? results.first : null;
+  }
+
+  /// Get user by email and school
+  static Future<Map<String, dynamic>?> getUserByEmailAndSchool(
+      Database db, String email, String schoolId) async {
+    final results = await db.query(
+      'users',
+      where: 'email = ? AND school_id = ? AND status = ?',
+      whereArgs: [email.toLowerCase(), schoolId, 'active'],
+    );
+
+    return results.isNotEmpty ? results.first : null;
+  }
+
+  /// Get all users for a school
+  static Future<List<Map<String, dynamic>>> getUsersForSchool(
+      Database db, String schoolId) async {
+    return await db.query(
+      'users',
+      where: 'school_id = ? AND status = ?',
+      whereArgs: [schoolId, 'active'],
+      orderBy: 'role, first_name, last_name',
+    );
+  }
+
+  /// Check if school has admin users
+  static Future<bool> schoolHasAdmins(Database db, String schoolId) async {
+    final results = await db.query(
+      'users',
+      where: 'school_id = ? AND role = ? AND status = ?',
+      whereArgs: [schoolId, 'admin', 'active'],
+      limit: 1,
+    );
+
+    return results.isNotEmpty;
   }
 }

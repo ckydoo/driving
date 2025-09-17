@@ -253,10 +253,12 @@ class DatabaseHelper {
         course TEXT,
         role TEXT NOT NULL,
         courseIds TEXT,
+        school_id TEXT NOT NULL,
         status TEXT NOT NULL DEFAULT 'Active',
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         last_login TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        last_login_method TEXT
+        last_login_method TEXT,
+        FOREIGN KEY (school_id) REFERENCES schools (id)
       )
     ''');
 
@@ -931,6 +933,335 @@ class DatabaseHelper {
   Future<List<Map<String, dynamic>>> getUserMessages() async {
     final db = await database;
     return await db.query('usermessages');
+  }
+
+  /// School Management Methods
+  Future<String?> getCurrentSchoolId() async {
+    try {
+      final db = await database;
+      final result = await db.query(
+        'settings',
+        where: 'key = ?',
+        whereArgs: ['current_school_id'],
+      );
+
+      return result.isNotEmpty ? result.first['value'] as String? : null;
+    } catch (e) {
+      print('❌ Error getting current school ID: $e');
+      return null;
+    }
+  }
+
+  /// Set current school ID
+  Future<void> setCurrentSchoolId(String schoolId) async {
+    try {
+      final db = await database;
+      await db.insert(
+        'settings',
+        {'key': 'current_school_id', 'value': schoolId},
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } catch (e) {
+      print('❌ Error setting current school ID: $e');
+    }
+  }
+
+  /// Get school by ID
+  Future<Map<String, dynamic>?> getSchoolById(String schoolId) async {
+    try {
+      final db = await database;
+      final results = await db.query(
+        'schools',
+        where: 'id = ? AND status = ?',
+        whereArgs: [schoolId, 'active'],
+      );
+
+      return results.isNotEmpty ? results.first : null;
+    } catch (e) {
+      print('❌ Error getting school by ID: $e');
+      return null;
+    }
+  }
+
+  /// Get school by invitation code
+  Future<Map<String, dynamic>?> getSchoolByInvitationCode(String code) async {
+    try {
+      final db = await database;
+      final results = await db.query(
+        'schools',
+        where: 'invitation_code = ? AND status = ?',
+        whereArgs: [code.toUpperCase(), 'active'],
+      );
+
+      return results.isNotEmpty ? results.first : null;
+    } catch (e) {
+      print('❌ Error getting school by invitation code: $e');
+      return null;
+    }
+  }
+
+  /// Get school by name (partial match)
+  Future<Map<String, dynamic>?> getSchoolByName(String name) async {
+    try {
+      final db = await database;
+      final results = await db.query(
+        'schools',
+        where: 'LOWER(name) LIKE ? AND status = ?',
+        whereArgs: ['%${name.toLowerCase()}%', 'active'],
+      );
+
+      return results.isNotEmpty ? results.first : null;
+    } catch (e) {
+      print('❌ Error getting school by name: $e');
+      return null;
+    }
+  }
+
+  /// Insert or update school
+  Future<void> insertSchool(Map<String, dynamic> schoolData) async {
+    try {
+      final db = await database;
+      await db.insert(
+        'schools',
+        schoolData,
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      print('✅ School inserted/updated: ${schoolData['name']}');
+    } catch (e) {
+      print('❌ Error inserting school: $e');
+      rethrow;
+    }
+  }
+
+  /// Get all active schools
+  Future<List<Map<String, dynamic>>> getActiveSchools() async {
+    try {
+      final db = await database;
+      return await db.query(
+        'schools',
+        where: 'status = ?',
+        whereArgs: ['active'],
+        orderBy: 'name',
+      );
+    } catch (e) {
+      print('❌ Error getting active schools: $e');
+      return [];
+    }
+  }
+
+  /// User Management Methods (School-specific)
+
+  /// Get user by email and school
+  Future<Map<String, dynamic>?> getUserByEmailAndSchool(
+      String email, String schoolId) async {
+    try {
+      final db = await database;
+      final results = await db.query(
+        'users',
+        where: 'email = ? AND school_id = ? AND status = ?',
+        whereArgs: [email.toLowerCase(), schoolId, 'active'],
+      );
+
+      return results.isNotEmpty ? results.first : null;
+    } catch (e) {
+      print('❌ Error getting user by email and school: $e');
+      return null;
+    }
+  }
+
+  // /// Insert or update user
+  // Future<void> insertUser(Map<String, dynamic> userData) async {
+  //   try {
+  //     final db = await database;
+
+  //     // Ensure email is lowercase for consistency
+  //     if (userData.containsKey('email')) {
+  //       userData['email'] = userData['email'].toString().toLowerCase();
+  //     }
+
+  //     await db.insert(
+  //       'users',
+  //       userData,
+  //       conflictAlgorithm: ConflictAlgorithm.replace,
+  //     );
+  //     print('✅ User inserted/updated: ${userData['email']}');
+  //   } catch (e) {
+  //     print('❌ Error inserting user: $e');
+  //     rethrow;
+  //   }
+  // }
+
+  /// Get all users for a school
+  Future<List<Map<String, dynamic>>> getUsersForSchool(String schoolId) async {
+    try {
+      final db = await database;
+      return await db.query(
+        'users',
+        where: 'school_id = ? AND status = ?',
+        whereArgs: [schoolId, 'active'],
+        orderBy: 'role, first_name, last_name',
+      );
+    } catch (e) {
+      print('❌ Error getting users for school: $e');
+      return [];
+    }
+  }
+
+  /// Get users by role for a school
+  Future<List<Map<String, dynamic>>> getUsersByRole(
+      String schoolId, String role) async {
+    try {
+      final db = await database;
+      return await db.query(
+        'users',
+        where: 'school_id = ? AND role = ? AND status = ?',
+        whereArgs: [schoolId, role, 'active'],
+        orderBy: 'first_name, last_name',
+      );
+    } catch (e) {
+      print('❌ Error getting users by role: $e');
+      return [];
+    }
+  }
+
+  /// Check if school has admin users
+  Future<bool> schoolHasAdmins(String schoolId) async {
+    try {
+      final db = await database;
+      final results = await db.query(
+        'users',
+        where: 'school_id = ? AND role = ? AND status = ?',
+        whereArgs: [schoolId, 'admin', 'active'],
+        limit: 1,
+      );
+
+      return results.isNotEmpty;
+    } catch (e) {
+      print('❌ Error checking school admins: $e');
+      return false;
+    }
+  }
+
+  /// Multi-tenant Query Helpers
+
+  /// Get students for current school
+  Future<List<Map<String, dynamic>>> getStudentsForCurrentSchool() async {
+    try {
+      final schoolId = await getCurrentSchoolId();
+      if (schoolId == null) {
+        print('⚠️ No current school set');
+        return [];
+      }
+
+      final db = await database;
+
+      // If you have a separate students table
+      final studentsTableExists = await _tableExists('students');
+      if (studentsTableExists) {
+        return await db.query(
+          'students',
+          where: 'school_id = ?',
+          whereArgs: [schoolId],
+          orderBy: 'fname, lname',
+        );
+      } else {
+        // Fallback to users table with student role
+        return await getUsersByRole(schoolId, 'student');
+      }
+    } catch (e) {
+      print('❌ Error getting students for current school: $e');
+      return [];
+    }
+  }
+
+  /// Get instructors for current school
+  Future<List<Map<String, dynamic>>> getInstructorsForCurrentSchool() async {
+    try {
+      final schoolId = await getCurrentSchoolId();
+      if (schoolId == null) {
+        print('⚠️ No current school set');
+        return [];
+      }
+
+      return await getUsersByRole(schoolId, 'instructor');
+    } catch (e) {
+      print('❌ Error getting instructors for current school: $e');
+      return [];
+    }
+  }
+
+  /// Helper method to check if table exists
+  Future<bool> _tableExists(String tableName) async {
+    try {
+      final db = await database;
+      final result = await db.rawQuery(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+          [tableName]);
+      return result.isNotEmpty;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Settings Management for Multi-tenant
+
+  /// Check if first run is completed
+  Future<bool> isFirstRunCompleted() async {
+    try {
+      final db = await database;
+      final result = await db.query(
+        'settings',
+        where: 'key = ?',
+        whereArgs: ['first_run_completed'],
+      );
+
+      return result.isNotEmpty && result.first['value'] == '1';
+    } catch (e) {
+      print('❌ Error checking first run status: $e');
+      return false;
+    }
+  }
+
+  /// Mark first run as completed
+  Future<void> markFirstRunCompleted() async {
+    try {
+      final db = await database;
+      await db.insert(
+        'settings',
+        {'key': 'first_run_completed', 'value': '1'},
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      print('✅ First run marked as completed');
+    } catch (e) {
+      print('❌ Error marking first run completed: $e');
+    }
+  }
+
+  /// Clean up methods for testing/reset
+
+  /// Clear all school data (for testing)
+  Future<void> clearAllSchoolData() async {
+    try {
+      final db = await database;
+      await db.delete('users');
+      await db.delete('schools');
+      await db.delete('settings',
+          where: 'key IN (?, ?)',
+          whereArgs: ['first_run_completed', 'current_school_id']);
+      print('✅ All school data cleared');
+    } catch (e) {
+      print('❌ Error clearing school data: $e');
+    }
+  }
+
+  /// Reset to first run state
+  Future<void> resetToFirstRun() async {
+    try {
+      await clearAllSchoolData();
+      print('✅ Reset to first run state');
+    } catch (e) {
+      print('❌ Error resetting to first run: $e');
+    }
   }
 
   // ================ BILLING RECORDS HISTORY TABLE ================

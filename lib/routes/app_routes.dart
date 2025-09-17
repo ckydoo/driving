@@ -4,11 +4,16 @@ import 'package:driving/middleware/auth_middleware.dart';
 import 'package:driving/screens/auth/login_screen.dart';
 import 'package:driving/screens/auth/enhanced_pin_login_screen.dart';
 import 'package:driving/screens/auth/pin_setup_screen.dart';
+import 'package:driving/screens/auth/school_registration_screen.dart';
+import 'package:driving/screens/auth/school_selection_screen.dart';
 import 'package:driving/widgets/main_layout.dart';
 import 'package:get/get.dart';
 
 class AppRoutes {
   // === ROUTE CONSTANTS ===
+  // School Management Routes
+  static const String schoolSelection = '/school-selection';
+  static const String schoolRegistration = '/school-registration';
 
   // Authentication flow
   static const String initial = '/';
@@ -37,7 +42,14 @@ class AppRoutes {
 
   static final routes = [
     // === INITIALIZATION & SCHOOL SELECTION ===
-
+    GetPage(
+      name: schoolSelection,
+      page: () => const SchoolSelectionScreen(),
+    ),
+    GetPage(
+      name: schoolRegistration,
+      page: () => const SchoolRegistrationScreen(),
+    ),
     // Initial loading screen
     GetPage(
       name: initial,

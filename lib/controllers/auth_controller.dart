@@ -182,7 +182,6 @@ class AuthController extends GetxController {
       final user = User.fromJson(userData);
       final userId = await DatabaseHelper.instance.insertUser(user.toJson());
 
-      print('✅ User registered locally with ID: $userId');
       print('✅ User: ${user.fname} ${user.lname} (${user.role})');
 
       return true;

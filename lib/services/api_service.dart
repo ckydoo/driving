@@ -12,7 +12,7 @@ import 'package:driving/models/fleet.dart';
 
 class ApiService {
   static String? _token;
-  static String baseUrl = 'http://192.168.8.172:8000/api'; // CHANGE THIS
+  static String baseUrl = 'http://192.168.9.103:8000/api'; // CHANGE THIS
 
   static void configure({required String baseUrl}) {
     ApiService.baseUrl = baseUrl;

@@ -20,7 +20,7 @@ class SyncController extends GetxController {
 
   // Sync settings
   final RxBool autoSyncEnabled = true.obs;
-  final RxInt syncIntervalMinutes = 30.obs;
+  final RxInt syncIntervalMinutes = 1.obs;
 
   // Background sync timer
   Timer? _syncTimer;
