@@ -1,5 +1,7 @@
 // lib/controllers/school_registration_controller.dart - INTERNET-FIRST APPROACH
 
+import 'package:driving/controllers/auth_controller.dart';
+import 'package:driving/models/user.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -367,13 +369,37 @@ class SchoolRegistrationController extends GetxController {
 
   /// Step 5: Show success and navigate
   Future<void> _showSuccessAndNavigate(Map<String, dynamic> result) async {
-    print('🎉 Step 5: Registration complete - showing success...');
+    print(
+        '🎉 Step 5: Registration complete - setting up PIN authentication...');
 
     try {
       final school = result['school'];
+      final admin = result['admin'];
       final trialDays = result['trial_days_remaining'] ?? 30;
 
-      // Show success dialog
+      // ✅ STEP 1: Set user as authenticated in AuthController
+      final authController = Get.find<AuthController>();
+
+      // Create user object from registration result
+      final user = User.fromJson({
+        'id': admin['id'],
+        'email': admin['email'],
+        'fname': admin['fname'],
+        'lname': admin['lname'],
+        'role': admin['role'],
+        'phone': admin['phone'],
+        'status': 'active',
+        'school_id': school['id'].toString(),
+      });
+
+      // Set current user and login state
+      authController.currentUser.value = user;
+      authController.isLoggedIn.value = true;
+      authController.userEmail.value = admin['email'];
+
+      print('✅ User authenticated: ${admin['email']}');
+
+      // ✅ STEP 2: Show success dialog with PIN setup message
       await Get.dialog(
         AlertDialog(
           title: Row(
@@ -393,9 +419,41 @@ class SchoolRegistrationController extends GetxController {
               const SizedBox(height: 8),
               Text('⏱️ Trial Period: $trialDays days'),
               const SizedBox(height: 16),
-              Text(
-                'Your school is now registered and data has been downloaded for offline access.',
-                style: TextStyle(color: Colors.grey[600]),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.shade200),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.security,
+                            color: Colors.blue.shade600, size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Security Setup Required',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue.shade600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'For faster and more secure access, you\'ll now set up a 4-digit PIN. '
+                      'This will be used for all future logins instead of your email and password.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.blue.shade700,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -406,22 +464,22 @@ class SchoolRegistrationController extends GetxController {
                 backgroundColor: Colors.green.shade600,
                 foregroundColor: Colors.white,
               ),
-              child: const Text('Continue to Login'),
+              child: const Text('Continue to PIN Setup'),
             ),
           ],
         ),
         barrierDismissible: false,
       );
 
-      // Mark first run as completed and navigate
+      // ✅ STEP 3: Navigate to PIN setup instead of login
       await SchoolSelectionController.markFirstRunCompleted();
-      Get.offAllNamed('/login');
+      Get.offAllNamed('/pin-setup');
 
-      print('✅ Step 5 Complete: Registration successful!');
+      print('✅ Step 5 Complete: Redirecting to PIN setup');
     } catch (e) {
       print('❌ Step 5 Failed: Navigation error - $e');
-      // Still navigate even if dialog fails
-      Get.offAllNamed('/login');
+      // Fallback: still navigate to PIN setup
+      Get.offAllNamed('/pin-setup');
     }
   }
 

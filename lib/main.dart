@@ -37,9 +37,6 @@ void main() async {
   // Initialize core services (simplified)
   await _initializeCoreServices();
 
-  // Initialize demo data for development
-  await _initializeDemoData();
-
   print('✅ === APP INITIALIZATION COMPLETED ===');
 
   runApp(DrivingSchoolApp());
@@ -138,152 +135,6 @@ void _setupAuthSyncIntegration() {
   }
 }
 
-/// Initialize demo data for development/testing
-Future<void> _initializeDemoData() async {
-  try {
-    final isFirstRun = await SchoolSelectionController.isFirstRun();
-    final hasExistingData = await _hasDemoSchools();
-
-    if (isFirstRun && !hasExistingData) {
-      print('🎯 First run detected - creating demo data...');
-      await _createDemoSchools();
-    } else if (hasExistingData) {
-      print('📚 Demo data already exists');
-      _printDemoCredentials(); // Show credentials in console
-    }
-  } catch (e) {
-    print('❌ Error initializing demo data: $e');
-  }
-}
-
-/// Check if demo schools exist
-Future<bool> _hasDemoSchools() async {
-  try {
-    final db = await DatabaseHelper.instance.database;
-    final schools = await db.query('schools', limit: 1);
-    return schools.isNotEmpty;
-  } catch (e) {
-    print('❌ Error checking demo schools: $e');
-    return false;
-  }
-}
-
-/// Create demo schools for testing
-Future<void> _createDemoSchools() async {
-  try {
-    final db = await DatabaseHelper.instance.database;
-
-    final sampleSchools = [
-      {
-        'id': 'school_001',
-        'name': 'Metro Driving School',
-        'address': '123 Main Street, Harare',
-        'location': 'Harare, Zimbabwe',
-        'phone': '+263 77 123 4567',
-        'email': 'info@metrodriving.co.zw',
-        'website': 'www.metrodriving.co.zw',
-        'start_time': '08:00',
-        'end_time': '18:00',
-        'operating_days': 'Mon,Tue,Wed,Thu,Fri,Sat',
-        'invitation_code': 'METRO2024',
-        'status': 'active',
-        'created_at': DateTime.now().toIso8601String(),
-      },
-      {
-        'id': 'school_002',
-        'name': 'Safe Drive Academy',
-        'address': '456 Oak Avenue, Bulawayo',
-        'location': 'Bulawayo, Zimbabwe',
-        'phone': '+263 77 987 6543',
-        'email': 'contact@safedrive.co.zw',
-        'website': 'www.safedrive.co.zw',
-        'start_time': '09:00',
-        'end_time': '17:00',
-        'operating_days': 'Mon,Tue,Wed,Thu,Fri',
-        'invitation_code': 'SAFE2024',
-        'status': 'active',
-        'created_at': DateTime.now().toIso8601String(),
-      },
-    ];
-
-    for (final school in sampleSchools) {
-      await db.insert(
-        'schools',
-        school,
-        conflictAlgorithm: ConflictAlgorithm.ignore,
-      );
-    }
-
-    // Create demo users
-    final sampleUsers = [
-      {
-        'id': 'user_001',
-        'school_id': 'school_001',
-        'email': 'admin@metro.com',
-        'password': 'admin123',
-        'role': 'admin',
-        'fname': 'John',
-        'lname': 'Smith',
-        'phone': '+263 77 111 0001',
-        'status': 'active',
-        'created_at': DateTime.now().toIso8601String(),
-      },
-      {
-        'id': 'user_002',
-        'school_id': 'school_002',
-        'email': 'admin@safedrive.com',
-        'password': 'admin123',
-        'role': 'admin',
-        'fname': 'Sarah',
-        'lname': 'Johnson',
-        'phone': '+263 77 222 0001',
-        'status': 'active',
-        'created_at': DateTime.now().toIso8601String(),
-      },
-      // Universal demo account
-      {
-        'id': 'user_demo',
-        'school_id': 'school_001',
-        'email': 'demo@school.com',
-        'password': 'demo123',
-        'role': 'admin',
-        'fname': 'Demo',
-        'lname': 'User',
-        'phone': '+263 77 000 0000',
-        'status': 'active',
-        'created_at': DateTime.now().toIso8601String(),
-      },
-    ];
-
-    for (final user in sampleUsers) {
-      await db.insert(
-        'users',
-        user,
-        conflictAlgorithm: ConflictAlgorithm.ignore,
-      );
-    }
-
-    print('✅ Demo schools and users created');
-    _printDemoCredentials();
-  } catch (e) {
-    print('❌ Error creating demo schools: $e');
-  }
-}
-
-/// Print demo credentials for testing
-void _printDemoCredentials() {
-  print('\n🔑 ===== DEMO LOGIN CREDENTIALS =====');
-  print('School: "Metro Driving School" or "METRO2024"');
-  print('Email: admin@metro.com | Password: admin123');
-  print('');
-  print('School: "Safe Drive Academy" or "SAFE2024"');
-  print('Email: admin@safedrive.com | Password: admin123');
-  print('');
-  print('Universal Demo Account:');
-  print('Email: demo@school.com | Password: demo123');
-  print('=====================================\n');
-}
-
 /// Driving School App
 class DrivingSchoolApp extends StatelessWidget {
   const DrivingSchoolApp({super.key});
@@ -360,68 +211,59 @@ class _AuthenticationWrapperState extends State<AuthenticationWrapper> {
   }
 
   Future<void> _determineInitialRoute() async {
-    // Prevent multiple calls
-    if (_isNavigating) {
-      print('🔄 Navigation already in progress, skipping...');
-      return;
-    }
-
+    if (_isNavigating) return;
     _isNavigating = true;
 
     try {
-      print('🔍 === DETERMINING INITIAL ROUTE WITH SCHOOL SELECTION ===');
-
-      // Wait a bit for controllers to initialize
+      print('🔍 === DETERMINING INITIAL ROUTE - PIN AFTER SCHOOL SETUP ===');
       await Future.delayed(const Duration(milliseconds: 300));
 
-      // Get required controllers
-      final authController = Get.find<SettingsController>();
+      final settingsController = Get.find<SettingsController>();
       final pinController = Get.find<PinController>();
+      final authController = Get.find<AuthController>();
 
       String initialRoute;
 
-      // Step 1: Check if this is first run or school not configured
+      // STEP 1: Check if this is completely first run (no school setup)
       final isFirstRun = await SchoolSelectionController.isFirstRun();
-      final isSchoolConfigured = authController.isBusinessInfoComplete();
+      final isSchoolConfigured = settingsController.isBusinessInfoComplete();
 
       if (isFirstRun || !isSchoolConfigured) {
-        print(
-            '🏫 First run or school not configured - showing school selection');
+        print('🏫 First time setup - need school selection');
         initialRoute = '/school-selection';
-      } else {
-        // Step 2: Check if user is already logged in
-        final authCtrl = Get.find<AuthController>();
-        if (authCtrl.isLoggedIn.value) {
-          print('👤 User already logged in');
-          initialRoute = '/main';
+      }
+      // STEP 2: Check if user has PIN setup (after school setup)
+      else if (pinController.isPinSet.value &&
+          pinController.isPinEnabled.value) {
+        print('🔐 PIN is set - using PIN authentication');
+        if (pinController.isLocked.value) {
+          print('🔒 PIN is locked - redirect to login');
+          initialRoute = '/login';
         } else {
-          // Step 3: Check PIN availability for quick login
-          final isUserVerified = await pinController.isUserVerified();
-          final shouldUsePinAuth = pinController.shouldUsePinAuth();
-          final hasUsers = await _checkIfUsersExist();
-
-          if (isUserVerified && shouldUsePinAuth && hasUsers) {
-            print('📱 PIN available - using PIN login');
-            initialRoute = '/pin-login';
-          } else {
-            print('🔐 Going to standard login');
-            initialRoute = '/login';
-          }
+          print('📱 Redirecting to PIN login');
+          initialRoute = '/pin-login';
         }
+      }
+      // STEP 3: Check if user is logged in but no PIN setup (after school join/registration)
+      else if (authController.isLoggedIn.value &&
+          !pinController.isPinSet.value) {
+        print('👤 User logged in after school setup - redirect to PIN setup');
+        initialRoute = '/pin-setup';
+      }
+      // STEP 4: No authentication - show login (shouldn't happen after school setup)
+      else {
+        print('🔑 No authentication - showing login');
+        initialRoute = '/login';
       }
 
       print('🎯 Initial route determined: $initialRoute');
 
-      // Navigate to the determined route
-      if (mounted) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
         Get.offAllNamed(initialRoute);
-      }
+      });
     } catch (e) {
-      debugPrint('❌ Error determining initial route: $e');
-      // Always fallback to school selection on error for first-time setup
-      if (mounted) {
-        Get.offAllNamed('/school-selection');
-      }
+      print('❌ Error determining route: $e');
+      Get.offAllNamed('/login');
     } finally {
       _isNavigating = false;
     }

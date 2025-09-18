@@ -1,5 +1,3 @@
-import 'package:driving/widgets/school_info_widget.dart';
-import 'package:driving/widgets/seed_data_widget.dart';
 import 'package:driving/widgets/sync_status_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';

@@ -1,4 +1,5 @@
 // lib/controllers/school_selection_controller.dart
+import 'package:driving/models/user.dart';
 import 'package:driving/services/school_api_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -103,28 +104,112 @@ class SchoolSelectionController extends GetxController {
       // Update settings controller
       await _setCurrentSchool(result['school']);
 
+      // ✅ NEW: Set user as authenticated in AuthController
+      final authController = Get.find<AuthController>();
+
+      // Create user object from join result
+      final user = User.fromJson({
+        'id': result['user']['id'],
+        'email': result['user']['email'],
+        'fname': result['user']['fname'] ?? '',
+        'lname': result['user']['lname'] ?? '',
+        'role': result['user']['role'],
+        'phone': result['user']['phone'] ?? '',
+        'status': 'active',
+        'school_id': result['school']['id'].toString(),
+      });
+
+      // Set current user and login state
+      authController.currentUser.value = user;
+      authController.isLoggedIn.value = true;
+      authController.userEmail.value = result['user']['email'];
+
+      print('✅ User authenticated after joining: ${result['user']['email']}');
+
       _clearForm();
 
-      // Show success message with trial info
+      // ✅ NEW: Show success message with PIN setup information
       final trialDays = result['trial_days_remaining'] ?? 0;
-      Get.snackbar(
-        'Welcome!',
-        trialDays > 0
-            ? 'Successfully joined ${result['school']['name']}. $trialDays trial days remaining.'
-            : 'Successfully joined ${result['school']['name']}.',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.green.shade100,
-        colorText: Colors.green.shade700,
+
+      await Get.dialog(
+        AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.green.shade600, size: 32),
+              const SizedBox(width: 12),
+              const Text('Welcome!'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                trialDays > 0
+                    ? 'Successfully joined ${result['school']['name']}. $trialDays trial days remaining.'
+                    : 'Successfully joined ${result['school']['name']}.',
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.shade200),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.security,
+                            color: Colors.blue.shade600, size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Set Up Quick Access',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue.shade600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Create a 4-digit PIN for faster login. No more typing email and password every time!',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.blue.shade700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Get.back(),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green.shade600,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Set Up PIN'),
+            ),
+          ],
+        ),
+        barrierDismissible: false,
       );
 
-      Get.offAllNamed('/login');
+      // ✅ NEW: Navigate to PIN setup instead of login
+      Get.offAllNamed('/pin-setup');
     } catch (e) {
       print('❌ Online authentication failed: $e');
       throw Exception('Online authentication failed: $e');
     }
   }
 
-  /// Join school offline (fallback)
+// Replace the _joinSchoolOffline method:
   Future<void> _joinSchoolOffline(
       String schoolName, String email, String password) async {
     try {
@@ -141,17 +226,100 @@ class SchoolSelectionController extends GetxController {
 
       if (isAuthenticated) {
         await _setCurrentSchool(school);
-        _clearForm();
 
-        Get.snackbar(
-          'Welcome!',
-          'Successfully joined ${school['name']} (offline mode).',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Colors.orange.shade100,
-          colorText: Colors.orange.shade700,
+        // ✅ NEW: Set user as authenticated in AuthController
+        final authController = Get.find<AuthController>();
+
+        // Get user data from local database
+        final db = await _dbHelper.database;
+        final userData = await db.query(
+          'users',
+          where: 'email = ? AND school_id = ?',
+          whereArgs: [email, school['id']],
+          limit: 1,
         );
 
-        Get.offAllNamed('/login');
+        if (userData.isNotEmpty) {
+          final user = User.fromJson(userData.first);
+          authController.currentUser.value = user;
+          authController.isLoggedIn.value = true;
+          authController.userEmail.value = email;
+
+          print('✅ User authenticated offline: $email');
+        }
+
+        _clearForm();
+
+        // ✅ NEW: Show offline success with PIN setup
+        await Get.dialog(
+          AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.check_circle,
+                    color: Colors.orange.shade600, size: 32),
+                const SizedBox(width: 12),
+                const Text('Welcome!'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Successfully joined ${school['name']} (offline mode).'),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.security,
+                              color: Colors.blue.shade600, size: 20),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Quick Access Setup',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.blue.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Set up a 4-digit PIN for instant access to your account.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.blue.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              ElevatedButton(
+                onPressed: () => Get.back(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange.shade600,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Set Up PIN'),
+              ),
+            ],
+          ),
+          barrierDismissible: false,
+        );
+
+        // ✅ NEW: Navigate to PIN setup instead of login
+        Get.offAllNamed('/pin-setup');
       } else {
         throw Exception('Invalid credentials for this school');
       }

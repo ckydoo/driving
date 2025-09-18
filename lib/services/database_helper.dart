@@ -1070,28 +1070,6 @@ class DatabaseHelper {
     }
   }
 
-  // /// Insert or update user
-  // Future<void> insertUser(Map<String, dynamic> userData) async {
-  //   try {
-  //     final db = await database;
-
-  //     // Ensure email is lowercase for consistency
-  //     if (userData.containsKey('email')) {
-  //       userData['email'] = userData['email'].toString().toLowerCase();
-  //     }
-
-  //     await db.insert(
-  //       'users',
-  //       userData,
-  //       conflictAlgorithm: ConflictAlgorithm.replace,
-  //     );
-  //     print('✅ User inserted/updated: ${userData['email']}');
-  //   } catch (e) {
-  //     print('❌ Error inserting user: $e');
-  //     rethrow;
-  //   }
-  // }
-
   /// Get all users for a school
   Future<List<Map<String, dynamic>>> getUsersForSchool(String schoolId) async {
     try {
