@@ -1,7 +1,7 @@
-// lib/controllers/sync_controller.dart
+// lib/controllers/sync_controller.dart - FIXED VERSION
 import 'dart:async';
 import 'package:driving/services/sync_service.dart';
-import 'package:driving/models/sync_result.dart'; // Import shared SyncResult
+import 'package:driving/models/sync_result.dart';
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -20,31 +20,79 @@ class SyncController extends GetxController {
 
   // Sync settings
   final RxBool autoSyncEnabled = true.obs;
-  final RxInt syncIntervalMinutes = 1.obs;
+  final RxInt syncIntervalMinutes = 30.obs; // FIX: Changed from 1 to 30 minutes
 
   // Background sync timer
   Timer? _syncTimer;
   Timer? _connectionCheckTimer;
 
+  // FIX: Add initialization state tracking
+  bool _isInitialized = false;
+  bool _isDisposed = false;
+
   @override
   void onInit() {
     super.onInit();
-    _startConnectionMonitoring();
-    _loadSyncSettings();
+    _initializeController();
   }
 
   @override
   void onClose() {
+    _isDisposed = true;
     _stopAllTimers();
     super.onClose();
   }
 
+  // FIX: Proper initialization sequence
+  Future<void> _initializeController() async {
+    try {
+      print('🔄 Initializing SyncController...');
+
+      // Load settings first
+      await _loadSyncSettings();
+
+      // Start connection monitoring
+      _startConnectionMonitoring();
+
+      // Mark as initialized
+      _isInitialized = true;
+
+      // Start periodic sync if enabled and user is logged in
+      _startSyncIfReady();
+
+      print('✅ SyncController initialized');
+    } catch (e) {
+      print('❌ SyncController initialization failed: $e');
+    }
+  }
+
+  // FIX: Check conditions before starting sync
+  void _startSyncIfReady() {
+    if (!_isInitialized || _isDisposed) return;
+
+    try {
+      final authController = Get.find<AuthController>();
+      if (autoSyncEnabled.value && authController.isLoggedIn.value) {
+        startPeriodicSync();
+      }
+    } catch (e) {
+      print('⚠️ AuthController not ready yet, will start sync on login');
+    }
+  }
+
   /// Start monitoring internet connection
   void _startConnectionMonitoring() {
-    _connectionCheckTimer = Timer.periodic(
-      Duration(seconds: 30),
-      (timer) => _checkConnection(),
-    );
+    if (_isDisposed) return;
+
+    // FIX: Adjust connection check interval based on sync interval
+    final checkInterval =
+        Duration(seconds: syncIntervalMinutes.value < 10 ? 30 : 60);
+
+    _connectionCheckTimer = Timer.periodic(checkInterval, (timer) {
+      if (!_isDisposed) {
+        _checkConnection();
+      }
+    });
 
     // Check connection immediately
     _checkConnection();
@@ -52,18 +100,25 @@ class SyncController extends GetxController {
 
   /// Check internet connection status
   Future<void> _checkConnection() async {
+    if (_isDisposed) return;
+
     try {
       final online = await SyncService.isOnline();
-      isOnline.value = online;
 
-      if (online) {
-        syncStatus.value = 'Connected';
-      } else {
-        syncStatus.value = 'Offline';
+      if (!_isDisposed) {
+        isOnline.value = online;
+
+        if (online) {
+          syncStatus.value = 'Connected';
+        } else {
+          syncStatus.value = 'Offline';
+        }
       }
     } catch (e) {
-      isOnline.value = false;
-      syncStatus.value = 'Connection error';
+      if (!_isDisposed) {
+        isOnline.value = false;
+        syncStatus.value = 'Connection error';
+      }
     }
   }
 
@@ -71,19 +126,25 @@ class SyncController extends GetxController {
   Future<void> _loadSyncSettings() async {
     try {
       final settings = await SyncService.getSyncSettings();
+
+      if (_isDisposed) return;
+
       autoSyncEnabled.value = settings['autoSync'] ?? true;
       syncIntervalMinutes.value = settings['interval'] ?? 30;
 
       // Get the ISO timestamp from storage and format it for display
       final lastSyncStored = settings['lastSync'];
       lastSyncTime.value = _formatLastSyncForDisplay(lastSyncStored);
+
+      print(
+          '✅ Sync settings loaded: auto=${autoSyncEnabled.value}, interval=${syncIntervalMinutes.value}min');
     } catch (e) {
       print('❌ Failed to load sync settings: $e');
       lastSyncTime.value = 'Never';
     }
   }
 
-  /// Format last sync timestamp for display (but don't save this format)
+  /// Format last sync timestamp for display
   String _formatLastSyncForDisplay(String? isoTimestamp) {
     if (isoTimestamp == null ||
         isoTimestamp == 'Never' ||
@@ -98,16 +159,12 @@ class SyncController extends GetxController {
       final difference = now.difference(dateTime);
 
       if (difference.inDays == 0) {
-        // Today - show as "Today HH:MM"
         return 'Today ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
       } else if (difference.inDays == 1) {
-        // Yesterday
         return 'Yesterday ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
       } else if (difference.inDays < 7) {
-        // This week
         return '${_getDayName(dateTime.weekday)} ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
       } else {
-        // Older dates
         return '${dateTime.day}/${dateTime.month}/${dateTime.year} ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
       }
     } catch (e) {
@@ -121,236 +178,91 @@ class SyncController extends GetxController {
     return days[weekday];
   }
 
-  /// Save sync settings - DO NOT save the display format
+  /// Save sync settings
   Future<void> _saveSyncSettings() async {
     try {
-      // DON'T save lastSyncTime.value (display format)
-      // The ISO timestamp is saved directly by SyncService
       await SyncService.saveSyncSettings({
         'autoSync': autoSyncEnabled.value,
         'interval': syncIntervalMinutes.value,
-        // Don't save 'lastSync' here - it's handled by SyncService
       });
     } catch (e) {
       print('❌ Failed to save sync settings: $e');
     }
   }
 
-  /// Update last sync time display after successful sync
-  void updateLastSyncDisplay() {
-    // Reload from storage to get the latest ISO timestamp and format for display
-    _loadSyncSettings();
-  }
-
-// Perform a complete data reset and fresh sync
-  Future<void> performFullDataSync() async {
-    if (isSyncing.value) return;
-
-    try {
-      isSyncing.value = true;
-      syncStatus.value = 'Performing full data sync...';
-
-      // Step 1: Download all data from server (ignoring last sync)
-      print('🔄 Starting full data download...');
-      final result = await SyncService.fullSync(forceFullDownload: true);
-      lastSyncResult.value = result;
-
-      if (result.success) {
-        syncStatus.value = 'Full sync completed';
-        lastSyncTime.value = _formatDateTime(DateTime.now());
-
-        Get.snackbar(
-          'Full Sync Complete',
-          'All data synchronized successfully',
-          icon: Icon(Icons.sync, color: Colors.white),
-          backgroundColor: Colors.green,
-          colorText: Colors.white,
-          duration: Duration(seconds: 3),
-        );
-      } else {
-        syncStatus.value = 'Full sync failed';
-        Get.snackbar(
-          'Full Sync Failed',
-          result.message,
-          icon: Icon(Icons.error, color: Colors.white),
-          backgroundColor: Colors.red,
-          colorText: Colors.white,
-          duration: Duration(seconds: 3),
-        );
-      }
-    } catch (e) {
-      syncStatus.value = 'Full sync error';
-      Get.snackbar(
-        'Sync Error',
-        e.toString(),
-        icon: Icon(Icons.error, color: Colors.white),
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-        duration: Duration(seconds: 3),
-      );
-    } finally {
-      isSyncing.value = false;
-    }
-  }
-
-  /// Perform full sync
-  Future<void> performFullSync() async {
-    if (isSyncing.value) {
-      print('⚠️ Sync already in progress');
-      return;
-    }
-
-    try {
-      isSyncing.value = true;
-      syncStatus.value = 'Syncing...';
-      syncProgress.value = 0.0;
-      syncProgressText.value = 'Checking connection...';
-
-      // Check connection
-      if (!await SyncService.isOnline()) {
-        throw Exception('No internet connection');
-      }
-
-      syncProgress.value = 0.2;
-      syncProgressText.value = 'Downloading data...';
-
-      // Perform full sync
-      final result = await SyncService.fullSync();
-      lastSyncResult.value = result;
-
-      syncProgress.value = 1.0;
-
-      if (result.success) {
-        syncStatus.value = 'Sync completed';
-        syncProgressText.value = 'Sync completed successfully';
-
-        // Update the display format after successful sync
-        updateLastSyncDisplay();
-
-        // Show success message
-        Get.snackbar(
-          'Sync Complete',
-          'Data synchronized successfully',
-          icon: Icon(Icons.sync, color: Colors.white),
-          backgroundColor: Colors.green,
-          colorText: Colors.white,
-          duration: Duration(seconds: 2),
-        );
-      } else {
-        syncStatus.value = 'Sync failed';
-        syncProgressText.value = result.message;
-
-        // Show error message
-        Get.snackbar(
-          'Sync Failed',
-          result.message,
-          icon: Icon(Icons.sync_problem, color: Colors.white),
-          backgroundColor: Colors.red,
-          colorText: Colors.white,
-          duration: Duration(seconds: 3),
-        );
-      }
-
-      // Save settings (but not the display format)
-      await _saveSyncSettings();
-    } catch (e) {
-      syncStatus.value = 'Sync failed';
-      syncProgressText.value = e.toString();
-      lastSyncResult.value = SyncResult(false, e.toString());
-
-      Get.snackbar(
-        'Sync Error',
-        e.toString(),
-        icon: Icon(Icons.error, color: Colors.white),
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-        duration: Duration(seconds: 3),
-      );
-
-      print('❌ Sync failed: $e');
-    } finally {
-      isSyncing.value = false;
-    }
-  }
-
-  /// Format sync time for display
-  String _formatSyncTime(DateTime dateTime) {
-    // Format as: "Today 16:13" or "15 Sep 16:13" etc.
-    final now = DateTime.now();
-    final difference = now.difference(dateTime);
-
-    if (difference.inDays == 0) {
-      // Today
-      return 'Today ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
-    } else if (difference.inDays == 1) {
-      // Yesterday
-      return 'Yesterday ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
-    } else {
-      // Older dates
-      return '${dateTime.day} ${_getMonthName(dateTime.month)} ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
-    }
-  }
-
-  String _getMonthName(int month) {
-    const months = [
-      '',
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec'
-    ];
-    return months[month];
-  }
-
-  /// Update last sync time after successful sync
-  void updateLastSyncTime(String isoTimestamp) {
-    try {
-      final syncDateTime = DateTime.parse(isoTimestamp);
-      lastSyncTime.value = _formatSyncTime(syncDateTime);
-    } catch (e) {
-      print('⚠️ Failed to update last sync time display: $e');
-      lastSyncTime.value = 'Just now';
-    }
-  }
-
   /// Perform initial sync when user logs in
   Future<void> performInitialSync() async {
-    if (!Get.find<AuthController>().isLoggedIn.value) {
-      print('❌ Cannot sync: User not logged in');
+    if (_isDisposed) return;
+
+    try {
+      final authController = Get.find<AuthController>();
+      if (!authController.isLoggedIn.value) {
+        print('❌ Cannot sync: User not logged in');
+        return;
+      }
+
+      print('🔄 Starting initial sync...');
+      await performFullSync();
+
+      // Start periodic sync after successful initial sync
+      if (autoSyncEnabled.value) {
+        startPeriodicSync();
+      }
+    } catch (e) {
+      print('❌ Initial sync failed: $e');
+    }
+  }
+
+  /// Start periodic sync - FIXED VERSION
+  void startPeriodicSync() {
+    if (_isDisposed || !_isInitialized) {
+      print('⚠️ Cannot start periodic sync: controller not ready');
       return;
     }
 
-    print('🔄 Starting initial sync...');
-    await performFullSync();
-  }
-
-  /// Start periodic sync
-  void startPeriodicSync() {
     if (!autoSyncEnabled.value) {
       print('ℹ️ Auto-sync is disabled');
       return;
     }
 
+    // FIX: Validate sync interval
+    if (syncIntervalMinutes.value < 5) {
+      print('⚠️ Sync interval too small, setting to minimum 5 minutes');
+      syncIntervalMinutes.value = 5;
+      _saveSyncSettings();
+    }
+
     stopPeriodicSync(); // Stop existing timer
 
     final interval = Duration(minutes: syncIntervalMinutes.value);
+
     _syncTimer = Timer.periodic(interval, (timer) {
-      if (Get.find<AuthController>().isLoggedIn.value && isOnline.value) {
-        print('🔄 Starting periodic sync...');
-        performFullSync();
+      if (_isDisposed) {
+        timer.cancel();
+        return;
+      }
+
+      try {
+        final authController = Get.find<AuthController>();
+        if (authController.isLoggedIn.value &&
+            isOnline.value &&
+            !isSyncing.value) {
+          print('🔄 Starting periodic sync...');
+          performFullSync();
+        } else {
+          print(
+              '⏸️ Skipping periodic sync: logged_in=${authController.isLoggedIn.value}, online=${isOnline.value}, syncing=${isSyncing.value}');
+        }
+      } catch (e) {
+        print('❌ Error in periodic sync: $e');
       }
     });
 
     print(
         '✅ Periodic sync started (interval: ${syncIntervalMinutes.value} minutes)');
+
+    // FIX: Update connection check timer interval
+    _restartConnectionMonitoring();
   }
 
   /// Stop periodic sync
@@ -363,20 +275,92 @@ class SyncController extends GetxController {
   /// Stop all sync activities
   void stopSync() {
     stopPeriodicSync();
-    syncStatus.value = 'Stopped';
+    if (!_isDisposed) {
+      syncStatus.value = 'Stopped';
+    }
     print('🛑 All sync activities stopped');
   }
 
+  // FIX: Restart connection monitoring with appropriate interval
+  void _restartConnectionMonitoring() {
+    _connectionCheckTimer?.cancel();
+    _startConnectionMonitoring();
+  }
+
+  /// Perform full sync
+  Future<void> performFullSync() async {
+    if (_isDisposed || isSyncing.value) {
+      print('⚠️ Sync already in progress or controller disposed');
+      return;
+    }
+
+    try {
+      isSyncing.value = true;
+      syncStatus.value = 'Syncing...';
+
+      final result = await SyncService.fullSync();
+
+      if (_isDisposed) return;
+
+      lastSyncResult.value = result;
+
+      if (result.success) {
+        syncStatus.value = 'Sync completed';
+        updateLastSyncDisplay();
+
+        Get.snackbar(
+          'Sync Complete',
+          'Data synchronized successfully',
+          icon: Icon(Icons.sync, color: Colors.white),
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+          duration: Duration(seconds: 2),
+        );
+      } else {
+        syncStatus.value = 'Sync failed';
+
+        Get.snackbar(
+          'Sync Failed',
+          result.message,
+          icon: Icon(Icons.sync_problem, color: Colors.white),
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+          duration: Duration(seconds: 3),
+        );
+      }
+    } catch (e) {
+      if (!_isDisposed) {
+        syncStatus.value = 'Sync error';
+        print('❌ Full sync error: $e');
+
+        Get.snackbar(
+          'Sync Error',
+          e.toString(),
+          icon: Icon(Icons.error, color: Colors.white),
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+          duration: Duration(seconds: 3),
+        );
+      }
+    } finally {
+      if (!_isDisposed) {
+        isSyncing.value = false;
+      }
+    }
+  }
+
   /// Upload pending changes only
-// Updated uploadPendingChanges method in lib/controllers/sync_controller.dart
   Future<void> uploadPendingChanges() async {
-    if (isSyncing.value) return;
+    if (_isDisposed || isSyncing.value) return;
 
     try {
       isSyncing.value = true;
       syncStatus.value = 'Uploading changes...';
 
       final result = await SyncService.uploadPendingChanges();
+
+      if (_isDisposed) return;
+
       lastSyncResult.value = result;
 
       if (result.success) {
@@ -386,9 +370,8 @@ class SyncController extends GetxController {
 
         syncStatus.value =
             isPartial ? 'Upload partially completed' : 'Upload completed';
-        lastSyncTime.value = _formatDateTime(DateTime.now());
+        updateLastSyncDisplay();
 
-        // Show appropriate success message
         if (isPartial && errors.isNotEmpty) {
           Get.snackbar(
             'Upload Partially Complete',
@@ -421,41 +404,32 @@ class SyncController extends GetxController {
         );
       }
     } catch (e) {
-      syncStatus.value = 'Upload error';
+      if (!_isDisposed) {
+        syncStatus.value = 'Upload error';
 
-      Get.snackbar(
-        'Upload Error',
-        e.toString(),
-        icon: Icon(Icons.error, color: Colors.white),
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-        duration: Duration(seconds: 3),
-      );
+        Get.snackbar(
+          'Upload Error',
+          e.toString(),
+          icon: Icon(Icons.error, color: Colors.white),
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+          duration: Duration(seconds: 3),
+        );
+      }
     } finally {
-      isSyncing.value = false;
+      if (!_isDisposed) {
+        isSyncing.value = false;
+      }
     }
   }
 
-  /// Get sync status information
-  Future<Map<String, dynamic>> getSyncInfo() async {
-    try {
-      return await SyncService.getSyncStatus();
-    } catch (e) {
-      print('❌ Failed to get sync info: $e');
-      return {
-        'connected': false,
-        'last_sync': 'Unknown',
-        'pending_changes': 0,
-        'error': e.toString(),
-      };
-    }
-  }
-
-  /// Toggle auto-sync
+  /// Toggle auto-sync - FIXED VERSION
   void toggleAutoSync(bool enabled) {
+    if (_isDisposed) return;
+
     autoSyncEnabled.value = enabled;
 
-    if (enabled) {
+    if (enabled && _isInitialized) {
       startPeriodicSync();
     } else {
       stopPeriodicSync();
@@ -476,8 +450,10 @@ class SyncController extends GetxController {
     );
   }
 
-  /// Update sync interval
+  /// Update sync interval - FIXED VERSION
   void updateSyncInterval(int minutes) {
+    if (_isDisposed) return;
+
     if (minutes < 5 || minutes > 1440) {
       Get.snackbar(
         'Invalid Interval',
@@ -492,7 +468,7 @@ class SyncController extends GetxController {
     _saveSyncSettings();
 
     // Restart periodic sync with new interval
-    if (autoSyncEnabled.value) {
+    if (autoSyncEnabled.value && _isInitialized) {
       startPeriodicSync();
     }
 
@@ -503,6 +479,27 @@ class SyncController extends GetxController {
       colorText: Colors.white,
       duration: Duration(seconds: 2),
     );
+  }
+
+  /// Update last sync time display
+  void updateLastSyncDisplay() {
+    if (_isDisposed) return;
+    _loadSyncSettings();
+  }
+
+  /// Get sync status information
+  Future<Map<String, dynamic>> getSyncInfo() async {
+    try {
+      return await SyncService.getSyncStatus();
+    } catch (e) {
+      print('❌ Failed to get sync info: $e');
+      return {
+        'connected': false,
+        'last_sync': 'Unknown',
+        'pending_changes': 0,
+        'error': e.toString(),
+      };
+    }
   }
 
   /// Stop all timers when disposing
@@ -532,5 +529,22 @@ class SyncController extends GetxController {
     if (lastSyncResult.value?.success == true) return Icons.sync;
     if (lastSyncResult.value?.success == false) return Icons.sync_problem;
     return Icons.sync_disabled;
+  }
+
+  // FIX: Add method to handle auth state changes
+  void onAuthStateChanged(bool isLoggedIn) {
+    if (_isDisposed) return;
+
+    if (isLoggedIn) {
+      print('🔄 User logged in - starting sync...');
+      Future.delayed(Duration(seconds: 1), () {
+        if (!_isDisposed) {
+          performInitialSync();
+        }
+      });
+    } else {
+      print('🔄 User logged out - stopping sync...');
+      stopSync();
+    }
   }
 }

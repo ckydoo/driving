@@ -1,6 +1,7 @@
 // lib/widgets/responsive_main_layout.dart - EXACT UX Structure, Just Responsive
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/controllers/settings_controller.dart';
+import 'package:driving/controllers/sync_controller.dart';
 import 'package:driving/dashboard.dart';
 import 'package:driving/models/user.dart';
 import 'package:driving/overview/quick_search_screen.dart';
@@ -402,7 +403,6 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
       ),
     );
   }
-// Update your _buildMobileTopBar method in lib/widgets/main_layout.dart
 
   Widget _buildMobileTopBar(NavigationController navController) {
     return Container(
@@ -419,30 +419,31 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
       ),
       child: SafeArea(
         child: Container(
-          height: 80, // Increased height for mobile
+          height: 80, // Keep your existing height
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           child: Row(
             children: [
-              // Hamburger menu - bigger touch target
+              // Hamburger menu - keep your existing styling
               Container(
                 width: 56,
                 height: 56,
                 child: IconButton(
-                  icon: const Icon(Icons.menu, size: 35), // Bigger icon
+                  icon: const Icon(Icons.menu, size: 35),
                   onPressed: () => _scaffoldKey.currentState?.openDrawer(),
                   tooltip: 'Menu',
                   splashRadius: 28,
                 ),
               ),
-              // Page title with better constraints
+
+              // Page title - keep your existing styling
               Expanded(
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: Obx(() => Text(
                         navController.getCurrentPageTitle(),
                         style: const TextStyle(
-                          fontSize: 20, // Increased font size
-                          fontWeight: FontWeight.w600,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w400,
                           color: Colors.black87,
                         ),
                         overflow: TextOverflow.ellipsis,
@@ -450,11 +451,47 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
                       )),
                 ),
               ),
+
+              // NEW: Simple Sync Button - Tap to sync
+              Container(
+                width: 56,
+                height: 56,
+                child: GetX<SyncController>(
+                  builder: (syncController) => IconButton(
+                    icon: Icon(
+                      syncController.getSyncStatusIcon(),
+                      size: 25,
+                      color: syncController.getSyncStatusColor(),
+                    ),
+                    tooltip: syncController.isSyncing.value
+                        ? 'Syncing...'
+                        : 'Tap to sync',
+                    onPressed: syncController.isSyncing.value
+                        ? null
+                        : () => syncController.performFullSync(),
+                    splashRadius: 24,
+                  ),
+                ),
+              ),
+
+              // NEW: POS Button
               Container(
                 width: 56,
                 height: 56,
                 child: IconButton(
-                  icon: const Icon(Icons.search, size: 35), // Bigger icon
+                  icon: const Icon(Icons.payment, size: 25),
+                  tooltip: 'POS',
+                  onPressed: () => navController.navigateToPage('pos'),
+                  splashRadius: 24,
+                ),
+              ),
+
+              // Search button - keep your existing styling
+              Container(
+                width: 56,
+                height: 56,
+                child: IconButton(
+                  icon: const Icon(Icons.search, size: 35),
                   tooltip: 'Search',
                   onPressed: () => navController.navigateToPage('quick_search'),
                   splashRadius: 24,
@@ -467,11 +504,11 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
     );
   }
 
-// Update your _buildDesktopTopBar method in lib/widgets/main_layout.dart
-
   Widget _buildDesktopTopBar(NavigationController navController) {
+    final AuthController authController = Get.find<AuthController>();
+
     return Container(
-      height: 64, // Slightly taller for desktop
+      height: 64,
       color: Colors.white,
       child: Row(
         children: [
@@ -489,12 +526,51 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
                   )),
             ),
           ),
-          // SYNC button
-          // SyncIndicator(),
-          SyncStatusWidget(
-            showFullStatus: false,
-            showSyncButton: true,
+
+          // SIMPLE FIX: Just use the compact sync widget directly
+          GetX<SyncController>(
+            builder: (syncController) => Container(
+              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: syncController.getSyncStatusColor().withOpacity(0.1),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: syncController.getSyncStatusColor().withOpacity(0.3),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    syncController.getSyncStatusIcon(),
+                    color: syncController.getSyncStatusColor(),
+                    size: 16,
+                  ),
+                  SizedBox(width: 6),
+                  Text(
+                    syncController.syncStatus.value,
+                    style: TextStyle(
+                      color: syncController.getSyncStatusColor(),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: () => syncController.performFullSync(),
+                    child: Icon(
+                      Icons.refresh,
+                      color: syncController.getSyncStatusColor(),
+                      size: 16,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
+
+          SizedBox(width: 8),
+
           // POS button
           IconButton(
             onPressed: () {
@@ -503,6 +579,7 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
             icon: const Icon(Icons.payment),
             tooltip: 'POS',
           ),
+
           // Search button
           IconButton(
             icon: const Icon(Icons.search),
@@ -512,81 +589,72 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
             },
           ),
 
-          // User menu dropdown (your existing code)
+          // User menu dropdown
           PopupMenuButton<String>(
             onSelected: (value) {
               switch (value) {
                 case 'profile':
-                  Get.to(ProfileScreen());
+                  Get.to(() => ProfileScreen());
                   break;
                 case 'settings':
                   navController.navigateToPage('settings');
                   break;
                 case 'logout':
-                  _performSafeLogout(); // Your existing logout method
+                  authController.signOut();
                   break;
               }
             },
-            itemBuilder: (BuildContext context) => [
-              PopupMenuItem<String>(
+            icon: Obx(() => CircleAvatar(
+                  radius: 16,
+                  backgroundColor: Colors.blue[100],
+                  child: Text(
+                    authController.currentUserName
+                            .substring(0, 1)
+                            .toUpperCase() ??
+                        'U',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue,
+                    ),
+                  ),
+                )),
+            itemBuilder: (context) => [
+              PopupMenuItem(
                 value: 'profile',
                 child: Row(
                   children: [
-                    Icon(Icons.person, size: 18),
-                    SizedBox(width: 8),
+                    Icon(Icons.person, size: 20),
+                    SizedBox(width: 12),
                     Text('Profile'),
                   ],
                 ),
               ),
-              PopupMenuItem<String>(
+              PopupMenuItem(
                 value: 'settings',
                 child: Row(
                   children: [
-                    Icon(Icons.settings, size: 18),
-                    SizedBox(width: 8),
+                    Icon(Icons.settings, size: 20),
+                    SizedBox(width: 12),
                     Text('Settings'),
                   ],
                 ),
               ),
               PopupMenuDivider(),
-              PopupMenuItem<String>(
+              PopupMenuItem(
                 value: 'logout',
                 child: Row(
                   children: [
-                    Icon(Icons.logout, size: 18, color: Colors.red),
-                    SizedBox(width: 8),
+                    Icon(Icons.logout, size: 20, color: Colors.red),
+                    SizedBox(width: 12),
                     Text('Logout', style: TextStyle(color: Colors.red)),
                   ],
                 ),
               ),
             ],
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: 16,
-                    backgroundColor: Colors.blue,
-                    child: Obx(() {
-                      final AuthController authController =
-                          Get.find<AuthController>();
-                      final user = authController.currentUser.value;
-                      return Text(
-                        user?.fname?.substring(0, 1).toUpperCase() ?? 'U',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      );
-                    }),
-                  ),
-                  SizedBox(width: 8),
-                  Icon(Icons.arrow_drop_down),
-                ],
-              ),
-            ),
           ),
+
+          SizedBox(width: 16),
         ],
       ),
     );

@@ -1,4 +1,5 @@
 // lib/widgets/sync_status_widget.dart
+import 'package:driving/controllers/navigation_controller.dart';
 import 'package:driving/controllers/sync_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -15,14 +16,19 @@ class SyncStatusWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GetX<SyncController>(
-      builder: (syncController) {
-        if (showFullStatus) {
-          return _buildFullStatusCard(syncController);
-        } else {
-          return _buildCompactStatus(syncController);
-        }
-      },
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Sync Status'),
+      ),
+      body: GetX<SyncController>(
+        builder: (syncController) {
+          if (showFullStatus) {
+            return _buildFullStatusCard(syncController);
+          } else {
+            return _buildCompactStatus(syncController);
+          }
+        },
+      ),
     );
   }
 
@@ -404,6 +410,191 @@ class SyncIndicator extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+// Add this to lib/widgets/sync_status_widget.dart
+// Compact sync indicator specifically for mobile app bars
+
+class MobileSyncIndicator extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return GetX<SyncController>(
+      builder: (syncController) {
+        return GestureDetector(
+          onTap: () => _showMobileSyncDialog(syncController),
+          child: Container(
+            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Sync status icon
+                Container(
+                  padding: EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                    color: syncController.getSyncStatusColor().withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    syncController.getSyncStatusIcon(),
+                    size: 16,
+                    color: syncController.getSyncStatusColor(),
+                  ),
+                ),
+                SizedBox(width: 4),
+                // Last sync time (shortened for mobile)
+                Text(
+                  _getShortSyncTime(syncController.lastSyncTime.value),
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: Colors.white.withOpacity(0.8),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  String _getShortSyncTime(String fullTime) {
+    if (fullTime == 'Never') return 'Never';
+    if (fullTime.startsWith('Today')) return 'Today';
+    if (fullTime.startsWith('Yesterday')) return 'Yesterday';
+
+    // For other times, show just the day
+    final parts = fullTime.split(' ');
+    if (parts.isNotEmpty) {
+      return parts[0]; // Return just the day part
+    }
+    return fullTime;
+  }
+
+  void _showMobileSyncDialog(SyncController syncController) {
+    Get.dialog(
+      Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Container(
+          padding: EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
+              Row(
+                children: [
+                  Icon(
+                    syncController.getSyncStatusIcon(),
+                    color: syncController.getSyncStatusColor(),
+                    size: 24,
+                  ),
+                  SizedBox(width: 12),
+                  Text(
+                    'Sync Status',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Spacer(),
+                  IconButton(
+                    icon: Icon(Icons.close, size: 20),
+                    onPressed: () => Get.back(),
+                  ),
+                ],
+              ),
+
+              Divider(),
+              SizedBox(height: 12),
+
+              // Status Information
+              _buildMobileInfoRow('Status', syncController.syncStatus.value,
+                  syncController.getSyncStatusColor()),
+              SizedBox(height: 8),
+              _buildMobileInfoRow('Last Sync',
+                  syncController.lastSyncTime.value, Colors.grey[700]!),
+              SizedBox(height: 8),
+              _buildMobileInfoRow(
+                  'Auto-Sync',
+                  syncController.autoSyncEnabled.value ? 'Enabled' : 'Disabled',
+                  syncController.autoSyncEnabled.value
+                      ? Colors.green
+                      : Colors.orange),
+
+              if (syncController.autoSyncEnabled.value) ...[
+                SizedBox(height: 8),
+                _buildMobileInfoRow(
+                    'Interval',
+                    '${syncController.syncIntervalMinutes.value} minutes',
+                    Colors.blue),
+              ],
+
+              SizedBox(height: 20),
+
+              // Action Buttons
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: syncController.isSyncing.value
+                          ? null
+                          : () {
+                              Get.back();
+                              syncController.performFullSync();
+                            },
+                      icon: Icon(Icons.sync, size: 18),
+                      label: Text('Sync Now'),
+                    ),
+                  ),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Get.back();
+                        Get.find<NavigationController>()
+                            .navigateToPage('settings');
+                      },
+                      icon: Icon(Icons.settings, size: 18),
+                      label: Text('Settings'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue[700],
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileInfoRow(String label, String value, Color color) {
+    return Row(
+      children: [
+        SizedBox(
+          width: 80,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: Colors.grey[600],
+            ),
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: color,
+          ),
+        ),
+      ],
     );
   }
 }

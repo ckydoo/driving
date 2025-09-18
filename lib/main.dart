@@ -1,99 +1,86 @@
-import 'package:driving/controllers/navigation_controller.dart';
-import 'package:driving/controllers/settings_controller.dart';
-import 'package:driving/controllers/sync_controller.dart';
-import 'package:driving/routes/app_routes.dart';
-import 'package:driving/screens/auth/login_screen.dart';
-import 'package:driving/controllers/school_selection_controller.dart'; // Add this import
-import 'package:driving/services/api_service.dart';
-import 'package:driving/services/app_bindings.dart';
+// lib/main.dart - FIXED VERSION with proper database initialization
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/controllers/pin_controller.dart';
-import 'package:driving/services/app_initialization.dart';
-import 'package:driving/services/database_helper.dart';
-import 'package:driving/services/database_migration.dart';
+import 'package:driving/controllers/school_selection_controller.dart';
+import 'package:driving/controllers/settings_controller.dart';
+import 'package:driving/routes/app_routes.dart';
+import 'package:driving/screens/auth/login_screen.dart';
 import 'package:driving/services/school_config_service.dart';
-import 'package:driving/services/school_api_service.dart'; // Add this import
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:driving/services/app_bindings.dart';
+import 'package:driving/services/api_service.dart';
+import 'package:driving/services/database_helper.dart';
+import 'package:driving/services/database_migration.dart';
+import 'package:driving/services/app_initialization.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'dart:io' show Platform;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Only use FFI on desktop platforms
-  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-    sqfliteFfiInit();
-    databaseFactory = databaseFactoryFfi;
-  }
-
   print('🚀 === STARTING DRIVING SCHOOL APP ===');
 
-  // Initialize database
-  final db = await DatabaseHelper.instance.database;
-  await DatabaseMigration.runMigrations(db);
-  await AppInitialization.initialize();
+  // STEP 1: Initialize database factory FIRST (critical for desktop platforms)
+  _initializeDatabaseFactory();
 
-  // Initialize core services (simplified)
-  await _initializeCoreServices();
+  // STEP 2: Initialize core dependencies
+  await _initializeCoreDependencies();
+
+  // STEP 3: Initialize app bindings (which includes all controllers and sync)
+  await AppBindings().dependencies();
 
   print('✅ === APP INITIALIZATION COMPLETED ===');
-
-  runApp(DrivingSchoolApp());
+  runApp(const DrivingSchoolApp());
 }
 
-Future<void> _initializeCoreServices() async {
+/// Initialize database factory for different platforms
+void _initializeDatabaseFactory() {
   try {
-    print('⚙️ Initializing core services...');
+    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+      sqfliteFfiInit();
+      databaseFactory = databaseFactoryFfi;
+      print('✅ Database factory initialized for desktop platform');
+    } else {
+      print('✅ Using default database factory for mobile platform');
+    }
+  } catch (e) {
+    print('❌ Database factory initialization failed: $e');
+    print('⚠️ App may not work properly on this platform');
+  }
+}
 
-    // Initialize API Service configuration
+Future<void> _initializeCoreDependencies() async {
+  print('🚀 Initializing core dependencies...');
+
+  try {
+    // Configure API service
     _configureApiService();
 
-    // Initialize PIN Controller early
-    if (!Get.isRegistered<PinController>()) {
-      Get.put<PinController>(PinController(), permanent: true);
-      print('✅ PinController initialized');
-    }
-
-    // Initialize Settings Controller (but skip school config)
-    if (!Get.isRegistered<SettingsController>()) {
-      Get.put<SettingsController>(SettingsController(), permanent: true);
-
-      final settingsController = Get.find<SettingsController>();
-      await settingsController.loadSettingsFromDatabase();
-      print('✅ SettingsController initialized');
-    }
-
-    // Initialize Auth Controller
-    if (!Get.isRegistered<AuthController>()) {
-      Get.put<AuthController>(AuthController(), permanent: true);
-      print('✅ AuthController initialized');
-    }
-
-    if (!Get.isRegistered<NavigationController>()) {
-      Get.put<NavigationController>(NavigationController(), permanent: true);
-      print('✅ NavigationController initialized');
-    }
-
-    // Initialize Sync Controller (before Auth)
-    if (!Get.isRegistered<SyncController>()) {
-      Get.put<SyncController>(SyncController(), permanent: true);
-      print('✅ Sync Controller initialized');
-    }
-
-    // Initialize School Config Service
-    if (!Get.isRegistered<SchoolConfigService>()) {
-      Get.put<SchoolConfigService>(SchoolConfigService(), permanent: true);
-      print('✅ SchoolConfigService initialized');
-    }
-
-    // Set up auth-sync integration
-    _setupAuthSyncIntegration();
+    // Initialize database and run migrations
+    await _initializeDatabaseAndMigrations();
 
     print('✅ Core services initialization completed');
   } catch (e) {
     print('❌ Core services initialization failed: $e');
-    // Continue anyway - app should still work with basic functionality
+    print('⚠️ App will continue with limited functionality');
+  }
+}
+
+/// Initialize database and run all migrations
+Future<void> _initializeDatabaseAndMigrations() async {
+  try {
+    print('🗄️ Initializing database and running migrations...');
+
+    final db = await DatabaseHelper.instance.database;
+    await DatabaseMigration.runMigrations(db);
+    await AppInitialization.initialize();
+
+    print('✅ Database and migrations completed successfully');
+  } catch (e) {
+    print('❌ Database/migration initialization failed: $e');
+    print('⚠️ App will continue but some features may not work');
+    // Don't throw - let app continue in degraded mode
   }
 }
 
@@ -106,33 +93,6 @@ void _configureApiService() {
   ApiService.configure(baseUrl: apiBaseUrl);
 
   print('✅ API Service configured with base URL: $apiBaseUrl');
-}
-
-void _setupAuthSyncIntegration() {
-  try {
-    final authController = Get.find<AuthController>();
-    final syncController = Get.find<SyncController>();
-
-    // Listen to auth state changes
-    ever(authController.isLoggedIn, (bool isLoggedIn) {
-      if (isLoggedIn) {
-        print('🔄 User logged in - sync will use existing API token');
-
-        // Token is already set by ApiService.login()
-        // Start sync after login
-        Future.delayed(Duration(seconds: 2), () {
-          syncController.performInitialSync();
-        });
-      } else {
-        print('🔄 User logged out - clearing sync...');
-        syncController.stopSync();
-      }
-    });
-
-    print('✅ Auth-Sync integration configured');
-  } catch (e) {
-    print('❌ Auth-Sync integration failed: $e');
-  }
 }
 
 /// Driving School App
