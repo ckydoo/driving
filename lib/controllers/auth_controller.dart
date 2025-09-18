@@ -7,7 +7,10 @@ import 'package:driving/controllers/pin_controller.dart';
 import 'package:driving/services/school_config_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:http/http.dart' as http;
 import 'dart:convert';
+
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AuthController extends GetxController {
   // Core authentication state
@@ -195,7 +198,6 @@ class AuthController extends GetxController {
     }
   }
 
-  /// PIN authentication for subsequent logins
   Future<bool> authenticateWithPin(String pin) async {
     try {
       print('🔐 PIN authentication attempt');
@@ -216,18 +218,207 @@ class AuthController extends GetxController {
 
       // Load user from local cache
       await _loadUserFromCache(pinUserEmail);
-      if (isLoggedIn.value) {
-        print('✅ PIN authentication successful');
-        return true;
+      if (!isLoggedIn.value) {
+        error.value =
+            'Authentication failed. Please sign in with email and password.';
+        return false;
       }
 
-      error.value =
-          'Authentication failed. Please sign in with email and password.';
-      return false;
+      // CRITICAL FIX: Establish API authentication for sync
+      try {
+        print('🔄 Establishing API connection for sync...');
+
+        final user = currentUser.value!;
+        print('🔍 User email: ${user.email}');
+
+        // Try to get stored API token
+        final storedToken = await _getStoredApiToken(user.email);
+        print(
+            '🔍 Retrieved stored token: ${storedToken != null ? '${storedToken.substring(0, 10)}...' : 'null'}');
+
+        if (storedToken != null && storedToken.isNotEmpty) {
+          // Set the token in ApiService
+          ApiService.setToken(storedToken);
+          print('✅ API token set in ApiService');
+
+          // Test if the token actually works
+          final isWorking = await _testApiConnection();
+          if (isWorking) {
+            print('✅ API token is working correctly');
+            await _setSyncAuthenticationRequired(false);
+          } else {
+            print('❌ Stored token is invalid/expired - removing it');
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.remove('api_token_${user.email}');
+            await _setSyncAuthenticationRequired(true);
+            ApiService.clearToken();
+          }
+
+          print('✅ API token restored from storage');
+        } else {
+          print('⚠️ No stored API token found');
+          print('⚠️ Sync will require password re-entry');
+
+          // Set flag that sync needs authentication
+          await _setSyncAuthenticationRequired(true);
+        }
+      } catch (e) {
+        print('⚠️ Could not establish API connection: $e');
+        print('📱 PIN login successful, but sync will be unavailable');
+        // Don't fail PIN login if API connection fails
+      }
+
+      print('✅ PIN authentication successful');
+      return true;
     } catch (e) {
       print('❌ PIN authentication error: $e');
       error.value = 'PIN authentication failed: ${e.toString()}';
       return false;
+    }
+  }
+
+// Helper methods to add to your AuthController:
+
+  /// Get stored API token for user
+  Future<String?> _getStoredApiToken(String email) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('api_token_$email');
+      return token;
+    } catch (e) {
+      print('Error reading stored token: $e');
+      return null;
+    }
+  }
+
+  /// Store API token using SharedPreferences
+  Future<void> _storeApiToken(String email, String token) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('api_token_$email', token);
+      print('✅ API token stored for future PIN logins');
+    } catch (e) {
+      print('Error storing token: $e');
+    }
+  }
+
+  /// Set flag that sync needs authentication using SharedPreferences
+  Future<void> _setSyncAuthenticationRequired(bool required) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('sync_auth_required', required);
+    } catch (e) {
+      print('Error setting sync auth flag: $e');
+    }
+  }
+
+  /// Check if sync needs authentication
+  Future<bool> _isSyncAuthenticationRequired() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getBool('sync_auth_required') ?? false;
+    } catch (e) {
+      print('Error checking sync auth flag: $e');
+      return false;
+    }
+  }
+
+  /// Test if the API token is working by making an actual API call
+  Future<bool> _testApiConnection() async {
+    try {
+      print('🧪 Testing API connection...');
+
+      // Use the correct endpoint from your Laravel routes: /auth/user
+      final response = await http.get(
+        Uri.parse('${ApiService.baseUrl}/auth/user'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          // We'll manually add the Authorization header using the stored token
+          if (await _getCurrentApiToken() != null)
+            'Authorization': 'Bearer ${await _getCurrentApiToken()}',
+        },
+      );
+
+      print('🧪 Test API response status: ${response.statusCode}');
+      if (response.statusCode != 200) {
+        print('🧪 Test API response: ${response.body}');
+      } else {
+        print('✅ API connection test successful');
+      }
+
+      return response.statusCode == 200;
+    } catch (e) {
+      print('🧪 API test failed: $e');
+      return false;
+    }
+  }
+
+  /// Get current API token from SharedPreferences (since ApiService._token is private)
+  Future<String?> _getCurrentApiToken() async {
+    try {
+      final user = currentUser.value;
+      if (user?.email != null) {
+        return await _getStoredApiToken(user!.email);
+      }
+      return null;
+    } catch (e) {
+      print('Error getting current API token: $e');
+      return null;
+    }
+  }
+
+  /// Modified loginWithApi method - store token for PIN use
+  Future<bool> loginWithApi(String email, String password) async {
+    try {
+      isLoading.value = true;
+      error.value = '';
+
+      print('\n🔐 === API LOGIN ATTEMPT ===');
+      print('📧 Email: $email');
+
+      if (email.isEmpty || password.isEmpty) {
+        error.value = 'Email and password are required';
+        return false;
+      }
+
+      // Call Laravel API for authentication
+      final loginResponse = await ApiService.login(email, password);
+
+      // Extract user data and token
+      final userData = loginResponse['user'];
+      final token = loginResponse['token'];
+
+      print('✅ API authentication successful');
+      print('🔑 Token received: ${token.substring(0, 10)}...');
+
+      // IMPORTANT: Store token for future PIN logins
+      await _storeApiToken(email, token);
+
+      // Set user as logged in
+      final user = User.fromJson(userData);
+      currentUser.value = user;
+      isLoggedIn.value = true;
+
+      // Save email for future sessions if remember me is enabled
+      if (rememberMe.value) {
+        userEmail.value = email;
+      }
+
+      // Also save to local database for offline access
+      await _saveUserToLocal(userData);
+
+      print('✅ User: ${user.fname} ${user.lname} (${user.role})');
+      return true;
+    } catch (e) {
+      print('❌ API Login error: $e');
+      error.value = 'Login failed: ${e.toString()}';
+
+      // Fallback to local login if API fails
+      print('🔄 Attempting local fallback login...');
+      return await login(email, password);
+    } finally {
+      isLoading.value = false;
     }
   }
 
@@ -641,58 +832,6 @@ class AuthController extends GetxController {
     } catch (e) {
       print('❌ userRole Error: $e');
       return 'guest';
-    }
-  }
-// Add this method to your AuthController class:
-
-  /// API-based login method
-  Future<bool> loginWithApi(String email, String password) async {
-    try {
-      isLoading.value = true;
-      error.value = '';
-
-      print('\n🔐 === API LOGIN ATTEMPT ===');
-      print('📧 Email: $email');
-
-      if (email.isEmpty || password.isEmpty) {
-        error.value = 'Email and password are required';
-        return false;
-      }
-
-      // Call Laravel API for authentication
-      final loginResponse = await ApiService.login(email, password);
-
-      // Extract user data and token
-      final userData = loginResponse['user'];
-      final token = loginResponse['token'];
-
-      print('✅ API authentication successful');
-      print('🔑 Token received: ${token.substring(0, 10)}...');
-
-      // Set user as logged in
-      final user = User.fromJson(userData);
-      currentUser.value = user;
-      isLoggedIn.value = true;
-
-      // Save email for future sessions if remember me is enabled
-      if (rememberMe.value) {
-        userEmail.value = email;
-      }
-
-      // Also save to local database for offline access
-      await _saveUserToLocal(userData);
-
-      print('✅ User: ${user.fname} ${user.lname} (${user.role})');
-      return true;
-    } catch (e) {
-      print('❌ API Login error: $e');
-      error.value = 'Login failed: ${e.toString()}';
-
-      // Fallback to local login if API fails
-      print('🔄 Attempting local fallback login...');
-      return await login(email, password);
-    } finally {
-      isLoading.value = false;
     }
   }
 
