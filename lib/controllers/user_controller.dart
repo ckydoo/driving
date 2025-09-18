@@ -1,3 +1,4 @@
+import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/models/user.dart';
 import 'package:driving/services/database_helper.dart';
 import 'package:driving/services/sync_service.dart';
@@ -330,14 +331,22 @@ class UserController extends GetxController {
       throw Exception(duplicateErrors.values.first);
     }
 
-    // Step 2: Save to LOCAL database
+    // Step 2: Get current school ID
+    final authController = Get.find<AuthController>();
+    final currentSchoolId = authController.currentUser.value?.schoolId ??
+        '1'; // Default to 1 for local
+
+    // Step 3: Add school_id to user
+    final userWithSchool = user.copyWith(schoolId: currentSchoolId);
+
+    // Step 4: Save to LOCAL database
     print('💾 Saving to local database...');
 
     // Convert User to Map for database operation
-    final userMap = user.toJson();
+    final userMap = userWithSchool.toJson();
     final newUserId = await DatabaseHelper.instance.insertUser(userMap);
 
-    final createdUser = user.copyWith(id: newUserId);
+    final createdUser = userWithSchool.copyWith(id: newUserId);
 
     // 🔄 TRACK THE USER CREATION FOR SYNC
     await SyncService.trackChange('users', createdUser.toJson(), 'create');
@@ -347,7 +356,7 @@ class UserController extends GetxController {
     _users.add(createdUser);
     print('✅ User saved locally with ID: $newUserId');
 
-    // Step 3: Show success message
+    // Step 5: Show success message
     Get.snackbar(
       'Success',
       '${user.fname} ${user.lname} saved successfully',

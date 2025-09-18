@@ -52,12 +52,12 @@ class Fleet {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'carPlate': carPlate,
+      'carplate': carPlate, // ✅ Use database field name
       'make': make,
       'model': model,
       'modelyear': modelYear,
       'status': status,
-      'instructor': instructor == 0 ? null : instructor, // Convert 0 to null
+      'instructor': instructor == 0 ? null : instructor,
       'created_at': created_at?.toIso8601String(),
       'updated_at': updated_at?.toIso8601String(),
     };
@@ -67,12 +67,14 @@ class Fleet {
   factory Fleet.fromJson(Map<String, dynamic> json) {
     return Fleet(
       id: json['id'],
-      carPlate: json['carPlate'] ?? json['carPlate'] ?? '',
+      carPlate: json['carplate'] ??
+          json['carPlate'] ??
+          '', // ✅ Check 'carplate' first (database field)
       make: json['make'] ?? '',
       model: json['model'] ?? '',
       modelYear: json['modelyear'] ?? json['modelYear'] ?? '',
       status: json['status'] ?? 'available',
-      instructor: json['instructor'] ?? 0, // Default to 0 if null
+      instructor: json['instructor'] ?? 0,
       created_at: json['created_at'] != null
           ? DateTime.parse(json['created_at'])
           : null,

@@ -107,7 +107,6 @@ class FleetController extends GetxController {
     }
   }
 
-  /// 🔄 ENHANCED: handleFleet with sync tracking
   Future<void> handleFleet(Fleet vehicle, {bool isUpdate = false}) async {
     try {
       isLoading(true);
@@ -117,38 +116,49 @@ class FleetController extends GetxController {
       if (isUpdate) {
         // Update existing vehicle
         await DatabaseHelper.instance.updateFleet(vehicle.toJson());
-
-        // 🔄 TRACK THE CHANGE FOR SYNC
-        await SyncService.trackChange('fleet', vehicle.toJson(), 'update');
-        print('📝 Tracked vehicle update for sync');
-
         print('✅ Vehicle updated successfully');
       } else {
         // Create new vehicle
         final id = await DatabaseHelper.instance.insertFleet(vehicle.toJson());
+        print('✅ Vehicle created successfully with ID: $id');
+      }
 
-        // Create vehicle with ID for tracking
-        final vehicleWithId = vehicle.copyWith(id: id);
-
-        // 🔄 TRACK THE CHANGE FOR SYNC
-        await SyncService.trackChange(
-            'fleet', vehicleWithId.toJson(), 'create');
-        print('📝 Tracked vehicle creation for sync');
-
-        print('✅ Vehicle created successfully');
+      // Optional operations - don't let these block the main flow
+      try {
+        if (!isUpdate) {
+          final id =
+              await DatabaseHelper.instance.insertFleet(vehicle.toJson());
+          final vehicleWithId = vehicle.copyWith(id: id);
+          await SyncService.trackChange(
+              'fleet', vehicleWithId.toJson(), 'create');
+        } else {
+          await SyncService.trackChange('fleet', vehicle.toJson(), 'update');
+        }
+        print('📝 Tracked vehicle change for sync');
+      } catch (e) {
+        print('⚠️ Sync tracking failed (non-critical): $e');
       }
 
       // Refresh the fleet list
-      await fetchFleet();
+      try {
+        await fetchFleet();
+      } catch (e) {
+        print('⚠️ Fleet refresh failed (non-critical): $e');
+      }
 
-      Get.snackbar(
-        'Success',
-        isUpdate
-            ? 'Vehicle "${vehicle.make} ${vehicle.model}" updated successfully'
-            : 'Vehicle "${vehicle.make} ${vehicle.model}" created successfully',
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
-      );
+      // Show success message
+      try {
+        Get.snackbar(
+          'Success',
+          isUpdate
+              ? 'Vehicle "${vehicle.make} ${vehicle.model}" updated successfully'
+              : 'Vehicle "${vehicle.make} ${vehicle.model}" created successfully',
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+        );
+      } catch (e) {
+        print('⚠️ Snackbar failed (non-critical): $e');
+      }
     } catch (e) {
       error('Fleet operation failed: ${e.toString()}');
       print('❌ handleFleet error: $e');
@@ -159,7 +169,9 @@ class FleetController extends GetxController {
         backgroundColor: Colors.red,
         colorText: Colors.white,
       );
-      throw Exception('Fleet operation failed: ${e.toString()}');
+
+      // Only throw on actual save failures
+      rethrow; // ✅ Let the dialog handle the error
     } finally {
       isLoading(false);
     }

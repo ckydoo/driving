@@ -556,29 +556,29 @@ class _CourseFormDialogState extends State<CourseFormDialog>
       await Get.find<CourseController>()
           .handleCourse(course, isUpdate: widget.course != null);
 
-      // ✅ CRITICAL FIX: Reset loading BEFORE navigation
+      // ✅ Reset loading BEFORE navigation
       if (mounted) {
         setState(() => _isLoading = false);
       }
 
-      // ✅ CRITICAL FIX: Use Navigator.pop instead of Get.back
+      // ✅ Use Navigator.pop instead of Get.back
       if (mounted) {
         Navigator.of(context).pop(true);
       }
 
-      // Show success message after dialog closes
-      await Future.delayed(Duration(milliseconds: 150));
-
-      Get.snackbar(
-        widget.course == null ? 'Course Created!' : 'Course Updated!',
-        'Course "${course.name}" ${widget.course == null ? "created" : "updated"} successfully',
-        backgroundColor: Colors.green.shade600,
-        colorText: Colors.white,
-        icon: Icon(Icons.check_circle, color: Colors.white),
-        duration: Duration(seconds: 3),
-      );
+      // ❌ REMOVE THIS DUPLICATE SNACKBAR - the controller already shows one
+      // await Future.delayed(Duration(milliseconds: 150));
+      //
+      // Get.snackbar(
+      //   widget.course == null ? 'Course Created!' : 'Course Updated!',
+      //   'Course "${course.name}" ${widget.course == null ? "created" : "updated"} successfully',
+      //   backgroundColor: Colors.green.shade600,
+      //   colorText: Colors.white,
+      //   icon: Icon(Icons.check_circle, color: Colors.white),
+      //   duration: Duration(seconds: 3),
+      // );
     } catch (e) {
-      // ✅ CRITICAL FIX: Always reset loading in catch block
+      // ✅ Always reset loading in catch block
       if (mounted) {
         setState(() => _isLoading = false);
       }

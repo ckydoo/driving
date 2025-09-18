@@ -16,10 +16,6 @@ class User {
   final String status;
   final String idnumber;
   final DateTime created_at;
-  final DateTime? last_modified;
-  final String? last_modified_device;
-  final int? deleted;
-  final int? sync_version;
 
   User({
     this.id,
@@ -37,10 +33,6 @@ class User {
     required this.status,
     required this.idnumber,
     required this.created_at,
-    this.last_modified,
-    this.last_modified_device,
-    this.deleted,
-    this.sync_version,
   });
 
   // Enhanced factory constructor with better null safety and type conversion
@@ -63,10 +55,6 @@ class User {
         status: json['status']?.toString() ?? 'Active',
         idnumber: (json['idnumber']?.toString() ?? '').trim(),
         created_at: _parseDate(json['created_at']) ?? DateTime.now(),
-        last_modified: _parseDate(json['last_modified']),
-        last_modified_device: json['last_modified_device']?.toString(),
-        deleted: _parseInt(json['deleted']),
-        sync_version: _parseInt(json['sync_version']),
       );
     } catch (e) {
       print('❌ Error parsing User from JSON: $e');
@@ -131,35 +119,27 @@ class User {
   // Enhanced toJson method
   Map<String, dynamic> toJson() {
     return {
-      if (id != null) 'id': id,
-      if (schoolId != null) 'schoolId': schoolId,
-      if (firebaseUserId != null) 'firebase_user_id': firebaseUserId,
-      'fname': fname.trim(),
-      'lname': lname.trim(),
-      'email': email.trim().toLowerCase(),
+      'id': id,
+      'school_id': schoolId, // ✅ Add this line
+      'fname': fname,
+      'lname': lname,
+      'email': email.toLowerCase(),
       'password': password,
       'gender': gender,
-      'phone': phone.trim(),
-      'address': address.trim(),
-      'date_of_birth': date_of_birth.toIso8601String().split('T')[0],
+      'phone': phone,
+      'address': address,
+      'date_of_birth': date_of_birth.toIso8601String(),
       'role': role.toLowerCase(),
       'status': status,
-      'idnumber': idnumber.trim(),
+      'idnumber': idnumber,
       'created_at': created_at.toIso8601String(),
-      if (last_modified != null)
-        'last_modified': last_modified!.toIso8601String(),
-      if (last_modified_device != null)
-        'last_modified_device': last_modified_device,
-      if (deleted != null) 'deleted': deleted,
-      if (sync_version != null) 'sync_version': sync_version,
     };
   }
 
   // Enhanced copyWith method
   User copyWith({
     int? id,
-    String? schoolId,
-    String? firebaseUserId,
+    String? schoolId, // ✅ Add this
     String? fname,
     String? lname,
     String? email,
@@ -172,15 +152,11 @@ class User {
     String? status,
     String? idnumber,
     DateTime? created_at,
-    DateTime? last_modified,
-    String? last_modified_device,
     int? deleted,
-    int? sync_version,
   }) {
     return User(
       id: id ?? this.id,
-      schoolId: schoolId ?? this.schoolId,
-      firebaseUserId: firebaseUserId ?? this.firebaseUserId,
+      schoolId: schoolId ?? this.schoolId, // ✅ Add this
       fname: fname ?? this.fname,
       lname: lname ?? this.lname,
       email: email ?? this.email,
@@ -193,10 +169,6 @@ class User {
       status: status ?? this.status,
       idnumber: idnumber ?? this.idnumber,
       created_at: created_at ?? this.created_at,
-      last_modified: last_modified ?? this.last_modified,
-      last_modified_device: last_modified_device ?? this.last_modified_device,
-      deleted: deleted ?? this.deleted,
-      sync_version: sync_version ?? this.sync_version,
     );
   }
 
@@ -213,8 +185,6 @@ class User {
   }
 
   String get fullName => '$fname $lname'.trim();
-
-  bool get isActive => deleted == null || deleted == 0;
 
   @override
   String toString() {

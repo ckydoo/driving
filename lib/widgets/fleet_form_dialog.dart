@@ -882,7 +882,6 @@ class _FleetFormDialogState extends State<FleetFormDialog>
     if (!_formKey.currentState!.validate()) {
       return;
     }
-
     setState(() => _isLoading = true);
 
     try {
@@ -892,9 +891,8 @@ class _FleetFormDialogState extends State<FleetFormDialog>
         make: _makeController.text.trim(),
         model: _modelController.text.trim(),
         modelYear: _modelYear,
-        status: widget.vehicle?.status ??
-            'available', // KEEP existing status or default to 'available'
-        instructor: _selectedInstructorId ?? 0, // CHANGE: Ensure 0 if null
+        status: widget.vehicle?.status ?? 'available',
+        instructor: _selectedInstructorId ?? 0,
       );
 
       await Get.find<FleetController>().handleFleet(
@@ -902,60 +900,26 @@ class _FleetFormDialogState extends State<FleetFormDialog>
         isUpdate: widget.vehicle != null,
       );
 
-      // Close the dialog first
-      Get.back(result: true);
+      // Success - close dialog and refresh list
+      if (mounted) {
+        setState(() => _isLoading = false);
+        Navigator.of(context)
+            .pop(true); // ✅ Use Navigator.pop for more reliability
+      }
+    } catch (e) {
+      print('FleetFormDialog: Error caught: $e');
 
-      // Show success feedback after dialog is closed
-      await Future.delayed(const Duration(milliseconds: 100));
-
-      // CHANGE: Update success message to reflect assignment status
-      final isAssigned = (vehicle.instructor > 0);
-      final instructorName = isAssigned
-          ? _availableInstructors
-              .firstWhereOrNull((i) => i.id == vehicle.instructor)
-          : null;
-
-      String successMessage;
-      if (widget.vehicle == null) {
-        // Adding new vehicle
-        if (isAssigned && instructorName != null) {
-          successMessage =
-              'Vehicle ${vehicle.carPlate} added and assigned to ${instructorName.fname} ${instructorName.lname}';
-        } else {
-          successMessage =
-              'Vehicle ${vehicle.carPlate} added successfully (unassigned)';
-        }
-      } else {
-        // Updating existing vehicle
-        if (isAssigned && instructorName != null) {
-          successMessage =
-              'Vehicle ${vehicle.carPlate} updated and assigned to ${instructorName.fname} ${instructorName.lname}';
-        } else {
-          successMessage = 'Vehicle ${vehicle.carPlate} updated successfully';
-        }
+      if (mounted) {
+        setState(() => _isLoading = false);
       }
 
       Get.snackbar(
-        widget.vehicle == null ? 'Vehicle Added!' : 'Vehicle Updated!',
-        successMessage,
-        backgroundColor: Colors.green.shade600,
-        colorText: Colors.white,
-        icon: const Icon(Icons.check_circle, color: Colors.white),
-        duration: const Duration(seconds: 3),
-        snackPosition: SnackPosition.TOP,
-      );
-    } catch (e) {
-      Get.snackbar(
         'Error',
-        'Failed to ${widget.vehicle == null ? 'add' : 'update'} vehicle: $e',
+        'Failed to ${widget.vehicle == null ? "create" : "update"} vehicle: $e',
         backgroundColor: Colors.red.shade600,
         colorText: Colors.white,
-        icon: const Icon(Icons.error, color: Colors.white),
-        duration: const Duration(seconds: 3),
-        snackPosition: SnackPosition.TOP,
+        duration: Duration(seconds: 4),
       );
-    } finally {
-      setState(() => _isLoading = false);
     }
   }
 }
