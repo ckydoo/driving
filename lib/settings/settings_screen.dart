@@ -1,3 +1,4 @@
+import 'package:driving/controllers/sync_controller.dart';
 import 'package:driving/widgets/sync_status_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -161,11 +162,21 @@ class _SettingsScreenState extends State<SettingsScreen>
     return views;
   }
 
+  final syncController = Get.find<SyncController>();
+
   Widget _buildQuickActions() {
     return Wrap(
       spacing: 8,
       runSpacing: 8,
       children: [
+        if (authController.hasAnyRole(['admin', 'instructor']))
+          _buildQuickActionButton(
+            icon: Icons.bug_report,
+            label: 'Sync Debug',
+            onTap: () {
+              syncController;
+            },
+          ),
         if (authController.hasAnyRole(['admin', 'instructor']))
           _buildQuickActionButton(
             icon: Icons.bug_report,

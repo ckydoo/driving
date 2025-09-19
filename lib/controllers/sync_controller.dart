@@ -1,10 +1,14 @@
 // lib/controllers/sync_controller.dart - FIXED VERSION
 import 'dart:async';
+import 'dart:convert';
+import 'package:driving/services/api_service.dart';
+import 'package:driving/services/sync_debug_helper.dart';
 import 'package:driving/services/sync_service.dart';
 import 'package:driving/models/sync_result.dart';
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class SyncController extends GetxController {
   // Sync state
@@ -287,18 +291,104 @@ class SyncController extends GetxController {
     _startConnectionMonitoring();
   }
 
-  /// Perform full sync
-  Future<void> performFullSync() async {
-    if (_isDisposed || isSyncing.value) {
-      print('⚠️ Sync already in progress or controller disposed');
-      return;
-    }
+  /// Enhanced upload method with automatic debugging
+  Future<void> uploadPendingChanges() async {
+    if (_isDisposed || isSyncing.value) return;
 
     try {
       isSyncing.value = true;
-      syncStatus.value = 'Syncing...';
+      syncStatus.value = 'Uploading changes...';
 
-      final result = await SyncService.fullSync();
+      // YOUR EXISTING UPLOAD CODE HERE...
+      final result = await SyncService.uploadPendingChanges();
+
+      if (_isDisposed) return;
+
+      lastSyncResult.value = result;
+
+      if (result.success) {
+        final uploaded = result.details?['uploaded'] ?? 0;
+        final errors = result.details?['errors'] ?? [];
+        final isPartial = result.details?['partial'] ?? false;
+
+        syncStatus.value =
+            isPartial ? 'Upload partially completed' : 'Upload completed';
+        updateLastSyncDisplay();
+
+        // Show appropriate message based on result
+        if (isPartial && errors.isNotEmpty) {
+          Get.snackbar(
+            'Upload Partially Complete',
+            '$uploaded items uploaded, ${errors.length} failed',
+            icon: Icon(Icons.warning, color: Colors.white),
+            backgroundColor: Colors.amber,
+            colorText: Colors.white,
+            duration: Duration(seconds: 4),
+          );
+
+          // 🐛 AUTO-DEBUG ON PARTIAL SUCCESS
+          print('⚠️ Partial upload detected - running auto-debug...');
+          await debugSyncStatus();
+        } else {
+          Get.snackbar(
+            'Upload Complete',
+            'Changes uploaded successfully',
+            icon: Icon(Icons.cloud_upload, color: Colors.white),
+            backgroundColor: Colors.green,
+            colorText: Colors.white,
+            duration: Duration(seconds: 2),
+          );
+        }
+      } else {
+        syncStatus.value = 'Upload failed';
+
+        Get.snackbar(
+          'Upload Failed',
+          result.message,
+          icon: Icon(Icons.cloud_off, color: Colors.white),
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+          duration: Duration(seconds: 3),
+        );
+
+        // 🐛 AUTO-DEBUG ON FAILURE
+        print('❌ Upload failed - running auto-debug...');
+        await debugSyncStatus();
+      }
+    } catch (e) {
+      if (!_isDisposed) {
+        syncStatus.value = 'Upload error';
+
+        Get.snackbar(
+          'Upload Error',
+          e.toString(),
+          icon: Icon(Icons.error, color: Colors.white),
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+          duration: Duration(seconds: 3),
+        );
+
+        // 🐛 AUTO-DEBUG ON EXCEPTION
+        print('💥 Upload exception - running auto-debug...');
+        await debugSyncStatus();
+      }
+    } finally {
+      if (!_isDisposed) {
+        isSyncing.value = false;
+      }
+    }
+  }
+
+  /// Enhanced full sync method with automatic debugging
+  Future<void> performFullSync({bool forceDownload = false}) async {
+    if (_isDisposed || isSyncing.value) return;
+
+    try {
+      isSyncing.value = true;
+      syncStatus.value = forceDownload ? 'Force syncing...' : 'Syncing...';
+
+      final result =
+          await SyncService.fullSync(forceFullDownload: forceDownload);
 
       if (_isDisposed) return;
 
@@ -327,6 +417,10 @@ class SyncController extends GetxController {
           colorText: Colors.white,
           duration: Duration(seconds: 3),
         );
+
+        // 🐛 AUTO-DEBUG ON SYNC FAILURE
+        print('❌ Full sync failed - running auto-debug...');
+        await debugSyncStatus();
       }
     } catch (e) {
       if (!_isDisposed) {
@@ -341,6 +435,10 @@ class SyncController extends GetxController {
           colorText: Colors.white,
           duration: Duration(seconds: 3),
         );
+
+        // 🐛 AUTO-DEBUG ON SYNC EXCEPTION
+        print('💥 Full sync exception - running auto-debug...');
+        await debugSyncStatus();
       }
     } finally {
       if (!_isDisposed) {
@@ -349,78 +447,54 @@ class SyncController extends GetxController {
     }
   }
 
-  /// Upload pending changes only
-  Future<void> uploadPendingChanges() async {
-    if (_isDisposed || isSyncing.value) return;
+// Add this method to your SyncController to easily check sync status
+  Future<void> debugSyncStatus() async {
+    await SyncDebugHelper.printDiagnosticReport();
 
-    try {
-      isSyncing.value = true;
-      syncStatus.value = 'Uploading changes...';
+    // Also check current pending changes
+    final pendingStatus = await SyncDebugHelper.checkPendingChanges();
+    print('🔍 Current pending changes status:');
+    print('   Has pending: ${pendingStatus['has_pending']}');
+    print('   Count: ${pendingStatus['count']}');
+    print('   Details: ${pendingStatus['details']}');
 
-      final result = await SyncService.uploadPendingChanges();
-
-      if (_isDisposed) return;
-
-      lastSyncResult.value = result;
-
-      if (result.success) {
-        final uploaded = result.details?['uploaded'] ?? 0;
-        final errors = result.details?['errors'] ?? [];
-        final isPartial = result.details?['partial'] ?? false;
-
-        syncStatus.value =
-            isPartial ? 'Upload partially completed' : 'Upload completed';
-        updateLastSyncDisplay();
-
-        if (isPartial && errors.isNotEmpty) {
-          Get.snackbar(
-            'Upload Partially Complete',
-            '$uploaded items uploaded, ${errors.length} failed',
-            icon: Icon(Icons.warning, color: Colors.white),
-            backgroundColor: Colors.amber,
-            colorText: Colors.white,
-            duration: Duration(seconds: 4),
-          );
-        } else {
-          Get.snackbar(
-            'Upload Complete',
-            'Changes uploaded successfully',
-            icon: Icon(Icons.cloud_upload, color: Colors.white),
-            backgroundColor: Colors.green,
-            colorText: Colors.white,
-            duration: Duration(seconds: 2),
-          );
-        }
-      } else {
-        syncStatus.value = 'Upload failed';
-
-        Get.snackbar(
-          'Upload Failed',
-          result.message,
-          icon: Icon(Icons.cloud_off, color: Colors.white),
-          backgroundColor: Colors.red,
-          colorText: Colors.white,
-          duration: Duration(seconds: 3),
-        );
-      }
-    } catch (e) {
-      if (!_isDisposed) {
-        syncStatus.value = 'Upload error';
-
-        Get.snackbar(
-          'Upload Error',
-          e.toString(),
-          icon: Icon(Icons.error, color: Colors.white),
-          backgroundColor: Colors.red,
-          colorText: Colors.white,
-          duration: Duration(seconds: 3),
-        );
-      }
-    } finally {
-      if (!_isDisposed) {
-        isSyncing.value = false;
+    if (pendingStatus['breakdown'] != null) {
+      final breakdown = pendingStatus['breakdown'] as Map<String, dynamic>;
+      for (final entry in breakdown.entries) {
+        print('   - ${entry.key}: ${entry.value} items');
       }
     }
+  }
+
+  static String? _getItemType(Map<String, dynamic> error) {
+    // This method should extract the item type from the error structure
+    // You'll need to implement this based on how your server structures error responses
+    // For example, if errors include the table name:
+    if (error.containsKey('table')) {
+      return error['table'];
+    }
+
+    // Or if you need to infer from the item data:
+    final item = error['item'];
+    if (item != null && item['data'] != null) {
+      final data = item['data'] as Map<String, dynamic>;
+
+      // Infer type from data structure
+      if (data.containsKey('fname') || data.containsKey('lname'))
+        return 'users';
+      if (data.containsKey('course_name') || data.containsKey('duration_hours'))
+        return 'courses';
+      if (data.containsKey('make') || data.containsKey('carplate'))
+        return 'fleet';
+      if (data.containsKey('start') || data.containsKey('end'))
+        return 'schedules';
+      if (data.containsKey('total_amount') || data.containsKey('due_date'))
+        return 'invoices';
+      if (data.containsKey('payment_method') ||
+          data.containsKey('payment_date')) return 'payments';
+    }
+
+    return null;
   }
 
   /// Toggle auto-sync - FIXED VERSION

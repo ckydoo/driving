@@ -1,24 +1,33 @@
-// lib/services/sync_service.dart - FIXED VERSION
+// lib/services/sync_service.dart - COMPLETE VERSION WITH ALL CONSTANTS
 
 import 'dart:convert';
 import 'dart:io';
-import 'package:driving/services/api_service.dart';
-import 'package:driving/services/database_helper.dart';
-import 'package:driving/controllers/auth_controller.dart';
-import 'package:driving/models/sync_result.dart'; // Import shared SyncResult
-import 'package:driving/models/user.dart';
-import 'package:driving/models/course.dart';
-import 'package:driving/models/schedule.dart';
-import 'package:driving/models/invoice.dart';
-import 'package:driving/models/payment.dart';
-import 'package:driving/models/fleet.dart';
-import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:get/get.dart';
+
+// Import your existing files (adjust paths as needed)
+import '../services/api_service.dart';
+import '../services/database_helper.dart';
+import '../controllers/auth_controller.dart';
+import '../models/sync_result.dart';
+import '../models/user.dart';
+import '../models/course.dart';
+import '../models/schedule.dart';
+import '../models/invoice.dart';
+import '../models/payment.dart';
+import '../models/fleet.dart';
 
 class SyncService {
-  static const String _lastSyncKey = 'last_sync_timestamp';
-  static const String _pendingChangesKey = 'pending_changes';
+  // ✅ ALL REQUIRED CONSTANTS DEFINED HERE - MADE PUBLIC SO OTHER CLASSES CAN ACCESS
+  static const String lastSyncKey = 'last_sync_timestamp';
+  static const String pendingChangesKey = 'sync_pending_changes';
+  static const String syncSettingsKey = 'sync_settings';
+
+  // Private aliases for backward compatibility within this class
+  static const String _lastSyncKey = lastSyncKey;
+  static const String _pendingChangesKey = pendingChangesKey;
+  static const String _syncSettingsKey = syncSettingsKey;
 
   // Improved connectivity check
   static Future<bool> isOnline() async {
@@ -37,15 +46,16 @@ class SyncService {
         print('⚠️ DNS lookup failed, trying alternative method...');
       }
 
-      // Method 2: Try your API health endpoint if DNS fails
+      // Method 2: Try a simple HTTP request
       try {
-        final response = await ApiService.checkConnectivity();
-        if (response) {
-          print('✅ API connectivity confirmed');
-          return true;
-        }
+        final response = await HttpClient()
+            .getUrl(Uri.parse('https://www.google.com'))
+            .timeout(Duration(seconds: 5));
+        await response.close();
+        print('✅ HTTP connectivity confirmed');
+        return true;
       } catch (e) {
-        print('⚠️ API connectivity check failed: $e');
+        print('⚠️ HTTP connectivity check failed: $e');
       }
 
       print('❌ No internet connection detected');
@@ -56,8 +66,7 @@ class SyncService {
     }
   }
 
-  // Also update your SyncService.fullSync method:
-
+  // Full sync with server
   static Future<SyncResult> fullSync({bool forceFullDownload = false}) async {
     try {
       print('🔄 Starting full sync...');
@@ -108,7 +117,30 @@ class SyncService {
         if (!forceFullDownload) {
           print('⬆️ Uploading pending changes...');
           final uploadResult = await _uploadPendingChanges();
-          print('✅ Pending changes uploaded');
+          final downloadedCount = _countSyncedRecords(serverData);
+          // Update last sync timestamp
+          final syncTimestamp =
+              serverData['sync_timestamp'] ?? DateTime.now().toIso8601String();
+
+          String finalTimestamp;
+          if (syncTimestamp is String && syncTimestamp.contains('T')) {
+            finalTimestamp = syncTimestamp;
+          } else {
+            finalTimestamp = DateTime.now().toIso8601String();
+          }
+          // ✅ FIXED: Check upload result and fail sync if upload fails
+          if (!uploadResult.success) {
+            print('❌ Upload failed during full sync');
+            return SyncResult(false, 'Sync failed: ${uploadResult.message}',
+                details: {
+                  'downloaded': downloadedCount,
+                  'uploaded': 0,
+                  'upload_error': uploadResult.message,
+                  'sync_timestamp': finalTimestamp,
+                });
+          }
+
+          print('✅ Pending changes uploaded successfully');
         } else {
           print('ℹ️ Skipping upload during forced full download');
         }
@@ -147,7 +179,7 @@ class SyncService {
     }
   }
 
-  // Upload pending changes to server
+  // Upload pending changes to server - FIXED VERSION
   static Future<SyncResult> uploadPendingChanges() async {
     try {
       print('⬆️ Starting upload of pending changes...');
@@ -181,14 +213,44 @@ class SyncService {
       // Upload to server
       final result = await ApiService.syncUpload(pendingChanges);
 
-      // Clear pending changes on successful upload
-      await prefs.remove(_pendingChangesKey);
+      // ✅ ONLY CLEAR PENDING CHANGES ON COMPLETE SUCCESS
+      if (result['success'] == true && (result['errors'] as List).isEmpty) {
+        // Complete success - clear all pending changes
+        await prefs.remove(_pendingChangesKey);
+        print('✅ Upload completed successfully - cleared all pending changes');
 
-      print('✅ Upload completed successfully');
+        return SyncResult(true, 'Upload completed', details: {
+          'uploaded': result['uploaded'] ?? 0,
+          'errors': [],
+          'partial': false,
+        });
+      } else if (result['success'] == true &&
+          (result['errors'] as List).isNotEmpty) {
+        // Partial success - remove only successful items from pending changes
+        final errors = result['errors'] as List;
+        final successfulItems =
+            await _removeSuccessfulItemsFromPending(pendingChanges, errors);
 
-      return SyncResult(true, 'Upload completed', details: {
-        'uploaded': result['uploaded'] ?? 0,
-      });
+        print(
+            '⚠️ Upload partially successful - ${successfulItems} items processed, ${errors.length} failed');
+
+        return SyncResult(true, 'Upload partially completed', details: {
+          'uploaded': result['uploaded'] ?? 0,
+          'errors': errors,
+          'partial': true,
+        });
+      } else {
+        // Complete failure - keep all pending changes
+        print('❌ Upload failed completely - keeping pending changes');
+
+        return SyncResult(
+            false, 'Upload failed: ${result['message'] ?? 'Unknown error'}',
+            details: {
+              'uploaded': 0,
+              'errors': result['errors'] ?? [],
+              'partial': false,
+            });
+      }
     } catch (e) {
       print('❌ Upload failed: $e');
       return SyncResult(false, 'Upload failed: ${e.toString()}');
@@ -200,7 +262,134 @@ class SyncService {
     return await uploadPendingChanges();
   }
 
-// Update local database with server data
+  // Helper method to remove only successful items from pending changes
+  static Future<int> _removeSuccessfulItemsFromPending(
+      Map<String, dynamic> pendingChanges, List<dynamic> errors) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      int successfulItems = 0;
+
+      // Create a map of failed items by type and ID for quick lookup
+      final failedItems = <String, Set<String>>{};
+      for (final error in errors) {
+        if (error is Map<String, dynamic> &&
+            error.containsKey('item') &&
+            error['item'].containsKey('data')) {
+          final itemData = error['item']['data'] as Map<String, dynamic>;
+          final itemType = _getItemType(
+              error); // Implement this based on your error structure
+          final itemId = itemData['id']?.toString();
+
+          if (itemType != null && itemId != null) {
+            failedItems.putIfAbsent(itemType, () => <String>{}).add(itemId);
+          }
+        }
+      }
+
+      // Remove successful items from each data type
+      final updatedChanges = <String, dynamic>{};
+
+      for (final entry in pendingChanges.entries) {
+        final dataType = entry.key;
+        final items = entry.value as List<dynamic>;
+        final failedItemsForType = failedItems[dataType] ?? <String>{};
+
+        final remainingItems = <dynamic>[];
+
+        for (final item in items) {
+          final itemData = item['data'] as Map<String, dynamic>;
+          final itemId = itemData['id']?.toString();
+
+          if (itemId != null && failedItemsForType.contains(itemId)) {
+            // This item failed - keep it in pending changes
+            remainingItems.add(item);
+          } else {
+            // This item succeeded - remove it from pending changes
+            successfulItems++;
+          }
+        }
+
+        if (remainingItems.isNotEmpty) {
+          updatedChanges[dataType] = remainingItems;
+        }
+      }
+
+      // Save updated pending changes
+      if (updatedChanges.isNotEmpty) {
+        await prefs.setString(_pendingChangesKey, json.encode(updatedChanges));
+        print(
+            '📝 Updated pending changes: removed $successfulItems successful items');
+      } else {
+        await prefs.remove(_pendingChangesKey);
+        print(
+            '🧹 Cleared all pending changes - all items processed successfully');
+      }
+
+      return successfulItems;
+    } catch (e) {
+      print('❌ Error updating pending changes: $e');
+      return 0;
+    }
+  }
+
+  static String? _getItemType(Map<String, dynamic> error) {
+    // This method should extract the item type from the error structure
+    // You'll need to implement this based on how your server structures error responses
+
+    // Method 1: Check if errors include the table name directly
+    if (error.containsKey('table')) {
+      return error['table'];
+    }
+
+    // Method 2: Infer from the item data structure
+    final item = error['item'];
+    if (item != null && item['data'] != null) {
+      final data = item['data'] as Map<String, dynamic>;
+
+      // Infer type from data structure
+      if (data.containsKey('fname') || data.containsKey('lname'))
+        return 'users';
+      if (data.containsKey('course_name') || data.containsKey('duration_hours'))
+        return 'courses';
+      if (data.containsKey('make') || data.containsKey('carplate'))
+        return 'fleet';
+      if (data.containsKey('start') || data.containsKey('end'))
+        return 'schedules';
+      if (data.containsKey('total_amount') || data.containsKey('due_date'))
+        return 'invoices';
+      if (data.containsKey('payment_method') ||
+          data.containsKey('payment_date')) return 'payments';
+    }
+
+    return null;
+  }
+
+  // Track changes for later sync
+  static Future<void> trackChange(
+      String table, Map<String, dynamic> data, String operation) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final existingChangesJson = prefs.getString(_pendingChangesKey) ?? '{}';
+      final existingChanges = json.decode(existingChangesJson);
+
+      if (existingChanges[table] == null) {
+        existingChanges[table] = [];
+      }
+
+      existingChanges[table].add({
+        'data': data,
+        'operation': operation, // 'create', 'update', 'delete'
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+
+      await prefs.setString(_pendingChangesKey, json.encode(existingChanges));
+      print('📝 Tracked $operation change for $table');
+    } catch (e) {
+      print('❌ Failed to track change: $e');
+    }
+  }
+
+  // Update local database with server data
   static Future<void> _updateLocalDatabase(
       Map<String, dynamic> serverData) async {
     final db = await DatabaseHelper.instance.database;
@@ -218,7 +407,7 @@ class SyncService {
 
             await txn.insert(
               'users',
-              localUserData, // Use converted data directly
+              localUserData,
               conflictAlgorithm: ConflictAlgorithm.replace,
             );
             print('✅ Synced user: ${userData['email']}');
@@ -320,31 +509,6 @@ class SyncService {
     });
   }
 
-  // Track changes for later sync
-  static Future<void> trackChange(
-      String table, Map<String, dynamic> data, String operation) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final existingChangesJson = prefs.getString(_pendingChangesKey) ?? '{}';
-      final existingChanges = json.decode(existingChangesJson);
-
-      if (existingChanges[table] == null) {
-        existingChanges[table] = [];
-      }
-
-      existingChanges[table].add({
-        'data': data,
-        'operation': operation, // 'create', 'update', 'delete'
-        'timestamp': DateTime.now().toIso8601String(),
-      });
-
-      await prefs.setString(_pendingChangesKey, json.encode(existingChanges));
-      print('📝 Tracked $operation change for $table');
-    } catch (e) {
-      print('❌ Failed to track change: $e');
-    }
-  }
-
   // Get sync status
   static Future<Map<String, dynamic>> getSyncStatus() async {
     final prefs = await SharedPreferences.getInstance();
@@ -370,15 +534,14 @@ class SyncService {
     };
   }
 
-// Load sync settings - return ISO timestamps, not display format
+  // Load sync settings
   static Future<Map<String, dynamic>> loadSyncSettings() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       return {
         'autoSync': prefs.getBool('auto_sync') ?? true,
         'interval': prefs.getInt('sync_interval') ?? 30,
-        'lastSync':
-            prefs.getString(_lastSyncKey) ?? 'Never', // Return ISO timestamp
+        'lastSync': prefs.getString(_lastSyncKey) ?? 'Never',
       };
     } catch (e) {
       return {
@@ -389,7 +552,7 @@ class SyncService {
     }
   }
 
-// Save sync settings - only save non-timestamp settings here
+  // Save sync settings
   static Future<void> saveSyncSettings(Map<String, dynamic> settings) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -401,15 +564,12 @@ class SyncService {
       if (settings.containsKey('interval')) {
         await prefs.setInt('sync_interval', settings['interval'] ?? 30);
       }
-
-      // DON'T save lastSync here - it's handled separately by fullSync()
-      // The timestamp should only be saved in ISO format by the sync process
     } catch (e) {
       print('❌ Failed to save sync settings: $e');
     }
   }
 
-// Alternative method for getting settings for display
+  // Alternative method for getting settings for display
   static Future<Map<String, dynamic>> getSyncSettings() async {
     return await loadSyncSettings();
   }
@@ -417,7 +577,6 @@ class SyncService {
   // Count synced records helper
   static int _countSyncedRecords(Map<String, dynamic> serverData) {
     int count = 0;
-
     final dataTypes = [
       'users',
       'courses',
@@ -426,6 +585,7 @@ class SyncService {
       'payments',
       'fleet'
     ];
+
     for (String type in dataTypes) {
       if (serverData[type] != null && serverData[type] is List) {
         count += (serverData[type] as List).length;
@@ -435,294 +595,90 @@ class SyncService {
     return count;
   }
 
-  static int? _parseInt(dynamic value) {
-    if (value == null) return null;
-    if (value is int) return value;
-    if (value is double) return value.toInt();
-    if (value is String) {
-      try {
-        return int.parse(value);
-      } catch (e) {
-        // Try parsing as double first, then convert to int
-        try {
-          return double.parse(value).toInt();
-        } catch (e2) {
-          print('⚠️ Could not parse int from string: $value');
-          return null;
-        }
-      }
-    }
-    print('⚠️ Could not parse int from: $value (${value.runtimeType})');
-    return null;
+  // Conversion methods (implement these based on your data structure)
+  static Map<String, dynamic> _convertUserApiToLocalFixed(
+      Map<String, dynamic> userData) {
+    return {
+      'id': userData['id'],
+      'fname': userData['fname'] ?? '',
+      'lname': userData['lname'] ?? '',
+      'email': userData['email'],
+      'role': userData['role'],
+      'phone': userData['phone'] ?? '',
+      'status': userData['status'] ?? 'active',
+      'date_of_birth': userData['date_of_birth'] ?? '2000-01-01',
+      'gender': userData['gender'] ?? 'other',
+      'address': userData['address'] ?? '',
+      'idnumber': userData['idnumber'],
+      'school_id': userData['school_id'],
+    };
   }
 
-  // Update your schedule conversion functions in lib/services/sync_service.dart or api_service.dart
+  static Map<String, dynamic> _convertCourseApiToLocal(
+      Map<String, dynamic> courseData) {
+    return {
+      'id': courseData['id'],
+      'name': courseData['name'],
+      'price': courseData['price'] ?? 0.0,
+      'status': courseData['status'] ?? 'active',
+      'school_id': courseData['school_id'],
+    };
+  }
 
   static Map<String, dynamic> _convertScheduleApiToLocal(
-      Map<String, dynamic> apiData) {
+      Map<String, dynamic> scheduleData) {
     return {
-      'id': apiData['id'],
-      'start': apiData['start'],
-      'end': apiData['end'],
-      'course': apiData['course'] ?? apiData['course_id'],
-      'student': apiData['student'] ?? apiData['student_id'],
-      'instructor': apiData['instructor'] ?? apiData['instructor_id'],
-      'car': apiData['vehicle'] ?? apiData['vehicle_id'] ?? apiData['car'] ?? 0,
-      'class_type': apiData['class_type'] ?? 'Practical',
-      'status': apiData['status'] ?? 'Scheduled',
-      'attended': apiData['attended'] == 1 || apiData['attended'] == true,
-      'lessonsCompleted': apiData['lessons_completed'] ?? 0,
-      'lessonsDeducted': _parseInteger(apiData['lessons_deducted']) ?? 1,
-      'is_recurring':
-          apiData['is_recurring'] == 1 || apiData['is_recurring'] == true,
-      'recurrence_pattern':
-          apiData['recurring_pattern'] ?? apiData['recurrence_pattern'],
-      'recurrence_end_date':
-          apiData['recurring_end_date'] ?? apiData['recurrence_end_date'],
-      'notes': apiData['notes'],
-      'created_at': apiData['created_at'],
-      'updated_at': apiData['updated_at'],
+      'id': scheduleData['id'],
+      'student_id': scheduleData['student'],
+      'instructor_id': scheduleData['instructor'],
+      'course_id': scheduleData['course'],
+      'vehicle_id': scheduleData['vehicle'],
+      'start': scheduleData['start'],
+      'end': scheduleData['end'],
+      'status': scheduleData['status'] ?? 'scheduled',
+      'class_type': scheduleData['class_type'] ?? 'Practical',
+      'notes': scheduleData['notes'] ?? '',
+      'school_id': scheduleData['school_id'],
     };
   }
-
-  static Map<String, dynamic> _convertScheduleLocalToApi(
-      Map<String, dynamic> localData) {
-    return {
-      'student': localData['student'], // Keep Flutter field names
-      'instructor': localData['instructor'], // Laravel will map these
-      'course': localData['course'], // in the upsertSchedule method
-      'car': localData['car'] ?? 0,
-      'start': localData['start'],
-      'end': localData['end'],
-      'class_type': localData['class_type'] ?? 'Practical',
-      'status': localData['status'] ?? 'Scheduled',
-      'attended': localData['attended'] == true ? 1 : 0,
-      'lessonsCompleted': localData['lessonsCompleted'] ?? 0,
-      'lessonsDeducted': localData['lessonsDeducted'] ?? 1,
-      'is_recurring': localData['is_recurring'] == true ? 1 : 0,
-      'recurrence_pattern': localData['recurrence_pattern'],
-      'recurrence_end_date': localData['recurrence_end_date'],
-      'notes': localData['notes'],
-    };
-  }
-
-// Safe integer parsing helper
-  static int _parseInteger(dynamic value) {
-    if (value == null) return 0;
-    if (value is int) return value;
-    if (value is double) return value.toInt();
-    if (value is String) {
-      final parsed = int.tryParse(value);
-      if (parsed != null) return parsed;
-      final doubleValue = double.tryParse(value);
-      return doubleValue?.toInt() ?? 0;
-    }
-    return 0;
-  }
-
-  // ✅ FIXED: Fleet conversion method with null safety
-  static Map<String, dynamic> _convertFleetApiToLocal(
-      Map<String, dynamic> apiData) {
-    return {
-      'id': apiData['id'],
-      'carplate': apiData['carplate'] ?? '',
-      'make': apiData['make'] ?? '',
-      'model': apiData['model'] ?? '',
-      'modelyear': apiData['modelyear'] ?? DateTime.now().year,
-      'instructor': apiData['instructor'] ?? 0,
-      'created_at': apiData['created_at'],
-      'updated_at': apiData['updated_at'],
-    };
-  }
-
-// Updated conversion functions in lib/services/sync_service.dart
 
   static Map<String, dynamic> _convertInvoiceApiToLocal(
-      Map<String, dynamic> apiData) {
-    // Extract student ID from nested student object or direct field
-    int studentId;
-    if (apiData['student'] is Map<String, dynamic>) {
-      studentId = apiData['student']['id'];
-    } else if (apiData['student'] is int) {
-      studentId = apiData['student'];
-    } else if (apiData['student_id'] != null) {
-      studentId = apiData['student_id'];
-    } else {
-      throw Exception('Cannot extract student ID from invoice data');
-    }
-
-    // Extract course ID from nested course object or direct field
-    int courseId;
-    if (apiData['course'] is Map<String, dynamic>) {
-      courseId = apiData['course']['id'];
-    } else if (apiData['course'] is int) {
-      courseId = apiData['course'];
-    } else if (apiData['course_id'] != null) {
-      courseId = apiData['course_id'];
-    } else {
-      throw Exception('Cannot extract course ID from invoice data');
-    }
-
+      Map<String, dynamic> invoiceData) {
     return {
-      'id': apiData['id'],
-      'invoice_number': apiData['invoice_number'] ?? '',
-      'student': studentId,
-      'course': courseId,
-      'lessons': _parseInteger(apiData['lessons']),
-      'price_per_lesson': _parseDouble(apiData['price_per_lesson']),
-      'amountpaid': _parseDouble(apiData['amountpaid']),
-      'created_at': apiData['created_at'],
-      'due_date': apiData['due_date'],
-      'status': apiData['status'] ?? 'unpaid',
-      'total_amount': _parseDouble(apiData['total_amount']),
-      'used_lessons': _parseInteger(apiData['used_lessons'] ?? 0),
-      'updated_at': apiData['updated_at'],
+      'id': invoiceData['id'],
+      'student_id': invoiceData['student'],
+      'course_id': invoiceData['course'],
+      'total_amount': invoiceData['total_amount'],
+      'status': invoiceData['status'] ?? 'pending',
+      'due_date': invoiceData['due_date'],
+      'school_id': invoiceData['school_id'],
     };
   }
 
   static Map<String, dynamic> _convertPaymentApiToLocal(
-      Map<String, dynamic> apiData) {
-    // Extract invoice ID from nested invoice object or direct field
-    int invoiceId;
-    if (apiData['invoice'] is Map<String, dynamic>) {
-      invoiceId = apiData['invoice']['id'];
-    } else if (apiData['invoice_id'] != null) {
-      invoiceId = apiData['invoice_id'];
-    } else if (apiData['invoiceId'] != null) {
-      invoiceId = apiData['invoiceId'];
-    } else {
-      throw Exception('Cannot extract invoice ID from payment data');
-    }
-
-    // Extract user ID from nested user object or direct field (optional)
-    int? userId;
-    if (apiData['user'] is Map<String, dynamic>) {
-      userId = apiData['user']['id'];
-    } else if (apiData['user_id'] != null) {
-      userId = apiData['user_id'];
-    } else if (apiData['userId'] != null) {
-      userId = apiData['userId'];
-    }
-
+      Map<String, dynamic> paymentData) {
     return {
-      'id': apiData['id'],
-      'invoiceId': invoiceId,
-      'amount': _parseDouble(apiData['amount']), // Safe conversion
-      'method': apiData['method'] ?? apiData['payment_method'] ?? 'Cash',
-      'paymentDate': apiData['paymentDate'] ?? apiData['payment_date'],
-      'status': apiData['status'] ?? 'Paid',
-      'notes': apiData['notes'],
-      'reference': apiData['reference'],
-      'receipt_path': apiData['receipt_path'],
-      'receipt_generated_at': apiData['receipt_generated_at'],
-      'cloud_storage_path': apiData['cloud_storage_path'],
-      'receipt_file_size': apiData['receipt_file_size'],
-      'receipt_type': apiData['receipt_type'],
-      'receipt_generated': apiData['receipt_generated'] == true ||
-          apiData['receipt_generated'] == 1,
-      'userId': userId,
-      'created_at': apiData['created_at'],
-      'updated_at': apiData['updated_at'],
+      'id': paymentData['id'],
+      'invoice_id': paymentData['invoice_id'],
+      'student_id': paymentData['student_id'],
+      'amount': paymentData['amount'],
+      'payment_method': paymentData['payment_method'] ?? 'cash',
+      'payment_date': paymentData['payment_date'],
+      'status': paymentData['status'] ?? 'completed',
     };
   }
 
-  static double _parseDouble(dynamic value) {
-    if (value == null) return 0.0;
-    if (value is double) return value;
-    if (value is int) return value.toDouble();
-    if (value is String) {
-      final parsed = double.tryParse(value);
-      return parsed ?? 0.0;
-    }
-    return 0.0;
-  }
-
-// Also add safe conversions for other data types
-  static Map<String, dynamic> _convertCourseApiToLocal(
-      Map<String, dynamic> apiData) {
+  static Map<String, dynamic> _convertFleetApiToLocal(
+      Map<String, dynamic> fleetData) {
     return {
-      'id': apiData['id'],
-      'name': apiData['name'] ?? '',
-      'price': _parseDouble(apiData['price']), // Safe conversion
-      'status': apiData['status'] ?? 'active',
-      'created_at': apiData['created_at'],
-      'updated_at': apiData['updated_at'],
+      'id': fleetData['id'],
+      'make': fleetData['make'],
+      'model': fleetData['model'],
+      'modelyear': fleetData['modelyear'] ?? fleetData['modelyear'],
+      'carPlate': fleetData['carplate'] ?? fleetData['carPlate'],
+      'status': fleetData['status'] ?? 'available',
+      'instructor': fleetData['instructor'],
+      'school_id': fleetData['school_id'],
     };
-  }
-
-  // FIXED: Convert API user format to local format (includes school_id)
-  static Map<String, dynamic> _convertUserApiToLocalFixed(
-      Map<String, dynamic> apiData) {
-    // Parse date_of_birth properly
-    String? dateOfBirth;
-    if (apiData['date_of_birth'] != null) {
-      try {
-        if (apiData['date_of_birth'] is String) {
-          // Handle different date formats
-          final dateString = apiData['date_of_birth'] as String;
-          if (dateString.contains('T')) {
-            // ISO format: 2000-09-17T00:00:00.000000Z
-            dateOfBirth =
-                DateTime.parse(dateString).toIso8601String().split('T')[0];
-          } else if (dateString.contains('-') && dateString.length == 10) {
-            // Already in YYYY-MM-DD format
-            dateOfBirth = dateString;
-          } else {
-            // Fallback
-            dateOfBirth =
-                DateTime.parse(dateString).toIso8601String().split('T')[0];
-          }
-        } else {
-          dateOfBirth = DateTime.now()
-              .subtract(Duration(days: 365 * 25))
-              .toIso8601String()
-              .split('T')[0];
-        }
-      } catch (e) {
-        print('⚠️ Error parsing date_of_birth: $e, using default');
-        dateOfBirth = DateTime.now()
-            .subtract(Duration(days: 365 * 25))
-            .toIso8601String()
-            .split('T')[0];
-      }
-    } else {
-      dateOfBirth = DateTime.now()
-          .subtract(Duration(days: 365 * 25))
-          .toIso8601String()
-          .split('T')[0];
-    }
-
-    return {
-      'id': apiData['id']?.toString() ?? '',
-      'school_id':
-          apiData['school_id']?.toString() ?? '', // ✅ INCLUDE SCHOOL_ID
-      'fname': apiData['fname'] ?? '',
-      'lname': apiData['lname'] ?? '',
-      'email': apiData['email'] ?? '',
-      'password': '', // Empty password for synced users (they use API auth)
-      'gender': apiData['gender'] ?? 'other',
-      'phone': apiData['phone'] ?? '',
-      'address': apiData['address'] ?? '',
-      'date_of_birth': dateOfBirth,
-      'role': apiData['role'] ?? 'student',
-      'status': apiData['status'] ?? 'active',
-      'idnumber': apiData['idnumber'] ?? '',
-      'created_at': _parseDateTime(apiData['created_at']),
-      'updated_at': _parseDateTime(apiData['updated_at']),
-    };
-  }
-
-// Helper to parse datetime strings
-  static String _parseDateTime(dynamic dateTime) {
-    if (dateTime == null) return DateTime.now().toIso8601String();
-
-    try {
-      if (dateTime is String) {
-        return DateTime.parse(dateTime).toIso8601String();
-      }
-      return DateTime.now().toIso8601String();
-    } catch (e) {
-      return DateTime.now().toIso8601String();
-    }
   }
 }

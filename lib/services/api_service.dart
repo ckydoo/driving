@@ -1,5 +1,6 @@
 // lib/services/api_service.dart - CORRECTED VERSION
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
@@ -88,46 +89,97 @@ class ApiService {
     print('🔍 URL: $baseUrl/sync/upload');
     print('🔍 Changes to upload: ${json.encode(changes)}');
 
-    final response = await http.post(
-      Uri.parse('$baseUrl/sync/upload'),
-      headers: _headers,
-      body: json.encode(changes),
-    );
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/sync/upload'),
+        headers: _headers,
+        body: json.encode(changes),
+      );
 
-    print('🔍 Upload Response Status: ${response.statusCode}');
-    print('🔍 Upload Response Body: ${response.body}');
+      print('🔍 Upload Response Status: ${response.statusCode}');
+      print('🔍 Upload Response Body: ${response.body}');
 
-    final data = json.decode(response.body);
+      final data = json.decode(response.body);
 
-    // Handle different response scenarios
-    if (response.statusCode == 200 && data['success']) {
-      // Complete success
-      print('✅ Upload completed successfully');
-      return {
-        'success': true,
-        'uploaded': data['data']['uploaded'] ?? 0,
-        'errors': [],
-        'message': 'Upload completed successfully'
-      };
-    } else if (response.statusCode == 422 && !data['success']) {
-      // Partial success - some items uploaded, some failed
-      final uploaded = data['data']['uploaded'] ?? 0;
-      final errors = data['data']['errors'] ?? [];
+      // Handle different response scenarios more strictly
+      if (response.statusCode == 200 && data['success']) {
+        // Complete success - verify no errors exist
+        final errors = data['data']['errors'] ?? [];
+        final uploaded = data['data']['uploaded'] ?? 0;
 
-      print(
-          '⚠️ Upload partially successful: $uploaded uploaded, ${errors.length} errors');
+        if (errors.isEmpty) {
+          print('✅ Upload completed successfully with no errors');
+          return {
+            'success': true,
+            'uploaded': uploaded,
+            'errors': [],
+            'message': 'Upload completed successfully'
+          };
+        } else {
+          // Server returned success but with errors - treat as partial success
+          print(
+              '⚠️ Server returned success but with errors - treating as partial success');
+          return {
+            'success': true,
+            'uploaded': uploaded,
+            'errors': errors,
+            'message': 'Upload completed with some errors'
+          };
+        }
+      } else if (response.statusCode == 422 && !data['success']) {
+        // Partial success - some items uploaded, some failed
+        final uploaded = data['data']['uploaded'] ?? 0;
+        final errors = data['data']['errors'] ?? [];
 
-      return {
-        'success': uploaded > 0, // Consider it success if anything was uploaded
-        'uploaded': uploaded,
-        'errors': errors,
-        'message':
-            'Upload partially completed: $uploaded items uploaded, ${errors.length} failed'
-      };
-    } else {
-      // Complete failure
-      print('❌ Upload completely failed');
-      throw Exception(data['message'] ?? 'Sync upload failed');
+        print(
+            '⚠️ Upload partially successful: $uploaded uploaded, ${errors.length} errors');
+
+        // ✅ BE MORE STRICT ABOUT WHAT COUNTS AS SUCCESS
+        if (uploaded > 0) {
+          return {
+            'success': true, // Consider it success if something was uploaded
+            'uploaded': uploaded,
+            'errors': errors,
+            'message':
+                'Upload partially completed: $uploaded items uploaded, ${errors.length} failed'
+          };
+        } else {
+          return {
+            'success': false, // No items uploaded - complete failure
+            'uploaded': 0,
+            'errors': errors,
+            'message': 'Upload failed: no items were processed successfully'
+          };
+        }
+      } else if (response.statusCode == 401) {
+        print('❌ Authentication failed');
+        throw Exception('Authentication failed - please login again');
+      } else if (response.statusCode == 403) {
+        print('❌ Access forbidden');
+        throw Exception('Access forbidden - insufficient permissions');
+      } else if (response.statusCode >= 500) {
+        print('❌ Server error: ${response.statusCode}');
+        throw Exception(
+            'Server error: ${data['message'] ?? 'Internal server error'}');
+      } else {
+        // Other errors
+        print('❌ Upload failed with status: ${response.statusCode}');
+        final errorMessage = data['message'] ??
+            'Upload failed with status ${response.statusCode}';
+        throw Exception(errorMessage);
+      }
+    } on SocketException {
+      print('❌ Network error - no internet connection');
+      throw Exception('No internet connection');
+    } on TimeoutException {
+      print('❌ Request timeout');
+      throw Exception('Request timeout - please try again');
+    } on FormatException {
+      print('❌ Invalid response format');
+      throw Exception('Invalid server response');
+    } catch (e) {
+      print('❌ Upload error: $e');
+      rethrow;
     }
   }
 
