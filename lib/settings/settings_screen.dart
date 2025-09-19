@@ -1,4 +1,5 @@
 import 'package:driving/controllers/sync_controller.dart';
+import 'package:driving/services/sync_service.dart';
 import 'package:driving/widgets/sync_status_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -172,9 +173,9 @@ class _SettingsScreenState extends State<SettingsScreen>
         if (authController.hasAnyRole(['admin', 'instructor']))
           _buildQuickActionButton(
             icon: Icons.bug_report,
-            label: 'Sync Debug',
+            label: 'Clear Pending Sync Errors',
             onTap: () {
-              syncController;
+              SyncService.clearAllSyncData();
             },
           ),
         if (authController.hasAnyRole(['admin', 'instructor']))

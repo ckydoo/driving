@@ -265,7 +265,7 @@ class DatabaseMigration {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS payments (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        invoice_id INTEGER,
+        invoiceId INTEGER,
         student_id INTEGER,
         amount REAL NOT NULL,
         payment_method TEXT,
@@ -273,7 +273,7 @@ class DatabaseMigration {
         status TEXT NOT NULL DEFAULT 'completed',
         created_at TEXT,
         updated_at TEXT,
-        FOREIGN KEY (invoice_id) REFERENCES invoices (id),
+        FOREIGN KEY (invoiceId) REFERENCES invoices (id),
         FOREIGN KEY (student_id) REFERENCES users (id)
       )
     ''');

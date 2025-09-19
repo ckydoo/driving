@@ -605,10 +605,12 @@ class SyncService {
       'email': userData['email'],
       'role': userData['role'],
       'phone': userData['phone'] ?? '',
+      'password': userData['password'] ?? '',
       'status': userData['status'] ?? 'active',
       'date_of_birth': userData['date_of_birth'] ?? '2000-01-01',
       'gender': userData['gender'] ?? 'other',
       'address': userData['address'] ?? '',
+      'last_login': userData['last_login'] ?? '',
       'idnumber': userData['idnumber'],
       'school_id': userData['school_id'],
     };
@@ -635,6 +637,12 @@ class SyncService {
       'vehicle_id': scheduleData['vehicle'],
       'start': scheduleData['start'],
       'end': scheduleData['end'],
+      'is_recurring': scheduleData['is_recurring'] ?? 0,
+      'recurrence_pattern': scheduleData['recurrence_pattern'] ?? '',
+      'recurrence_end_date': scheduleData['recurrence_end_date'] ?? '',
+      'attended': scheduleData['attended'] ?? 0,
+      'lessons_completed': scheduleData['lessons_completed'] ?? 0,
+      'lessons_deducted': scheduleData['lessons_deducted'] ?? 0,
       'status': scheduleData['status'] ?? 'scheduled',
       'class_type': scheduleData['class_type'] ?? 'Practical',
       'notes': scheduleData['notes'] ?? '',
@@ -646,8 +654,13 @@ class SyncService {
       Map<String, dynamic> invoiceData) {
     return {
       'id': invoiceData['id'],
-      'student_id': invoiceData['student'],
-      'course_id': invoiceData['course'],
+      'student': invoiceData['student'],
+      'lessons': invoiceData['lessons'] ?? 0,
+      'invoice_number': invoiceData['invoice_number'],
+      'course': invoiceData['course'],
+      'amountpaid': invoiceData['amountpaid'] ?? 0.0,
+      'price_per_lesson': invoiceData['price_per_lesson'] ?? 0.0,
+      'used_lessons': invoiceData['used_lessons'] ?? 0,
       'total_amount': invoiceData['total_amount'],
       'status': invoiceData['status'] ?? 'pending',
       'due_date': invoiceData['due_date'],
@@ -659,11 +672,14 @@ class SyncService {
       Map<String, dynamic> paymentData) {
     return {
       'id': paymentData['id'],
-      'invoice_id': paymentData['invoice_id'],
-      'student_id': paymentData['student_id'],
+      'invoiceId': paymentData['invoiceId'],
       'amount': paymentData['amount'],
-      'payment_method': paymentData['payment_method'] ?? 'cash',
-      'payment_date': paymentData['payment_date'],
+      'method': paymentData['method'] ?? 'cash',
+      'reference': paymentData['reference'] ?? '',
+      'receipt_path': paymentData['receipt_path'] ?? '',
+      'receipt_generated': paymentData['receipt_generated'] ?? 0,
+      'userId': paymentData['userId'] ?? 0,
+      'paymentDate': paymentData['paymentDate'],
       'status': paymentData['status'] ?? 'completed',
     };
   }
@@ -680,5 +696,26 @@ class SyncService {
       'instructor': fleetData['instructor'],
       'school_id': fleetData['school_id'],
     };
+  }
+
+  // Add this method to your SyncService class
+
+  static Future<void> clearAllSyncData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      // Clear all sync-related data
+      await prefs.remove('sync_pending_changes');
+      await prefs.remove('last_sync_timestamp');
+      await prefs.remove('sync_debug_logs');
+      await prefs.remove('sync_last_error');
+
+      print('🧹 All sync data cleared successfully');
+      print('✅ Pending changes cleared');
+      print('✅ Sync timestamps cleared');
+      print('✅ Debug logs cleared');
+    } catch (e) {
+      print('❌ Failed to clear sync data: $e');
+    }
   }
 }

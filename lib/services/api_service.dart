@@ -455,7 +455,7 @@ class ApiService {
       {int? studentId, int? invoiceId}) async {
     final uri = Uri.parse('$baseUrl/payments').replace(queryParameters: {
       if (studentId != null) 'student_id': studentId.toString(),
-      if (invoiceId != null) 'invoice_id': invoiceId.toString(),
+      if (invoiceId != null) 'invoiceId': invoiceId.toString(),
     });
 
     final response = await http.get(uri, headers: _headers);
@@ -593,6 +593,7 @@ class ApiService {
       'status': localData['status'],
       'attended': localData['attended'],
       'lessons_deducted': localData['lessonsDeducted'],
+      'lessons_completed': localData['lessonsCompleted'],
       'is_recurring': localData['is_recurring'],
       'recurring_pattern': localData['recurrence_pattern'],
       'recurring_end_date': localData['recurrence_end_date'],
@@ -669,7 +670,7 @@ class ApiService {
       Map<String, dynamic> apiData) {
     return {
       'id': apiData['id'],
-      'invoiceId': apiData['invoice_id'],
+      'invoiceId': apiData['invoiceId'],
       'amount': apiData['amount'],
       'method': apiData['payment_method'],
       'paymentDate': apiData['payment_date'],
@@ -682,7 +683,7 @@ class ApiService {
   static Map<String, dynamic> _convertPaymentLocalToApi(
       Map<String, dynamic> localData) {
     return {
-      'invoice_id': localData['invoiceId'],
+      'invoiceId': localData['invoiceId'],
       'amount': localData['amount'],
       'payment_method': localData['method'],
       'payment_date': localData['paymentDate'],

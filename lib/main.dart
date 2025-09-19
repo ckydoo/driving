@@ -164,6 +164,9 @@ class AuthenticationWrapper extends StatefulWidget {
 }
 
 class _AuthenticationWrapperState extends State<AuthenticationWrapper> {
+  // Add this flag as a class member
+  bool _isNavigating = false;
+
   @override
   void initState() {
     super.initState();
@@ -228,9 +231,6 @@ class _AuthenticationWrapperState extends State<AuthenticationWrapper> {
       _isNavigating = false;
     }
   }
-
-  // Add this flag as a class member
-  bool _isNavigating = false;
 
   // Helper method to check if users exist
   Future<bool> _checkIfUsersExist() async {
@@ -308,15 +308,15 @@ class _AuthenticationWrapperState extends State<AuthenticationWrapper> {
 
 class MultiTenantRouteObserver extends NavigatorObserver {
   @override
-  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
-    super.didPush(route, previousRoute);
-    _logRouteChange('PUSH', route);
-  }
-
-  @override
   void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
     super.didPop(route, previousRoute);
     _logRouteChange('POP', route);
+  }
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    super.didPush(route, previousRoute);
+    _logRouteChange('PUSH', route);
   }
 
   @override

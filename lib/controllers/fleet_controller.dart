@@ -113,22 +113,24 @@ class FleetController extends GetxController {
       print(
           '🚗 ${isUpdate ? 'Updating' : 'Creating'} vehicle: ${vehicle.make} ${vehicle.model}');
 
+      int? vehicleId;
+
       if (isUpdate) {
         // Update existing vehicle
         await DatabaseHelper.instance.updateFleet(vehicle.toJson());
+        vehicleId = vehicle.id;
         print('✅ Vehicle updated successfully');
       } else {
-        // Create new vehicle
-        final id = await DatabaseHelper.instance.insertFleet(vehicle.toJson());
-        print('✅ Vehicle created successfully with ID: $id');
+        // Create new vehicle - ONLY INSERT ONCE
+        vehicleId = await DatabaseHelper.instance.insertFleet(vehicle.toJson());
+        print('✅ Vehicle created successfully with ID: $vehicleId');
       }
 
       // Optional operations - don't let these block the main flow
       try {
         if (!isUpdate) {
-          final id =
-              await DatabaseHelper.instance.insertFleet(vehicle.toJson());
-          final vehicleWithId = vehicle.copyWith(id: id);
+          // Use the ID we already got from the insert above
+          final vehicleWithId = vehicle.copyWith(id: vehicleId);
           await SyncService.trackChange(
               'fleet', vehicleWithId.toJson(), 'create');
         } else {
