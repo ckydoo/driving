@@ -78,90 +78,6 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  Widget _buildDebugPanel() {
-    // Only show in debug mode
-    if (!kDebugMode) return const SizedBox.shrink();
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 20),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.orange[50],
-        border: Border.all(color: Colors.orange[300]!),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.bug_report, color: Colors.orange[700], size: 18),
-              const SizedBox(width: 8),
-              Text(
-                'Debug Mode - Quick Login',
-                style: TextStyle(
-                  color: Colors.orange[700],
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: _debugCredentials.map((credentials) {
-              return ElevatedButton.icon(
-                onPressed: () => _fillDebugCredentials(credentials),
-                icon: Icon(
-                  _getRoleIcon(credentials['role']!),
-                  size: 16,
-                ),
-                label: Text(
-                  credentials['role']!,
-                  style: const TextStyle(fontSize: 12),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange[100],
-                  foregroundColor: Colors.orange[700],
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Tap any button to auto-fill credentials',
-            style: TextStyle(
-              color: Colors.orange[600],
-              fontSize: 11,
-              fontStyle: FontStyle.italic,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  IconData _getRoleIcon(String role) {
-    switch (role.toLowerCase()) {
-      case 'admin':
-        return Icons.admin_panel_settings;
-      case 'instructor':
-        return Icons.person_outline;
-      case 'student':
-        return Icons.school;
-      default:
-        return Icons.person;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final isWideScreen = MediaQuery.of(context).size.width > 600;
@@ -229,9 +145,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
 
                     SizedBox(height: isWideScreen ? 30 : 18),
-
-                    // Debug Panel (only in debug mode)
-                    _buildDebugPanel(),
 
                     // Email Field
                     TextFormField(
@@ -378,40 +291,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         )),
 
                     SizedBox(height: isWideScreen ? 24 : 20),
-
-                    // Additional options (register, forgot password, etc.)
-                    TextButton(
-                      onPressed: () {
-                        // Add registration or forgot password logic
-                      },
-                      child: Text(
-                        'Need help signing in?',
-                        style: TextStyle(
-                          color: Theme.of(context).primaryColor,
-                          fontSize: isWideScreen ? 16 : 14,
-                        ),
-                      ),
-                    ),
-
-                    // Debug info at bottom (only in debug mode)
-                    if (kDebugMode) ...[
-                      const SizedBox(height: 20),
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[100],
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          'Debug Mode Active',
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 12,
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
-                      ),
-                    ],
                   ],
                 ),
               ),
