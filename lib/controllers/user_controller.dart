@@ -280,6 +280,8 @@ class UserController extends GetxController {
   }
 
 // 1. In _handleUserUpdate method - track user updates
+// Fixed _handleUserUpdate method in UserController
+
   Future<void> _handleUserUpdate(User user) async {
     // Check for duplicates first (excluding the current user)
     final duplicateErrors = await checkForDuplicates(user, isUpdate: true);
@@ -288,8 +290,45 @@ class UserController extends GetxController {
       throw Exception(errorMessage);
     }
 
+    // 🔧 FIX: Ensure the user has a school_id before updating
+    User userToUpdate = user;
+
+    // If the user doesn't have a schoolId, get it from current context or existing user
+    if (user.schoolId == null || user.schoolId!.isEmpty) {
+      // Option 1: Get from AuthController
+      final authController = Get.find<AuthController>();
+      final currentSchoolId = authController.currentUser.value?.schoolId ?? '1';
+
+      // Option 2: Get from existing user in database (safer approach)
+      try {
+        final existingUsers = await DatabaseHelper.instance.getUsers();
+        final existingUser = existingUsers.firstWhere(
+          (u) => u['id'] == user.id,
+          orElse: () => <String, dynamic>{},
+        );
+
+        final schoolIdToUse = existingUser['school_id'] ?? currentSchoolId;
+        userToUpdate = user.copyWith(schoolId: schoolIdToUse.toString());
+
+        print(
+            '🔧 Added missing school_id: $schoolIdToUse to user ${user.email}');
+      } catch (e) {
+        print(
+            '⚠️ Could not get existing user, using current school: $currentSchoolId');
+        userToUpdate = user.copyWith(schoolId: currentSchoolId);
+      }
+    }
+
     // Convert User to Map for database operation
-    final userMap = user.toJson();
+    final userMap = userToUpdate.toJson();
+
+    // 🔧 ADDITIONAL SAFETY: Ensure school_id is not null in the map
+    if (userMap['school_id'] == null) {
+      userMap['school_id'] = '1'; // Default fallback
+      print('⚠️ Applied fallback school_id: 1');
+    }
+
+    print('📝 Updating user with school_id: ${userMap['school_id']}');
 
     // Update in local database
     await DatabaseHelper.instance.updateUser(userMap);
@@ -301,7 +340,7 @@ class UserController extends GetxController {
     // Update the user in the local observable list
     final index = _users.indexWhere((u) => u.id == user.id);
     if (index != -1) {
-      _users[index] = user;
+      _users[index] = userToUpdate; // Use the updated user with school_id
     }
 
     print('✅ User updated locally successfully');
