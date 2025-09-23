@@ -1,6 +1,4 @@
-// lib/screens/auth/login_screen.dart - WITH DEBUG FEATURES
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart'; // For kDebugMode
 import 'package:get/get.dart';
 import '../../controllers/auth_controller.dart';
 
@@ -19,47 +17,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool _obscurePassword = true;
 
-  // Debug credentials for quick login during development
-  final List<Map<String, String>> _debugCredentials = [
-    {
-      'email': 'admin@test.com',
-      'password': 'admin123',
-      'role': 'Admin',
-    },
-    {
-      'email': 'instructor1@test.com',
-      'password': 'instructor123',
-      'role': 'Instructor',
-    },
-    {
-      'email': 'student1@test.com',
-      'password': 'student123',
-      'role': 'Student',
-    },
-  ];
-
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
-  }
-
-  void _fillDebugCredentials(Map<String, String> credentials) {
-    setState(() {
-      _emailController.text = credentials['email']!;
-      _passwordController.text = credentials['password']!;
-    });
-
-    // Show feedback
-    Get.snackbar(
-      'Debug Mode',
-      'Filled ${credentials['role']} credentials',
-      duration: const Duration(seconds: 1),
-      backgroundColor: Colors.blue[100],
-      colorText: Colors.blue[800],
-      snackPosition: SnackPosition.TOP,
-    );
   }
 
   Future<void> _handleLogin() async {

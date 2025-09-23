@@ -13,7 +13,7 @@ class SchoolRegistrationScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Register New School'),
+        title: const Text('Registration'),
         backgroundColor: Colors.transparent,
         elevation: 0,
         foregroundColor: Colors.black87,

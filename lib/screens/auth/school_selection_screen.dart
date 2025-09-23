@@ -26,11 +26,11 @@ class SchoolSelectionScreen extends StatelessWidget {
                 // App Logo/Header
                 _buildHeader(),
 
-                const SizedBox(height: 60),
+                const SizedBox(height: 10),
 
                 // Welcome Text
                 Text(
-                  'Welcome to Driving School Manager',
+                  'DriveSync Pro',
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                         fontWeight: FontWeight.bold,
                         color: Colors.grey[800],
@@ -38,10 +38,10 @@ class SchoolSelectionScreen extends StatelessWidget {
                   textAlign: TextAlign.center,
                 ),
 
-                const SizedBox(height: 16),
+                const SizedBox(height: 8),
 
                 Text(
-                  'Choose how you want to get started',
+                  'How do you want to get started?',
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                         color: Colors.grey[600],
                       ),
@@ -106,15 +106,6 @@ class SchoolSelectionScreen extends StatelessWidget {
             color: Colors.blue.shade600,
           ),
         ),
-        const SizedBox(height: 16),
-        Text(
-          'Multi-School Management',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            color: Colors.grey[700],
-          ),
-        ),
       ],
     );
   }
@@ -125,8 +116,8 @@ class SchoolSelectionScreen extends StatelessWidget {
       children: [
         // Join Existing School Card
         _buildOptionCard(
-          title: 'Join Existing School',
-          subtitle: 'Sign in with your school credentials',
+          title: 'Sign In',
+          subtitle: 'Enter driving school credentials',
           icon: Icons.login,
           color: Colors.green,
           onTap: () => _showJoinSchoolDialog(controller),
@@ -200,8 +191,7 @@ class SchoolSelectionScreen extends StatelessWidget {
 Widget _buildRegisterNewSchoolButton(SchoolSelectionController controller) {
   return ElevatedButton.icon(
     onPressed: () => controller.navigateToSchoolRegistration(),
-    icon: const Icon(Icons.add_business, size: 20),
-    label: const Text('Register New School'),
+    label: const Text('Registration'),
     style: ElevatedButton.styleFrom(
       backgroundColor: Colors.blue.shade600,
       foregroundColor: Colors.white,
@@ -224,12 +214,12 @@ Widget _buildFooterInfo() {
       children: [
         Icon(
           Icons.info_outline,
-          color: Colors.grey[600],
+          color: Colors.blue[600],
           size: 20,
         ),
         const SizedBox(height: 8),
         Text(
-          'Multi-school management allows you to manage multiple driving schools from one app. Each school maintains its own data and settings.',
+          'DriveSync Pro allows you to manage multiple driving schools from one app.',
           style: TextStyle(
             fontSize: 12,
             color: Colors.grey[600],
@@ -244,15 +234,15 @@ Widget _buildFooterInfo() {
 void _showJoinSchoolDialog(SchoolSelectionController controller) {
   Get.dialog(
     AlertDialog(
-      title: const Text('Join School'),
+      title: const Text('Sign In '),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           TextField(
             controller: controller.schoolNameController,
             decoration: const InputDecoration(
-              labelText: 'School Name or Code',
-              hintText: 'Enter school name or invitation code',
+              labelText: 'Driving School Name or Code',
+              hintText: 'Enter driving school name or invitation code',
               border: OutlineInputBorder(),
               prefixIcon: Icon(Icons.school),
             ),
@@ -289,7 +279,7 @@ void _showJoinSchoolDialog(SchoolSelectionController controller) {
               )),
           const SizedBox(height: 12),
           const Text(
-            'Contact your school administrator if you don\'t have login credentials.',
+            'Contact your system administrator if you don\'t have login credentials.',
             style: TextStyle(fontSize: 12, color: Colors.grey),
           ),
         ],
@@ -312,7 +302,7 @@ void _showJoinSchoolDialog(SchoolSelectionController controller) {
                       height: 16,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Text('Join School'),
+                  : const Text('Sign In'),
             )),
       ],
     ),

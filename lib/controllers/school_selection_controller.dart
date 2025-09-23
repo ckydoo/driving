@@ -1,4 +1,3 @@
-// lib/controllers/school_selection_controller.dart
 import 'package:driving/models/user.dart';
 import 'package:driving/services/school_api_service.dart';
 import 'package:flutter/material.dart';
