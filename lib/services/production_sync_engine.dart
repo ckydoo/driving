@@ -293,16 +293,21 @@ class ProductionSyncEngine {
   // HELPER METHODS - Using your existing services
   // ===================================================================
 
+  // QUICK FIX: Replace your _updateLocalDatabase method in production_sync_engine.dart
+
+  // lib/services/production_sync_engine.dart
+// REPLACE your existing _updateLocalDatabase method with this:
+
   static Future<void> _updateLocalDatabase(
       Map<String, dynamic> serverData) async {
-    // Use your existing SyncService method
-    // You'll need to make this method accessible or copy its logic
-    print('💾 Updating local database...');
+    print('💾 Updating local database with relationship handling...');
 
     final db = await DatabaseHelper.instance.database;
+    int totalInserted = 0;
+    int totalFailed = 0;
 
     await db.transaction((txn) async {
-      // Update each table type
+      // Process each table type
       for (final tableType in [
         'users',
         'courses',
@@ -316,17 +321,303 @@ class ProductionSyncEngine {
           print('💾 Processing ${records.length} $tableType records...');
 
           for (final record in records) {
-            await txn.insert(
-              tableType,
-              record,
-              conflictAlgorithm: ConflictAlgorithm.replace,
-            );
+            try {
+              // Convert Laravel data to SQLite format
+              final convertedRecord = _convertRecord(record, tableType);
+
+              await txn.insert(
+                tableType,
+                convertedRecord,
+                conflictAlgorithm: ConflictAlgorithm.replace,
+              );
+
+              totalInserted++;
+              print('✅ Synced $tableType: ${convertedRecord['id']}');
+            } catch (e) {
+              totalFailed++;
+              print('❌ Failed to sync $tableType record: $e');
+            }
           }
         }
       }
     });
 
-    print('✅ Local database updated');
+    print(
+        '✅ Database sync completed: $totalInserted inserted, $totalFailed failed');
+  }
+
+// ADD this new method to handle the conversions:
+  static Map<String, dynamic> _convertRecord(
+      Map<String, dynamic> data, String tableType) {
+    switch (tableType) {
+      case 'users':
+        return _convertUserRecord(data);
+      case 'courses':
+        return _convertCourseRecord(data);
+      case 'fleet':
+        return _convertFleetRecord(data);
+      case 'schedules':
+        return _convertScheduleRecord(data);
+      case 'invoices':
+        return _convertInvoiceRecord(data);
+      case 'payments':
+        return _convertPaymentRecord(data);
+      default:
+        return _cleanRecord(data);
+    }
+  }
+
+// ADD these conversion methods:
+
+  static Map<String, dynamic> _convertUserRecord(Map<String, dynamic> data) {
+    // Only include fields your users table has
+    return {
+      'id': data['id']?.toString(),
+      'fname': data['fname']?.toString() ?? '',
+      'lname': data['lname']?.toString() ?? '',
+      'email': data['email']?.toString() ?? '',
+      'password': '', // Don't sync passwords
+      'role': data['role']?.toString() ?? 'student',
+      'status': data['status']?.toString() ?? 'Active',
+      'date_of_birth': data['date_of_birth']?.toString() ?? '2000-01-01',
+      'gender': data['gender']?.toString() ?? 'other',
+      'phone': data['phone']?.toString() ?? '',
+      'address': data['address']?.toString() ?? '',
+      'idnumber': data['idnumber']?.toString() ?? '',
+      'created_at':
+          data['created_at']?.toString() ?? DateTime.now().toIso8601String(),
+      'updated_at':
+          data['updated_at']?.toString() ?? DateTime.now().toIso8601String(),
+      'school_id': data['school_id']?.toString(),
+    };
+  }
+
+  static Map<String, dynamic> _convertScheduleRecord(
+      Map<String, dynamic> data) {
+    // Extract IDs from nested objects
+    String? student;
+    String? instructor;
+    String? course;
+    String? car;
+
+    // Handle nested student: {student: {id: 2}} → student: "2"
+    if (data['student'] is Map) {
+      student = (data['student'] as Map)['id']?.toString();
+    } else {
+      student = data['student']?.toString() ?? data['student']?.toString();
+    }
+
+    // Handle nested instructor
+    if (data['instructor'] is Map) {
+      instructor = (data['instructor'] as Map)['id']?.toString();
+    } else {
+      instructor =
+          data['instructor']?.toString() ?? data['instructor_id']?.toString();
+    }
+
+    // Handle nested course
+    if (data['course'] is Map) {
+      course = (data['course'] as Map)['id']?.toString();
+    } else {
+      course = data['course']?.toString() ?? data['course_id']?.toString();
+    }
+
+    // Handle nested car
+    if (data['car'] is Map) {
+      car = (data['car'] as Map)['id']?.toString();
+    } else {
+      car = data['car']?.toString() ?? data['vehicle_id']?.toString();
+    }
+
+    return {
+      'id': data['id']?.toString(),
+      'student': student,
+      'instructor': instructor,
+      'course': course,
+      'car': car,
+      'start': data['start']?.toString() ?? '',
+      'end': data['end']?.toString() ?? '',
+      'status': data['status']?.toString() ?? 'scheduled',
+      'class_type': data['class_type']?.toString() ?? 'practical',
+      'attended': _convertBoolean(data['attended']),
+      'is_recurring': _convertBoolean(data['is_recurring']),
+      'recurrence_pattern': data['recurrence_pattern']?.toString(),
+      'recurrence_end_date': data['recurrence_end_date']?.toString(),
+      'created_at':
+          data['created_at']?.toString() ?? DateTime.now().toIso8601String(),
+      'updated_at':
+          data['updated_at']?.toString() ?? DateTime.now().toIso8601String(),
+      'school_id': data['school_id']?.toString(),
+    };
+  }
+
+  static Map<String, dynamic> _convertInvoiceRecord(Map<String, dynamic> data) {
+    // Extract student ID from nested object
+    String? student;
+    if (data['student'] is Map) {
+      student = (data['student'] as Map)['id']?.toString();
+    } else {
+      student = data['student']?.toString() ?? data['student']?.toString();
+    }
+
+    // Extract course ID from nested object
+    String? course;
+    if (data['course'] is Map) {
+      course = (data['course'] as Map)['id']?.toString();
+    } else {
+      course = data['course']?.toString() ?? data['course_id']?.toString();
+    }
+
+    return {
+      'id': data['id']?.toString(),
+      'student': student,
+      'course': course,
+      'invoice_number': data['invoice_number']?.toString() ??
+          'INV-${DateTime.now().millisecondsSinceEpoch}',
+      'total_amount': _parseDouble(data['total_amount']) ?? 0.0,
+      'amountpaid':
+          _parseDouble(data['amountpaid'] ?? data['amountpaid']) ?? 0.0,
+      'status': data['status']?.toString() ?? 'pending',
+      'lessons': data['lessons']?.toString() ?? '',
+      'price_per_lesson': _parseDouble(data['price_per_lesson']) ?? 0.0,
+      'due_date': data['due_date']?.toString() ??
+          DateTime.now()
+              .add(Duration(days: 30))
+              .toIso8601String()
+              .split('T')[0],
+      'created_at':
+          data['created_at']?.toString() ?? DateTime.now().toIso8601String(),
+      'updated_at':
+          data['updated_at']?.toString() ?? DateTime.now().toIso8601String(),
+      'school_id': data['school_id']?.toString(),
+    };
+  }
+
+  static Map<String, dynamic> _convertPaymentRecord(Map<String, dynamic> data) {
+    // Extract invoice ID from nested object
+    String? invoiceId;
+    if (data['invoice'] is Map) {
+      invoiceId = (data['invoice'] as Map)['id']?.toString();
+    } else {
+      invoiceId =
+          data['invoiceId']?.toString() ?? data['invoiceId']?.toString();
+    }
+
+    // Extract user ID from nested object
+    String? userId;
+    if (data['user'] is Map) {
+      userId = (data['user'] as Map)['id']?.toString();
+    } else {
+      userId = data['userId']?.toString() ?? data['user_id']?.toString();
+    }
+
+    return {
+      'id': data['id']?.toString(),
+      'invoiceId': invoiceId,
+      'amount': _parseDouble(data['amount']) ?? 0.0,
+      'method': data['method']?.toString() ?? 'cash',
+      'paymentDate': data['paymentDate']?.toString() ??
+          data['payment_date']?.toString() ??
+          DateTime.now().toIso8601String().split('T')[0],
+      'status': data['status']?.toString() ?? 'completed',
+      'notes': data['notes']?.toString() ?? '',
+      'reference': data['reference']?.toString() ?? '',
+      'receipt_path': data['receipt_path']?.toString() ?? '',
+      'receipt_generated': _convertBoolean(data['receipt_generated']),
+      'userId': userId,
+      'created_at':
+          data['created_at']?.toString() ?? DateTime.now().toIso8601String(),
+      'updated_at':
+          data['updated_at']?.toString() ?? DateTime.now().toIso8601String(),
+    };
+  }
+
+  static Map<String, dynamic> _convertCourseRecord(Map<String, dynamic> data) {
+    return {
+      'id': data['id']?.toString(),
+      'name': data['name']?.toString() ?? '',
+      'price': _parseDouble(data['price']) ?? 0.0,
+      'status': data['status']?.toString() ?? 'active',
+      'created_at':
+          data['created_at']?.toString() ?? DateTime.now().toIso8601String(),
+      'updated_at':
+          data['updated_at']?.toString() ?? DateTime.now().toIso8601String(),
+      'school_id': data['school_id']?.toString(),
+    };
+  }
+
+  static Map<String, dynamic> _convertFleetRecord(Map<String, dynamic> data) {
+    return {
+      'id': data['id']?.toString(),
+      'carplate': data['carplate']?.toString() ?? '',
+      'make': data['make']?.toString() ?? '',
+      'model': data['model']?.toString() ?? '',
+      'modelyear':
+          data['modelyear']?.toString() ?? DateTime.now().year.toString(),
+      'status': data['status']?.toString() ?? 'available',
+      'instructor': data['instructor']?.toString(),
+      'created_at':
+          data['created_at']?.toString() ?? DateTime.now().toIso8601String(),
+      'updated_at':
+          data['updated_at']?.toString() ?? DateTime.now().toIso8601String(),
+      'school_id': data['school_id']?.toString(),
+    };
+  }
+
+// Helper method for unknown tables
+  static Map<String, dynamic> _cleanRecord(Map<String, dynamic> data) {
+    final result = Map<String, dynamic>.from(data);
+
+    // Remove nested objects and convert booleans
+    for (final key in result.keys.toList()) {
+      final value = result[key];
+
+      if (value is bool) {
+        result[key] = value ? 1 : 0;
+      } else if (value is Map || value is List) {
+        result.remove(key); // Remove nested objects
+      }
+    }
+
+    return result;
+  }
+
+// Helper conversion methods (ADD these if you don't have them):
+
+  static int _convertBoolean(dynamic value) {
+    if (value == null) return 0;
+    if (value is bool) return value ? 1 : 0;
+    if (value is int) return value != 0 ? 1 : 0;
+    if (value is String) {
+      final lower = value.toLowerCase();
+      return (lower == 'true' || lower == '1' || lower == 'yes') ? 1 : 0;
+    }
+    return 0;
+  }
+
+  static double? _parseDouble(dynamic value) {
+    if (value == null) return null;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
+  }
+
+// ✅ NEW: Add this helper method to fix SQLite type issues
+  static Map<String, dynamic> _fixSQLiteTypes(Map<String, dynamic> data) {
+    final result = Map<String, dynamic>.from(data);
+
+    // Convert all boolean values to integers (SQLite doesn't support boolean)
+    for (final key in result.keys.toList()) {
+      final value = result[key];
+
+      if (value is bool) {
+        result[key] = value ? 1 : 0;
+        print('🔄 Converted boolean $key: $value -> ${result[key]}');
+      }
+    }
+
+    return result;
   }
 
   static Future<Map<String, dynamic>> _uploadPendingChanges() async {
