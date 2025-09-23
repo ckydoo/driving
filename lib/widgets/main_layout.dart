@@ -468,7 +468,7 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
                         : 'Tap to sync',
                     onPressed: syncController.isSyncing.value
                         ? null
-                        : () => syncController.performFullSync(),
+                        : () => syncController.performSmartSync(),
                     splashRadius: 24,
                   ),
                 ),
@@ -557,7 +557,7 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
                   ),
                   SizedBox(width: 8),
                   GestureDetector(
-                    onTap: () => syncController.performFullSync(),
+                    onTap: () => syncController.performSmartSync(),
                     child: Icon(
                       Icons.refresh,
                       color: syncController.getSyncStatusColor(),
