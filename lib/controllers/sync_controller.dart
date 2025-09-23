@@ -1,7 +1,9 @@
 // lib/controllers/sync_controller.dart - FIXED VERSION
 import 'dart:async';
 import 'dart:convert';
+import 'package:driving/controllers/settings_controller.dart';
 import 'package:driving/services/api_service.dart';
+import 'package:driving/services/production_sync_engine.dart';
 import 'package:driving/services/sync_debug_helper.dart';
 import 'package:driving/services/sync_service.dart';
 import 'package:driving/models/sync_result.dart';
@@ -377,6 +379,193 @@ class SyncController extends GetxController {
         isSyncing.value = false;
       }
     }
+  }
+
+  Future<void> performProductionSync({bool forceFullSync = false}) async {
+    if (_isDisposed || isSyncing.value) return;
+
+    try {
+      isSyncing.value = true;
+      syncStatus.value =
+          forceFullSync ? 'Force syncing...' : 'Starting production sync...';
+
+      // Get school ID from settings controller
+      final settingsController = Get.find<SettingsController>();
+      final schoolId = settingsController.schoolId.value;
+
+      if (schoolId.isEmpty) {
+        throw Exception('No school ID found');
+      }
+
+      print('🚀 Starting production sync for school: $schoolId');
+
+      // Use the production sync engine
+      final result = await ProductionSyncEngine.performProductionSync(
+        schoolId: schoolId,
+        forceFullSync: forceFullSync,
+      );
+
+      if (_isDisposed) return;
+
+      lastSyncResult.value = result;
+
+      if (result.success) {
+        syncStatus.value = 'Sync completed';
+        updateLastSyncDisplay();
+
+        // Log sync details
+        final details = result.details ?? {};
+        print('✅ Production sync completed:');
+        print('   Strategy: ${details['strategy'] ?? 'unknown'}');
+        print('   Downloaded: ${details['downloaded_records'] ?? 0} records');
+        print('   Uploaded: ${details['uploaded_changes'] ?? 0} changes');
+
+        Get.snackbar(
+          'Sync Complete',
+          'Data synchronized successfully using ${details['strategy'] ?? 'production'} strategy',
+          icon: Icon(Icons.sync, color: Colors.white),
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+          duration: Duration(seconds: 3),
+        );
+      } else {
+        syncStatus.value = 'Sync failed';
+
+        Get.snackbar(
+          'Sync Failed',
+          result.message,
+          icon: Icon(Icons.sync_problem, color: Colors.white),
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+          duration: Duration(seconds: 4),
+        );
+
+        print('❌ Production sync failed: ${result.message}');
+        await debugSyncStatus();
+      }
+    } catch (e) {
+      if (!_isDisposed) {
+        syncStatus.value = 'Sync error';
+        print('❌ Production sync error: $e');
+
+        Get.snackbar(
+          'Sync Error',
+          'Production sync failed: ${e.toString()}',
+          icon: Icon(Icons.error, color: Colors.white),
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+          duration: Duration(seconds: 4),
+        );
+
+        await debugSyncStatus();
+      }
+    } finally {
+      if (!_isDisposed) {
+        isSyncing.value = false;
+      }
+    }
+  }
+
+  /// NEW: Force full data reset and sync
+  Future<void> performFullReset() async {
+    final confirmed = await Get.dialog<bool>(
+      AlertDialog(
+        title: Text('Full Data Reset'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.warning, color: Colors.orange, size: 48),
+            SizedBox(height: 16),
+            Text(
+              'This will clear all local data and download everything fresh from the server. This may take several minutes.',
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Are you sure you want to continue?',
+              style: TextStyle(fontWeight: FontWeight.bold),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back(result: false),
+            child: Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Get.back(result: true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            child: Text('Reset & Sync'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await performProductionSync(forceFullSync: true);
+    }
+  }
+
+  /// NEW: Switch between production and legacy sync
+  Future<void> performSmartSync() async {
+    try {
+      // Check if production sync engine is available
+      final hasProductionSync = await _checkProductionSyncAvailability();
+
+      if (hasProductionSync) {
+        print('🚀 Using production sync engine');
+        await performProductionSync();
+      } else {
+        print('⚠️ Falling back to legacy sync');
+        await performFullSync();
+      }
+    } catch (e) {
+      print('❌ Smart sync failed: $e');
+      // Fallback to legacy sync
+      await performFullSync();
+    }
+  }
+
+  /// Check if production sync is available and working
+  Future<bool> _checkProductionSyncAvailability() async {
+    try {
+      // Test server connectivity for production endpoints
+      final testResult = await ApiService.testServerConnection();
+      return testResult;
+    } catch (e) {
+      print('⚠️ Production sync unavailable: $e');
+      return false;
+    }
+  }
+
+  /// Enhanced method to update your existing UI calls
+  void performSyncWithStrategy({String strategy = 'auto'}) {
+    switch (strategy) {
+      case 'production':
+        performProductionSync();
+        break;
+      case 'legacy':
+        performFullSync();
+        break;
+      case 'reset':
+        performFullReset();
+        break;
+      case 'auto':
+      default:
+        performSmartSync();
+        break;
+    }
+  }
+
+  /// NEW: Get sync strategy info for UI
+  Map<String, dynamic> getSyncStrategyInfo() {
+    return {
+      'available_strategies': ['production', 'legacy', 'reset', 'auto'],
+      'current_strategy': 'auto',
+      'production_available': true, // You can make this dynamic
+      'legacy_available': true,
+    };
   }
 
   /// Enhanced full sync method with automatic debugging

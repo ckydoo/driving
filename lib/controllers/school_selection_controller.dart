@@ -463,11 +463,26 @@ class SchoolSelectionController extends GetxController {
   /// Set current school in settings
   Future<void> _setCurrentSchool(Map<String, dynamic> school) async {
     try {
-      selectedSchoolId(school['id']);
+      // ✅ FIXED: Convert school ID to String properly
+      final schoolIdValue = school['id'];
+      String schoolIdString;
+
+      if (schoolIdValue is int) {
+        schoolIdString = schoolIdValue.toString();
+      } else if (schoolIdValue is String) {
+        schoolIdString = schoolIdValue;
+      } else {
+        throw Exception('Invalid school ID type: ${schoolIdValue.runtimeType}');
+      }
+
+      print(
+          '🏫 Setting current school ID: $schoolIdString (converted from ${schoolIdValue.runtimeType})');
+
+      selectedSchoolId(schoolIdString); // Now passing String instead of int
 
       // Update settings controller
       final settingsController = Get.find<SettingsController>();
-      settingsController.schoolId.value = school['id'];
+      settingsController.schoolId.value = schoolIdString; // ✅ String conversion
       settingsController.schoolDisplayName.value = school['name'].toString();
       settingsController.enableMultiTenant.value = true;
 
@@ -478,19 +493,20 @@ class SchoolSelectionController extends GetxController {
       settingsController.setBusinessPhone(school['phone']?.toString() ?? '');
       settingsController.setBusinessEmail(school['email']?.toString() ?? '');
 
-      // Save settings
-      await settingsController.saveAllBusinessSettings();
+      // Save to database with String ID
+      await _dbHelper.setCurrentSchoolId(schoolIdString);
 
-      // Initialize school config service
+      // Update school configuration service if available
       if (Get.isRegistered<SchoolConfigService>()) {
         final schoolConfig = Get.find<SchoolConfigService>();
         await schoolConfig.updateSchoolConfig();
       }
 
-      print('✅ Current school set: ${school['name']}');
+      print(
+          '✅ Current school set successfully: ${school['name']} (ID: $schoolIdString)');
     } catch (e) {
       print('❌ Error setting current school: $e');
-      rethrow;
+      throw Exception('Failed to set current school: $e');
     }
   }
 

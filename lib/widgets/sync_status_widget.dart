@@ -5,349 +5,144 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 class SyncStatusWidget extends StatelessWidget {
-  final bool showFullStatus;
   final bool showSyncButton;
+  final String preferredSyncType;
 
   const SyncStatusWidget({
     Key? key,
-    this.showFullStatus = true,
     this.showSyncButton = true,
+    this.preferredSyncType = 'auto',
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Sync Status'),
-      ),
-      body: GetX<SyncController>(
-        builder: (syncController) {
-          if (showFullStatus) {
-            return _buildFullStatusCard(syncController);
-          } else {
-            return _buildCompactStatus(syncController);
-          }
-        },
-      ),
-    );
-  }
-
-  Widget _buildFullStatusCard(SyncController syncController) {
-    return Card(
-      margin: EdgeInsets.all(16),
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  syncController.getSyncStatusIcon(),
-                  color: syncController.getSyncStatusColor(),
-                  size: 24,
-                ),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Sync Status',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        syncController.syncStatus.value,
-                        style: TextStyle(
-                          color: syncController.getSyncStatusColor(),
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
+    return GetX<SyncController>(
+      builder: (syncController) => Card(
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Status row
+              Row(
+                children: [
+                  Icon(
+                    syncController.getSyncStatusIcon(),
+                    color: syncController.getSyncStatusColor(),
                   ),
-                ),
-                if (showSyncButton) _buildSyncButton(syncController),
-              ],
-            ),
-            if (syncController.isSyncing.value) ...[
-              SizedBox(height: 16),
-              LinearProgressIndicator(
-                value: syncController.syncProgress.value,
-                backgroundColor: Colors.grey[300],
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  syncController.getSyncStatusColor(),
-                ),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      syncController.syncStatus.value,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w500,
+                        color: syncController.getSyncStatusColor(),
+                      ),
+                    ),
+                  ),
+                  if (showSyncButton && !syncController.isSyncing.value)
+                    IconButton(
+                      icon: Icon(Icons.more_vert),
+                      onPressed: () => _showSyncOptions(context),
+                    ),
+                ],
               ),
-              SizedBox(height: 8),
-              if (syncController.syncProgressText.value.isNotEmpty)
+
+              // Progress bar (if syncing)
+              if (syncController.isSyncing.value) ...[
+                SizedBox(height: 8),
+                LinearProgressIndicator(
+                  value: syncController.syncProgress.value > 0
+                      ? syncController.syncProgress.value
+                      : null,
+                ),
+                if (syncController.syncProgressText.value.isNotEmpty) ...[
+                  SizedBox(height: 4),
+                  Text(
+                    syncController.syncProgressText.value,
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  ),
+                ],
+              ],
+
+              // Last sync time
+              if (syncController.lastSyncTime.value != 'Never') ...[
+                SizedBox(height: 8),
                 Text(
-                  syncController.syncProgressText.value,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                  ),
+                  'Last sync: ${syncController.lastSyncTime.value}',
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                 ),
+              ],
             ],
-            SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildInfoItem(
-                    'Connection',
-                    syncController.isOnline.value ? 'Online' : 'Offline',
-                    syncController.isOnline.value ? Colors.green : Colors.red,
-                    syncController.isOnline.value ? Icons.wifi : Icons.wifi_off,
-                  ),
-                ),
-                SizedBox(width: 16),
-                Expanded(
-                  child: _buildInfoItem(
-                    'Last Sync',
-                    syncController.lastSyncTime.value,
-                    Colors.grey[600]!,
-                    Icons.access_time,
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildInfoItem(
-                    'Auto Sync',
-                    syncController.autoSyncEnabled.value
-                        ? 'Enabled'
-                        : 'Disabled',
-                    syncController.autoSyncEnabled.value
-                        ? Colors.green
-                        : Colors.orange,
-                    syncController.autoSyncEnabled.value
-                        ? Icons.sync
-                        : Icons.sync_disabled,
-                  ),
-                ),
-                SizedBox(width: 16),
-                Expanded(
-                  child: _buildInfoItem(
-                    'Interval',
-                    '${syncController.syncIntervalMinutes.value}min',
-                    Colors.grey[600]!,
-                    Icons.schedule,
-                  ),
-                ),
-              ],
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildCompactStatus(SyncController syncController) {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: syncController.getSyncStatusColor().withOpacity(0.1),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: syncController.getSyncStatusColor().withOpacity(0.3),
-        ),
-      ),
-      child: Row(
+  void _showSyncOptions(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SyncSettingsDialog(),
+    );
+  }
+}
+
+class SyncSettingsDialog extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final syncController = Get.find<SyncController>();
+
+    return AlertDialog(
+      title: Text('Sync Settings'),
+      content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            syncController.getSyncStatusIcon(),
-            color: syncController.getSyncStatusColor(),
-            size: 16,
+          ListTile(
+            leading: Icon(Icons.auto_awesome),
+            title: Text('Smart Sync'),
+            subtitle: Text('Automatically chooses best sync method'),
+            onTap: () {
+              Get.back();
+              syncController.performSmartSync();
+            },
           ),
-          SizedBox(width: 6),
-          Text(
-            syncController.syncStatus.value,
-            style: TextStyle(
-              color: syncController.getSyncStatusColor(),
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-            ),
+          ListTile(
+            leading: Icon(Icons.rocket_launch),
+            title: Text('Production Sync'),
+            subtitle: Text('Advanced multi-device sync'),
+            onTap: () {
+              Get.back();
+              syncController.performProductionSync();
+            },
           ),
-          if (showSyncButton && !syncController.isSyncing.value) ...[
-            SizedBox(width: 8),
-            GestureDetector(
-              onTap: () => syncController.performFullSync(),
-              child: Icon(
-                Icons.refresh,
-                color: syncController.getSyncStatusColor(),
-                size: 16,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInfoItem(
-      String label, String value, Color color, IconData icon) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(icon, size: 14, color: color),
-            SizedBox(width: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[600],
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-        SizedBox(height: 2),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 12,
-            color: color,
-            fontWeight: FontWeight.w600,
+          ListTile(
+            leading: Icon(Icons.sync),
+            title: Text('Legacy Sync'),
+            subtitle: Text('Original sync method'),
+            onTap: () {
+              Get.back();
+              syncController.performSmartSync();
+            },
           ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSyncButton(SyncController syncController) {
-    return PopupMenuButton<String>(
-      enabled: !syncController.isSyncing.value,
-      icon: Icon(
-        Icons.more_vert,
-        color: Colors.grey[600],
-      ),
-      onSelected: (value) {
-        switch (value) {
-          case 'full_sync':
-            syncController.performFullSync();
-            break;
-          case 'upload_only':
-            syncController.uploadPendingChanges();
-            break;
-          case 'toggle_auto':
-            syncController
-                .toggleAutoSync(!syncController.autoSyncEnabled.value);
-            break;
-          case 'settings':
-            _showSyncSettings(syncController);
-            break;
-        }
-      },
-      itemBuilder: (context) => [
-        PopupMenuItem(
-          value: 'full_sync',
-          child: Row(
-            children: [
-              Icon(Icons.sync, size: 18),
-              SizedBox(width: 8),
-              Text('Full Sync'),
-            ],
-          ),
-        ),
-        PopupMenuItem(
-          value: 'upload_only',
-          child: Row(
-            children: [
-              Icon(Icons.cloud_upload, size: 18),
-              SizedBox(width: 8),
-              Text('Upload Changes'),
-            ],
-          ),
-        ),
-        PopupMenuDivider(),
-        PopupMenuItem(
-          value: 'toggle_auto',
-          child: Row(
-            children: [
-              Icon(
-                syncController.autoSyncEnabled.value
-                    ? Icons.sync_disabled
-                    : Icons.sync,
-                size: 18,
-              ),
-              SizedBox(width: 8),
-              Text(syncController.autoSyncEnabled.value
-                  ? 'Disable Auto-Sync'
-                  : 'Enable Auto-Sync'),
-            ],
-          ),
-        ),
-        PopupMenuItem(
-          value: 'settings',
-          child: Row(
-            children: [
-              Icon(Icons.settings, size: 18),
-              SizedBox(width: 8),
-              Text('Sync Settings'),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  void _showSyncSettings(SyncController syncController) {
-    Get.dialog(
-      AlertDialog(
-        title: Text('Sync Settings'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SwitchListTile(
-              title: Text('Auto Sync'),
-              subtitle: Text('Automatically sync data in the background'),
-              value: syncController.autoSyncEnabled.value,
-              onChanged: (value) {
-                syncController.toggleAutoSync(value);
-                Get.back();
-              },
-            ),
-            if (syncController.autoSyncEnabled.value) ...[
-              SizedBox(height: 16),
-              Text('Sync Interval',
-                  style: TextStyle(fontWeight: FontWeight.bold)),
-              SizedBox(height: 8),
-              DropdownButton<int>(
-                value: syncController.syncIntervalMinutes.value,
-                isExpanded: true,
-                items: [
-                  DropdownMenuItem(value: 5, child: Text('5 minutes')),
-                  DropdownMenuItem(value: 15, child: Text('15 minutes')),
-                  DropdownMenuItem(value: 30, child: Text('30 minutes')),
-                  DropdownMenuItem(value: 60, child: Text('1 hour')),
-                  DropdownMenuItem(value: 120, child: Text('2 hours')),
-                  DropdownMenuItem(value: 360, child: Text('6 hours')),
-                ],
-                onChanged: (value) {
-                  if (value != null) {
-                    syncController.updateSyncInterval(value);
-                    Get.back();
-                  }
-                },
-              ),
-            ],
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Get.back(),
-            child: Text('Close'),
+          Divider(),
+          ListTile(
+            leading: Icon(Icons.refresh, color: Colors.orange),
+            title: Text('Full Reset'),
+            subtitle: Text('Clear all data and re-download'),
+            onTap: () {
+              Get.back();
+              syncController.performFullReset();
+            },
           ),
         ],
       ),
+      actions: [
+        TextButton(
+          onPressed: () => Get.back(),
+          child: Text('Cancel'),
+        ),
+      ],
     );
   }
 }
@@ -399,7 +194,7 @@ class SyncIndicator extends StatelessWidget {
           if (!syncController.isSyncing.value)
             TextButton(
               onPressed: () {
-                syncController.performFullSync();
+                syncController.performSmartSync();
                 Get.back();
               },
               child: Text('Sync Now'),
@@ -541,7 +336,7 @@ class MobileSyncIndicator extends StatelessWidget {
                           ? null
                           : () {
                               Get.back();
-                              syncController.performFullSync();
+                              syncController.performSmartSync();
                             },
                       icon: Icon(Icons.sync, size: 18),
                       label: Text('Sync Now'),

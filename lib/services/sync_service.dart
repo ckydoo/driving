@@ -509,7 +509,7 @@ class SyncService {
     });
   }
 
-  // Get sync status
+// Get sync status
   static Future<Map<String, dynamic>> getSyncStatus() async {
     final prefs = await SharedPreferences.getInstance();
     final lastSync = prefs.getString(_lastSyncKey);
@@ -520,7 +520,17 @@ class SyncService {
 
     if (isConnected) {
       try {
-        serverStatus = await ApiService.getSyncStatus();
+        // Get the current school ID from AuthController
+        final authController = Get.find<AuthController>();
+        final currentUser = authController.currentUser.value;
+
+        if (currentUser != null && currentUser.schoolId != null) {
+          serverStatus = await ApiService.getSyncStatus(
+            schoolId: currentUser.schoolId!,
+          );
+        } else {
+          print('⚠️ Cannot get server status: No school ID available');
+        }
       } catch (e) {
         print('❌ Failed to get server status: $e');
       }
