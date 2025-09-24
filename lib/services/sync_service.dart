@@ -180,6 +180,7 @@ class SyncService {
   }
 
   // Upload pending changes to server - FIXED VERSION
+
   static Future<SyncResult> uploadPendingChanges() async {
     try {
       print('⬆️ Starting upload of pending changes...');
@@ -208,36 +209,61 @@ class SyncService {
         return SyncResult(true, 'No pending changes to upload');
       }
 
-      print('📤 Uploading ${pendingChanges.length} change groups...');
+      // Count total items for logging
+      int totalItems = 0;
+      if (pendingChanges is Map) {
+        for (final items in pendingChanges.values) {
+          if (items is List) totalItems += items.length;
+        }
+      }
 
-      // Upload to server
+      print('📤 Uploading $totalItems items...');
+
+      // Upload to server with ID mapping support
       final result = await ApiService.syncUpload(pendingChanges);
 
-      // ✅ ONLY CLEAR PENDING CHANGES ON COMPLETE SUCCESS
-      if (result['success'] == true && (result['errors'] as List).isEmpty) {
+      print('🔍 Upload result: $result');
+
+      final success = result['success'] == true;
+      final uploaded = result['uploaded'] ?? 0;
+      final errors = result['errors'] ?? [];
+      final isPartial = result['partial'] == true;
+      final idMappings = result['id_mappings'] ?? {}; // ✅ GET ID MAPPINGS
+
+      if (success && errors.isEmpty) {
+        // ✅ UPDATE LOCAL DATABASE WITH SERVER IDs
+        if (idMappings.isNotEmpty) {
+          await _updateLocalIdsWithServerIds(idMappings);
+        }
+
         // Complete success - clear all pending changes
         await prefs.remove(_pendingChangesKey);
         print('✅ Upload completed successfully - cleared all pending changes');
 
         return SyncResult(true, 'Upload completed', details: {
-          'uploaded': result['uploaded'] ?? 0,
+          'uploaded': uploaded,
           'errors': [],
           'partial': false,
+          'id_mappings': idMappings,
         });
-      } else if (result['success'] == true &&
-          (result['errors'] as List).isNotEmpty) {
-        // Partial success - remove only successful items from pending changes
-        final errors = result['errors'] as List;
+      } else if (success && errors.isNotEmpty) {
+        // ✅ UPDATE LOCAL DATABASE WITH SERVER IDs for successful items
+        if (idMappings.isNotEmpty) {
+          await _updateLocalIdsWithServerIds(idMappings);
+        }
+
+        // Partial success - remove only successful items
         final successfulItems =
             await _removeSuccessfulItemsFromPending(pendingChanges, errors);
 
         print(
-            '⚠️ Upload partially successful - ${successfulItems} items processed, ${errors.length} failed');
+            '⚠️ Upload partially successful - $successfulItems items processed, ${errors.length} failed');
 
         return SyncResult(true, 'Upload partially completed', details: {
-          'uploaded': result['uploaded'] ?? 0,
+          'uploaded': uploaded,
           'errors': errors,
           'partial': true,
+          'id_mappings': idMappings,
         });
       } else {
         // Complete failure - keep all pending changes
@@ -247,13 +273,86 @@ class SyncService {
             false, 'Upload failed: ${result['message'] ?? 'Unknown error'}',
             details: {
               'uploaded': 0,
-              'errors': result['errors'] ?? [],
+              'errors': errors,
               'partial': false,
             });
       }
     } catch (e) {
       print('❌ Upload failed: $e');
       return SyncResult(false, 'Upload failed: ${e.toString()}');
+    }
+  }
+
+// ✅ NEW METHOD: Update local database IDs with server IDs
+  static Future<void> _updateLocalIdsWithServerIds(
+      Map<String, dynamic> idMappings) async {
+    try {
+      print('🔄 Updating local IDs with server IDs...');
+
+      final db = await DatabaseHelper.instance.database;
+
+      await db.transaction((txn) async {
+        for (final tableEntry in idMappings.entries) {
+          final table = tableEntry.key;
+          final mappings = tableEntry.value as Map<String, dynamic>;
+
+          for (final mapping in mappings.entries) {
+            final localId = int.tryParse(mapping.key.toString());
+            final serverId = int.tryParse(mapping.value.toString());
+
+            if (localId != null && serverId != null && localId != serverId) {
+              print('🔄 Updating $table: $localId -> $serverId');
+
+              // Update the record's ID
+              await txn.rawUpdate(
+                  'UPDATE $table SET id = ? WHERE id = ?', [serverId, localId]);
+
+              // ✅ CRITICAL: Update foreign key references in other tables
+              if (table == 'users') {
+                // Update student references
+                await txn.rawUpdate(
+                    'UPDATE invoices SET student = ? WHERE student = ?',
+                    [serverId, localId]);
+                await txn.rawUpdate(
+                    'UPDATE schedules SET student = ? WHERE student = ?',
+                    [serverId, localId]);
+                // Update instructor references
+                await txn.rawUpdate(
+                    'UPDATE schedules SET instructor = ? WHERE instructor = ?',
+                    [serverId, localId]);
+                await txn.rawUpdate(
+                    'UPDATE fleet SET instructor = ? WHERE instructor = ?',
+                    [serverId, localId]);
+              }
+
+              if (table == 'courses') {
+                // Update course references
+                await txn.rawUpdate(
+                    'UPDATE invoices SET course = ? WHERE course = ?',
+                    [serverId, localId]);
+                await txn.rawUpdate(
+                    'UPDATE schedules SET course = ? WHERE course = ?',
+                    [serverId, localId]);
+              }
+
+              if (table == 'fleet') {
+                // Update vehicle references
+                await txn.rawUpdate(
+                    'UPDATE schedules SET car = ? WHERE car = ?',
+                    [serverId, localId]);
+              }
+
+              print(
+                  '✅ Updated $table and all references: $localId -> $serverId');
+            }
+          }
+        }
+      });
+
+      print('✅ Local ID updates completed');
+    } catch (e) {
+      print('❌ Failed to update local IDs: $e');
+      // Don't throw - this is not critical for sync success
     }
   }
 

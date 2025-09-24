@@ -655,7 +655,6 @@ class ProductionSyncEngine {
 
   static Future<Map<String, dynamic>> _uploadPendingChanges() async {
     try {
-      // Use your existing upload logic
       final prefs = await SharedPreferences.getInstance();
       final pendingJson = prefs.getString('sync_pending_changes');
 
@@ -663,13 +662,32 @@ class ProductionSyncEngine {
         return {'uploaded': 0, 'message': 'No pending changes'};
       }
 
-      final pendingChanges = json.decode(pendingJson);
-      final result = await ApiService.syncUpload(pendingChanges);
+      final pendingChanges = json.decode(pendingJson) as Map<String, dynamic>;
+
+      // ✅ FIX: Convert Map structure to List format expected by API
+      final changesList = <Map<String, dynamic>>[];
+
+      for (final entry in pendingChanges.entries) {
+        final dataType = entry.key;
+        final items = entry.value as List<dynamic>;
+
+        for (final item in items) {
+          changesList.add({
+            'table': dataType,
+            'operation': item['operation'] ?? 'create',
+            'data': item['data'],
+            'id': item['data']['id'],
+          });
+        }
+      }
+
+      // Now pass the List instead of Map to syncUpload
+      final result = await ApiService.syncUpload(changesList);
 
       if (result['success'] == true) {
         await prefs.remove('sync_pending_changes');
         return {
-          'uploaded': result['uploaded'] ?? 0,
+          'uploaded': result['uploaded'] ?? changesList.length,
           'message': 'Upload successful'
         };
       } else {
