@@ -65,23 +65,10 @@ class _LoginScreenState extends State<LoginScreen> {
                           Container(
                             width: isWideScreen ? 120 : 100,
                             height: isWideScreen ? 120 : 100,
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).primaryColor,
-                              borderRadius: BorderRadius.circular(24),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Theme.of(context)
-                                      .primaryColor
-                                      .withOpacity(0.3),
-                                  blurRadius: 20,
-                                  spreadRadius: 5,
-                                ),
-                              ],
-                            ),
-                            child: Icon(
-                              Icons.school,
-                              color: Colors.white,
-                              size: isWideScreen ? 60 : 50,
+                            child: Image.asset(
+                              'assets/images/logo.png',
+                              width: 60,
+                              height: 60,
                             ),
                           ),
                           SizedBox(height: isWideScreen ? 32 : 24),
@@ -225,6 +212,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               ? null
                               : _handleLogin,
                           style: ElevatedButton.styleFrom(
+                            backgroundColor: Theme.of(context).primaryColor,
                             padding: EdgeInsets.symmetric(
                               vertical: isWideScreen ? 20 : 16,
                             ),
@@ -248,6 +236,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   style: TextStyle(
                                     fontSize: isWideScreen ? 18 : 16,
                                     fontWeight: FontWeight.w600,
+                                    color: Colors.white,
                                   ),
                                 ),
                         )),

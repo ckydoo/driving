@@ -96,14 +96,10 @@ class SchoolSelectionScreen extends StatelessWidget {
         Container(
           width: 100,
           height: 100,
-          decoration: BoxDecoration(
-            color: Colors.blue.shade50,
-            borderRadius: BorderRadius.circular(50),
-          ),
-          child: Icon(
-            Icons.school,
-            size: 50,
-            color: Colors.blue.shade600,
+          child: Image.asset(
+            'assets/images/logo.png',
+            width: 60,
+            height: 60,
           ),
         ),
       ],
