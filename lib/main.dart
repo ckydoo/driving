@@ -178,27 +178,38 @@ class _AuthenticationWrapperState extends State<AuthenticationWrapper> {
     _isNavigating = true;
 
     try {
-      print('🔍 === DETERMINING INITIAL ROUTE - PIN AFTER SCHOOL SETUP ===');
+      print('🔍 === DETERMINING INITIAL ROUTE - TABLE CONFLICT FIX ===');
       await Future.delayed(const Duration(milliseconds: 300));
 
       final settingsController = Get.find<SettingsController>();
       final pinController = Get.find<PinController>();
       final authController = Get.find<AuthController>();
 
+      // CRITICAL: Load settings first to check both tables
+      await settingsController.loadSettingsFromDatabase();
+      await pinController.isPinEnabled();
+
       String initialRoute;
 
-      // STEP 1: Check if this is completely first run (no school setup)
+      // STEP 1: Check if business/school setup is complete (checks both tables now)
+      final isSchoolSetupComplete = settingsController.isBusinessInfoComplete();
       final isFirstRun = await SchoolSelectionController.isFirstRun();
-      final isSchoolConfigured = settingsController.isBusinessInfoComplete();
 
-      if (isFirstRun || !isSchoolConfigured) {
-        print('🏫 First time setup - need school selection');
+      print('🏫 School setup complete: $isSchoolSetupComplete');
+      print('🏫 First run: $isFirstRun');
+      print(
+          '📊 Settings state: ${settingsController.getBusinessInfoSummary()}');
+
+      if (!isSchoolSetupComplete || isFirstRun) {
+        print('🏫 School setup needed - redirect to school selection');
         initialRoute = '/school-selection';
       }
-      // STEP 2: Check if user has PIN setup (after school setup)
+      // STEP 2: Check PIN authentication
       else if (pinController.isPinSet.value &&
-          pinController.isPinEnabled.value) {
-        print('🔐 PIN is set - using PIN authentication');
+          pinController.isPinEnabled.value &&
+          await pinController.isUserVerified()) {
+        print('🔐 PIN authentication available');
+
         if (pinController.isLocked.value) {
           print('🔒 PIN is locked - redirect to login');
           initialRoute = '/login';
@@ -207,15 +218,20 @@ class _AuthenticationWrapperState extends State<AuthenticationWrapper> {
           initialRoute = '/pin-login';
         }
       }
-      // STEP 3: Check if user is logged in but no PIN setup (after school join/registration)
+      // STEP 3: Check if user logged in but PIN not set
       else if (authController.isLoggedIn.value &&
           !pinController.isPinSet.value) {
-        print('👤 User logged in after school setup - redirect to PIN setup');
+        print('👤 User logged in, setting up PIN');
         initialRoute = '/pin-setup';
       }
-      // STEP 4: No authentication - show login (shouldn't happen after school setup)
+      // STEP 4: Check if users exist
+      else if (await _checkIfUsersExist()) {
+        print('👥 Users exist - redirect to login');
+        initialRoute = '/login';
+      }
+      // STEP 5: Fallback
       else {
-        print('🔑 No authentication - showing login');
+        print('🔑 Fallback to login');
         initialRoute = '/login';
       }
 
@@ -229,6 +245,82 @@ class _AuthenticationWrapperState extends State<AuthenticationWrapper> {
       Get.offAllNamed('/login');
     } finally {
       _isNavigating = false;
+    }
+  }
+
+  Future<bool> _checkSchoolConfiguration() async {
+    try {
+      // Check if school data exists in database
+      final db = await DatabaseHelper.instance.database;
+
+      // Check schools table
+      final schoolResult = await db.query('schools', limit: 1);
+
+      // Check settings table for school configuration
+      final settingsResult = await db.query(
+        'settings',
+        where: 'key IN (?, ?, ?)',
+        whereArgs: ['business_name', 'school_id', 'enable_multi_tenant'],
+      );
+
+      // School is configured if:
+      // 1. At least one school exists in schools table
+      // 2. Business name is set
+      // 3. School ID is set
+      bool hasSchoolData = schoolResult.isNotEmpty;
+      bool hasBusinessName = settingsResult.any((row) =>
+          row['key'] == 'business_name' &&
+          row['value'] != null &&
+          row['value'].toString().trim().isNotEmpty);
+      bool hasSchoolId = settingsResult.any((row) =>
+          row['key'] == 'school_id' &&
+          row['value'] != null &&
+          row['value'].toString().trim().isNotEmpty);
+
+      bool isConfigured = hasSchoolData && hasBusinessName && hasSchoolId;
+
+      print('🏫 School configuration check:');
+      print('   Has school data: $hasSchoolData');
+      print('   Has business name: $hasBusinessName');
+      print('   Has school ID: $hasSchoolId');
+      print('   Is configured: $isConfigured');
+
+      return isConfigured;
+    } catch (e) {
+      print('❌ Error checking school configuration: $e');
+      return false;
+    }
+  }
+
+  /// Check if user has stored authentication
+  Future<bool> _checkStoredAuthentication() async {
+    try {
+      // Check if there are any users in the database
+      final db = await DatabaseHelper.instance.database;
+      final users = await db.query('users', limit: 1);
+
+      if (users.isEmpty) {
+        print('👥 No users found in database');
+        return false;
+      }
+
+      // Check if auth controller has remembered login
+      final authController = Get.find<AuthController>();
+
+      // Load remembered email if exists
+      await authController.loadRememberedEmail();
+
+      bool hasRememberedEmail = authController.userEmail.value.isNotEmpty;
+
+      print('🔐 Authentication check:');
+      print('   Has users: ${users.isNotEmpty}');
+      print('   Has remembered email: $hasRememberedEmail');
+
+      // If we have users and potentially remembered login, consider as having auth
+      return users.isNotEmpty;
+    } catch (e) {
+      print('❌ Error checking stored authentication: $e');
+      return false;
     }
   }
 

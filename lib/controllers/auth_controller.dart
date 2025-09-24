@@ -885,6 +885,17 @@ class AuthController extends GetxController {
     }
   }
 
+  /// Load remembered email from storage
+  Future<void> loadRememberedEmail() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final email = prefs.getString('remembered_email') ?? '';
+      userEmail.value = email;
+    } catch (e) {
+      print('Failed to load remembered email: $e');
+    }
+  }
+
   /// Convenience role check methods - COMPLETELY SAFE
   bool get isAdmin => hasRole('admin');
   bool get isInstructor => hasAnyRole(['admin', 'instructor']);

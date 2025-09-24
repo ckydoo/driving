@@ -936,34 +936,99 @@ class DatabaseHelper {
     return await db.query('usermessages');
   }
 
-  /// School Management Methods
+  /// Get current school ID from multiple sources
   Future<String?> getCurrentSchoolId() async {
     try {
       final db = await database;
-      final result = await db.query(
+
+      // Method 1: Check settings table
+      final settingsResult = await db.query(
         'settings',
         where: 'key = ?',
-        whereArgs: ['current_school_id'],
+        whereArgs: ['school_id'],
+        limit: 1,
       );
 
-      return result.isNotEmpty ? result.first['value'] as String? : null;
+      if (settingsResult.isNotEmpty) {
+        final schoolId = settingsResult.first['value']?.toString();
+        if (schoolId != null && schoolId.isNotEmpty) {
+          print('🔍 Found school ID in settings: $schoolId');
+          return schoolId;
+        }
+      }
+
+      // Method 2: Check if we have any school in schools table
+      final schoolsResult = await db.query('schools', limit: 1);
+      if (schoolsResult.isNotEmpty) {
+        final schoolId = schoolsResult.first['id']?.toString();
+        print('🔍 Found school ID in schools table: $schoolId');
+
+        // Save this to settings for future use
+        if (schoolId != null && schoolId.isNotEmpty) {
+          await setCurrentSchoolId(schoolId);
+        }
+
+        return schoolId;
+      }
+
+      print('⚠️ No school ID found in any table');
+      return null;
     } catch (e) {
       print('❌ Error getting current school ID: $e');
       return null;
     }
   }
 
-  /// Set current school ID
+  /// Set current school ID in settings
   Future<void> setCurrentSchoolId(String schoolId) async {
     try {
       final db = await database;
       await db.insert(
         'settings',
-        {'key': 'current_school_id', 'value': schoolId},
+        {'key': 'school_id', 'value': schoolId},
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
+      print('✅ School ID saved to settings: $schoolId');
     } catch (e) {
       print('❌ Error setting current school ID: $e');
+    }
+  }
+
+  /// Check if school exists in schools table
+  Future<bool> schoolExistsInTable(String schoolId) async {
+    try {
+      final db = await database;
+      final result = await db.query(
+        'schools',
+        where: 'id = ?',
+        whereArgs: [schoolId],
+        limit: 1,
+      );
+      return result.isNotEmpty;
+    } catch (e) {
+      print('❌ Error checking school existence: $e');
+      return false;
+    }
+  }
+
+  /// Get school data from schools table
+  Future<Map<String, dynamic>?> getSchoolData(String schoolId) async {
+    try {
+      final db = await database;
+      final result = await db.query(
+        'schools',
+        where: 'id = ?',
+        whereArgs: [schoolId],
+        limit: 1,
+      );
+
+      if (result.isNotEmpty) {
+        return result.first;
+      }
+      return null;
+    } catch (e) {
+      print('❌ Error getting school data: $e');
+      return null;
     }
   }
 

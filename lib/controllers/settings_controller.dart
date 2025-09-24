@@ -72,6 +72,24 @@ class SettingsController extends GetxController {
   final RxInt _tempAutoSaveInterval = 5.obs;
 
   final RxBool _isInitialized = false.obs;
+  bool isBusinessInfoComplete() {
+    // Check both local settings AND schools table
+    return _isLocalBusinessInfoComplete() || _isSchoolRecordComplete();
+  }
+
+  /// Check if local settings business info is complete
+  bool _isLocalBusinessInfoComplete() {
+    return businessName.value.isNotEmpty &&
+        businessAddress.value.isNotEmpty &&
+        businessPhone.value.isNotEmpty &&
+        businessEmail.value.isNotEmpty;
+  }
+
+  /// Check if we have complete school record in schools table
+  bool _isSchoolRecordComplete() {
+    // This will be checked by looking at schools table
+    return schoolId.value.isNotEmpty && schoolDisplayName.value.isNotEmpty;
+  }
 
 // Lesson duration options (in hours)
   static const List<double> lessonDurationOptions = [0.5, 1.0, 1.5, 2.0];
@@ -704,99 +722,158 @@ class SettingsController extends GetxController {
     try {
       print('📖 Loading enhanced settings from database...');
       final db = await _dbHelper.database;
-      final settings = await db.query('settings');
 
-      if (settings.isNotEmpty) {
-        final settingsMap = {
-          for (var setting in settings) setting['key']: setting['value']
-        };
+      // First load from settings table
+      await _loadFromSettingsTable(db);
 
-        // Load existing business information
-        businessName.value = (settingsMap['business_name'] as String?) ?? '';
-        businessAddress.value =
-            (settingsMap['business_address'] as String?) ?? '';
-        businessCity.value = (settingsMap['business_city'] as String?) ?? '';
-        businessCountry.value =
-            (settingsMap['business_country'] as String?) ?? 'Zimbabwe';
-        businessPhone.value = (settingsMap['business_phone'] as String?) ?? '';
-        businessEmail.value = (settingsMap['business_email'] as String?) ?? '';
-        businessWebsite.value =
-            (settingsMap['business_website'] as String?) ?? '';
-        businessStartTime.value =
-            (settingsMap['business_start_time'] as String?) ?? '09:00';
-        businessEndTime.value =
-            (settingsMap['business_end_time'] as String?) ?? '17:00';
+      // Then check and merge from schools table if needed
+      await _mergeFromSchoolsTable(db);
 
-        // Load operating days
-        final operatingDaysString =
-            (settingsMap['operating_days'] as String?) ?? '';
-        if (operatingDaysString.isNotEmpty) {
-          operatingDays.value = operatingDaysString.split(',');
-        }
+      // Update school configuration status
+      _updateSchoolConfigStatus();
 
-        // Load multi-tenant settings
-        enableMultiTenant.value =
-            (settingsMap['enable_multi_tenant'] as String?) == '1';
-        enableCloudSync.value =
-            (settingsMap['enable_cloud_sync'] as String?) == '1';
-        schoolId.value = (settingsMap['school_id'] as String?) ?? '';
-        schoolDisplayName.value =
-            (settingsMap['school_display_name'] as String?) ?? '';
-
-        // Load all other existing settings (scheduling, billing, etc.)
-        _loadExistingSettings(Map<String, dynamic>.from(settingsMap));
-
-        // Update school configuration status
-        _updateSchoolConfigStatus();
-
-        print('✅ Enhanced settings loaded successfully');
-        print(
-            '🏫 School: ${schoolDisplayName.value.isNotEmpty ? schoolDisplayName.value : "Not configured"}');
-        print(
-            '🔄 Multi-tenant: ${enableMultiTenant.value ? "Enabled" : "Disabled"}');
-        print(
-            '☁️ Cloud sync: ${enableCloudSync.value ? "Enabled" : "Disabled"}');
-      }
+      print('✅ Enhanced settings loaded successfully');
     } catch (e) {
       print('❌ Error loading enhanced settings: $e');
+      rethrow;
     }
   }
 
-  /// Load existing settings (your current implementation)
-  void _loadExistingSettings(Map<String, dynamic> settingsMap) {
-    // Scheduling Settings
-    enforceBillingValidation.value =
-        (settingsMap['enforce_billing_validation'] as String?) == '1';
-    checkInstructorAvailability.value =
-        (settingsMap['check_instructor_availability'] as String?) == '1';
-    enforceWorkingHours.value =
-        (settingsMap['enforce_working_hours'] as String?) == '1';
-    autoAssignVehicles.value =
-        (settingsMap['auto_assign_vehicles'] as String?) == '1';
+  /// Load from settings table (existing logic)
+  Future<void> _loadFromSettingsTable(dynamic db) async {
+    final settings = await db.query('settings');
 
-    final durationStr = settingsMap['default_lesson_duration'] as String?;
-    if (durationStr != null) {
-      defaultLessonDuration.value = double.tryParse(durationStr) ?? 1.5;
+    if (settings.isNotEmpty) {
+      final settingsMap = {
+        for (var setting in settings) setting['key']: setting['value']
+      };
+
+      // Load all existing settings...
+      businessName.value = (settingsMap['business_name'] as String?) ?? '';
+      businessAddress.value =
+          (settingsMap['business_address'] as String?) ?? '';
+      businessCity.value = (settingsMap['business_city'] as String?) ?? '';
+      businessCountry.value =
+          (settingsMap['business_country'] as String?) ?? 'Zimbabwe';
+      businessPhone.value = (settingsMap['business_phone'] as String?) ?? '';
+      businessEmail.value = (settingsMap['business_email'] as String?) ?? '';
+      businessWebsite.value =
+          (settingsMap['business_website'] as String?) ?? '';
+
+      // Multi-tenant settings
+      enableMultiTenant.value =
+          (settingsMap['enable_multi_tenant'] as String?) == '1';
+      enableCloudSync.value =
+          (settingsMap['enable_cloud_sync'] as String?) == '1';
+      schoolId.value = (settingsMap['school_id'] as String?) ?? '';
+      schoolDisplayName.value =
+          (settingsMap['school_display_name'] as String?) ?? '';
+
+      print(
+          '📋 Loaded from settings: name=${businessName.value}, id=${schoolId.value}');
     }
+  }
 
-    // Billing Settings
-    showLowLessonWarning.value =
-        (settingsMap['show_low_lesson_warning'] as String?) == '1';
+  /// Merge data from schools table if settings are incomplete
+  Future<void> _mergeFromSchoolsTable(dynamic db) async {
+    try {
+      // Check if we have a current school ID
+      String? currentSchoolId;
 
-    final thresholdStr = settingsMap['low_lesson_threshold'] as String?;
-    if (thresholdStr != null) {
-      lowLessonThreshold.value = int.tryParse(thresholdStr) ?? 3;
+      // Try to get from settings first
+      if (schoolId.value.isNotEmpty) {
+        currentSchoolId = schoolId.value;
+      } else {
+        // Try to get from database helper
+        try {
+          currentSchoolId = await _dbHelper.getCurrentSchoolId();
+        } catch (e) {
+          print('⚠️ No current school ID found: $e');
+        }
+      }
+
+      if (currentSchoolId != null && currentSchoolId.isNotEmpty) {
+        print('🔍 Checking schools table for ID: $currentSchoolId');
+
+        // Query schools table
+        final schoolRecords = await db.query(
+          'schools',
+          where: 'id = ?',
+          whereArgs: [currentSchoolId],
+          limit: 1,
+        );
+
+        if (schoolRecords.isNotEmpty) {
+          final schoolData = schoolRecords.first;
+          print('🏫 Found school record: ${schoolData['name']}');
+
+          // Merge school data into settings if local data is incomplete
+          if (businessName.value.isEmpty && schoolData['name'] != null) {
+            businessName.value = schoolData['name'].toString();
+          }
+          if (businessAddress.value.isEmpty && schoolData['address'] != null) {
+            businessAddress.value = schoolData['address'].toString();
+          }
+          if (businessPhone.value.isEmpty && schoolData['phone'] != null) {
+            businessPhone.value = schoolData['phone'].toString();
+          }
+          if (businessEmail.value.isEmpty && schoolData['email'] != null) {
+            businessEmail.value = schoolData['email'].toString();
+          }
+
+          // Update school-specific settings
+          schoolId.value = currentSchoolId;
+          schoolDisplayName.value = schoolData['name']?.toString() ?? '';
+
+          // If we merged data, save it to settings table for future use
+          if (schoolData['name'] != null) {
+            print('💾 Saving merged school data to settings...');
+            await _saveMergedData();
+          }
+
+          print('✅ Successfully merged school data into settings');
+        } else {
+          print('⚠️ No school record found for ID: $currentSchoolId');
+        }
+      } else {
+        print('ℹ️ No school ID available for merging');
+      }
+    } catch (e) {
+      print('❌ Error merging from schools table: $e');
+      // Don't throw - this is a fallback operation
     }
+  }
 
-    preventOverScheduling.value =
-        (settingsMap['prevent_over_scheduling'] as String?) == '1';
-    autoCreateBillingRecords.value =
-        (settingsMap['auto_create_billing_records'] as String?) == '1';
-    countScheduledLessons.value =
-        (settingsMap['count_scheduled_lessons'] as String?) == '1';
+  /// Save merged data to settings table
+  Future<void> _saveMergedData() async {
+    try {
+      final db = await _dbHelper.database;
 
-    // Continue with other settings...
-    // (Include all your existing setting loading logic here)
+      final mergedSettings = {
+        'business_name': businessName.value,
+        'business_address': businessAddress.value,
+        'business_phone': businessPhone.value,
+        'business_email': businessEmail.value,
+        'school_id': schoolId.value,
+        'school_display_name': schoolDisplayName.value,
+        'enable_multi_tenant': '1',
+        'enable_cloud_sync': '1',
+      };
+
+      for (final entry in mergedSettings.entries) {
+        if (entry.value.isNotEmpty) {
+          await db.insert(
+            'settings',
+            {'key': entry.key, 'value': entry.value},
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
+      }
+
+      print('✅ Merged settings saved to database');
+    } catch (e) {
+      print('❌ Error saving merged data: $e');
+    }
   }
 
   /// Enhanced save all business settings
@@ -820,14 +897,6 @@ class SettingsController extends GetxController {
       print('❌ Error in saveAllBusinessSettings (enhanced): $e');
       rethrow;
     }
-  }
-
-  /// Check if business information is complete for multi-tenant setup
-  bool isBusinessInfoComplete() {
-    return businessName.value.isNotEmpty &&
-        businessAddress.value.isNotEmpty &&
-        businessPhone.value.isNotEmpty &&
-        businessEmail.value.isNotEmpty;
   }
 
   /// Get business information summary for school configuration

@@ -598,24 +598,75 @@ class SchoolSelectionController extends GetxController {
     Get.toNamed('/school-registration');
   }
 
-  /// Check if app is running for the first time
   static Future<bool> isFirstRun() async {
     try {
       final db = await DatabaseHelper.instance.database;
+
+      // Method 1: Check first_run flag in settings
       final settings = await db.query(
         'settings',
         where: 'key = ?',
         whereArgs: ['first_run_completed'],
       );
 
-      return settings.isEmpty;
+      if (settings.isNotEmpty) {
+        final isCompleted = settings.first['value'] == '1';
+        print('🔍 First run completed flag: $isCompleted');
+
+        if (isCompleted) {
+          // Double-check we have school data
+          final hasSchoolData = await _hasValidSchoolData(db);
+          print('🔍 Has valid school data: $hasSchoolData');
+          return !hasSchoolData; // Return true if we DON'T have valid data
+        }
+        return true; // First run not completed
+      }
+
+      // Method 2: Check if we have any school configuration
+      final hasSchoolData = await _hasValidSchoolData(db);
+      print('🔍 Has school data (no flag): $hasSchoolData');
+
+      return !hasSchoolData; // First run if no school data
     } catch (e) {
       print('❌ Error checking first run: $e');
-      return true; // Assume first run if error
+      return true; // Assume first run on error
     }
   }
 
-  /// Mark first run as completed
+  /// Check if we have valid school data in any table
+  static Future<bool> _hasValidSchoolData(dynamic db) async {
+    try {
+      // Check settings table
+      final businessNameResult = await db.query(
+        'settings',
+        where: 'key = ?',
+        whereArgs: ['business_name'],
+      );
+
+      if (businessNameResult.isNotEmpty) {
+        final businessName = businessNameResult.first['value']?.toString();
+        if (businessName != null && businessName.isNotEmpty) {
+          print('✅ Found business name in settings: $businessName');
+          return true;
+        }
+      }
+
+      // Check schools table
+      final schoolsResult = await db.query('schools', limit: 1);
+      if (schoolsResult.isNotEmpty) {
+        final schoolName = schoolsResult.first['name']?.toString();
+        print('✅ Found school in schools table: $schoolName');
+        return true;
+      }
+
+      return false;
+    } catch (e) {
+      print('❌ Error checking school data: $e');
+      return false;
+    }
+  }
+
+  /// Mark first run as completed - ENHANCED VERSION
   static Future<void> markFirstRunCompleted() async {
     try {
       final db = await DatabaseHelper.instance.database;
