@@ -3,6 +3,7 @@
 
 import 'dart:convert';
 import 'dart:io';
+import 'package:driving/services/sync_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:get/get.dart';
 import 'package:crypto/crypto.dart';
@@ -165,12 +166,26 @@ class ProductionSyncEngine {
       final currentState = await _loadSyncState(schoolId);
       print('📱 Device: ${currentState.deviceId}');
 
-      // Step 2: Determine strategy
+      // Step 2: CRITICAL FIX - Register device with server first
+      try {
+        print('📝 Registering device with server...');
+        await ApiService.registerDevice(
+          schoolId: schoolId,
+          deviceId: currentState.deviceId,
+        );
+        print('✅ Device registration successful');
+      } catch (e) {
+        print('⚠️ Device registration failed: $e');
+        // Continue anyway - device might already be registered
+        // or this might be a network issue
+      }
+
+      // Step 3: Determine strategy
       final strategy =
           await _determineSyncStrategy(currentState, forceFullSync);
       print('🎯 Sync Strategy: ${strategy.name}');
 
-      // Step 3: Execute sync based on strategy
+      // Step 4: Execute sync based on strategy
       late SyncResult result;
 
       switch (strategy) {
@@ -184,7 +199,7 @@ class ProductionSyncEngine {
           break;
       }
 
-      // Step 4: Update sync state on success
+      // Step 5: Update sync state on success
       if (result.success) {
         final updatedState = _updateSyncState(currentState, result, strategy);
         await _saveSyncState(updatedState);
@@ -198,6 +213,56 @@ class ProductionSyncEngine {
     }
   }
 
+  // ===================================================================
+  // FULL SYNC EXECUTION - ALSO FIXED TO ENSURE DEVICE REGISTRATION
+  // ===================================================================
+
+  static Future<SyncResult> _executeFullSync(DeviceSyncState state) async {
+    try {
+      print('⬇️ Executing full sync...');
+
+      // Ensure device is registered before downloading
+      try {
+        await ApiService.registerDevice(
+          schoolId: state.schoolId,
+          deviceId: state.deviceId,
+        );
+      } catch (e) {
+        print('⚠️ Device re-registration failed during full sync: $e');
+        // Continue anyway
+      }
+
+      // Download all school data
+      final serverData = await ApiService.downloadAllSchoolData(
+        schoolId: state.schoolId,
+      );
+
+      // Update local database
+      await _updateLocalDatabase(serverData);
+
+      // Upload any pending changes
+      final uploadResult = await _uploadPendingChanges();
+      final downloadedCount = _countRecords(serverData);
+
+      print('✅ Full sync completed:');
+      print('   Downloaded: $downloadedCount records');
+      print('   Uploaded: ${uploadResult['uploaded']} changes');
+
+      return SyncResult(
+        true,
+        'Full sync completed successfully',
+        details: {
+          'strategy': 'full_sync',
+          'downloaded_records': downloadedCount,
+          'uploaded_changes': uploadResult['uploaded'],
+          'sync_time': DateTime.now().toIso8601String(),
+        },
+      );
+    } catch (e) {
+      print('❌ Full sync failed: $e');
+      return SyncResult(false, 'Full sync failed: ${e.toString()}');
+    }
+  }
   // ===================================================================
   // STRATEGY DETERMINATION
   // ===================================================================
@@ -232,33 +297,6 @@ class ProductionSyncEngine {
   // SYNC IMPLEMENTATIONS
   // ===================================================================
 
-  static Future<SyncResult> _executeFullSync(
-      DeviceSyncState currentState) async {
-    print('🔄 Executing full sync...');
-
-    try {
-      // Use your existing API service - no Last-Sync header for full sync
-      final serverData = await ApiService.syncDownload(lastSync: null);
-
-      // Update local database using existing method
-      await _updateLocalDatabase(serverData);
-
-      // Clear any pending changes since we're doing full sync
-      await _clearPendingChanges();
-
-      final downloadedCount = _countRecords(serverData);
-
-      return SyncResult(true, 'Full sync completed successfully', details: {
-        'strategy': 'fullSync',
-        'downloaded_records': downloadedCount,
-        'sync_timestamp':
-            serverData['sync_timestamp'] ?? DateTime.now().toIso8601String(),
-      });
-    } catch (e) {
-      return SyncResult(false, 'Full sync failed: ${e.toString()}');
-    }
-  }
-
   static Future<SyncResult> _executeIncrementalSync(
       DeviceSyncState currentState) async {
     print('⚡ Executing incremental sync...');
@@ -292,11 +330,6 @@ class ProductionSyncEngine {
   // ===================================================================
   // HELPER METHODS - Using your existing services
   // ===================================================================
-
-  // QUICK FIX: Replace your _updateLocalDatabase method in production_sync_engine.dart
-
-  // lib/services/production_sync_engine.dart
-// REPLACE your existing _updateLocalDatabase method with this:
 
   static Future<void> _updateLocalDatabase(
       Map<String, dynamic> serverData) async {

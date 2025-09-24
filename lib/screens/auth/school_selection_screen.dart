@@ -234,77 +234,202 @@ Widget _buildFooterInfo() {
 void _showJoinSchoolDialog(SchoolSelectionController controller) {
   Get.dialog(
     AlertDialog(
-      title: const Text('Sign In '),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
+      title: Row(
         children: [
-          TextField(
-            controller: controller.schoolNameController,
-            decoration: const InputDecoration(
-              labelText: 'Driving School Name or Code',
-              hintText: 'Enter driving school name or invitation code',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.school),
-            ),
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: controller.emailController,
-            keyboardType: TextInputType.emailAddress,
-            decoration: const InputDecoration(
-              labelText: 'Email',
-              hintText: 'Enter your email address',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.email),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Obx(() => TextField(
-                controller: controller.passwordController,
-                obscureText: controller.obscurePassword.value,
-                decoration: InputDecoration(
-                  labelText: 'Password',
-                  hintText: 'Enter your password',
-                  border: const OutlineInputBorder(),
-                  prefixIcon: const Icon(Icons.lock),
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      controller.obscurePassword.value
-                          ? Icons.visibility
-                          : Icons.visibility_off,
-                    ),
-                    onPressed: () => controller.togglePasswordVisibility(),
-                  ),
-                ),
-              )),
-          const SizedBox(height: 12),
-          const Text(
-            'Contact your system administrator if you don\'t have login credentials.',
-            style: TextStyle(fontSize: 12, color: Colors.grey),
-          ),
+          Icon(Icons.school, color: Colors.blue.shade600),
+          SizedBox(width: 8),
+          Text('Sign In'),
         ],
       ),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // School name field
+            TextField(
+              controller: controller.schoolNameController,
+              decoration: InputDecoration(
+                labelText: 'School Name or Code',
+                hintText: 'Enter driving school name or invitation code',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                prefixIcon: Icon(Icons.school),
+                filled: true,
+                fillColor: Colors.grey.shade50,
+              ),
+            ),
+            SizedBox(height: 16),
+
+            // Email field
+            TextField(
+              controller: controller.emailController,
+              keyboardType: TextInputType.emailAddress,
+              decoration: InputDecoration(
+                labelText: 'Email',
+                hintText: 'Enter your email address',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                prefixIcon: Icon(Icons.email),
+                filled: true,
+                fillColor: Colors.grey.shade50,
+              ),
+            ),
+            SizedBox(height: 16),
+
+            // Password field with visibility toggle
+            Obx(() => TextField(
+                  controller: controller.passwordController,
+                  obscureText: controller.obscurePassword.value,
+                  decoration: InputDecoration(
+                    labelText: 'Password',
+                    hintText: 'Enter your password',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    prefixIcon: Icon(Icons.lock),
+                    filled: true,
+                    fillColor: Colors.grey.shade50,
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        controller.obscurePassword.value
+                            ? Icons.visibility
+                            : Icons.visibility_off,
+                      ),
+                      onPressed: controller.togglePasswordVisibility,
+                    ),
+                  ),
+                )),
+
+            SizedBox(height: 12),
+
+            // Help text
+            Container(
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.amber.shade200),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline,
+                      color: Colors.amber.shade700, size: 20),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Contact your administrator if you don\'t have login credentials.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.amber.shade700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
       actions: [
+        // Cancel button
         TextButton(
           onPressed: () => Get.back(),
-          child: const Text('Cancel'),
+          style: TextButton.styleFrom(
+            foregroundColor: Colors.grey.shade600,
+          ),
+          child: Text('Cancel'),
         ),
+
+        // Enhanced join button with loading state
         Obx(() => ElevatedButton(
               onPressed: controller.isLoading.value
                   ? null
-                  : () {
-                      controller.joinSchool();
-                      Get.back();
+                  : () async {
+                      // Start the join process
+                      await controller.joinSchool();
                     },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue.shade600,
+                foregroundColor: Colors.white,
+                padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
               child: controller.isLoading.value
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                  ? Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        ),
+                        SizedBox(width: 8),
+                        Text('Connecting...'),
+                      ],
                     )
-                  : const Text('Sign In'),
+                  : Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(width: 8),
+                        Text('Sign In'),
+                      ],
+                    ),
             )),
       ],
+    ),
+    barrierDismissible: false, // Prevent dismissing during loading
+  );
+}
+
+// Enhanced responsive button component for school selection
+Widget _buildActionButton({
+  required String text,
+  required VoidCallback onPressed,
+  required IconData icon,
+  Color? backgroundColor,
+  Color? foregroundColor,
+  bool isLoading = false,
+}) {
+  return SizedBox(
+    width: double.infinity,
+    child: ElevatedButton.icon(
+      onPressed: isLoading ? null : onPressed,
+      icon: isLoading
+          ? SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  foregroundColor ?? Colors.white,
+                ),
+              ),
+            )
+          : Icon(icon, size: 20),
+      label: Text(
+        isLoading ? 'Loading...' : text,
+        style: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: backgroundColor ?? Colors.blue.shade600,
+        foregroundColor: foregroundColor ?? Colors.white,
+        padding: EdgeInsets.symmetric(vertical: 16),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        elevation: 2,
+      ),
     ),
   );
 }

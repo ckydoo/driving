@@ -7,7 +7,7 @@ import 'package:http/http.dart' as http;
 
 class ApiService {
   static String? _token;
-  static String baseUrl = 'http://192.168.8.173:8000/api';
+  static String baseUrl = 'http://192.168.9.108:8000/api';
 
   // Enhanced timeout settings for production
   static const Duration connectTimeout = Duration(seconds: 30);
@@ -84,10 +84,10 @@ class ApiService {
         'POST',
         '/sync/register-device',
         body: {
-          'school_id': schoolId,
+          'school_id': schoolId, // Added this - your server needs it
           'device_id': deviceId,
           'platform': Platform.operatingSystem,
-          'app_version': '1.0.0', // Get from package_info
+          'app_version': '1.0.0', // Get from package_info if available
         },
         timeout: sendTimeout,
       );

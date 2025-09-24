@@ -17,6 +17,9 @@ class SchoolSelectionController extends GetxController {
   final TextEditingController passwordController = TextEditingController();
 
   final RxBool isLoading = false.obs;
+  final RxBool isAuthenticating = false.obs;
+  final RxBool isSettingUpAccount = false.obs;
+  final RxString loadingMessage = ''.obs;
   final RxBool obscurePassword = true.obs;
   final RxString selectedSchoolId = ''.obs;
 
@@ -39,7 +42,6 @@ class SchoolSelectionController extends GetxController {
     obscurePassword.value = !obscurePassword.value;
   }
 
-  /// Join school with credentials (online-first approach)
   Future<void> joinSchool() async {
     final schoolName = schoolNameController.text.trim();
     final email = emailController.text.trim();
@@ -50,46 +52,122 @@ class SchoolSelectionController extends GetxController {
         'Error',
         'Please fill in all fields',
         snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
       );
       return;
     }
 
     try {
+      // Step 1: Start loading
       isLoading(true);
+      isAuthenticating(true);
+      loadingMessage.value = 'Connecting to server...';
 
-      // Check if online first
+      // Close the join dialog first
+      Get.back();
+
+      // Step 2: Show loading dialog
+      _showLoadingDialog();
+
+      // Step 3: Check connectivity
       final isOnline = await SchoolApiService.isOnline();
 
       if (isOnline) {
+        loadingMessage.value = 'Authenticating with school...';
         print('🌐 Attempting online school authentication...');
         await _joinSchoolOnline(schoolName, email, password);
       } else {
-        print('📱 Falling back to offline authentication...');
+        loadingMessage.value = 'Authenticating offline...';
+        print('📱 Using offline authentication...');
         await _joinSchoolOffline(schoolName, email, password);
       }
     } catch (e) {
       print('❌ School join failed: $e');
 
-      // If online fails, try offline fallback
+      // Close loading dialog
+      _closeLoadingDialog();
+
+      // Try offline fallback
       try {
+        loadingMessage.value = 'Trying offline authentication...';
+        _showLoadingDialog();
         print('🔄 Trying offline fallback authentication...');
         await _joinSchoolOffline(schoolName, email, password);
       } catch (offlineError) {
+        _closeLoadingDialog();
         Get.snackbar(
           'Authentication Failed',
-          'Failed to authenticate: $offlineError',
+          'Unable to authenticate: $offlineError',
           snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+          duration: Duration(seconds: 4),
         );
       }
     } finally {
       isLoading(false);
+      isAuthenticating(false);
+      isSettingUpAccount(false);
+      loadingMessage.value = '';
     }
   }
 
-  /// Join school online via API
+  /// Show enhanced loading dialog
+  void _showLoadingDialog() {
+    Get.dialog(
+      Obx(() => AlertDialog(
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 50,
+                  height: 50,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 3,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                  ),
+                ),
+                SizedBox(height: 20),
+                Text(
+                  loadingMessage.value,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                if (isSettingUpAccount.value) ...[
+                  SizedBox(height: 12),
+                  Text(
+                    'Please wait while we prepare your account...',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          )),
+      barrierDismissible: false,
+    );
+  }
+
+  /// Close loading dialog
+  void _closeLoadingDialog() {
+    if (Get.isDialogOpen == true) {
+      Get.back();
+    }
+  }
+
+  /// Enhanced online authentication with loading states
   Future<void> _joinSchoolOnline(
       String schoolName, String email, String password) async {
     try {
+      loadingMessage.value = 'Verifying school credentials...';
+
       // Authenticate with API
       final result = await SchoolApiService.authenticateSchoolUser(
         schoolIdentifier: schoolName,
@@ -97,16 +175,21 @@ class SchoolSelectionController extends GetxController {
         password: password,
       );
 
+      loadingMessage.value = 'Setting up your account...';
+      isAuthenticating(false);
+      isSettingUpAccount(true);
+
+      // Give UI time to update
+      await Future.delayed(Duration(milliseconds: 500));
+
       // Save school and user info locally for offline access
       await _saveOnlineResultLocally(result);
 
       // Update settings controller
       await _setCurrentSchool(result['school']);
 
-      // ✅ NEW: Set user as authenticated in AuthController
+      // Set user as authenticated in AuthController
       final authController = Get.find<AuthController>();
-
-      // Create user object from join result
       final user = User.fromJson({
         'id': result['user']['id'],
         'email': result['user']['email'],
@@ -118,7 +201,6 @@ class SchoolSelectionController extends GetxController {
         'school_id': result['school']['id'].toString(),
       });
 
-      // Set current user and login state
       authController.currentUser.value = user;
       authController.isLoggedIn.value = true;
       authController.userEmail.value = result['user']['email'];
@@ -126,92 +208,27 @@ class SchoolSelectionController extends GetxController {
       print('✅ User authenticated after joining: ${result['user']['email']}');
 
       _clearForm();
+      _closeLoadingDialog();
 
-      // ✅ NEW: Show success message with PIN setup information
-      final trialDays = result['trial_days_remaining'] ?? 0;
-
-      await Get.dialog(
-        AlertDialog(
-          title: Row(
-            children: [
-              Icon(Icons.check_circle, color: Colors.green.shade600, size: 32),
-              const SizedBox(width: 12),
-              const Text('Welcome!'),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                trialDays > 0
-                    ? 'Successfully joined ${result['school']['name']}. $trialDays trial days remaining.'
-                    : 'Successfully joined ${result['school']['name']}.',
-              ),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.blue.shade200),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.security,
-                            color: Colors.blue.shade600, size: 20),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Set Up Quick Access',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.blue.shade600,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Create a 4-digit PIN for faster login. No more typing email and password every time!',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.blue.shade700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            ElevatedButton(
-              onPressed: () => Get.back(),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green.shade600,
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('Set Up PIN'),
-            ),
-          ],
-        ),
-        barrierDismissible: false,
+      // Show success dialog with smooth transition
+      await _showSuccessDialogAndNavigate(
+        schoolName: result['school']['name'],
+        isOnline: true,
+        trialDays: result['trial_days_remaining'] ?? 0,
       );
-
-      // ✅ NEW: Navigate to PIN setup instead of login
-      Get.offAllNamed('/pin-setup');
     } catch (e) {
+      _closeLoadingDialog();
       print('❌ Online authentication failed: $e');
       throw Exception('Online authentication failed: $e');
     }
   }
 
-// Replace the _joinSchoolOffline method:
+  /// Enhanced offline authentication
   Future<void> _joinSchoolOffline(
       String schoolName, String email, String password) async {
     try {
+      loadingMessage.value = 'Finding school locally...';
+
       // Find school by name or invitation code
       final school = await _findSchoolByNameOrCode(schoolName);
 
@@ -219,18 +236,24 @@ class SchoolSelectionController extends GetxController {
         throw Exception('No school found with name or code: $schoolName');
       }
 
+      loadingMessage.value = 'Verifying credentials...';
+
       // Authenticate user locally
       final isAuthenticated =
           await _authenticateUser(school['id'], email, password);
 
       if (isAuthenticated) {
+        loadingMessage.value = 'Setting up offline access...';
+        isAuthenticating(false);
+        isSettingUpAccount(true);
+
+        await Future.delayed(Duration(milliseconds: 500));
+
         await _setCurrentSchool(school);
 
-        // ✅ NEW: Set user as authenticated in AuthController
+        // Set user as authenticated in AuthController
         final authController = Get.find<AuthController>();
-
-        // Get user data from local database
-        final db = await _dbHelper.database;
+        final db = await DatabaseHelper.instance.database;
         final userData = await db.query(
           'users',
           where: 'email = ? AND school_id = ?',
@@ -243,89 +266,125 @@ class SchoolSelectionController extends GetxController {
           authController.currentUser.value = user;
           authController.isLoggedIn.value = true;
           authController.userEmail.value = email;
-
           print('✅ User authenticated offline: $email');
         }
 
         _clearForm();
+        _closeLoadingDialog();
 
-        // ✅ NEW: Show offline success with PIN setup
-        await Get.dialog(
-          AlertDialog(
-            title: Row(
-              children: [
-                Icon(Icons.check_circle,
-                    color: Colors.orange.shade600, size: 32),
-                const SizedBox(width: 12),
-                const Text('Welcome!'),
-              ],
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Successfully joined ${school['name']} (offline mode).'),
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.blue.shade200),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.security,
-                              color: Colors.blue.shade600, size: 20),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Quick Access Setup',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.blue.shade600,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Set up a 4-digit PIN for instant access to your account.',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.blue.shade700,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              ElevatedButton(
-                onPressed: () => Get.back(),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange.shade600,
-                  foregroundColor: Colors.white,
-                ),
-                child: const Text('Set Up PIN'),
-              ),
-            ],
-          ),
-          barrierDismissible: false,
+        // Show success dialog for offline mode
+        await _showSuccessDialogAndNavigate(
+          schoolName: school['name'],
+          isOnline: false,
         );
-
-        // ✅ NEW: Navigate to PIN setup instead of login
-        Get.offAllNamed('/pin-setup');
       } else {
         throw Exception('Invalid credentials for this school');
       }
     } catch (e) {
+      _closeLoadingDialog();
       print('❌ Offline authentication failed: $e');
       rethrow;
     }
+  }
+
+  /// Enhanced success dialog with smooth navigation
+  Future<void> _showSuccessDialogAndNavigate({
+    required String schoolName,
+    required bool isOnline,
+    int trialDays = 0,
+  }) async {
+    await Get.dialog(
+      AlertDialog(
+        title: Row(
+          children: [
+            Icon(
+              Icons.check_circle,
+              color: isOnline ? Colors.green.shade600 : Colors.orange.shade600,
+              size: 32,
+            ),
+            SizedBox(width: 12),
+            Expanded(child: Text('Welcome!')),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              isOnline
+                  ? trialDays > 0
+                      ? 'Successfully joined $schoolName. $trialDays trial days remaining.'
+                      : 'Successfully joined $schoolName.'
+                  : 'Successfully joined $schoolName (offline mode).',
+              style: TextStyle(fontSize: 16),
+            ),
+            SizedBox(height: 16),
+            Container(
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.security,
+                          color: Colors.blue.shade600, size: 20),
+                      SizedBox(width: 8),
+                      Text(
+                        'Quick Access Setup',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    'Set up a 4-digit PIN for instant access to your account. '
+                    'No more typing email and password every time!',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.blue.shade700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () {
+              Get.back(); // Close dialog
+              // Small delay for smooth transition
+              Future.delayed(Duration(milliseconds: 200), () {
+                Get.offAllNamed('/pin-setup');
+              });
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor:
+                  isOnline ? Colors.green.shade600 : Colors.orange.shade600,
+              foregroundColor: Colors.white,
+              padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            ),
+            child: Text('Set Up PIN'),
+          ),
+        ],
+      ),
+      barrierDismissible: false,
+    );
+  }
+
+  // Rest of your existing methods remain the same...
+  void _clearForm() {
+    schoolNameController.clear();
+    emailController.clear();
+    passwordController.clear();
   }
 
   /// Save online authentication result locally
@@ -508,14 +567,6 @@ class SchoolSelectionController extends GetxController {
       print('❌ Error setting current school: $e');
       throw Exception('Failed to set current school: $e');
     }
-  }
-
-  /// Clear form fields
-  void _clearForm() {
-    schoolNameController.clear();
-    emailController.clear();
-    passwordController.clear();
-    obscurePassword.value = true;
   }
 
   /// Ensure schools table exists
