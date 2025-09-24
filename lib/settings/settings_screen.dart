@@ -173,14 +173,6 @@ class _SettingsScreenState extends State<SettingsScreen>
         if (authController.hasAnyRole(['admin', 'instructor']))
           _buildQuickActionButton(
             icon: Icons.bug_report,
-            label: 'Clear Pending Sync Errors',
-            onTap: () {
-              SyncService.clearAllSyncData();
-            },
-          ),
-        if (authController.hasAnyRole(['admin', 'instructor']))
-          _buildQuickActionButton(
-            icon: Icons.bug_report,
             label: 'Sync Data',
             onTap: () {
               Get.to(() => SyncStatusWidget());
