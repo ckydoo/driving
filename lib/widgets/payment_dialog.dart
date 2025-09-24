@@ -410,9 +410,9 @@ class _PaymentDialogState extends State<PaymentDialog>
   void _submitPayment() async {
     if (!_payAllMode && _selectedInvoice == null) {
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Error',
         'Please select an invoice to pay',
-        snackPosition: SnackPosition.TOP,
         backgroundColor: Colors.red.shade600,
         colorText: Colors.white,
       );
@@ -447,9 +447,9 @@ class _PaymentDialogState extends State<PaymentDialog>
         await _showSuccessAnimation();
       } catch (e) {
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Error',
           'Failed to record payment: ${e.toString()}',
-          snackPosition: SnackPosition.TOP,
           backgroundColor: Colors.red.shade600,
           colorText: Colors.white,
         );

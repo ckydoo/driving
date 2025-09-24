@@ -355,6 +355,7 @@ class BillingController extends GetxController {
         'Invoice payment sync has been repaired',
         backgroundColor: Colors.green,
         colorText: Colors.white,
+        snackPosition: SnackPosition.BOTTOM, // Add this line
       );
     } catch (e) {
       print('Error fixing invoice payment sync: $e');
@@ -363,6 +364,7 @@ class BillingController extends GetxController {
         'Failed to fix sync: ${e.toString()}',
         backgroundColor: Colors.red,
         colorText: Colors.white,
+        snackPosition: SnackPosition.BOTTOM,
       );
     }
   }
@@ -380,11 +382,11 @@ class BillingController extends GetxController {
 
       await fetchBillingData(); // Refresh UI
       Get.snackbar('Success', 'Invoice created successfully',
-          backgroundColor: Colors.green);
+          snackPosition: SnackPosition.BOTTOM, backgroundColor: Colors.green);
     } catch (e) {
       print('Error creating invoice: $e');
       Get.snackbar('Error', 'Failed to create invoice: ${e.toString()}',
-          backgroundColor: Colors.red);
+          snackPosition: SnackPosition.BOTTOM, backgroundColor: Colors.red);
     } finally {
       isLoading(false);
     }
@@ -476,11 +478,11 @@ class BillingController extends GetxController {
 
       await fetchBillingData(); // Refresh UI
       Get.snackbar('Success', 'Invoice updated successfully',
-          backgroundColor: Colors.green);
+          snackPosition: SnackPosition.BOTTOM, backgroundColor: Colors.green);
     } catch (e) {
       print('Error updating invoice: $e');
       Get.snackbar('Error', 'Failed to update invoice: ${e.toString()}',
-          backgroundColor: Colors.red);
+          snackPosition: SnackPosition.BOTTOM, backgroundColor: Colors.red);
     } finally {
       isLoading(false);
     }
@@ -494,7 +496,11 @@ class BillingController extends GetxController {
       await fetchBillingData();
 
       if (invoices.isEmpty) {
-        Get.snackbar('No Data', 'No invoices found to export');
+        Get.snackbar(
+          'No Data',
+          'No invoices found to export',
+          snackPosition: SnackPosition.BOTTOM,
+        );
         return;
       }
 
@@ -605,17 +611,23 @@ class BillingController extends GetxController {
         Get.snackbar(
           'Export Successful',
           'Detailed invoices with course information exported to $filePath',
+          snackPosition: SnackPosition.BOTTOM,
           backgroundColor: Colors.green,
           colorText: Colors.white,
           duration: Duration(seconds: 3),
         );
       } else {
-        Get.snackbar('Export Cancelled', 'No file path selected');
+        Get.snackbar(
+          'Export Cancelled',
+          'No file path selected',
+          snackPosition: SnackPosition.BOTTOM,
+        );
       }
     } catch (e) {
       Get.snackbar(
         'Export Failed',
         'Failed to export detailed invoices: ${e.toString()}',
+        snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Colors.red,
         colorText: Colors.white,
       );
@@ -650,7 +662,11 @@ class BillingController extends GetxController {
       }).toList();
 
       if (filteredInvoices.isEmpty) {
-        Get.snackbar('No Data', 'No invoices found for the specified criteria');
+        Get.snackbar(
+          'No Data',
+          'No invoices found for the specified criteria',
+          snackPosition: SnackPosition.BOTTOM,
+        );
         return;
       }
 
@@ -1154,16 +1170,22 @@ class BillingController extends GetxController {
           'Detailed billing report with course information saved to $filePath',
           backgroundColor: Colors.green,
           colorText: Colors.white,
+          snackPosition: SnackPosition.BOTTOM,
           duration: Duration(seconds: 3),
         );
       } else {
-        Get.snackbar('Export Cancelled', 'No file path selected');
+        Get.snackbar(
+          'Export Cancelled',
+          'No file path selected',
+          snackPosition: SnackPosition.BOTTOM,
+        );
       }
     } catch (e) {
       print('Error in generateBillingReportPDF: $e');
       Get.snackbar(
         'Report Failed',
         'Failed to generate detailed report: ${e.toString()}',
+        snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Colors.red,
         colorText: Colors.white,
       );
@@ -1214,7 +1236,11 @@ class BillingController extends GetxController {
       }).toList();
 
       if (overdueInvoices.isEmpty) {
-        Get.snackbar('No Data', 'No overdue invoices found');
+        Get.snackbar(
+          'No Data',
+          'No overdue invoices found',
+          snackPosition: SnackPosition.BOTTOM,
+        );
         return;
       }
 
@@ -1320,15 +1346,21 @@ class BillingController extends GetxController {
           'Overdue invoices exported to $filePath\n${overdueInvoices.length} overdue invoices found',
           backgroundColor: Colors.orange,
           colorText: Colors.white,
+          snackPosition: SnackPosition.BOTTOM,
           duration: Duration(seconds: 4),
         );
       } else {
-        Get.snackbar('Export Cancelled', 'No file path selected');
+        Get.snackbar(
+          'Export Cancelled',
+          'No file path selected',
+          snackPosition: SnackPosition.BOTTOM,
+        );
       }
     } catch (e) {
       Get.snackbar(
         'Export Failed',
         'Failed to export overdue invoices: ${e.toString()}',
+        snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Colors.red,
         colorText: Colors.white,
       );
@@ -1455,6 +1487,7 @@ class BillingController extends GetxController {
         'Missing Business Information',
         'Please complete the following in Settings: ${missingFields.join(', ')}',
         duration: const Duration(seconds: 5),
+        snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Colors.orange.shade100,
         colorText: Colors.orange.shade800,
       );
@@ -1477,6 +1510,7 @@ class BillingController extends GetxController {
       Get.snackbar(
         'Receipt Generation Failed',
         'Failed to generate receipt: ${e.toString()}',
+        snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Colors.red.shade100,
         colorText: Colors.red.shade800,
       );
@@ -1501,6 +1535,7 @@ class BillingController extends GetxController {
         'Receipt Sent to Printer',
         'Receipt for ${payment.reference} has been sent to printer',
         backgroundColor: Colors.green.shade100,
+        snackPosition: SnackPosition.BOTTOM,
         colorText: Colors.green.shade800,
       );
     } catch (e) {
@@ -1509,6 +1544,7 @@ class BillingController extends GetxController {
         'Failed to print receipt: ${e.toString()}',
         backgroundColor: Colors.red.shade100,
         colorText: Colors.red.shade800,
+        snackPosition: SnackPosition.BOTTOM,
       );
     }
   }
@@ -1530,6 +1566,7 @@ class BillingController extends GetxController {
         'Share Failed',
         'Failed to share receipt: ${e.toString()}',
         backgroundColor: Colors.red.shade100,
+        snackPosition: SnackPosition.BOTTOM,
         colorText: Colors.red.shade800,
       );
     }
@@ -1602,6 +1639,7 @@ ${settingsController.businessEmail.value}
         'Receipt Emailed',
         'Receipt has been sent to $recipientEmail',
         backgroundColor: Colors.green.shade100,
+        snackPosition: SnackPosition.BOTTOM,
         colorText: Colors.green.shade800,
       );
     } catch (e) {
@@ -1609,6 +1647,7 @@ ${settingsController.businessEmail.value}
         'Email Failed',
         'Failed to email receipt: ${e.toString()}',
         backgroundColor: Colors.red.shade100,
+        snackPosition: SnackPosition.BOTTOM,
         colorText: Colors.red.shade800,
       );
     }
@@ -1634,6 +1673,7 @@ ${settingsController.businessEmail.value}
           'Receipt has been updated with current business information',
           backgroundColor: Colors.green.shade100,
           colorText: Colors.green.shade800,
+          snackPosition: SnackPosition.BOTTOM,
         );
       }
 
@@ -1644,6 +1684,7 @@ ${settingsController.businessEmail.value}
         'Failed to regenerate receipt: ${e.toString()}',
         backgroundColor: Colors.red.shade100,
         colorText: Colors.red.shade800,
+        snackPosition: SnackPosition.BOTTOM,
       );
       return null;
     }
@@ -1672,6 +1713,7 @@ ${settingsController.businessEmail.value}
       Get.snackbar(
         'Bulk Generation Complete',
         'Generated $successCount receipts successfully${failCount > 0 ? ', $failCount failed' : ''}',
+        snackPosition: SnackPosition.BOTTOM,
         backgroundColor:
             successCount > 0 ? Colors.green.shade100 : Colors.orange.shade100,
         colorText:
@@ -1791,12 +1833,17 @@ ${settingsController.businessEmail.value}
           'Payment of \$${payment.amount.toStringAsFixed(2)} recorded successfully',
           backgroundColor: Colors.green,
           colorText: Colors.white,
+          snackPosition: SnackPosition.BOTTOM,
         );
       }
     } catch (e) {
       print('=== ERROR in recordPayment ===');
       if (!silent) {
-        Get.snackbar('Error', 'Failed to record payment: ${e.toString()}');
+        Get.snackbar(
+          'Error',
+          'Failed to record payment: ${e.toString()}',
+          snackPosition: SnackPosition.BOTTOM,
+        );
       }
       throw e;
     } finally {
@@ -1961,7 +2008,7 @@ ${settingsController.businessEmail.value}
         Get.snackbar(
           'Payment Recorded',
           'Payment recorded and receipt generated successfully',
-          snackPosition: SnackPosition.TOP,
+          snackPosition: SnackPosition.BOTTOM,
           backgroundColor: Colors.green.shade600,
           colorText: Colors.white,
           duration: const Duration(seconds: 5),
@@ -1979,7 +2026,7 @@ ${settingsController.businessEmail.value}
         Get.snackbar(
           'Payment Recorded',
           'Payment recorded but receipt generation failed',
-          snackPosition: SnackPosition.TOP,
+          snackPosition: SnackPosition.BOTTOM,
           backgroundColor: Colors.orange.shade600,
           colorText: Colors.white,
         );
@@ -2028,7 +2075,11 @@ ${settingsController.businessEmail.value}
       // Refresh the invoice list
       await fetchBillingData();
     } catch (e) {
-      Get.snackbar('Error', 'Failed to create invoice: ${e.toString()}');
+      Get.snackbar(
+        'Error',
+        'Failed to create invoice: ${e.toString()}',
+        snackPosition: SnackPosition.BOTTOM,
+      );
       throw e;
     }
   }
@@ -2082,6 +2133,7 @@ ${settingsController.businessEmail.value}
         'Student was created but invoice creation failed: ${e.toString()}',
         backgroundColor: Colors.orange,
         colorText: Colors.white,
+        snackPosition: SnackPosition.BOTTOM,
         duration: Duration(seconds: 5),
       );
       rethrow;
@@ -2179,7 +2231,11 @@ ${settingsController.businessEmail.value}
 
       if (index == -1) {
         print('BillingController: Invoice not found for studentId: $studentId');
-        Get.snackbar('Error', 'No invoice found for this student');
+        Get.snackbar(
+          'Error',
+          'No invoice found for this student',
+          snackPosition: SnackPosition.BOTTOM,
+        );
         return;
       }
 
@@ -2212,12 +2268,17 @@ ${settingsController.businessEmail.value}
       Get.snackbar(
         'Success',
         'Added $lessonsToAdd lessons. Total now: $updatedLessons',
+        snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Colors.green,
         colorText: Colors.white,
       );
     } catch (e) {
       print('BillingController: Error in addLessonsBack: ${e.toString()}');
-      Get.snackbar('Error', 'Failed to update billing info: ${e.toString()}');
+      Get.snackbar(
+        'Error',
+        'Failed to update billing info: ${e.toString()}',
+        snackPosition: SnackPosition.BOTTOM,
+      );
     }
   }
 

@@ -89,6 +89,7 @@ class PinController extends GetxController {
           'PIN must be exactly 4 digits',
           backgroundColor: Colors.red,
           colorText: Colors.white,
+          snackPosition: SnackPosition.BOTTOM,
         );
         return false;
       }
@@ -112,6 +113,7 @@ class PinController extends GetxController {
         'Your PIN has been set successfully',
         backgroundColor: Colors.green,
         colorText: Colors.white,
+        snackPosition: SnackPosition.BOTTOM,
       );
 
       return true;
@@ -121,6 +123,7 @@ class PinController extends GetxController {
         'Error',
         'Failed to setup PIN. Please try again.',
         backgroundColor: Colors.red,
+        snackPosition: SnackPosition.BOTTOM,
         colorText: Colors.white,
       );
       return false;
@@ -136,6 +139,7 @@ class PinController extends GetxController {
           'Account Locked',
           'Too many failed attempts. Try again in ${_formatDuration(remaining)}',
           backgroundColor: Colors.red,
+          snackPosition: SnackPosition.BOTTOM,
           colorText: Colors.white,
         );
         return false;
@@ -174,6 +178,7 @@ class PinController extends GetxController {
             'Account Locked',
             'Too many failed PIN attempts. Account locked for ${_formatDuration(lockoutDuration)}',
             backgroundColor: Colors.red,
+            snackPosition: SnackPosition.BOTTOM,
             colorText: Colors.white,
           );
         } else {
@@ -183,6 +188,7 @@ class PinController extends GetxController {
             '$remaining attempts remaining before lockout',
             backgroundColor: Colors.orange,
             colorText: Colors.white,
+            snackPosition: SnackPosition.BOTTOM,
           );
         }
         return false;
@@ -246,6 +252,7 @@ class PinController extends GetxController {
           'No PIN found to change',
           backgroundColor: Colors.red,
           colorText: Colors.white,
+          snackPosition: SnackPosition.BOTTOM,
         );
         return false;
       }
@@ -257,6 +264,7 @@ class PinController extends GetxController {
           'Current PIN is incorrect',
           backgroundColor: Colors.red,
           colorText: Colors.white,
+          snackPosition: SnackPosition.BOTTOM,
         );
         return false;
       }
@@ -289,6 +297,7 @@ class PinController extends GetxController {
         'PIN Disabled',
         'PIN authentication has been disabled',
         backgroundColor: Colors.blue,
+        snackPosition: SnackPosition.BOTTOM,
         colorText: Colors.white,
       );
     } catch (e) {

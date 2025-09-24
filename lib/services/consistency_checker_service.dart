@@ -294,6 +294,7 @@ class ConsistencyCheckerService extends GetxService {
     } catch (e) {
       print('Error fixing inconsistencies: $e');
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Fix Error',
         'Some fixes failed: ${e.toString()}',
         backgroundColor: Colors.red,
@@ -434,6 +435,7 @@ class ConsistencyCheckerService extends GetxService {
     }
 
     Get.snackbar(
+      snackPosition: SnackPosition.BOTTOM,
       'Consistency Check Complete',
       message,
       backgroundColor: totalFixed > 0 ? Colors.green : Colors.blue,

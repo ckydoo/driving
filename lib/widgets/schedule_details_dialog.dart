@@ -70,6 +70,7 @@ class _ScheduleDetailsDialogState extends State<ScheduleDetailsDialog> {
           });
 
           Get.snackbar(
+            snackPosition: SnackPosition.BOTTOM,
             'Lesson Auto-Completed',
             'The lesson has been automatically marked as completed',
             backgroundColor: Colors.green,
@@ -80,6 +81,7 @@ class _ScheduleDetailsDialogState extends State<ScheduleDetailsDialog> {
       } catch (e) {
         if (mounted) {
           Get.snackbar(
+            snackPosition: SnackPosition.BOTTOM,
             'Auto-Complete Error',
             'Failed to auto-complete lesson: ${e.toString()}',
             backgroundColor: Colors.red,
@@ -823,6 +825,7 @@ class _ScheduleDetailsDialogState extends State<ScheduleDetailsDialog> {
       }
 
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Success',
         message,
         backgroundColor: attended
@@ -833,6 +836,7 @@ class _ScheduleDetailsDialogState extends State<ScheduleDetailsDialog> {
       );
     } catch (e) {
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Error',
         'Failed to update attendance: ${e.toString()}',
         backgroundColor: Colors.red,
@@ -926,6 +930,7 @@ class _ScheduleDetailsDialogState extends State<ScheduleDetailsDialog> {
 
             // Optional: Add a note to track the refund
             Get.snackbar(
+              snackPosition: SnackPosition.BOTTOM,
               'Lessons Refunded',
               '$lessonsToRefund lesson(s) have been returned to the student\'s account',
               backgroundColor: Colors.green,
@@ -945,6 +950,7 @@ class _ScheduleDetailsDialogState extends State<ScheduleDetailsDialog> {
 
         Get.back(); // Close dialog
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Lesson Cancelled',
           'The lesson has been cancelled successfully',
           backgroundColor: Colors.red,
@@ -952,6 +958,7 @@ class _ScheduleDetailsDialogState extends State<ScheduleDetailsDialog> {
         );
       } catch (e) {
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Error',
           'Failed to cancel lesson: ${e.toString()}',
           backgroundColor: Colors.red,

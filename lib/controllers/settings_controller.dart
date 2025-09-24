@@ -467,6 +467,7 @@ class SettingsController extends GetxController {
       await _loadSettings(); // Reload to update observable values
 
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Settings Imported',
         'Settings have been successfully imported',
         backgroundColor: Colors.green,
@@ -475,6 +476,7 @@ class SettingsController extends GetxController {
     } catch (e) {
       print('Error importing settings: $e');
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Import Error',
         'Failed to import settings: ${e.toString()}',
         backgroundColor: Colors.red,
@@ -524,6 +526,7 @@ class SettingsController extends GetxController {
       showDeveloperOptions.value = false;
 
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Settings Reset',
         'All settings have been reset to defaults',
         backgroundColor: Colors.blue,
@@ -532,6 +535,7 @@ class SettingsController extends GetxController {
     } catch (e) {
       print('Error resetting settings: $e');
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Error',
         'Failed to reset settings',
         backgroundColor: Colors.red,
@@ -1084,12 +1088,12 @@ class SettingsController extends GetxController {
     if (_isInitialized.value && Get.context != null) {
       try {
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Setting Updated',
           'Setting "$key" has been updated successfully',
           backgroundColor: Colors.green.withOpacity(0.8),
           colorText: Colors.white,
           duration: Duration(seconds: 2),
-          snackPosition: SnackPosition.BOTTOM,
         );
       } catch (e) {
         print('⚠️ Could not show snackbar for $key: $e');

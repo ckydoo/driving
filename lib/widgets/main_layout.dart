@@ -130,7 +130,7 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
           ),
           backgroundColor: Colors.grey.shade800,
           duration: _exitTimeLimit,
-          behavior: SnackBarBehavior.floating,
+          behavior: SnackBarBehavior.fixed,
           margin: const EdgeInsets.all(16),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8),
@@ -1200,6 +1200,7 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
       // Show success message after navigation
       Future.delayed(const Duration(milliseconds: 300), () {
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Logged Out',
           'You have been successfully logged out',
           backgroundColor: Colors.green.shade100,
@@ -1225,6 +1226,7 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
       // Show error message after navigation
       Future.delayed(const Duration(milliseconds: 300), () {
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Logout Complete',
           'You have been logged out',
           backgroundColor: Colors.orange.shade100,

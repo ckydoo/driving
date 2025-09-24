@@ -1701,6 +1701,7 @@ class _FleetDetailsScreenState extends State<FleetDetailsScreen>
                     child: TextButton.icon(
                       onPressed: () {
                         Get.snackbar(
+                          snackPosition: SnackPosition.BOTTOM,
                           'Feature Coming Soon',
                           'Full history view will be available in the next update',
                           backgroundColor: Colors.blue,
@@ -1919,6 +1920,7 @@ class _FleetDetailsScreenState extends State<FleetDetailsScreen>
           Get.back(); // Close the dialog
           Get.back(); // Close the details screen
           Get.snackbar(
+            snackPosition: SnackPosition.BOTTOM,
             'Success',
             'Vehicle deleted successfully',
             backgroundColor: Colors.green,

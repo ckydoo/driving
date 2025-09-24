@@ -218,6 +218,7 @@ class NavigationController extends GetxController {
         'Access Denied',
         'You do not have permission to access this page',
         backgroundColor: Colors.red,
+        snackPosition: SnackPosition.BOTTOM,
         colorText: Colors.white,
         icon: const Icon(Icons.block, color: Colors.white),
       );
@@ -333,6 +334,7 @@ class NavigationController extends GetxController {
       Get.snackbar(
         'Logout Error',
         'An error occurred during logout.',
+        snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Colors.red,
         colorText: Colors.white,
       );

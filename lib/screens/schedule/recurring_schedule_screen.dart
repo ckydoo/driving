@@ -337,6 +337,7 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
       if (studentInvoices.isEmpty) {
         // No billing found - show error and prevent scheduling
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'No Billing Found',
           'This student has no invoices. Please create an invoice before scheduling.',
           backgroundColor: Colors.red,
@@ -380,6 +381,7 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
       if (validCourses.isEmpty) {
         // Student has invoices but no remaining lessons
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'No Lessons Remaining',
           'This student has used all their billed lessons. Please add more lessons to their invoice.',
           backgroundColor: Colors.orange,
@@ -414,6 +416,7 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
 
       // Show success message with lesson count
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Student Selected',
         'Found ${validCourses.length} course(s) with remaining lessons',
         backgroundColor: Colors.green,
@@ -423,6 +426,7 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     } catch (e) {
       print('ERROR in _loadStudentCourses: $e');
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Error',
         'Failed to load student courses: ${e.toString()}',
         backgroundColor: Colors.red,
@@ -596,6 +600,7 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
 
       if (estimatedLessons > _remainingLessons && _remainingLessons > 0) {
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Too Many Lessons',
           'This end date would generate $estimatedLessons lessons, but only $_remainingLessons lessons remain. Please choose an earlier end date.',
           backgroundColor: Colors.orange,
@@ -1749,6 +1754,7 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
 
     if (durationMinutes <= 0) {
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Invalid Duration',
         'End time must be after start time',
         backgroundColor: Colors.red,
@@ -1756,6 +1762,7 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
       );
     } else if (durationMinutes < 30) {
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Short Duration',
         'Lesson is ${durationMinutes} minutes. Minimum recommended: 30 minutes',
         backgroundColor: Colors.orange,
@@ -1764,6 +1771,7 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     } else if (durationMinutes % 30 != 0) {
       final lessons = (durationMinutes / 30.0).toStringAsFixed(1);
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Duration Info',
         'Lesson duration: ${durationMinutes} minutes (${lessons} lessons)',
         backgroundColor: Colors.blue,
@@ -1772,6 +1780,7 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     } else {
       final lessons = (durationMinutes / 30).round();
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Duration Set',
         'Lesson duration: ${durationMinutes} minutes (${lessons} lesson${lessons > 1 ? 's' : ''})',
         backgroundColor: Colors.green,
@@ -1902,6 +1911,7 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
 
     if (conflicts.isNotEmpty && conflicts.length <= 3) {
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Instructor Conflicts',
         'Conflicts on: ${conflicts.take(3).join(', ')}${conflicts.length > 3 ? '...' : ''}',
         backgroundColor: Colors.orange,
@@ -2711,6 +2721,7 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
                 : 'Vehicle';
 
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           '$conflictType Conflicts Detected',
           '${conflicts.length > 5 ? '5+' : conflicts.length} scheduling conflicts found',
           backgroundColor: Colors.orange,
@@ -2831,6 +2842,7 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     if (!_canCreateRecurringSchedule()) {
       final errors = _getValidationErrors();
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Validation Error',
         errors.isNotEmpty
             ? errors.first
@@ -3017,6 +3029,7 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
       // FIX 2: Show single consolidated success message
       if (savedCount > 0) {
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Success',
           'Created $savedCount recurring schedule${savedCount > 1 ? 's' : ''} successfully!${skippedDates.length > 0 ? ' (${skippedDates.length} skipped due to conflicts)' : ''}',
           backgroundColor: Colors.green,
@@ -3037,6 +3050,7 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
       }
 
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Error',
         'Failed to create recurring schedule: ${e.toString()}',
         backgroundColor: Colors.red,

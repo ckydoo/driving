@@ -75,6 +75,7 @@ class CsvTemplateGenerator {
         await file.writeAsString(csvString);
 
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Success',
           'Template downloaded to: ${file.path}',
           backgroundColor: Colors.green,
@@ -83,6 +84,7 @@ class CsvTemplateGenerator {
         );
       } else {
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Cancelled',
           'Template download cancelled',
           backgroundColor: Colors.orange,
@@ -91,6 +93,7 @@ class CsvTemplateGenerator {
       }
     } catch (e) {
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Error',
         'Failed to download template: ${e.toString()}',
         backgroundColor: Colors.red,

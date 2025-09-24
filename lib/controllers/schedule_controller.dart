@@ -78,6 +78,7 @@ class ScheduleController extends GetxController {
     } catch (e) {
       error('Failed to load schedules: ${e.toString()}');
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Error',
         'Failed to load schedules: ${e.toString()}',
         backgroundColor: Colors.red,
@@ -294,6 +295,7 @@ class ScheduleController extends GetxController {
     // Check if scheduling date is not in the past
     if (!_isValidScheduleDate(start)) {
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Invalid Date',
         'Cannot schedule lessons for past dates. Please select today or a future date.',
         backgroundColor: Colors.red,
@@ -307,6 +309,7 @@ class ScheduleController extends GetxController {
     // Check if end time is after start time
     if (end.isBefore(start) || end.isAtSameMomentAs(start)) {
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Invalid Time',
         'End time must be after start time.',
         backgroundColor: Colors.red,
@@ -321,6 +324,7 @@ class ScheduleController extends GetxController {
     final duration = end.difference(start);
     if (duration.inMinutes < 30) {
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Invalid Duration',
         'Lesson duration must be at least 30 minutes.',
         backgroundColor: Colors.red,
@@ -333,6 +337,7 @@ class ScheduleController extends GetxController {
 
     if (duration.inHours > 4) {
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Invalid Duration',
         'Lesson duration cannot exceed 4 hours.',
         backgroundColor: Colors.red,
@@ -594,6 +599,7 @@ class ScheduleController extends GetxController {
       await fetchSchedules();
 
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Migration Complete',
         'Schedule migration and consistency fixes completed successfully',
         backgroundColor: Colors.green,
@@ -603,6 +609,7 @@ class ScheduleController extends GetxController {
     } catch (e) {
       print('Error in migration: $e');
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Migration Error',
         'Migration failed: ${e.toString()}',
         backgroundColor: Colors.red,
@@ -629,6 +636,7 @@ class ScheduleController extends GetxController {
 
       if (totalFixed > 0) {
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Fixes Applied',
           'Fixed $totalFixed inconsistencies successfully',
           backgroundColor: Colors.green,
@@ -636,6 +644,7 @@ class ScheduleController extends GetxController {
         );
       } else {
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'No Issues Found',
           'All schedules are already consistent',
           backgroundColor: Colors.blue,
@@ -644,7 +653,10 @@ class ScheduleController extends GetxController {
       }
     } catch (e) {
       print('Error fixing inconsistencies: $e');
-      Get.snackbar('Error', 'Failed to fix inconsistencies: ${e.toString()}');
+      Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
+          'Error',
+          'Failed to fix inconsistencies: ${e.toString()}');
     } finally {
       isLoading(false);
     }
@@ -695,6 +707,7 @@ class ScheduleController extends GetxController {
 
       if (totalIssues == 0) {
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'System Healthy',
           'No consistency issues found',
           backgroundColor: Colors.green,
@@ -702,6 +715,7 @@ class ScheduleController extends GetxController {
         );
       } else {
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Issues Found',
           '$totalIssues consistency issues detected. Check logs for details.',
           backgroundColor: Colors.orange,
@@ -712,7 +726,9 @@ class ScheduleController extends GetxController {
     } catch (e) {
       print('Error running consistency check: $e');
       Get.snackbar(
-          'Check Error', 'Failed to run consistency check: ${e.toString()}');
+          snackPosition: SnackPosition.BOTTOM,
+          'Check Error',
+          'Failed to run consistency check: ${e.toString()}');
     } finally {
       isLoading(false);
     }
@@ -899,6 +915,7 @@ class ScheduleController extends GetxController {
       // FIX: Only show snackbar if not in silent mode
       if (!silent) {
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Success',
           schedule.id == null
               ? 'Schedule created successfully'
@@ -910,7 +927,10 @@ class ScheduleController extends GetxController {
     } catch (e) {
       // FIX: Only show error snackbar if not in silent mode
       if (!silent) {
-        Get.snackbar('Error', 'Failed to save schedule: ${e.toString()}');
+        Get.snackbar(
+            snackPosition: SnackPosition.BOTTOM,
+            'Error',
+            'Failed to save schedule: ${e.toString()}');
       }
       rethrow; // Re-throw to handle in calling code
     } finally {
@@ -933,13 +953,17 @@ class ScheduleController extends GetxController {
       _applyFilters();
 
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Success',
         'Schedule deleted successfully',
         backgroundColor: Colors.red,
         colorText: Colors.white,
       );
     } catch (e) {
-      Get.snackbar('Error', 'Failed to delete schedule: ${e.toString()}');
+      Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
+          'Error',
+          'Failed to delete schedule: ${e.toString()}');
     } finally {
       isLoading(false);
     }
@@ -952,7 +976,8 @@ class ScheduleController extends GetxController {
 
       final index = schedules.indexWhere((s) => s.id == scheduleId);
       if (index == -1) {
-        Get.snackbar('Error', 'Schedule not found');
+        Get.snackbar(
+            snackPosition: SnackPosition.BOTTOM, 'Error', 'Schedule not found');
         return;
       }
 
@@ -1001,13 +1026,17 @@ class ScheduleController extends GetxController {
       }
 
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Success',
         'Schedule cancelled successfully',
         backgroundColor: Colors.orange,
         colorText: Colors.white,
       );
     } catch (e) {
-      Get.snackbar('Error', 'Failed to cancel schedule: ${e.toString()}');
+      Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
+          'Error',
+          'Failed to cancel schedule: ${e.toString()}');
     } finally {
       isLoading(false);
     }
@@ -1051,13 +1080,17 @@ class ScheduleController extends GetxController {
       await addOrUpdateSchedule(newScheduleWithStatus);
 
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Success',
         'Schedule rescheduled successfully',
         backgroundColor: Colors.green,
         colorText: Colors.white,
       );
     } catch (e) {
-      Get.snackbar('Error', 'Failed to reschedule: ${e.toString()}');
+      Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
+          'Error',
+          'Failed to reschedule: ${e.toString()}');
     } finally {
       isLoading(false);
     }
@@ -1070,7 +1103,8 @@ class ScheduleController extends GetxController {
 
       final index = schedules.indexWhere((s) => s.id == scheduleId);
       if (index == -1) {
-        Get.snackbar('Error', 'Schedule not found');
+        Get.snackbar(
+            snackPosition: SnackPosition.BOTTOM, 'Error', 'Schedule not found');
         return;
       }
 
@@ -1086,6 +1120,7 @@ class ScheduleController extends GetxController {
               .getRemainingLessons(schedule.studentId, schedule.courseId);
 
           Get.snackbar(
+            snackPosition: SnackPosition.BOTTOM,
             'Lesson Limit Exceeded',
             'Cannot mark as attended. Remaining lessons: $remaining',
             backgroundColor: Colors.red,
@@ -1139,7 +1174,10 @@ class ScheduleController extends GetxController {
       );
     } catch (e) {
       print('Error toggling attendance: $e');
-      Get.snackbar('Error', 'Failed to update attendance: ${e.toString()}');
+      Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
+          'Error',
+          'Failed to update attendance: ${e.toString()}');
     } finally {
       isLoading(false);
     }
@@ -1181,6 +1219,7 @@ class ScheduleController extends GetxController {
       await _createBillingRecordIfNeeded(createdSchedule);
 
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Success',
         'Schedule created successfully',
         backgroundColor: Colors.green,
@@ -1188,7 +1227,10 @@ class ScheduleController extends GetxController {
       );
     } catch (e) {
       print('Error creating schedule: $e');
-      Get.snackbar('Error', 'Failed to create schedule: ${e.toString()}');
+      Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
+          'Error',
+          'Failed to create schedule: ${e.toString()}');
       rethrow;
     } finally {
       isLoading(false);
@@ -1221,6 +1263,7 @@ class ScheduleController extends GetxController {
       // Only show snackbar if not silent
       if (!silent) {
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Success',
           'Schedule updated successfully',
           backgroundColor: Colors.green,
@@ -1229,7 +1272,10 @@ class ScheduleController extends GetxController {
       }
     } catch (e) {
       if (!silent) {
-        Get.snackbar('Error', 'Failed to update schedule: ${e.toString()}');
+        Get.snackbar(
+            snackPosition: SnackPosition.BOTTOM,
+            'Error',
+            'Failed to update schedule: ${e.toString()}');
       }
       throw e;
     } finally {
@@ -1296,6 +1342,7 @@ class ScheduleController extends GetxController {
       }
 
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Bulk Creation Success',
         'Created ${createdSchedules.length} schedules successfully',
         backgroundColor: Colors.green,
@@ -1304,7 +1351,9 @@ class ScheduleController extends GetxController {
     } catch (e) {
       print('Error in bulk schedule creation: $e');
       Get.snackbar(
-          'Bulk Creation Error', 'Failed to create schedules: ${e.toString()}');
+          snackPosition: SnackPosition.BOTTOM,
+          'Bulk Creation Error',
+          'Failed to create schedules: ${e.toString()}');
       rethrow;
     } finally {
       isLoading(false);

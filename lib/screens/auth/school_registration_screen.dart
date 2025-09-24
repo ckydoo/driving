@@ -165,7 +165,7 @@ class SchoolRegistrationScreen extends StatelessWidget {
             _buildTextField(
               controller: controller.schoolNameController,
               label: 'School Name',
-              hint: 'e.g., Metro Driving School',
+              hint: 'e.g., Moyo Driving School',
               icon: Icons.school,
               validator: (value) {
                 if (value?.isEmpty ?? true) {
@@ -199,7 +199,7 @@ class SchoolRegistrationScreen extends StatelessWidget {
                   child: _buildTextField(
                     controller: controller.cityController,
                     label: 'City',
-                    hint: 'e.g., Harare',
+                    hint: 'e.g., Mutare',
                     icon: Icons.location_city,
                   ),
                 ),

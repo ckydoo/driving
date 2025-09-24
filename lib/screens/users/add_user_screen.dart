@@ -109,6 +109,7 @@ class _AddUserScreenState extends State<AddUserScreen> {
     } catch (e) {
       print('❌ Error creating invoice: $e');
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Error',
         'Failed to create invoice: $e',
         backgroundColor: Colors.red,
@@ -1506,6 +1507,7 @@ class _AddUserScreenState extends State<AddUserScreen> {
         // Basic Info validation
         if (_fnameController.text.isEmpty) {
           Get.snackbar(
+            snackPosition: SnackPosition.BOTTOM,
             'Validation Error',
             'First name is required',
             backgroundColor: Colors.red[100],
@@ -1516,6 +1518,7 @@ class _AddUserScreenState extends State<AddUserScreen> {
         }
         if (_lnameController.text.isEmpty) {
           Get.snackbar(
+            snackPosition: SnackPosition.BOTTOM,
             'Validation Error',
             'Last name is required',
             backgroundColor: Colors.red[100],
@@ -1526,6 +1529,7 @@ class _AddUserScreenState extends State<AddUserScreen> {
         }
         if (_idNumberController.text.isEmpty) {
           Get.snackbar(
+            snackPosition: SnackPosition.BOTTOM,
             'Validation Error',
             'ID number is required',
             backgroundColor: Colors.red[100],
@@ -1536,6 +1540,7 @@ class _AddUserScreenState extends State<AddUserScreen> {
         }
         if (_selectedDate == null) {
           Get.snackbar(
+            snackPosition: SnackPosition.BOTTOM,
             'Validation Error',
             'Date of birth is required',
             backgroundColor: Colors.red[100],
@@ -1550,6 +1555,7 @@ class _AddUserScreenState extends State<AddUserScreen> {
         // Contact Info validation
         if (_emailController.text.isEmpty) {
           Get.snackbar(
+            snackPosition: SnackPosition.BOTTOM,
             'Validation Error',
             'Email is required',
             backgroundColor: Colors.red[100],
@@ -1560,6 +1566,7 @@ class _AddUserScreenState extends State<AddUserScreen> {
         }
         if (!GetUtils.isEmail(_emailController.text)) {
           Get.snackbar(
+            snackPosition: SnackPosition.BOTTOM,
             'Validation Error',
             'Please enter a valid email address',
             backgroundColor: Colors.red[100],
@@ -1570,6 +1577,7 @@ class _AddUserScreenState extends State<AddUserScreen> {
         }
         if (_phoneController.text.isEmpty) {
           Get.snackbar(
+            snackPosition: SnackPosition.BOTTOM,
             'Validation Error',
             'Phone number is required',
             backgroundColor: Colors.red[100],
@@ -1580,6 +1588,7 @@ class _AddUserScreenState extends State<AddUserScreen> {
         }
         if (_addressController.text.isEmpty) {
           Get.snackbar(
+            snackPosition: SnackPosition.BOTTOM,
             'Validation Error',
             'Address is required',
             backgroundColor: Colors.red[100],
@@ -1594,6 +1603,7 @@ class _AddUserScreenState extends State<AddUserScreen> {
         // Additional Info validation
         if (_passwordController.text.isEmpty) {
           Get.snackbar(
+            snackPosition: SnackPosition.BOTTOM,
             'Validation Error',
             'Password is required',
             backgroundColor: Colors.red[100],
@@ -1604,6 +1614,7 @@ class _AddUserScreenState extends State<AddUserScreen> {
         }
         if (_passwordController.text.length != 8) {
           Get.snackbar(
+            snackPosition: SnackPosition.BOTTOM,
             'Validation Error',
             'Password must be exactly 8 digits',
             backgroundColor: Colors.red[100],
@@ -1731,6 +1742,7 @@ class _AddUserScreenState extends State<AddUserScreen> {
       print('⚠️ Invoice creation failed: $e');
       // Show warning but don't prevent success dialog
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Warning',
         'Student created but invoice creation failed: ${e.toString()}',
         backgroundColor: Colors.orange,

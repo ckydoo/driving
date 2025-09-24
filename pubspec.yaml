@@ -76,14 +76,16 @@ dev_dependencies:
   flutter_lints: ^5.0.0
 flutter_launcher_icons:
   android: true
-  background: "#ffffff"
   ios: true
   windows: 
     generate: true
     image_path: "assets/icons/icon.png"
     background_color: "#ffffff"
+    adaptive_icon_background: "#ffffff"
   image_path: "assets/icons/icon.png"
-
+  background_color: "#ffffff"  # This adds white background to Android adaptive icons
+  adaptive_icon_background: "#ffffff"  # White background for Android adaptive icons
+ 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 

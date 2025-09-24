@@ -569,7 +569,7 @@ class _CourseFormDialogState extends State<CourseFormDialog>
       // ❌ REMOVE THIS DUPLICATE SNACKBAR - the controller already shows one
       // await Future.delayed(Duration(milliseconds: 150));
       //
-      // Get.snackbar(
+      // Get.snackbar(snackPosition: SnackPosition.BOTTOM,
       //   widget.course == null ? 'Course Created!' : 'Course Updated!',
       //   'Course "${course.name}" ${widget.course == null ? "created" : "updated"} successfully',
       //   backgroundColor: Colors.green.shade600,
@@ -584,6 +584,7 @@ class _CourseFormDialogState extends State<CourseFormDialog>
       }
 
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Error',
         'Failed to ${widget.course == null ? "create" : "update"} course: $e',
         backgroundColor: Colors.red.shade600,

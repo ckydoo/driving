@@ -229,6 +229,7 @@ class PinSettingsWidget extends StatelessWidget {
             onPressed: () async {
               if (newPinController.text != confirmPinController.text) {
                 Get.snackbar(
+                  snackPosition: SnackPosition.BOTTOM,
                   'Error',
                   'New PINs do not match',
                   backgroundColor: Colors.red,
@@ -239,6 +240,7 @@ class PinSettingsWidget extends StatelessWidget {
 
               if (newPinController.text.length != 4) {
                 Get.snackbar(
+                  snackPosition: SnackPosition.BOTTOM,
                   'Error',
                   'PIN must be 4 digits',
                   backgroundColor: Colors.red,
@@ -281,6 +283,7 @@ class PinSettingsWidget extends StatelessWidget {
                 controller.isPinEnabled.value = false;
                 Get.back();
                 Get.snackbar(
+                  snackPosition: SnackPosition.BOTTOM,
                   'PIN Disabled',
                   'PIN login has been disabled',
                   backgroundColor: Colors.blue,
@@ -295,6 +298,7 @@ class PinSettingsWidget extends StatelessWidget {
     } else {
       controller.isPinEnabled.value = true;
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'PIN Enabled',
         'PIN login has been enabled',
         backgroundColor: Colors.green,

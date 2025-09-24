@@ -81,6 +81,7 @@ class _FleetScreenState extends State<FleetScreen>
         _isLoading = false;
       });
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Error',
         'Failed to load vehicles: $e',
         backgroundColor: Colors.red,
@@ -1288,6 +1289,7 @@ class _FleetScreenState extends State<FleetScreen>
         await fleetController.deleteFleet(vehicle.id!);
         _loadVehicles();
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Success',
           'Vehicle deleted successfully',
           backgroundColor: Colors.green,
@@ -1295,6 +1297,7 @@ class _FleetScreenState extends State<FleetScreen>
         );
       } catch (e) {
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Error',
           'Failed to delete vehicle: $e',
           backgroundColor: Colors.red,
@@ -1337,6 +1340,7 @@ class _FleetScreenState extends State<FleetScreen>
         });
         _loadVehicles();
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Success',
           'Selected vehicles deleted successfully',
           backgroundColor: Colors.green,
@@ -1344,6 +1348,7 @@ class _FleetScreenState extends State<FleetScreen>
         );
       } catch (e) {
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Error',
           'Failed to delete vehicles: $e',
           backgroundColor: Colors.red,
@@ -1422,6 +1427,7 @@ class _FleetScreenState extends State<FleetScreen>
       final instructor =
           userController.users.firstWhere((u) => u.id == instructorId);
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Success',
         'Vehicle assigned to ${instructor.fname} ${instructor.lname}',
         backgroundColor: Colors.green,
@@ -1429,6 +1435,7 @@ class _FleetScreenState extends State<FleetScreen>
       );
     } catch (e) {
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Error',
         'Failed to assign instructor: $e',
         backgroundColor: Colors.red,
@@ -1439,6 +1446,7 @@ class _FleetScreenState extends State<FleetScreen>
 
   void _bulkAssignInstructors() {
     Get.snackbar(
+      snackPosition: SnackPosition.BOTTOM,
       'Feature Coming Soon',
       'Bulk instructor assignment will be available in the next update',
       backgroundColor: Colors.blue,

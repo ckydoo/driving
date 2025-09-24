@@ -112,6 +112,7 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
 
       if (studentInvoices.isEmpty) {
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'No Billing Found',
           'This student has no invoices. Please create an invoice before scheduling.',
           backgroundColor: Colors.red,
@@ -154,6 +155,7 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
 
       if (validCourses.isEmpty) {
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'No Lessons Remaining',
           'This student has used all their billed lessons. Please add more lessons to their invoice.',
           backgroundColor: Colors.orange,
@@ -190,6 +192,7 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
       }
 
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Student Selected',
         'Found ${validCourses.length} course(s) with remaining lessons',
         backgroundColor: Colors.green,
@@ -199,6 +202,7 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
     } catch (e) {
       print('ERROR in _loadStudentCourses: $e');
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Error',
         'Failed to load student courses: ${e.toString()}',
         backgroundColor: Colors.red,
@@ -249,6 +253,7 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
     // Show message if instructor has no assigned vehicle for practical lessons
     if (assignedVehicle == null && _selectedClassType == 'Practical') {
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'No Vehicle Assigned',
         'This instructor has no vehicle assigned. Please assign a vehicle to this instructor first.',
         backgroundColor: Colors.orange,
@@ -316,6 +321,7 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
             DateFormat('hh:mm a').format(conflictingSchedules.first.end);
 
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Instructor Conflict',
           'Instructor has a lesson from $conflictTime to $conflictEndTime',
           backgroundColor: Colors.orange,
@@ -927,6 +933,7 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
     } catch (e) {
       print('Error in time picker: $e');
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Error',
         'Failed to select time. Please try again.',
         backgroundColor: Colors.red,
@@ -980,6 +987,7 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
       Get.back();
     } catch (e) {
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Error',
         'Failed to schedule lesson: ${e.toString()}',
         backgroundColor: Colors.red,

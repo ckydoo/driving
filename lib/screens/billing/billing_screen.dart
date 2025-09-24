@@ -222,7 +222,7 @@ class _BillingScreenState extends State<BillingScreen>
       SnackBar(
         content: Text(message),
         backgroundColor: Colors.red.shade600,
-        behavior: SnackBarBehavior.floating,
+        behavior: SnackBarBehavior.fixed,
       ),
     );
   }
@@ -232,7 +232,7 @@ class _BillingScreenState extends State<BillingScreen>
       SnackBar(
         content: Text(message),
         backgroundColor: Colors.green.shade600,
-        behavior: SnackBarBehavior.floating,
+        behavior: SnackBarBehavior.fixed,
       ),
     );
   }

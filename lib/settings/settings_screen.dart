@@ -666,6 +666,7 @@ class _SettingsScreenState extends State<SettingsScreen>
               // Here you would implement clipboard copy functionality
               Get.back();
               Get.snackbar(
+                snackPosition: SnackPosition.BOTTOM,
                 'Settings Exported',
                 'Settings have been copied to clipboard',
                 backgroundColor: Colors.green,
@@ -723,6 +724,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                   Get.back();
                 } else {
                   Get.snackbar(
+                    snackPosition: SnackPosition.BOTTOM,
                     'Error',
                     'Please paste valid settings JSON',
                     backgroundColor: Colors.red,
@@ -731,6 +733,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                 }
               } catch (e) {
                 Get.snackbar(
+                  snackPosition: SnackPosition.BOTTOM,
                   'Import Error',
                   'Invalid JSON format',
                   backgroundColor: Colors.red,
@@ -1013,6 +1016,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                             settingsController.saveBusinessSettings();
 
                             Get.snackbar(
+                              snackPosition: SnackPosition.BOTTOM,
                               'Saved',
                               '$title updated successfully',
                               backgroundColor: Colors.green,
@@ -1153,6 +1157,7 @@ class _SettingsScreenState extends State<SettingsScreen>
 
                   // Then show success message
                   Get.snackbar(
+                    snackPosition: SnackPosition.BOTTOM,
                     'Success',
                     'All business settings saved successfully',
                     backgroundColor: Colors.green,
@@ -1165,6 +1170,7 @@ class _SettingsScreenState extends State<SettingsScreen>
 
                   // Then show error message
                   Get.snackbar(
+                    snackPosition: SnackPosition.BOTTOM,
                     'Error',
                     'Failed to save settings: ${e.toString()}',
                     backgroundColor: Colors.red,
@@ -1223,6 +1229,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                 onPressed: () {
                   settingsController.saveBusinessSettings();
                   Get.snackbar(
+                    snackPosition: SnackPosition.BOTTOM,
                     'Saved',
                     'Operating days updated',
                     backgroundColor: Colors.green,

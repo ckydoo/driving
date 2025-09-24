@@ -94,6 +94,7 @@ class _FleetFormDialogState extends State<FleetFormDialog>
         _isLoadingInstructors = false;
       });
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Error',
         'Failed to load instructors: ${e.toString()}',
         backgroundColor: Colors.red.shade600,
@@ -914,6 +915,7 @@ class _FleetFormDialogState extends State<FleetFormDialog>
       }
 
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Error',
         'Failed to ${widget.vehicle == null ? "create" : "update"} vehicle: $e',
         backgroundColor: Colors.red.shade600,

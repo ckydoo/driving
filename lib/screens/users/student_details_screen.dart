@@ -107,6 +107,7 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
 
       if (student == null) {
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Error',
           'Student not found',
           backgroundColor: Colors.red,
@@ -118,6 +119,7 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
         _isLoading = false;
       });
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Error',
         'Failed to load student data: ${e.toString()}',
         backgroundColor: Colors.red,
@@ -148,6 +150,7 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
         _noteController.clear();
         await _fetchStudentNotes();
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Success',
           'Note added successfully',
           backgroundColor: Colors.green,
@@ -155,6 +158,7 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
         );
       } catch (e) {
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Error',
           'Failed to add note: ${e.toString()}',
           backgroundColor: Colors.red,
@@ -2246,12 +2250,14 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
 
   void _deleteStudent() {
     // Delete student logic
-    Get.snackbar('Info', 'Student deleted');
+    Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM, 'Info', 'Student deleted');
   }
 
   void _showScheduleDetails(schedule) {
     // Show schedule details dialog
-    Get.snackbar('Info', 'Show schedule details');
+    Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM, 'Info', 'Show schedule details');
   }
 
   void _uploadFile() async {
@@ -2259,32 +2265,43 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
       FilePickerResult? result = await FilePicker.platform.pickFiles();
       if (result != null) {
         // Handle file upload
-        Get.snackbar('Success', 'File uploaded successfully');
+        Get.snackbar(
+            snackPosition: SnackPosition.BOTTOM,
+            'Success',
+            'File uploaded successfully');
         await _fetchStudentAttachments();
       }
     } catch (e) {
-      Get.snackbar('Error', 'Failed to upload file');
+      Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
+          'Error',
+          'Failed to upload file');
     }
   }
 
   void _downloadFile(Map<String, dynamic> attachment) {
     // Download file logic
-    Get.snackbar('Info', 'Downloading ${attachment['file_name']}');
+    Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
+        'Info',
+        'Downloading ${attachment['file_name']}');
   }
 
   void _deleteAttachment(int attachmentId) {
     // Delete attachment logic
-    Get.snackbar('Info', 'Attachment deleted');
+    Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM, 'Info', 'Attachment deleted');
   }
 
   void _editNote(Map<String, dynamic> note) {
     // Edit note logic
-    Get.snackbar('Info', 'Edit note functionality');
+    Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM, 'Info', 'Edit note functionality');
   }
 
   void _deleteNote(int noteId) {
     // Delete note logic
-    Get.snackbar('Info', 'Note deleted');
+    Get.snackbar(snackPosition: SnackPosition.BOTTOM, 'Info', 'Note deleted');
   }
 
   @override

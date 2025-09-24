@@ -117,10 +117,10 @@ class AppInitialization {
   static void _showInitializationError(dynamic error) {
     try {
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'App Initialization',
         'Some features may not work properly. The app will continue with limited functionality.',
         duration: const Duration(seconds: 5),
-        snackPosition: SnackPosition.TOP,
         backgroundColor: Colors.orange[100],
         colorText: Colors.orange[800],
         icon: const Icon(Icons.warning, color: Colors.orange),

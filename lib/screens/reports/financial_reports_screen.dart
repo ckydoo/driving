@@ -1298,9 +1298,9 @@ class _FinancialReportsScreenState extends State<FinancialReportsScreen> {
       }
     } catch (e) {
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Error',
         'Failed to generate report: $e',
-        snackPosition: SnackPosition.TOP,
         backgroundColor: Colors.red,
         colorText: Colors.white,
       );
@@ -1987,6 +1987,7 @@ class _FinancialReportsScreenState extends State<FinancialReportsScreen> {
 
         // Show success message with file location
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Export Successful',
           '${report['title']} saved to: ${file.path}',
           backgroundColor: Colors.green,
@@ -2013,6 +2014,7 @@ class _FinancialReportsScreenState extends State<FinancialReportsScreen> {
           await file.writeAsBytes(pdfBytes);
 
           Get.snackbar(
+            snackPosition: SnackPosition.BOTTOM,
             'Export Successful',
             '${report['title']} exported to $filePath',
             backgroundColor: Colors.green,
@@ -2023,6 +2025,7 @@ class _FinancialReportsScreenState extends State<FinancialReportsScreen> {
       }
     } catch (e) {
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Export Failed',
         'Failed to export PDF: ${e.toString()}',
         backgroundColor: Colors.red,
@@ -2065,6 +2068,7 @@ class _FinancialReportsScreenState extends State<FinancialReportsScreen> {
 
       if (result != null) {
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Export Successful',
           '${report['title']} exported successfully',
           backgroundColor: Colors.green,
@@ -2074,6 +2078,7 @@ class _FinancialReportsScreenState extends State<FinancialReportsScreen> {
       }
     } catch (e) {
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Export Failed',
         'Failed to export PDF: ${e.toString()}',
         backgroundColor: Colors.red,

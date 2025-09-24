@@ -706,7 +706,7 @@ class _BulkStudentUploadScreenState extends State<BulkStudentUploadScreen>
       SnackBar(
         content: Text(message),
         backgroundColor: Colors.red,
-        behavior: SnackBarBehavior.floating,
+        behavior: SnackBarBehavior.fixed,
       ),
     );
   }

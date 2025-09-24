@@ -278,7 +278,10 @@ class _CourseReportsScreenState extends State<CourseReportsScreen> {
   Future<void> _downloadCsv() async {
     final reportData = _generateCourseReportData();
     if (reportData.isEmpty) {
-      Get.snackbar('No Data', 'No data to download.',
+      Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
+          'No Data',
+          'No data to download.',
           backgroundColor: Colors.orange);
       return;
     }
@@ -312,10 +315,16 @@ class _CourseReportsScreenState extends State<CourseReportsScreen> {
       final file = File(path);
       await file.writeAsString(csv);
 
-      Get.snackbar('Download Complete', 'CSV report saved to: $path',
+      Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
+          'Download Complete',
+          'CSV report saved to: $path',
           backgroundColor: Colors.green);
     } catch (e) {
-      Get.snackbar('Error', 'Failed to save CSV: $e',
+      Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
+          'Error',
+          'Failed to save CSV: $e',
           backgroundColor: Colors.red);
     }
   }
@@ -323,7 +332,10 @@ class _CourseReportsScreenState extends State<CourseReportsScreen> {
   Future<void> _downloadPdf() async {
     final reportData = _generateCourseReportData();
     if (reportData.isEmpty) {
-      Get.snackbar('No Data', 'No data to download.',
+      Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
+          'No Data',
+          'No data to download.',
           backgroundColor: Colors.orange);
       return;
     }
@@ -360,10 +372,16 @@ class _CourseReportsScreenState extends State<CourseReportsScreen> {
       final file = File(path);
       await file.writeAsBytes(await doc.save());
 
-      Get.snackbar('Download Complete', 'PDF report saved to: $path',
+      Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
+          'Download Complete',
+          'PDF report saved to: $path',
           backgroundColor: Colors.green);
     } catch (e) {
-      Get.snackbar('Error', 'Failed to save PDF: $e',
+      Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
+          'Error',
+          'Failed to save PDF: $e',
           backgroundColor: Colors.red);
     }
   }

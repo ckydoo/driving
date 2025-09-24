@@ -127,7 +127,7 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
       SnackBar(
         content: Text(message),
         backgroundColor: Colors.red.shade600,
-        behavior: SnackBarBehavior.floating,
+        behavior: SnackBarBehavior.fixed,
       ),
     );
   }
@@ -1899,7 +1899,7 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
           ],
         ),
         backgroundColor: Colors.blue.shade600,
-        behavior: SnackBarBehavior.floating,
+        behavior: SnackBarBehavior.fixed,
         duration: const Duration(seconds: 2),
       ),
     );
@@ -1910,8 +1910,7 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
       SnackBar(
         content: Text(message),
         backgroundColor: Colors.green.shade600,
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 3),
+        behavior: SnackBarBehavior.fixed,
       ),
     );
   }
@@ -2056,6 +2055,7 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
       }
 
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Receipt Sent to Printer',
         'Receipt for ${payment.reference ?? payment.id} has been sent to printer',
         backgroundColor: Colors.green.shade100,
@@ -2063,6 +2063,7 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
       );
     } catch (e) {
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Print Failed',
         'Failed to print receipt: ${e.toString()}',
         backgroundColor: Colors.red.shade100,
@@ -2102,6 +2103,7 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
       }
 
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Receipt Shared',
         'Receipt for ${payment.reference ?? payment.id} has been shared successfully',
         backgroundColor: Colors.green.shade100,
@@ -2109,6 +2111,7 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
       );
     } catch (e) {
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Share Failed',
         'Failed to share receipt: ${e.toString()}',
         backgroundColor: Colors.red.shade100,
@@ -2132,6 +2135,7 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
       return await ReceiptService.generateReceiptSmart(payment);
     } catch (e) {
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Receipt Generation Failed',
         'Failed to generate receipt: ${e.toString()}',
         backgroundColor: Colors.red.shade100,
@@ -2193,9 +2197,9 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
 
         // Show success with receipt options
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Payment Recorded',
           'Payment recorded and cloud receipt generated successfully',
-          snackPosition: SnackPosition.TOP,
           backgroundColor: Colors.green.shade600,
           colorText: Colors.white,
           duration: const Duration(seconds: 5),
@@ -2212,9 +2216,9 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
         await billingController.fetchBillingData();
 
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Payment Recorded',
           'Payment recorded successfully, but receipt generation failed. You can generate it later.',
-          snackPosition: SnackPosition.TOP,
           backgroundColor: Colors.orange.shade600,
           colorText: Colors.white,
           duration: const Duration(seconds: 5),
@@ -2227,9 +2231,9 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
       print('Error: $e');
 
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Payment Failed',
         'Failed to record payment: ${e.toString()}',
-        snackPosition: SnackPosition.TOP,
         backgroundColor: Colors.red.shade600,
         colorText: Colors.white,
         duration: const Duration(seconds: 5),
@@ -2256,6 +2260,7 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
           .toList();
       if (paymentsNeedingMigration.isEmpty) {
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Migration Complete',
           'All receipts are already in the cloud',
           backgroundColor: Colors.green.shade100,
@@ -2298,6 +2303,7 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
 
       // Show result
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Migration Complete',
         'Successfully migrated ${result['success_count']} receipts to cloud storage',
         backgroundColor: result['success_count'] == result['total_processed']
@@ -2313,6 +2319,7 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
     } catch (e) {
       Get.back(); // Close progress dialog
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Migration Failed',
         'Failed to migrate receipts: ${e.toString()}',
         backgroundColor: Colors.red.shade100,

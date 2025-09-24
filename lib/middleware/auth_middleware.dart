@@ -91,6 +91,7 @@ class RoleMiddleware extends GetMiddleware {
           print(
               '🚫 Role Middleware: Access denied for role "$userRole" to route $route');
           Get.snackbar(
+            snackPosition: SnackPosition.BOTTOM,
             'Access Denied',
             'You do not have permission to access this page',
             backgroundColor: Colors.red,

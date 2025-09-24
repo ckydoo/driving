@@ -494,11 +494,11 @@ class _BulkPaymentDialogState extends State<BulkPaymentDialog> {
 
       // Show success message
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Success',
         'Bulk payment of \$${paymentAmount.toStringAsFixed(2)} processed successfully',
         backgroundColor: Colors.green.shade600,
         colorText: Colors.white,
-        snackPosition: SnackPosition.BOTTOM,
       );
 
       // Close dialog and refresh data
@@ -506,11 +506,11 @@ class _BulkPaymentDialogState extends State<BulkPaymentDialog> {
       widget.onPaymentComplete();
     } catch (e) {
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Error',
         'Failed to process bulk payment: ${e.toString()}',
         backgroundColor: Colors.red.shade600,
         colorText: Colors.white,
-        snackPosition: SnackPosition.BOTTOM,
       );
     } finally {
       setState(() => _isProcessing = false);

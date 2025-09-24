@@ -1505,7 +1505,7 @@ class _ReceiptManagementScreenState extends State<ReceiptManagementScreen> {
       SnackBar(
         content: Text(message),
         backgroundColor: Colors.red.shade600,
-        behavior: SnackBarBehavior.floating,
+        behavior: SnackBarBehavior.fixed,
       ),
     );
   }
@@ -1515,7 +1515,7 @@ class _ReceiptManagementScreenState extends State<ReceiptManagementScreen> {
       SnackBar(
         content: Text(message),
         backgroundColor: Colors.green.shade600,
-        behavior: SnackBarBehavior.floating,
+        behavior: SnackBarBehavior.fixed,
       ),
     );
   }
@@ -1538,7 +1538,7 @@ class _ReceiptManagementScreenState extends State<ReceiptManagementScreen> {
           ],
         ),
         backgroundColor: Colors.blue.shade600,
-        behavior: SnackBarBehavior.floating,
+        behavior: SnackBarBehavior.fixed,
         duration: const Duration(seconds: 2),
       ),
     );

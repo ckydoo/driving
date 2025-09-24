@@ -90,7 +90,10 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
         _applyFiltersAndSort();
       });
     } catch (e) {
-      Get.snackbar('Error', 'Failed to load ${widget.role}s: $e');
+      Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
+          'Error',
+          'Failed to load ${widget.role}s: $e');
     }
   }
 
@@ -247,6 +250,7 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
 
       if (failedDeletions.isEmpty) {
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Success',
           'Successfully deleted $selectedCount ${widget.role}${selectedCount > 1 ? 's' : ''}',
           backgroundColor: Colors.green[100],
@@ -255,6 +259,7 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
         );
       } else {
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Partial Success',
           'Deleted ${selectedCount - failedDeletions.length} users. Failed: ${failedDeletions.join(', ')}',
           backgroundColor: Colors.orange[100],
@@ -266,6 +271,7 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
       _exitMultiSelectionMode();
     } catch (e) {
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Error',
         'Failed to delete selected ${widget.role}s: $e',
         backgroundColor: Colors.red[100],
@@ -324,6 +330,7 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
       // STEP 4: Show results
       if (failedGraduations.isEmpty && successCount > 0) {
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Success',
           'Successfully graduated $successCount student${successCount > 1 ? 's' : ''}${ineligibleStudents.isNotEmpty ? ' (${ineligibleStudents.length} skipped due to incomplete requirements)' : ''}',
           backgroundColor: Colors.green[100],
@@ -332,6 +339,7 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
         );
       } else if (successCount > 0) {
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Partial Success',
           'Graduated $successCount students. Failed: ${failedGraduations.join(', ')}${ineligibleStudents.isNotEmpty ? '. ${ineligibleStudents.length} skipped due to incomplete requirements.' : ''}',
           backgroundColor: Colors.orange[100],
@@ -340,6 +348,7 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
         );
       } else {
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'No Graduations',
           ineligibleStudents.isNotEmpty
               ? 'All ${ineligibleStudents.length} selected students are ineligible for graduation.'
@@ -353,6 +362,7 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
       _exitMultiSelectionMode();
     } catch (e) {
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Error',
         'Failed to graduate students: $e',
         backgroundColor: Colors.red[100],
@@ -1694,6 +1704,7 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
 
   void _handleFileImport(PlatformFile file) {
     Get.snackbar(
+      snackPosition: SnackPosition.BOTTOM,
       'Import Started',
       'Processing file: ${file.name}',
       backgroundColor: Colors.blue[100],
@@ -1719,6 +1730,7 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
                 await controller.deleteUser(user.id!);
                 _loadUsers();
                 Get.snackbar(
+                  snackPosition: SnackPosition.BOTTOM,
                   'Success',
                   '${widget.role.capitalize} deleted successfully',
                   backgroundColor: Colors.green[100],
@@ -1726,6 +1738,7 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
                 );
               } catch (e) {
                 Get.snackbar(
+                  snackPosition: SnackPosition.BOTTOM,
                   'Error',
                   'Failed to delete ${widget.role}: $e',
                   backgroundColor: Colors.red[100],

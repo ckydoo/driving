@@ -93,12 +93,12 @@ class AutoAttendanceService extends GetxService {
       await _scheduleController.toggleAttendance(lesson.id!, true);
 
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Auto-Attendance',
         'Lesson automatically marked as attended',
         backgroundColor: Colors.green.withOpacity(0.8),
         colorText: Colors.white,
         duration: Duration(seconds: 3),
-        snackPosition: SnackPosition.TOP,
         icon: Icon(Icons.check_circle, color: Colors.white),
       );
     } catch (e) {
@@ -113,12 +113,12 @@ class AutoAttendanceService extends GetxService {
         );
 
     Get.snackbar(
+      snackPosition: SnackPosition.BOTTOM,
       'Auto-Attendance',
       'Lesson with ${student?.fname ?? 'Student'} will be marked attended in 30 seconds',
       backgroundColor: Colors.blue.withOpacity(0.9),
       colorText: Colors.white,
       duration: Duration(seconds: 25),
-      snackPosition: SnackPosition.TOP,
       icon: Icon(Icons.timer, color: Colors.white),
       mainButton: TextButton(
         onPressed: () {

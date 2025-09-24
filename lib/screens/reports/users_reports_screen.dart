@@ -1435,6 +1435,7 @@ class _UsersReportsScreenState extends State<UsersReportsScreen> {
       );
 
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Print Ready',
         'Report sent to printer successfully!',
         backgroundColor: Colors.green,
@@ -1443,6 +1444,7 @@ class _UsersReportsScreenState extends State<UsersReportsScreen> {
       );
     } catch (e) {
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Print Error',
         'Failed to print report: ${e.toString()}',
         backgroundColor: Colors.red,
@@ -1531,6 +1533,7 @@ class _UsersReportsScreenState extends State<UsersReportsScreen> {
       }
     } catch (e) {
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Error',
         'Failed to generate report: ${e.toString()}',
         backgroundColor: Colors.red,
@@ -1623,6 +1626,7 @@ class _UsersReportsScreenState extends State<UsersReportsScreen> {
         await file.writeAsBytes(await pdf.save());
 
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Success',
           'Report saved successfully!',
           backgroundColor: Colors.green,

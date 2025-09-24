@@ -92,7 +92,11 @@ class FleetController extends GetxController {
       await fetchFleet();
     } catch (e) {
       error(e.toString());
-      Get.snackbar('Error', 'Failed to load data: ${e.toString()}');
+      Get.snackbar(
+        'Error',
+        'Failed to load data: ${e.toString()}',
+        snackPosition: SnackPosition.BOTTOM,
+      );
     } finally {
       isLoading(false);
     }
@@ -151,6 +155,7 @@ class FleetController extends GetxController {
       // Show success message
       try {
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Success',
           isUpdate
               ? 'Vehicle "${vehicle.make} ${vehicle.model}" updated successfully'
@@ -169,6 +174,7 @@ class FleetController extends GetxController {
         'Error',
         'Fleet operation failed: ${e.toString()}',
         backgroundColor: Colors.red,
+        snackPosition: SnackPosition.BOTTOM,
         colorText: Colors.white,
       );
 
@@ -224,6 +230,7 @@ class FleetController extends GetxController {
         'Success',
         'Vehicle "${vehicle.make} ${vehicle.model}" deleted successfully',
         backgroundColor: Colors.green,
+        snackPosition: SnackPosition.BOTTOM,
         colorText: Colors.white,
       );
     } catch (e) {
@@ -234,6 +241,7 @@ class FleetController extends GetxController {
         'Error',
         'Failed to delete vehicle: ${e.toString()}',
         backgroundColor: Colors.red,
+        snackPosition: SnackPosition.BOTTOM,
         colorText: Colors.white,
       );
       throw Exception('Delete failed: ${e.toString()}');
@@ -272,18 +280,17 @@ class FleetController extends GetxController {
 
       print('✅ Vehicle assigned successfully');
 
-      Get.snackbar(
-        'Success',
-        'Vehicle assigned to instructor successfully',
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
-      );
+      Get.snackbar('Success', 'Vehicle assigned to instructor successfully',
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+          snackPosition: SnackPosition.BOTTOM);
     } catch (e) {
       print('❌ Error assigning vehicle: $e');
       Get.snackbar(
         'Error',
         'Failed to assign vehicle: ${e.toString()}',
         backgroundColor: Colors.red,
+        snackPosition: SnackPosition.BOTTOM,
         colorText: Colors.white,
       );
     }
@@ -323,6 +330,7 @@ class FleetController extends GetxController {
         'Error',
         'Failed to update vehicle status: ${e.toString()}',
         backgroundColor: Colors.red,
+        snackPosition: SnackPosition.BOTTOM,
         colorText: Colors.white,
       );
     }
@@ -364,6 +372,7 @@ class FleetController extends GetxController {
         'Failed to update vehicle: ${e.toString()}',
         backgroundColor: Colors.red,
         colorText: Colors.white,
+        snackPosition: SnackPosition.BOTTOM,
       );
     }
   }
@@ -384,6 +393,7 @@ class FleetController extends GetxController {
         'Bulk Update Complete',
         'Updated ${vehicleIds.length} vehicles successfully',
         backgroundColor: Colors.green,
+        snackPosition: SnackPosition.BOTTOM,
         colorText: Colors.white,
       );
     } catch (e) {
@@ -392,6 +402,7 @@ class FleetController extends GetxController {
         'Bulk Update Failed',
         'Failed to update vehicles: ${e.toString()}',
         backgroundColor: Colors.red,
+        snackPosition: SnackPosition.BOTTOM,
         colorText: Colors.white,
       );
     } finally {
@@ -417,6 +428,7 @@ class FleetController extends GetxController {
         'Bulk Delete Complete',
         'Deleted ${vehicleIds.length} vehicles successfully',
         backgroundColor: Colors.green,
+        snackPosition: SnackPosition.BOTTOM,
         colorText: Colors.white,
       );
     } catch (e) {
@@ -424,6 +436,7 @@ class FleetController extends GetxController {
       Get.snackbar(
         'Bulk Delete Failed',
         'Failed to delete vehicles: ${e.toString()}',
+        snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Colors.red,
         colorText: Colors.white,
       );
@@ -459,6 +472,7 @@ class FleetController extends GetxController {
         'Import Complete',
         'Successfully imported ${newFleet.length} vehicles',
         backgroundColor: Colors.green,
+        snackPosition: SnackPosition.BOTTOM,
         colorText: Colors.white,
       );
     } catch (e) {
@@ -467,6 +481,7 @@ class FleetController extends GetxController {
         'Import Failed',
         'Failed to import vehicles: ${e.toString()}',
         backgroundColor: Colors.red,
+        snackPosition: SnackPosition.BOTTOM,
         colorText: Colors.white,
       );
     } finally {

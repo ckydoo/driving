@@ -189,6 +189,7 @@ class _GraduationScreenState extends State<GraduationScreen> {
       });
 
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Graduation Failed',
         'Failed to process graduation: ${e.toString()}',
         backgroundColor: Colors.red,
@@ -436,6 +437,7 @@ class _GraduationScreenState extends State<GraduationScreen> {
       await _checkGraduationEligibility();
 
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Schedules Closed',
         'All remaining schedules have been cancelled.',
         backgroundColor: Colors.orange,
@@ -443,6 +445,7 @@ class _GraduationScreenState extends State<GraduationScreen> {
       );
     } catch (e) {
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Error',
         'Failed to close schedules: ${e.toString()}',
         backgroundColor: Colors.red,
@@ -560,6 +563,7 @@ class _GraduationScreenState extends State<GraduationScreen> {
       await _checkGraduationEligibility();
 
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Payment Processed',
         'Payment of \$${amount.toStringAsFixed(2)} has been processed.',
         backgroundColor: Colors.green,
@@ -567,6 +571,7 @@ class _GraduationScreenState extends State<GraduationScreen> {
       );
     } catch (e) {
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Payment Failed',
         'Failed to process payment: ${e.toString()}',
         backgroundColor: Colors.red,

@@ -28,7 +28,10 @@ class _ScheduleMigrationDialogState extends State<ScheduleMigrationDialog> {
       final stats = await ScheduleStatusMigration.instance.getMigrationStats();
       setState(() => _migrationStats = stats);
     } catch (e) {
-      Get.snackbar('Error', 'Failed to load migration stats: $e');
+      Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
+          'Error',
+          'Failed to load migration stats: $e');
     } finally {
       setState(() => _isLoading = false);
     }

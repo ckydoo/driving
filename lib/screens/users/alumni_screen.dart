@@ -80,6 +80,7 @@ class _AlumniScreenState extends State<AlumniScreen> {
       _enrichedAlumni = [];
       _filteredAlumni = [];
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Error',
         'Failed to load alumni data: ${e.toString()}',
         backgroundColor: Colors.red,
@@ -1068,6 +1069,7 @@ class _AlumniScreenState extends State<AlumniScreen> {
       await _loadEnhancedAlumniData();
 
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Success',
         '${alumni.fname} ${alumni.lname} has been reactivated as a student.',
         backgroundColor: Colors.green,
@@ -1077,6 +1079,7 @@ class _AlumniScreenState extends State<AlumniScreen> {
     } catch (e) {
       print('Error reactivating student: $e');
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Error',
         'Failed to reactivate student: ${e.toString()}',
         backgroundColor: Colors.red,

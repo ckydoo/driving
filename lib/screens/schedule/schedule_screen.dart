@@ -78,6 +78,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     } catch (e) {
       print('Error loading data: $e');
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Error',
         'Failed to load some data. Please refresh.',
         backgroundColor: Colors.orange,
@@ -726,9 +727,14 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       _selectedDay.value = firstMatch.start;
       _focusedDay.value = firstMatch.start;
       Get.snackbar(
-          'Search Results', '${matchingSchedules.length} schedules found');
+          snackPosition: SnackPosition.BOTTOM,
+          'Search Results',
+          '${matchingSchedules.length} schedules found');
     } else {
-      Get.snackbar('No Results', 'No schedules found matching "$query"');
+      Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
+          'No Results',
+          'No schedules found matching "$query"');
     }
   }
 

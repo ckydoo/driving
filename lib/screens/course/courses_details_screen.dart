@@ -76,6 +76,7 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
 
       if (course == null) {
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Error',
           'Course not found',
           backgroundColor: Colors.red,
@@ -88,6 +89,7 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
         _isLoading = false;
       });
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Error',
         'Failed to load course data: $e',
         backgroundColor: Colors.red,
@@ -1062,6 +1064,7 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
 
         await courseController.handleCourse(duplicatedCourse, isUpdate: false);
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Success',
           'Course duplicated successfully',
           backgroundColor: Colors.green,
@@ -1069,6 +1072,7 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
         );
       } catch (e) {
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Error',
           'Failed to duplicate course: $e',
           backgroundColor: Colors.red,
@@ -1129,6 +1133,7 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
       try {
         await courseController.deleteCourse(course!.id!);
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Success',
           'Course deleted successfully',
           backgroundColor: Colors.green,
@@ -1137,6 +1142,7 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
         Navigator.of(context).pop();
       } catch (e) {
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Error',
           'Failed to delete course: $e',
           backgroundColor: Colors.red,

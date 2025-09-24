@@ -102,6 +102,7 @@ class _CourseScreenState extends State<CourseScreen>
       });
 
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Error',
         'Failed to refresh data: $e',
         backgroundColor: Colors.red,
@@ -1284,20 +1285,20 @@ class _CourseScreenState extends State<CourseScreen>
         await _loadCourses();
 
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Success',
           'Course "${course.name}" deleted successfully',
           backgroundColor: Colors.green,
           colorText: Colors.white,
-          snackPosition: SnackPosition.TOP,
           duration: Duration(seconds: 2),
         );
       } catch (e) {
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Error',
           'Failed to delete course: $e',
           backgroundColor: Colors.red,
           colorText: Colors.white,
-          snackPosition: SnackPosition.TOP,
           duration: Duration(seconds: 3),
         );
       }
@@ -1340,20 +1341,20 @@ class _CourseScreenState extends State<CourseScreen>
         await _loadCourses();
 
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Success',
           'Selected courses deleted successfully',
           backgroundColor: Colors.green,
           colorText: Colors.white,
-          snackPosition: SnackPosition.TOP,
           duration: Duration(seconds: 2),
         );
       } catch (e) {
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Error',
           'Failed to delete courses: $e',
           backgroundColor: Colors.red,
           colorText: Colors.white,
-          snackPosition: SnackPosition.TOP,
           duration: Duration(seconds: 3),
         );
       }
@@ -1372,6 +1373,7 @@ class _CourseScreenState extends State<CourseScreen>
       await controller.handleCourse(duplicatedCourse, isUpdate: false);
       _loadCourses();
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Success',
         'Course duplicated successfully',
         backgroundColor: Colors.green,
@@ -1379,6 +1381,7 @@ class _CourseScreenState extends State<CourseScreen>
       );
     } catch (e) {
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Error',
         'Failed to duplicate course: $e',
         backgroundColor: Colors.red,
@@ -1448,6 +1451,7 @@ class _CourseScreenState extends State<CourseScreen>
       _loadCourses();
 
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Success',
         'Courses updated successfully',
         backgroundColor: Colors.green,
@@ -1455,6 +1459,7 @@ class _CourseScreenState extends State<CourseScreen>
       );
     } catch (e) {
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Error',
         'Failed to update courses: $e',
         backgroundColor: Colors.red,

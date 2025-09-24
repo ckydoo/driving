@@ -320,6 +320,7 @@ class SyncController extends GetxController {
         // Show appropriate message based on result
         if (isPartial && errors.isNotEmpty) {
           Get.snackbar(
+            snackPosition: SnackPosition.BOTTOM,
             'Upload Partially Complete',
             '$uploaded items uploaded, ${errors.length} failed',
             icon: Icon(Icons.warning, color: Colors.white),
@@ -333,6 +334,7 @@ class SyncController extends GetxController {
           await debugSyncStatus();
         } else {
           Get.snackbar(
+            snackPosition: SnackPosition.BOTTOM,
             'Upload Complete',
             'Changes uploaded successfully',
             icon: Icon(Icons.cloud_upload, color: Colors.white),
@@ -345,6 +347,7 @@ class SyncController extends GetxController {
         syncStatus.value = 'Upload failed';
 
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Upload Failed',
           result.message,
           icon: Icon(Icons.cloud_off, color: Colors.white),
@@ -362,6 +365,7 @@ class SyncController extends GetxController {
         syncStatus.value = 'Upload error';
 
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Upload Error',
           e.toString(),
           icon: Icon(Icons.error, color: Colors.white),
@@ -421,6 +425,7 @@ class SyncController extends GetxController {
         print('   Uploaded: ${details['uploaded_changes'] ?? 0} changes');
 
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Sync Complete',
           'Data synchronized successfully using ${details['strategy'] ?? 'production'} strategy',
           icon: Icon(Icons.sync, color: Colors.white),
@@ -432,6 +437,7 @@ class SyncController extends GetxController {
         syncStatus.value = 'Sync failed';
 
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Sync Failed',
           result.message,
           icon: Icon(Icons.sync_problem, color: Colors.white),
@@ -449,6 +455,7 @@ class SyncController extends GetxController {
         print('❌ Production sync error: $e');
 
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Sync Error',
           'Production sync failed: ${e.toString()}',
           icon: Icon(Icons.error, color: Colors.white),
@@ -588,6 +595,7 @@ class SyncController extends GetxController {
         updateLastSyncDisplay();
 
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Sync Complete',
           'Data synchronized successfully',
           icon: Icon(Icons.sync, color: Colors.white),
@@ -599,6 +607,7 @@ class SyncController extends GetxController {
         syncStatus.value = 'Sync failed';
 
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Sync Failed',
           result.message,
           icon: Icon(Icons.sync_problem, color: Colors.white),
@@ -617,6 +626,7 @@ class SyncController extends GetxController {
         print('❌ Full sync error: $e');
 
         Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
           'Sync Error',
           e.toString(),
           icon: Icon(Icons.error, color: Colors.white),
@@ -701,6 +711,7 @@ class SyncController extends GetxController {
     _saveSyncSettings();
 
     Get.snackbar(
+      snackPosition: SnackPosition.BOTTOM,
       'Auto-Sync ${enabled ? 'Enabled' : 'Disabled'}',
       enabled
           ? 'Data will sync automatically every ${syncIntervalMinutes.value} minutes'
@@ -719,6 +730,7 @@ class SyncController extends GetxController {
 
     if (minutes < 5 || minutes > 1440) {
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Invalid Interval',
         'Sync interval must be between 5 minutes and 24 hours',
         backgroundColor: Colors.red,
@@ -736,6 +748,7 @@ class SyncController extends GetxController {
     }
 
     Get.snackbar(
+      snackPosition: SnackPosition.BOTTOM,
       'Sync Interval Updated',
       'Data will sync every $minutes minutes',
       backgroundColor: Colors.blue,

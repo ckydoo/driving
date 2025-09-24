@@ -2170,23 +2170,38 @@ class _InstructorDetailsScreenState extends State<InstructorDetailsScreen>
   }
 
   void _scheduleLesson() {
-    Get.snackbar('Info', 'Schedule lesson functionality');
+    Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
+        'Info',
+        'Schedule lesson functionality');
   }
 
   void _assignVehicle() {
-    Get.snackbar('Info', 'Assign vehicle functionality');
+    Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
+        'Info',
+        'Assign vehicle functionality');
   }
 
   void _sendMessage() {
-    Get.snackbar('Info', 'Send message functionality');
+    Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
+        'Info',
+        'Send message functionality');
   }
 
   void _editInstructor() {
-    Get.snackbar('Info', 'Edit instructor functionality');
+    Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
+        'Info',
+        'Edit instructor functionality');
   }
 
   void _toggleStatus() {
-    Get.snackbar('Info', 'Toggle status functionality');
+    Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
+        'Info',
+        'Toggle status functionality');
   }
 
   void _deleteInstructor() {
@@ -2202,7 +2217,10 @@ class _InstructorDetailsScreenState extends State<InstructorDetailsScreen>
           ElevatedButton(
             onPressed: () {
               Get.back();
-              Get.snackbar('Info', 'Delete instructor functionality');
+              Get.snackbar(
+                  snackPosition: SnackPosition.BOTTOM,
+                  'Info',
+                  'Delete instructor functionality');
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,
@@ -2217,7 +2235,8 @@ class _InstructorDetailsScreenState extends State<InstructorDetailsScreen>
 
   void _addNote() {
     if (_noteController.text.trim().isEmpty) {
-      Get.snackbar('Error', 'Please enter a note');
+      Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM, 'Error', 'Please enter a note');
       return;
     }
 
@@ -2231,18 +2250,23 @@ class _InstructorDetailsScreenState extends State<InstructorDetailsScreen>
       _noteController.clear();
     });
 
-    Get.snackbar('Success', 'Note added successfully');
+    Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
+        'Success',
+        'Note added successfully');
   }
 
   void _editNote(Map<String, dynamic> note) {
-    Get.snackbar('Info', 'Edit note functionality');
+    Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM, 'Info', 'Edit note functionality');
   }
 
   void _deleteNote(int noteId) {
     setState(() {
       _instructorNotes.removeWhere((note) => note['id'] == noteId);
     });
-    Get.snackbar('Success', 'Note deleted');
+    Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM, 'Success', 'Note deleted');
   }
 
   Future<void> _uploadFile() async {
@@ -2258,15 +2282,24 @@ class _InstructorDetailsScreenState extends State<InstructorDetailsScreen>
             'uploaded_at': DateTime.now(),
           });
         });
-        Get.snackbar('Success', 'File uploaded successfully');
+        Get.snackbar(
+            snackPosition: SnackPosition.BOTTOM,
+            'Success',
+            'File uploaded successfully');
       }
     } catch (e) {
-      Get.snackbar('Error', 'Failed to upload file');
+      Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
+          'Error',
+          'Failed to upload file');
     }
   }
 
   void _downloadFile(Map<String, dynamic> attachment) {
-    Get.snackbar('Info', 'Downloading ${attachment['file_name']}');
+    Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
+        'Info',
+        'Downloading ${attachment['file_name']}');
   }
 
   void _deleteAttachment(int attachmentId) {
@@ -2274,7 +2307,8 @@ class _InstructorDetailsScreenState extends State<InstructorDetailsScreen>
       _instructorAttachments
           .removeWhere((attachment) => attachment['id'] == attachmentId);
     });
-    Get.snackbar('Success', 'File deleted');
+    Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM, 'Success', 'File deleted');
   }
 }
 

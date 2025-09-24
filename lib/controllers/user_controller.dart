@@ -90,6 +90,7 @@ class UserController extends GetxController {
       error(e.toString());
       print('UserController: Error fetching users - ${e.toString()}');
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Error',
         'Failed to load users: ${e.toString()}',
         backgroundColor: Colors.red,
@@ -145,6 +146,7 @@ class UserController extends GetxController {
       String userFriendlyError = _parseError(e.toString());
 
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Error',
         userFriendlyError,
         backgroundColor: Colors.red,
@@ -346,6 +348,7 @@ class UserController extends GetxController {
     print('✅ User updated locally successfully');
 
     Get.snackbar(
+      snackPosition: SnackPosition.BOTTOM,
       'Success',
       '${user.fname} ${user.lname} updated successfully',
       backgroundColor: Colors.green,
@@ -361,6 +364,7 @@ class UserController extends GetxController {
     if (duplicateErrors.isNotEmpty) {
       final errorMessages = duplicateErrors.values.join('\n');
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Duplicate Found',
         errorMessages,
         backgroundColor: Colors.orange,
@@ -397,6 +401,7 @@ class UserController extends GetxController {
 
     // Step 5: Show success message
     Get.snackbar(
+      snackPosition: SnackPosition.BOTTOM,
       'Success',
       '${user.fname} ${user.lname} saved successfully',
       backgroundColor: Colors.green,
@@ -449,6 +454,7 @@ class UserController extends GetxController {
       print('UserController: User deleted successfully');
 
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Success',
         '${userToDelete.fname} ${userToDelete.lname != 'User' ? userToDelete.lname : ''} deleted successfully',
         backgroundColor: Colors.green,
@@ -458,6 +464,7 @@ class UserController extends GetxController {
     } catch (e) {
       error(e.toString());
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Error',
         'Failed to delete user: ${e.toString()}',
         backgroundColor: Colors.red,
@@ -493,6 +500,7 @@ class UserController extends GetxController {
       print('UserController: Successfully deleted ${userIds.length} users');
 
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Success',
         'Successfully deleted ${userIds.length} users',
         backgroundColor: Colors.green,
@@ -503,6 +511,7 @@ class UserController extends GetxController {
       error(e.toString());
       print('UserController: Error deleting multiple users - ${e.toString()}');
       Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
         'Error',
         'Failed to delete users: ${e.toString()}',
         backgroundColor: Colors.red,

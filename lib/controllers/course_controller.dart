@@ -75,6 +75,7 @@ class CourseController extends GetxController {
         'Failed to load courses: ${e.toString()}',
         backgroundColor: Colors.red.shade100,
         colorText: Colors.red.shade800,
+        snackPosition: SnackPosition.BOTTOM,
         duration: Duration(seconds: 5),
       );
     } finally {
@@ -129,6 +130,7 @@ class CourseController extends GetxController {
         isUpdate
             ? 'Course "${course.name}" updated successfully'
             : 'Course "${course.name}" created successfully',
+        snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Colors.green.shade100,
         colorText: Colors.green.shade800,
       );
@@ -141,6 +143,7 @@ class CourseController extends GetxController {
         'Course operation failed: ${e.toString()}',
         backgroundColor: Colors.red.shade100,
         colorText: Colors.red.shade800,
+        snackPosition: SnackPosition.BOTTOM,
         duration: Duration(seconds: 5),
       );
     } finally {
@@ -191,6 +194,7 @@ class CourseController extends GetxController {
         'Course "${course.name}" deleted successfully',
         backgroundColor: Colors.green.shade100,
         colorText: Colors.green.shade800,
+        snackPosition: SnackPosition.BOTTOM,
       );
     } catch (e) {
       error('Delete failed: ${e.toString()}');
@@ -201,6 +205,7 @@ class CourseController extends GetxController {
         'Failed to delete course: ${e.toString()}',
         backgroundColor: Colors.red.shade100,
         colorText: Colors.red.shade800,
+        snackPosition: SnackPosition.BOTTOM,
         duration: Duration(seconds: 5),
       );
     } finally {
@@ -237,6 +242,7 @@ class CourseController extends GetxController {
         'Error',
         'Failed to update course: ${e.toString()}',
         backgroundColor: Colors.red.shade100,
+        snackPosition: SnackPosition.BOTTOM,
         colorText: Colors.red.shade800,
       );
     }
