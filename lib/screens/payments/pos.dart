@@ -1,5 +1,4 @@
-// lib/screens/payments/enhanced_pos_screen.dart
-import 'package:driving/services/receipt_service.dart';
+// lib/screens/payments/pos_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
@@ -19,850 +18,618 @@ class POSScreen extends StatefulWidget {
   _POSScreenState createState() => _POSScreenState();
 }
 
-class _POSScreenState extends State<POSScreen> with TickerProviderStateMixin {
+class _POSScreenState extends State<POSScreen> {
   final BillingController billingController = Get.find();
   final UserController userController = Get.find();
   final CourseController courseController = Get.find();
 
-  // Animation Controllers
-  late AnimationController _fadeController;
-  late AnimationController _slideController;
-  late AnimationController _scaleController;
-  late Animation<double> _fadeAnimation;
-  late Animation<Offset> _slideAnimation;
-  late Animation<double> _scaleAnimation;
-
-  // Search and Selection
-  final TextEditingController _searchController = TextEditingController();
-  final FocusNode _searchFocusNode = FocusNode();
-  User? _selectedStudent;
-  List<User> _searchResults = [];
-  List<User> _recentStudents = [];
-  bool _showSearchResults = false;
-
-  // Payment Processing
-  final TextEditingController _paymentAmountController =
-      TextEditingController();
-  final TextEditingController _notesController = TextEditingController();
-  final FocusNode _amountFocusNode = FocusNode();
-  String _paymentMethod = 'Cash';
-  bool _generateReceipt = true;
-  bool _isProcessing = false;
-
-  // Invoice Creation
-  Course? _selectedCourse;
-  final TextEditingController _lessonsController =
-      TextEditingController(text: '1');
-  DateTime _invoiceDueDate = DateTime.now().add(Duration(days: 30));
-
-  // UI State
-  String _operationMode = 'payment';
-  String _currentStep = 'search'; // search, details, payment, confirmation
-
-  // Quick Actions
-  final List<double> _quickAmounts = [20.0];
-  final GlobalKey<FormState> _paymentFormKey = GlobalKey<FormState>();
-  String? _paymentAmountError;
-  bool _isFormValid = false; // ADD THIS FOR BUTTON STATE
-
-  @override
-  void initState() {
-    super.initState();
-    _initializeAnimations();
-    _loadData();
-    _setupKeyboardShortcuts();
-    _loadRecentStudents();
-    _paymentAmountError = null;
-  }
-
-  // Helper method to get screen breakpoints
+  // Screen responsiveness
   bool get _isMobile => MediaQuery.of(context).size.width < 768;
   bool get _isTablet =>
       MediaQuery.of(context).size.width >= 768 &&
       MediaQuery.of(context).size.width < 1024;
-  bool get _isDesktop => MediaQuery.of(context).size.width >= 1024;
 
-  // Responsive padding
-  EdgeInsets get _responsivePadding {
-    if (_isMobile) return EdgeInsets.all(8);
-    if (_isTablet) return EdgeInsets.all(16);
-    return EdgeInsets.all(20);
-  }
+  EdgeInsets get _responsivePadding => EdgeInsets.all(_isMobile ? 16 : 24);
+  double get _responsiveFontSize => _isMobile ? 16 : 14;
 
-  // Responsive text scaling
-  double get _textScaleFactor {
-    if (_isMobile) return 0.85;
-    if (_isTablet) return 0.95;
-    return 1.0;
-  }
+  // Student Selection
+  final TextEditingController _studentSearchController =
+      TextEditingController();
+  final FocusNode _studentSearchFocus = FocusNode();
+  User? _selectedStudent;
+  List<User> _studentSearchResults = [];
+  bool _showStudentResults = false;
 
-  void _initializeAnimations() {
-    _fadeController = AnimationController(
-      duration: Duration(milliseconds: 300),
-      vsync: this,
-    );
-    _slideController = AnimationController(
-      duration: Duration(milliseconds: 400),
-      vsync: this,
-    );
-    _scaleController = AnimationController(
-      duration: Duration(milliseconds: 200),
-      vsync: this,
-    );
+  // Shopping Cart
+  final List<CartItem> _cartItems = [];
+  double get _cartTotal =>
+      _cartItems.fold(0.0, (sum, item) => sum + item.totalPrice);
 
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _fadeController, curve: Curves.easeInOut),
-    );
-    _slideAnimation =
-        Tween<Offset>(begin: Offset(0, 0.5), end: Offset.zero).animate(
-      CurvedAnimation(parent: _slideController, curve: Curves.easeOutCubic),
-    );
-    _scaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
-      CurvedAnimation(parent: _scaleController, curve: Curves.elasticOut),
-    );
+  // Payment
+  String _paymentMethod = 'Cash';
+  final TextEditingController _notesController = TextEditingController();
+  bool _isProcessing = false;
 
-    _fadeController.forward();
-    _slideController.forward();
-    _scaleController.forward();
-  }
-
-  void _setupKeyboardShortcuts() {
-    _searchFocusNode.addListener(() {
-      if (_searchFocusNode.hasFocus) {
-        setState(() {
-          _showSearchResults = true;
-        });
-      }
+  @override
+  void initState() {
+    super.initState();
+    _studentSearchController.addListener(_onStudentSearchChanged);
+    // Load users when screen initializes
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadUsers();
     });
   }
 
   @override
   void dispose() {
-    _fadeController.dispose();
-    _slideController.dispose();
-    _scaleController.dispose();
-    _searchController.dispose();
-    _searchFocusNode.dispose();
-    _paymentAmountController.dispose();
+    _studentSearchController.dispose();
+    _studentSearchFocus.dispose();
     _notesController.dispose();
-    _amountFocusNode.dispose();
-    _lessonsController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadData() async {
-    await userController.fetchUsers();
-    await billingController.fetchBillingData();
-    await courseController.fetchCourses();
+  // Load users if not already loaded
+  void _loadUsers() async {
+    try {
+      if (userController.users.isEmpty) {
+        await userController.fetchUsers(); // Assuming this method exists
+        print('Loaded ${userController.users.length} users');
+      } else {
+        print('Users already loaded: ${userController.users.length}');
+      }
+    } catch (e) {
+      print('Error loading users: $e');
+    }
   }
 
-  void _loadRecentStudents() {
-    // Load recently processed students
-    _recentStudents = userController.users
-        .where((user) => user.role.toLowerCase() == 'student')
+  void _onStudentSearchChanged() {
+    final query = _studentSearchController.text.trim();
+
+    if (query.isEmpty) {
+      setState(() {
+        _studentSearchResults.clear();
+        _showStudentResults = false;
+      });
+      return;
+    }
+
+    print('Searching for: "$query"');
+    print('Total users available: ${userController.users.length}');
+
+    // Get all users first
+    final allUsers = userController.users;
+
+    if (allUsers.isEmpty) {
+      print('No users loaded yet, attempting to load...');
+      _loadUsers();
+      return;
+    }
+
+    // Filter for students first
+    final allStudents = allUsers.where((user) {
+      final role = user.role?.toLowerCase() ?? '';
+      return role == 'student';
+    }).toList();
+
+    print('Found ${allStudents.length} students total');
+
+    // Then filter by search query
+    final matchingStudents = allStudents
+        .where((user) {
+          final queryLower = query.toLowerCase();
+
+          // Get user fields safely
+          final firstName = user.fname?.toLowerCase() ?? '';
+          final lastName = user.lname?.toLowerCase() ?? '';
+          final fullName = '$firstName $lastName'.trim();
+          final email = user.email?.toLowerCase() ?? '';
+          final phone = user.phone ?? '';
+          final idNumber = user.idnumber?.toLowerCase() ?? '';
+
+          // Check all possible matches
+          final matches = fullName.contains(queryLower) ||
+              firstName.contains(queryLower) ||
+              lastName.contains(queryLower) ||
+              email.contains(queryLower) ||
+              phone.contains(query) ||
+              idNumber.contains(queryLower);
+
+          return matches;
+        })
         .take(5)
         .toList();
+
+    print('Final matching students: ${matchingStudents.length}');
+
+    setState(() {
+      _studentSearchResults = matchingStudents;
+      _showStudentResults = matchingStudents.isNotEmpty;
+    });
   }
 
-  void _showEnhancedSnackbar(String message, SnackbarType type) {
-    final color = type == SnackbarType.success
-        ? Colors.green
-        : type == SnackbarType.error
-            ? Colors.red
-            : Colors.blue;
+  void _selectStudent(User student) {
+    setState(() {
+      _selectedStudent = student;
+      _studentSearchController.text =
+          '${student.fname ?? ''} ${student.lname ?? ''}'.trim();
+      _showStudentResults = false;
+    });
+    FocusScope.of(context).unfocus();
+  }
 
-    final icon = type == SnackbarType.success
-        ? Icons.check_circle
-        : type == SnackbarType.error
-            ? Icons.error
-            : Icons.info;
+  void _addToCart(Course course, {int quantity = 1}) {
+    setState(() {
+      final existingIndex =
+          _cartItems.indexWhere((item) => item.course.id == course.id);
+      if (existingIndex >= 0) {
+        _cartItems[existingIndex] = _cartItems[existingIndex].copyWith(
+          quantity: _cartItems[existingIndex].quantity + quantity,
+        );
+      } else {
+        _cartItems.add(CartItem(
+          course: course,
+          quantity: quantity,
+          pricePerUnit: course.price.toDouble(),
+        ));
+      }
+    });
 
-    Get.snackbar(
-      '',
-      '',
-      titleText: Container(),
-      messageText: Row(
-        children: [
-          Icon(icon, color: Colors.white, size: 24),
-          SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              message,
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-        ],
+    // Show feedback
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('${course.name} added to cart'),
+        duration: Duration(seconds: 1),
+        backgroundColor: Colors.green,
       ),
-      backgroundColor: color.shade600,
-      snackPosition: SnackPosition.TOP,
-      margin: EdgeInsets.all(16),
-      borderRadius: 12,
-      duration: Duration(seconds: 3),
-      animationDuration: Duration(milliseconds: 300),
     );
   }
 
-  // EXACT COPY from student_details_screen.dart _buildBillingTab method
-  double _getStudentBalance(User student) {
-    final studentInvoices = billingController.invoices
-        .where((invoice) => invoice.studentId == student.id)
-        .toList();
-
-    final totalBalance = studentInvoices.fold<double>(
-        0.0, (sum, invoice) => sum + invoice.balance);
-
-    return totalBalance;
+  void _removeFromCart(int index) {
+    setState(() {
+      _cartItems.removeAt(index);
+    });
   }
 
-  // EXACT COPY from payment_dialog.dart logic
-  List<Invoice> _getStudentInvoices(User student) {
-    return billingController.invoices
-        .where((invoice) => invoice.studentId == student.id)
-        .toList();
+  void _updateCartQuantity(int index, int newQuantity) {
+    if (newQuantity <= 0) {
+      _removeFromCart(index);
+      return;
+    }
+    setState(() {
+      _cartItems[index] = _cartItems[index].copyWith(quantity: newQuantity);
+    });
   }
 
-  // EXACT COPY from payment_dialog.dart - filter unpaid invoices
-  List<Invoice> _getUnpaidInvoices(User student) {
-    return billingController.invoices
-        .where(
-            (invoice) => invoice.studentId == student.id && invoice.balance > 0)
-        .toList();
+  void _clearCart() {
+    setState(() {
+      _cartItems.clear();
+    });
+  }
+
+  Future<void> _processTransaction({bool payNow = true}) async {
+    if (_selectedStudent == null) {
+      _showError('Please select a student');
+      return;
+    }
+    if (_cartItems.isEmpty) {
+      _showError('Please add items to cart');
+      return;
+    }
+
+    setState(() {
+      _isProcessing = true;
+    });
+
+    try {
+      if (payNow) {
+        // Process payment immediately
+        await _processPayment();
+      } else {
+        // Create invoice only
+        await _createInvoiceOnly();
+      }
+
+      _showSuccess(payNow
+          ? 'Payment processed successfully!'
+          : 'Invoice created successfully!');
+      _clearAll();
+    } catch (e) {
+      _showError('Error: ${e.toString()}');
+    } finally {
+      setState(() {
+        _isProcessing = false;
+      });
+    }
+  }
+
+  Future<void> _processPayment() async {
+    for (final item in _cartItems) {
+      // Create invoice data (without setting ID - let database auto-increment)
+      final invoiceNumber =
+          'INV-${DateTime.now().toUtc().millisecondsSinceEpoch}';
+
+      final invoice = Invoice(
+        studentId: _selectedStudent!.id!,
+        courseId: item.course.id!,
+        invoiceNumber: invoiceNumber,
+        totalAmount: item.totalPrice,
+        pricePerLesson: item.course.price.toDouble(),
+        amountPaid: item.totalPrice,
+        dueDate: DateTime.now(),
+        status: 'paid',
+        createdAt: DateTime.now(),
+        lessons: item.quantity,
+      );
+
+      print(
+          'Creating invoice: $invoiceNumber for ${item.course.name} x${item.quantity}');
+
+      // Save invoice and capture the database-assigned ID
+      await billingController.createInvoice(invoice);
+
+      // Since createInvoice doesn't return the ID, we need to get the latest invoice
+      // by finding the one we just created using the unique invoice number
+      await billingController.fetchBillingData(); // Refresh to get latest data
+
+      final createdInvoice = billingController.invoices.firstWhere(
+          (inv) => inv.invoiceNumber == invoiceNumber,
+          orElse: () => throw Exception(
+              'Failed to find created invoice: $invoiceNumber'));
+
+      print('Found created invoice with database ID: ${createdInvoice.id}');
+
+      // Generate reference for payment
+      final reference = 'POS-${DateTime.now().toUtc().millisecondsSinceEpoch}';
+
+      // Create payment with the correct database-assigned invoice ID
+      final payment = Payment(
+        invoiceId: createdInvoice
+            .id!, // Use the actual database ID, not the invoice number!
+        amount: item.totalPrice,
+        method: _convertPaymentMethod(_paymentMethod),
+        paymentDate: DateTime.now(),
+        notes: _notesController.text.trim().isEmpty
+            ? 'POS Payment'
+            : _notesController.text.trim(),
+        reference: reference,
+        receiptGenerated: false,
+        userId: _selectedStudent!.id!,
+      );
+
+      print('Creating payment with correct database invoice ID:');
+      print('- InvoiceId (DB ID): ${payment.invoiceId}');
+      print('- Amount: ${payment.amount}');
+      print('- Method: ${payment.method}');
+      print('- Reference: ${payment.reference}');
+      print('- Notes: ${payment.notes}');
+      print('- UserId: ${payment.userId}');
+
+      // Record the payment
+      await billingController.recordPayment(payment);
+
+      print('Payment recorded successfully for invoice ${createdInvoice.id}');
+    }
+  }
+
+  Future<void> _createInvoiceOnly() async {
+    for (final item in _cartItems) {
+      final invoice = Invoice(
+        studentId: _selectedStudent!.id!,
+        courseId: item.course.id!,
+        invoiceNumber: 'INV-${DateTime.now().toUtc().millisecondsSinceEpoch}',
+        totalAmount: item.totalPrice,
+        pricePerLesson: item.course.price.toDouble(),
+        amountPaid: 0.0,
+        dueDate: DateTime.now().add(Duration(days: 30)),
+        status: 'pending',
+        createdAt: DateTime.now(),
+        lessons: item.quantity,
+      );
+
+      await billingController.createInvoice(invoice);
+
+      print('Invoice created successfully: ${invoice.invoiceNumber}');
+    }
+  }
+
+  // Helper method to convert payment method to backend format
+  String _convertPaymentMethod(String method) {
+    switch (method.toLowerCase()) {
+      case 'cash':
+        return 'cash';
+      case 'card':
+        return 'card';
+      case 'bank transfer':
+        return 'bank_transfer';
+      case 'mobile money':
+        return 'mobile_payment';
+      default:
+        return method.toLowerCase().replaceAll(' ', '_');
+    }
+  }
+
+  void _clearAll() {
+    setState(() {
+      _selectedStudent = null;
+      _studentSearchController.clear();
+      _cartItems.clear();
+      _notesController.clear();
+      _paymentMethod = 'Cash';
+      _showStudentResults = false;
+    });
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
+    );
+  }
+
+  void _showSuccess(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.green),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return MediaQuery(
-      data: MediaQuery.of(context).copyWith(
-        textScaleFactor: _textScaleFactor,
-      ),
-      child: Scaffold(
-        backgroundColor: Colors.grey[50],
-        appBar: _buildEnhancedAppBar(),
-        body: SafeArea(
-          child: FadeTransition(
-            opacity: _fadeAnimation,
-            child: SlideTransition(
-              position: _slideAnimation,
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  // Mobile layout - single column with tabs
-                  if (_isMobile) {
-                    return _buildMobileLayout();
-                  }
-                  // Tablet and Desktop layout - side by side panels
-                  else {
-                    return _buildDesktopTabletLayout(constraints);
-                  }
-                },
-              ),
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('POS System'),
+        backgroundColor: Colors.blue.shade700,
+        foregroundColor: Colors.white,
+        actions: [
+          if (_cartItems.isNotEmpty)
+            IconButton(
+              icon: Icon(Icons.clear_all),
+              onPressed: _clearCart,
+              tooltip: 'Clear Receipt',
             ),
-          ),
-        ),
+        ],
       ),
+      body: _isMobile ? _buildMobileLayout() : _buildDesktopLayout(),
     );
   }
 
   Widget _buildMobileLayout() {
     return Column(
       children: [
-        // Operation Mode Tabs
-        Container(
-          color: Colors.grey[50],
-          child: Row(
-            children: [
-              Expanded(
-                child: _buildModeButton(
-                  'Payment',
-                  'Process payments quickly',
-                  Icons.payment,
-                  'payment',
-                  Colors.green,
-                ),
-              ),
-              Expanded(
-                child: _buildModeButton(
-                  'Invoice',
-                  'Create new invoices',
-                  Icons.receipt,
-                  'invoice',
-                  Colors.blue,
-                ),
-              ),
-            ],
-          ),
-        ),
-        // Main Content
+        // Student Selection Card
+        _buildStudentSelectionCard(),
+
+        // Cart Summary (Compact)
+        if (_cartItems.isNotEmpty) _buildMobileCartSummary(),
+
+        // Course Catalog
         Expanded(
-          child: SingleChildScrollView(
-            padding: _responsivePadding,
-            child: Column(
-              children: [
-                _buildStudentPanel(),
-                SizedBox(height: 16),
-                _buildOperationForm(),
-              ],
-            ),
-          ),
+          child: _buildCourseCatalog(),
         ),
+
+        // Bottom Action Panel
+        _buildMobileActionPanel(),
       ],
     );
   }
 
-  Widget _buildDesktopTabletLayout(BoxConstraints constraints) {
+  Widget _buildDesktopLayout() {
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Left Panel - Student Search & Selection
+        // Left Panel - Student & Catalog
+        Expanded(
+          flex: 2,
+          child: Column(
+            children: [
+              _buildStudentSelectionCard(),
+              Expanded(child: _buildCourseCatalog()),
+            ],
+          ),
+        ),
+
+        // Right Panel - Cart & Payment
         Container(
-          width: _isTablet
-              ? constraints.maxWidth * 0.4
-              : constraints.maxWidth * 0.35,
+          width: 400,
           decoration: BoxDecoration(
-            color: Colors.grey[50],
-            border: Border(right: BorderSide(color: Colors.grey.shade300)),
+            color: Colors.grey.shade50,
+            border: Border(left: BorderSide(color: Colors.grey.shade300)),
           ),
           child: Column(
             children: [
-              // Operation Mode Selector
-              Container(
-                padding: _responsivePadding,
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: _buildModeButton(
-                        'Payment',
-                        'Process payments',
-                        Icons.payment,
-                        'payment',
-                        Colors.green,
-                      ),
-                    ),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: _buildModeButton(
-                        'Invoice',
-                        'Create invoices',
-                        Icons.receipt,
-                        'invoice',
-                        Colors.blue,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: _responsivePadding,
-                  child: _buildStudentPanel(),
-                ),
-              ),
+              Expanded(child: _buildCartPanel()),
+              _buildPaymentPanel(),
             ],
           ),
         ),
-        // Right Panel - Operation Form
-        Expanded(
-          child: Container(
-            padding: _responsivePadding,
-            child: _buildOperationsPanel(),
-          ),
-        ),
       ],
     );
   }
 
-  PreferredSizeWidget _buildEnhancedAppBar() {
-    return AppBar(
-      title: _isMobile
-          ? Text('Make Payments & Billing',
-              style: TextStyle(fontWeight: FontWeight.bold))
-          : Row(
-              children: [
-                Container(
-                  padding: EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(Icons.point_of_sale, color: Colors.white),
-                ),
-                SizedBox(width: 12),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Point of Sale',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 20,
-                        color: Colors.white,
-                      ),
-                    ),
-                    Text(
-                      'Process payments & create invoices',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.white.withOpacity(0.8),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-      backgroundColor: Colors.blue[700],
-      elevation: 0,
-      actions: [
-        _buildQuickAction(Icons.refresh, 'Refresh', _loadData),
-        if (!_isMobile)
-          _buildQuickAction(Icons.clear_all, 'Clear All', _clearAll),
-        SizedBox(width: 8),
-      ],
-    );
-  }
-
-  Widget _buildQuickAction(
-      IconData icon, String tooltip, VoidCallback onPressed) {
-    return Tooltip(
-      message: tooltip,
-      child: Container(
-        margin: EdgeInsets.symmetric(horizontal: 4),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(8),
-            onTap: onPressed,
-            child: Container(
-              padding: EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.white.withOpacity(0.3)),
-              ),
-              child: Icon(icon, color: Colors.white, size: 20),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildModeButton(
-      String title, String subtitle, IconData icon, String mode, Color color) {
-    final isSelected = _operationMode == mode;
-    return Container(
-      margin: EdgeInsets.symmetric(vertical: 4),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: () => setState(() => _operationMode = mode),
-          child: Container(
-            padding: EdgeInsets.all(_isMobile ? 12 : 16),
-            decoration: BoxDecoration(
-              color: isSelected ? color.withOpacity(0.1) : Colors.transparent,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: isSelected ? color : Colors.grey.shade300,
-                width: 2,
-              ),
-            ),
-            child: Column(
-              children: [
-                Container(
-                  padding: EdgeInsets.all(_isMobile ? 8 : 12),
-                  decoration: BoxDecoration(
-                    color: isSelected ? color : Colors.grey.shade400,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(
-                    icon,
-                    color: Colors.white,
-                    size: _isMobile ? 20 : 24,
-                  ),
-                ),
-                SizedBox(height: 8),
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: _isMobile ? 14 : 16,
-                    color: isSelected ? color : Colors.grey[800],
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                if (!_isMobile) ...[
-                  SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[600],
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStudentPanel() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSearchSection(),
-        SizedBox(height: 16),
-        if (_selectedStudent != null) _buildStudentInfoCard(),
-        if (_recentStudents.isNotEmpty && _selectedStudent == null)
-          _buildRecentStudentsCard(),
-      ],
-    );
-  }
-
-  Widget _buildSearchSection() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            blurRadius: 20,
-            spreadRadius: 2,
-            offset: Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Padding(
-            padding: _responsivePadding,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.search, color: Colors.blue.shade600),
-                    SizedBox(width: 8),
-                    Text(
-                      'Find Student',
-                      style: TextStyle(
-                        fontSize: _isMobile ? 16 : 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey[800],
-                      ),
-                    ),
-                    Spacer(),
-                    if (_selectedStudent != null)
-                      IconButton(
-                        icon: Icon(Icons.close, size: 20),
-                        onPressed: () => setState(() {
-                          _selectedStudent = null;
-                          _searchController.clear();
-                        }),
-                        constraints:
-                            BoxConstraints(minWidth: 32, minHeight: 32),
-                        padding: EdgeInsets.zero,
-                      ),
-                  ],
-                ),
-                SizedBox(height: 12),
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.grey[50],
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey.shade300),
-                  ),
-                  child: TextField(
-                    controller: _searchController,
-                    focusNode: _searchFocusNode,
-                    decoration: InputDecoration(
-                      hintText: 'Search by name, email, or phone...',
-                      prefixIcon:
-                          Icon(Icons.search, color: Colors.grey.shade500),
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.all(16),
-                      hintStyle: TextStyle(color: Colors.grey.shade500),
-                    ),
-                    onChanged: _searchStudents,
-                    textInputAction: TextInputAction.search,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (_showSearchResults && _searchResults.isNotEmpty)
-            Container(
-              constraints: BoxConstraints(maxHeight: 300),
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: _searchResults.length,
-                itemBuilder: (context, index) {
-                  final student = _searchResults[index];
-                  return _buildStudentListTile(student);
-                },
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStudentListTile(User student) {
-    final balance = _getStudentBalance(student);
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () => _selectStudent(student),
-        child: Container(
-          padding: EdgeInsets.symmetric(
-            horizontal: _responsivePadding.horizontal,
-            vertical: 12,
-          ),
-          decoration: BoxDecoration(
-            border: Border(top: BorderSide(color: Colors.grey.shade200)),
-          ),
-          child: Row(
-            children: [
-              CircleAvatar(
-                radius: _isMobile ? 20 : 24,
-                backgroundColor: Colors.blue.shade100,
-                child: Text(
-                  student.fname[0].toUpperCase(),
-                  style: TextStyle(
-                    color: Colors.blue.shade700,
-                    fontWeight: FontWeight.bold,
-                    fontSize: _isMobile ? 14 : 16,
-                  ),
-                ),
-              ),
-              SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${student.fname} ${student.lname}',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: _isMobile ? 14 : 16,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (student.email.isNotEmpty)
-                      Text(
-                        student.email,
-                        style: TextStyle(
-                          color: Colors.grey.shade600,
-                          fontSize: _isMobile ? 12 : 14,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    if (balance > 0)
-                      Text(
-                        'Balance: \$${balance.toStringAsFixed(2)}',
-                        style: TextStyle(
-                          color: Colors.red.shade600,
-                          fontSize: _isMobile ? 12 : 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              Icon(Icons.arrow_forward_ios,
-                  size: _isMobile ? 16 : 18, color: Colors.grey.shade400),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStudentInfoCard() {
-    if (_selectedStudent == null) return SizedBox.shrink();
-
-    final balance = _getStudentBalance(_selectedStudent!);
-    final invoices = _getStudentInvoices(_selectedStudent!);
-    final unpaidInvoices = _getUnpaidInvoices(_selectedStudent!);
+  Widget _buildStudentSelectionCard() {
+    final studentCount = userController.users
+        .where((u) => u.role?.toLowerCase() == 'student')
+        .length;
 
     return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            blurRadius: 20,
-            spreadRadius: 2,
-            offset: Offset(0, 4),
-          ),
-        ],
-      ),
+      margin: _responsivePadding,
       padding: _responsivePadding,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4)],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              CircleAvatar(
-                radius: _isMobile ? 25 : 30,
-                backgroundColor: Colors.blue.shade100,
-                child: Text(
-                  _selectedStudent!.fname[0].toUpperCase(),
-                  style: TextStyle(
-                    color: Colors.blue.shade700,
-                    fontWeight: FontWeight.bold,
-                    fontSize: _isMobile ? 18 : 22,
-                  ),
-                ),
-              ),
-              SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${_selectedStudent!.fname} ${_selectedStudent!.lname}',
-                      style: TextStyle(
-                        fontSize: _isMobile ? 16 : 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey[800],
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    SizedBox(height: 4),
-                    if (_selectedStudent!.email.isNotEmpty)
-                      Text(
-                        _selectedStudent!.email,
-                        style: TextStyle(
-                          color: Colors.grey.shade600,
-                          fontSize: _isMobile ? 12 : 14,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    if (_selectedStudent!.phone.isNotEmpty)
-                      Text(
-                        _selectedStudent!.phone,
-                        style: TextStyle(
-                          color: Colors.grey.shade600,
-                          fontSize: _isMobile ? 12 : 14,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                  ],
+              Text(
+                'Select Student',
+                style: TextStyle(
+                  fontSize: _responsiveFontSize + 2,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
             ],
           ),
-          SizedBox(height: 16),
-          // Balance and Invoice Summary
-          Container(
-            padding: EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: balance > 0 ? Colors.red.shade50 : Colors.green.shade50,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Outstanding Balance',
-                      style: TextStyle(
-                        fontSize: _isMobile ? 12 : 14,
-                        color: Colors.grey.shade700,
-                      ),
-                    ),
-                    Text(
-                      '\$${balance.toStringAsFixed(2)}',
-                      style: TextStyle(
-                        fontSize: _isMobile ? 18 : 20,
-                        fontWeight: FontWeight.bold,
-                        color: balance > 0
-                            ? Colors.red.shade700
-                            : Colors.green.shade700,
-                      ),
-                    ),
-                  ],
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      'Unpaid Invoices',
-                      style: TextStyle(
-                        fontSize: _isMobile ? 12 : 14,
-                        color: Colors.grey.shade700,
-                      ),
-                    ),
-                    Text(
-                      '${unpaidInvoices.length}',
-                      style: TextStyle(
-                        fontSize: _isMobile ? 18 : 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey.shade800,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+          SizedBox(height: 12),
+
+          // Main search field
+          TextFormField(
+            controller: _studentSearchController,
+            focusNode: _studentSearchFocus,
+            decoration: InputDecoration(
+              hintText: 'Search student by name, email, or phone...',
+              prefixIcon: Icon(Icons.search),
+              suffixIcon: _selectedStudent != null
+                  ? IconButton(
+                      icon: Icon(Icons.clear),
+                      onPressed: () {
+                        setState(() {
+                          _selectedStudent = null;
+                          _studentSearchController.clear();
+                          _showStudentResults = false;
+                        });
+                      },
+                    )
+                  : null,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
           ),
+
+          // Search results dropdown (NOT positioned, but in normal flow)
+          if (_showStudentResults)
+            Container(
+              margin: EdgeInsets.only(top: 4),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey.shade300),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black26,
+                    blurRadius: 8,
+                    offset: Offset(0, 2),
+                  )
+                ],
+              ),
+              constraints: BoxConstraints(maxHeight: 200),
+              child: _studentSearchResults.isEmpty
+                  ? Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Text(
+                        'No students found',
+                        style: TextStyle(color: Colors.grey.shade600),
+                        textAlign: TextAlign.center,
+                      ),
+                    )
+                  : ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: _studentSearchResults.length,
+                      separatorBuilder: (_, __) => Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final student = _studentSearchResults[index];
+                        final initials =
+                            '${student.fname?[0] ?? ''}${student.lname?[0] ?? ''}';
+                        final fullName =
+                            '${student.fname ?? ''} ${student.lname ?? ''}'
+                                .trim();
+
+                        return ListTile(
+                          leading: CircleAvatar(
+                            child: Text(initials.toUpperCase()),
+                            backgroundColor: Colors.blue.shade100,
+                          ),
+                          title: Text(fullName.isNotEmpty
+                              ? fullName
+                              : 'Unknown Student'),
+                          subtitle: Text(student.email ?? 'No email'),
+                          onTap: () => _selectStudent(student),
+                          dense: true,
+                          hoverColor: Colors.blue.shade50,
+                        );
+                      },
+                    ),
+            ),
+
+          // Selected student info
+          if (_selectedStudent != null) _buildSelectedStudentInfo(),
         ],
       ),
     );
   }
 
-  Widget _buildRecentStudentsCard() {
+  // Remove the old _buildStudentSearchResults method since we're now inlining it
+
+  Widget _buildSelectedStudentInfo() {
+    final initials =
+        '${_selectedStudent!.fname?[0] ?? ''}${_selectedStudent!.lname?[0] ?? ''}';
+    final fullName =
+        '${_selectedStudent!.fname ?? ''} ${_selectedStudent!.lname ?? ''}'
+            .trim();
+
     return Container(
+      margin: EdgeInsets.only(top: 12),
+      padding: EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            blurRadius: 20,
-            spreadRadius: 2,
-            offset: Offset(0, 4),
-          ),
-        ],
+        color: Colors.green.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.green.shade200),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Padding(
-            padding: _responsivePadding,
-            child: Row(
+          CircleAvatar(
+            child: Text(initials.toUpperCase()),
+            backgroundColor: Colors.green.shade200,
+          ),
+          SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.history, color: Colors.grey.shade600),
-                SizedBox(width: 8),
                 Text(
-                  'Recent Students',
-                  style: TextStyle(
-                    fontSize: _isMobile ? 14 : 16,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey[700],
-                  ),
+                  fullName.isNotEmpty ? fullName : 'Selected Student',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  _selectedStudent!.email ?? 'No email',
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
                 ),
               ],
             ),
           ),
-          Container(
-            constraints: BoxConstraints(maxHeight: 200),
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: _recentStudents.take(3).length,
+          Icon(Icons.check_circle, color: Colors.green),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCourseCatalog() {
+    return Container(
+      margin: _responsivePadding,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Courses Catalog',
+            style: TextStyle(
+              fontSize: _responsiveFontSize + 2,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          SizedBox(height: 12),
+          Expanded(
+            child: GridView.builder(
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: _isMobile ? 1 : 2,
+                childAspectRatio: _isMobile ? 4.5 : 3.5,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+              ),
+              itemCount: courseController.courses.length,
               itemBuilder: (context, index) {
-                final student = _recentStudents[index];
-                return _buildStudentListTile(student);
+                final course = courseController.courses[index];
+                return _buildCourseCard(course);
               },
             ),
           ),
@@ -871,206 +638,16 @@ class _POSScreenState extends State<POSScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildOperationsPanel() {
-    return Column(
-      children: [
-        Expanded(child: _buildOperationForm()),
-      ],
-    );
-  }
-
-  Widget _buildOperationForm() {
-    if (_currentStep == 'processing') {
-      return _buildProcessingScreen();
-    } else if (_currentStep == 'success') {
-      return _buildSuccessScreen();
-    } else if (_operationMode == 'payment') {
-      return SingleChildScrollView(child: _buildEnhancedPaymentForm());
-    } else {
-      return SingleChildScrollView(child: _buildEnhancedInvoiceForm());
-    }
-  }
-
-  Widget _buildProcessingScreen() {
-    return Container(
-      padding: _responsivePadding.add(EdgeInsets.all(_isMobile ? 20 : 40)),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            blurRadius: 20,
-            spreadRadius: 2,
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          SizedBox(
-            width: _isMobile ? 60 : 80,
-            height: _isMobile ? 60 : 80,
-            child: CircularProgressIndicator(
-              strokeWidth: _isMobile ? 4 : 6,
-              valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade600),
-            ),
-          ),
-          SizedBox(height: _isMobile ? 24 : 32),
-          Text(
-            'Processing ${_operationMode == 'payment' ? 'Payment' : 'Invoice'}...',
-            style: TextStyle(
-              fontSize: _isMobile ? 20 : 24,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey[800],
-            ),
-            textAlign: TextAlign.center,
-          ),
-          SizedBox(height: _isMobile ? 12 : 16),
-          Text(
-            'Please wait while we process your transaction',
-            style: TextStyle(
-              fontSize: _isMobile ? 14 : 16,
-              color: Colors.grey[600],
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSuccessScreen() {
-    return Container(
-      padding: _responsivePadding.add(EdgeInsets.all(_isMobile ? 20 : 40)),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            blurRadius: 20,
-            spreadRadius: 2,
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: _isMobile ? 60 : 80,
-            height: _isMobile ? 60 : 80,
-            decoration: BoxDecoration(
-              color: Colors.green.shade100,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.check,
-              color: Colors.green.shade600,
-              size: _isMobile ? 30 : 40,
-            ),
-          ),
-          SizedBox(height: _isMobile ? 24 : 32),
-          Text(
-            '${_operationMode == 'payment' ? 'Payment' : 'Invoice'} Completed!',
-            style: TextStyle(
-              fontSize: _isMobile ? 20 : 24,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey[800],
-            ),
-            textAlign: TextAlign.center,
-          ),
-          SizedBox(height: _isMobile ? 12 : 16),
-          Text(
-            _operationMode == 'payment'
-                ? 'Payment has been processed successfully'
-                : 'Invoice has been created successfully',
-            style: TextStyle(
-              fontSize: _isMobile ? 14 : 16,
-              color: Colors.grey[600],
-            ),
-            textAlign: TextAlign.center,
-          ),
-          SizedBox(height: _isMobile ? 24 : 32),
-          SizedBox(
-            width: double.infinity,
-            height: _isMobile ? 48 : 56,
-            child: ElevatedButton(
-              onPressed: () => _clearAll(),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue.shade600,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              child: Text(
-                'New Transaction',
-                style: TextStyle(
-                  fontSize: _isMobile ? 16 : 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildQuickAmountChip(double amount, {bool isBalance = false}) {
-    return Material(
-      color: Colors.transparent,
+  Widget _buildCourseCard(Course course) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
-        borderRadius: BorderRadius.circular(20),
-        onTap: () => _paymentAmountController.text = amount.toStringAsFixed(2),
-        child: Container(
-          padding: EdgeInsets.symmetric(
-            horizontal: _isMobile ? 12 : 16,
-            vertical: _isMobile ? 6 : 8,
-          ),
-          decoration: BoxDecoration(
-            color: isBalance ? Colors.green.shade50 : Colors.blue.shade50,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: isBalance ? Colors.green.shade200 : Colors.blue.shade200,
-            ),
-          ),
-          child: Text(
-            isBalance
-                ? 'Full Balance (\$${amount.toStringAsFixed(2)})'
-                : '\$${amount.toStringAsFixed(0)}',
-            style: TextStyle(
-              color: isBalance ? Colors.green.shade700 : Colors.blue.shade700,
-              fontWeight: FontWeight.w600,
-              fontSize: _isMobile ? 12 : 14,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEnhancedInvoiceForm() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            blurRadius: 20,
-            spreadRadius: 2,
-            offset: Offset(0, 4),
-          ),
-        ],
-      ),
-      padding: _responsivePadding,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header
-          Row(
+        onTap: () => _addToCart(course),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: EdgeInsets.all(12),
+          child: Row(
             children: [
               Container(
                 padding: EdgeInsets.all(8),
@@ -1078,1011 +655,519 @@ class _POSScreenState extends State<POSScreen> with TickerProviderStateMixin {
                   color: Colors.blue.shade100,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(Icons.receipt, color: Colors.blue.shade700),
+                child:
+                    Icon(Icons.school, color: Colors.blue.shade700, size: 20),
               ),
               SizedBox(width: 12),
-              Text(
-                'Create Invoice',
-                style: TextStyle(
-                  fontSize: _isMobile ? 18 : 22,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey[800],
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: _isMobile ? 16 : 24),
-
-          if (_selectedStudent == null)
-            Container(
-              padding: EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.orange.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.orange.shade200),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.info, color: Colors.orange.shade600),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Please select a student to create invoice',
-                      style: TextStyle(
-                        color: Colors.orange.shade700,
-                        fontSize: _isMobile ? 14 : 16,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            )
-          else ...[
-            // Course Selection
-            Text(
-              'Course',
-              style: TextStyle(
-                fontSize: _isMobile ? 14 : 16,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey[700],
-              ),
-            ),
-            SizedBox(height: 8),
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.grey[50],
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade300),
-              ),
-              child: DropdownButtonFormField<Course>(
-                value: _selectedCourse,
-                decoration: InputDecoration(
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.all(16),
-                  hintText: 'Select a course...',
-                ),
-                items: courseController.courses
-                    .map((course) => DropdownMenuItem(
-                          value: course,
-                          child: Text(
-                            course.name,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ))
-                    .toList(),
-                onChanged: (value) => setState(() => _selectedCourse = value),
-                isExpanded: true,
-              ),
-            ),
-            SizedBox(height: _isMobile ? 16 : 20),
-
-            // Lessons Count
-            Text(
-              'Number of Lessons',
-              style: TextStyle(
-                fontSize: _isMobile ? 14 : 16,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey[700],
-              ),
-            ),
-            SizedBox(height: 8),
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.grey[50],
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade300),
-              ),
-              child: TextField(
-                controller: _lessonsController,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.all(16),
-                  hintText: '1',
-                  hintStyle: TextStyle(color: Colors.grey.shade500),
-                ),
-                style: TextStyle(
-                  fontSize: _isMobile ? 16 : 18,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            SizedBox(height: _isMobile ? 16 : 20),
-
-            // Total Amount Preview
-            if (_selectedCourse != null)
-              Container(
-                padding: EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      'Total Amount',
+                      course.name,
                       style: TextStyle(
-                        fontSize: _isMobile ? 14 : 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    Text(
-                      '\$${(_selectedCourse!.price * (int.tryParse(_lessonsController.text) ?? 1)).toStringAsFixed(2)}',
-                      style: TextStyle(
-                        fontSize: _isMobile ? 18 : 20,
                         fontWeight: FontWeight.bold,
-                        color: Colors.blue.shade700,
+                        fontSize: _responsiveFontSize,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      '\$${course.price.toStringAsFixed(2)}',
+                      style: TextStyle(
+                        color: Colors.green.shade700,
+                        fontSize: _responsiveFontSize + 2,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                   ],
                 ),
               ),
-
-            if (_selectedCourse != null) SizedBox(height: _isMobile ? 16 : 20),
-
-            // Due Date
-            Text(
-              'Due Date',
-              style: TextStyle(
-                fontSize: _isMobile ? 14 : 16,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey[700],
-              ),
-            ),
-            SizedBox(height: 8),
-            Material(
-              color: Colors.transparent,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(12),
-                onTap: _selectDueDate,
-                child: Container(
-                  padding: EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[50],
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey.shade300),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.calendar_today, color: Colors.blue.shade600),
-                      SizedBox(width: 12),
-                      Text(
-                        DateFormat('MMM dd, yyyy').format(_invoiceDueDate),
-                        style: TextStyle(
-                          fontSize: _isMobile ? 14 : 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      Spacer(),
-                      Icon(Icons.arrow_drop_down, color: Colors.grey.shade500),
-                    ],
-                  ),
+              Container(
+                padding: EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade100,
+                  shape: BoxShape.circle,
                 ),
+                child: Icon(Icons.add, color: Colors.green.shade700, size: 20),
               ),
-            ),
-            SizedBox(height: _isMobile ? 24 : 32),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
-            // Create Invoice Button
-            SizedBox(
-              width: double.infinity,
-              height: _isMobile ? 48 : 56,
-              child: ElevatedButton(
-                onPressed: _isProcessing || _selectedCourse == null
-                    ? null
-                    : _createInvoice,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue.shade600,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  elevation: 2,
-                ),
-                child: _isProcessing
-                    ? SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2,
-                        ),
-                      )
-                    : Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.receipt_long,
-                              color: Colors.white, size: _isMobile ? 20 : 24),
-                          SizedBox(width: 12),
-                          Text(
-                            'Create Invoice',
-                            style: TextStyle(
-                              fontSize: _isMobile ? 16 : 18,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ],
-                      ),
-              ),
+  Widget _buildMobileCartSummary() {
+    return Container(
+      margin: EdgeInsets.symmetric(horizontal: 16),
+      padding: EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.orange.shade200),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.shopping_cart, color: Colors.orange.shade700),
+          SizedBox(width: 8),
+          Text(
+            '${_cartItems.length} items • \$${_cartTotal.toStringAsFixed(2)}',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: Colors.orange.shade700,
             ),
-          ],
+          ),
+          Spacer(),
+          TextButton(
+            onPressed: () => _showCartBottomSheet(),
+            child: Text('VIEW CART'),
+          ),
         ],
       ),
     );
   }
 
-  // Methods for handling user interactions
-  void _searchStudents(String query) {
-    if (query.isEmpty) {
-      setState(() {
-        _searchResults = [];
-        _showSearchResults = false;
-      });
-      return;
-    }
-
-    final students = userController.users
-        .where((user) => user.role.toLowerCase() == 'student')
-        .where((user) =>
-            '${user.fname} ${user.lname}'
-                .toLowerCase()
-                .contains(query.toLowerCase()) ||
-            user.email.toLowerCase().contains(query.toLowerCase()) ||
-            (user.phone.contains(query)) ||
-            (user.idnumber?.toLowerCase().contains(query.toLowerCase()) ??
-                false))
-        .take(10)
-        .toList();
-
-    setState(() {
-      _searchResults = students;
-      _showSearchResults = true;
-    });
-  }
-
-  bool _canProcessPayment() {
-    // Basic requirements
-    if (_selectedStudent == null || _isProcessing) {
-      return false;
-    }
-
-    // Check if amount is entered
-    if (_paymentAmountController.text.isEmpty) {
-      return false;
-    }
-
-    // Validate amount
-    final amount = double.tryParse(_paymentAmountController.text);
-    if (amount == null || amount <= 0) {
-      return false;
-    }
-
-    // Check balance
-    final balance = _getStudentBalance(_selectedStudent!);
-    if (amount > balance) {
-      return false;
-    }
-
-    // Check if student has any balance to pay
-    if (balance <= 0) {
-      return false;
-    }
-
-    // Form validation
-    if (_paymentFormKey.currentState?.validate() != true) {
-      return false;
-    }
-
-    return true;
-  }
-
-// 3. UPDATE YOUR PROCESS PAYMENT BUTTON WITH SMART STATE:
-  Widget _buildProcessPaymentButton() {
-    final canProcess = _canProcessPayment();
-    final buttonColor =
-        canProcess ? Colors.green.shade600 : Colors.grey.shade400;
-
-    return SizedBox(
-      width: double.infinity,
-      height: _isMobile ? 48 : 56,
-      child: ElevatedButton(
-        onPressed: canProcess ? _processPayment : null, // SMART DISABLE
-        style: ElevatedButton.styleFrom(
-          backgroundColor: buttonColor,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          elevation: canProcess ? 2 : 0,
-          disabledBackgroundColor: Colors.grey.shade300, // DISABLED STYLE
+  Widget _buildMobileActionPanel() {
+    if (_cartItems.isEmpty || _selectedStudent == null) {
+      return Container(
+        padding: _responsivePadding,
+        child: Text(
+          _selectedStudent == null
+              ? 'Please select a student and add items to cart'
+              : 'Add items to cart to continue',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Colors.grey.shade600),
         ),
-        child: _isProcessing
-            ? SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                  color: Colors.white,
-                  strokeWidth: 2,
-                ),
-              )
-            : Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.payment,
-                    color: canProcess ? Colors.white : Colors.grey.shade600,
-                    size: _isMobile ? 20 : 24,
-                  ),
-                  SizedBox(width: 12),
-                  Text(
-                    _getButtonText(),
-                    style: TextStyle(
-                      fontSize: _isMobile ? 16 : 18,
-                      fontWeight: FontWeight.bold,
-                      color: canProcess ? Colors.white : Colors.grey.shade600,
-                    ),
-                  ),
-                ],
-              ),
+      );
+    }
+
+    return Container(
+      padding: _responsivePadding,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4)],
       ),
-    );
-  }
-
-// 4. ADD METHOD TO GET DYNAMIC BUTTON TEXT:
-  String _getButtonText() {
-    if (_selectedStudent == null) {
-      return 'Select Student First';
-    }
-
-    if (_paymentAmountController.text.isEmpty) {
-      return 'Enter Payment Amount';
-    }
-
-    final amount = double.tryParse(_paymentAmountController.text);
-    if (amount == null || amount <= 0) {
-      return 'Enter Valid Amount';
-    }
-
-    final balance = _getStudentBalance(_selectedStudent!);
-    if (balance <= 0) {
-      return 'No Outstanding Balance';
-    }
-
-    if (amount > balance) {
-      return 'Amount Exceeds Balance';
-    }
-
-    return 'Process Payment';
-  }
-
-// 5. UPDATE _buildPaymentAmountSection TO TRIGGER VALIDATION:
-  Widget _buildPaymentAmountSection(double balance) {
-    final currentAmount = double.tryParse(_paymentAmountController.text) ?? 0.0;
-    final isExceeding = currentAmount > balance;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Header with balance info
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              'Payment Amount',
-              style: TextStyle(
-                fontSize: _isMobile ? 14 : 16,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey[700],
-              ),
-            ),
-            Container(
-              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: balance > 0 ? Colors.red.shade50 : Colors.green.shade50,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color:
-                      balance > 0 ? Colors.red.shade200 : Colors.green.shade200,
-                ),
-              ),
-              child: Text(
-                'Balance: \$${balance.toStringAsFixed(2)}',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color:
-                      balance > 0 ? Colors.red.shade700 : Colors.green.shade700,
-                ),
-              ),
-            ),
-          ],
-        ),
-        SizedBox(height: 8),
-
-        // Payment amount input with validation
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.grey[50],
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: isExceeding
-                  ? Colors.red.shade400
-                  : _paymentAmountError != null
-                      ? Colors.red.shade400
-                      : Colors.grey.shade300,
-              width: isExceeding || _paymentAmountError != null ? 2 : 1,
-            ),
-          ),
-          child: TextFormField(
-            controller: _paymentAmountController,
-            focusNode: _amountFocusNode,
-            keyboardType: TextInputType.numberWithOptions(decimal: true),
-            inputFormatters: [
-              FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
-            ],
+      child: Column(
+        children: [
+          // Payment Method Selection
+          DropdownButtonFormField<String>(
+            value: _paymentMethod,
             decoration: InputDecoration(
-              hintText: '0.00',
-              prefixText: '\$ ',
-              border: InputBorder.none,
-              contentPadding: EdgeInsets.all(16),
-              prefixStyle: TextStyle(
-                fontSize: _isMobile ? 16 : 18,
-                fontWeight: FontWeight.bold,
-                color: isExceeding ? Colors.red.shade700 : Colors.grey[800],
-              ),
-              hintStyle: TextStyle(color: Colors.grey.shade500),
+              labelText: 'Payment Method',
+              border:
+                  OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
             ),
-            style: TextStyle(
-              fontSize: _isMobile ? 16 : 18,
-              fontWeight: FontWeight.bold,
-              color: isExceeding ? Colors.red.shade700 : Colors.grey[800],
-            ),
-            validator: (value) {
-              if (value == null || value.isEmpty) {
-                return 'Please enter payment amount';
-              }
-
-              final amount = double.tryParse(value);
-              if (amount == null) {
-                return 'Please enter a valid number';
-              }
-
-              if (amount <= 0) {
-                return 'Amount must be greater than zero';
-              }
-
-              if (_selectedStudent != null && amount > balance) {
-                return 'Amount cannot exceed balance (\$${balance.toStringAsFixed(2)})';
-              }
-
-              return null;
-            },
-            onChanged: (value) {
-              setState(() {
-                _paymentAmountError = null;
-                // TRIGGER BUTTON STATE UPDATE
-                _isFormValid =
-                    _paymentFormKey.currentState?.validate() ?? false;
-              });
-            },
+            items: ['Cash', 'Card', 'Bank Transfer', 'Mobile Money']
+                .map((method) =>
+                    DropdownMenuItem(value: method, child: Text(method)))
+                .toList(),
+            onChanged: (value) => setState(() => _paymentMethod = value!),
           ),
-        ),
+          SizedBox(height: 16),
 
-        // Show error message if validation fails
-        if (_paymentAmountError != null) ...[
-          SizedBox(height: 8),
+          // Action Buttons
           Row(
             children: [
-              Icon(Icons.error, color: Colors.red.shade600, size: 16),
-              SizedBox(width: 8),
               Expanded(
-                child: Text(
-                  _paymentAmountError!,
-                  style: TextStyle(
-                    color: Colors.red.shade700,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
+                child: OutlinedButton.icon(
+                  onPressed: _isProcessing
+                      ? null
+                      : () => _processTransaction(payNow: false),
+                  icon: Icon(Icons.receipt),
+                  label: Text('INVOICE ONLY'),
+                  style: OutlinedButton.styleFrom(
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+              ),
+              SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _isProcessing
+                      ? null
+                      : () => _processTransaction(payNow: true),
+                  icon: _isProcessing
+                      ? SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.white),
+                          ))
+                      : Icon(Icons.payment),
+                  label: Text('PAY NOW'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8)),
                   ),
                 ),
               ),
             ],
           ),
         ],
+      ),
+    );
+  }
 
-        // Show visual warning if exceeding balance
-        if (_selectedStudent != null && isExceeding && currentAmount > 0) ...[
-          SizedBox(height: 8),
-          Container(
-            padding: EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.red.shade50,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.red.shade200),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.warning_amber, color: Colors.red.shade600, size: 20),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Amount Exceeds Balance',
-                        style: TextStyle(
-                          color: Colors.red.shade800,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      Text(
-                        'Payment exceeds balance by \$${(currentAmount - balance).toStringAsFixed(2)}',
-                        style: TextStyle(
-                          color: Colors.red.shade700,
-                          fontSize: 12,
-                        ),
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        'Please reduce the amount to continue',
-                        style: TextStyle(
-                          color: Colors.red.shade600,
-                          fontSize: 11,
-                          fontStyle: FontStyle.italic,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+  Widget _buildCartPanel() {
+    return Container(
+      padding: _responsivePadding,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Receipt',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
-        ],
-
-        // Show helpful info if balance is 0
-        if (_selectedStudent != null && balance == 0) ...[
-          SizedBox(height: 8),
-          Container(
-            padding: EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.green.shade50,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.green.shade200),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.check_circle,
-                    color: Colors.green.shade600, size: 20),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'This student has no outstanding balance',
-                    style: TextStyle(
-                      color: Colors.green.shade700,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
+          SizedBox(height: 16),
+          if (_cartItems.isEmpty)
+            Expanded(
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.shopping_cart_outlined,
+                        size: 64, color: Colors.grey),
+                    SizedBox(height: 16),
+                    Text(
+                      'Receipt is empty',
+                      style: TextStyle(color: Colors.grey.shade600),
                     ),
+                  ],
+                ),
+              ),
+            )
+          else
+            Expanded(
+              child: ListView.separated(
+                itemCount: _cartItems.length,
+                separatorBuilder: (_, __) => Divider(),
+                itemBuilder: (context, index) {
+                  final item = _cartItems[index];
+                  return _buildCartItem(item, index);
+                },
+              ),
+            ),
+          if (_cartItems.isNotEmpty) ...[
+            Divider(),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Total:',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  '\$${_cartTotal.toStringAsFixed(2)}',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green.shade700,
                   ),
                 ),
               ],
             ),
-          ),
+          ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildCartItem(CartItem item, int index) {
+    final TextEditingController quantityController =
+        TextEditingController(text: item.quantity.toString());
+
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                item.course.name,
+                style: TextStyle(fontWeight: FontWeight.w500),
+              ),
+              Text(
+                '\$${item.pricePerUnit.toStringAsFixed(2)} each',
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+        Row(
+          children: [
+            // Minus Button
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey.shade300),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: IconButton(
+                onPressed: () => _updateCartQuantity(index, item.quantity - 1),
+                icon: Icon(Icons.remove, size: 16),
+                padding: EdgeInsets.zero,
+              ),
+            ),
+
+            // Quantity Input Field
+            Container(
+              width: 60,
+              height: 32,
+              margin: EdgeInsets.symmetric(horizontal: 4),
+              child: TextFormField(
+                controller: quantityController,
+                keyboardType: TextInputType.number,
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 14),
+                decoration: InputDecoration(
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                  isDense: true,
+                ),
+                onChanged: (value) {
+                  final newQuantity = int.tryParse(value) ?? item.quantity;
+                  if (newQuantity != item.quantity && newQuantity > 0) {
+                    _updateCartQuantity(index, newQuantity);
+                  }
+                },
+                onEditingComplete: () {
+                  final newQuantity =
+                      int.tryParse(quantityController.text) ?? item.quantity;
+                  _updateCartQuantity(index, newQuantity);
+                  FocusScope.of(context).unfocus();
+                },
+              ),
+            ),
+
+            // Plus Button
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey.shade300),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: IconButton(
+                onPressed: () => _updateCartQuantity(index, item.quantity + 1),
+                icon: Icon(Icons.add, size: 16),
+                padding: EdgeInsets.zero,
+              ),
+            ),
+          ],
+        ),
+        SizedBox(width: 8),
+        Text(
+          '\$${item.totalPrice.toStringAsFixed(2)}',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        IconButton(
+          onPressed: () => _removeFromCart(index),
+          icon: Icon(Icons.delete_outline, color: Colors.red),
+          iconSize: 20,
+        ),
       ],
     );
   }
 
-// 6. UPDATE _buildEnhancedPaymentForm TO USE NEW BUTTON:
-  Widget _buildEnhancedPaymentForm() {
-    final balance =
-        _selectedStudent != null ? _getStudentBalance(_selectedStudent!) : 0.0;
+  Widget _buildPaymentPanel() {
+    if (_selectedStudent == null || _cartItems.isEmpty) {
+      return Container(
+        padding: _responsivePadding,
+        child: Text(
+          'Select student and add items to proceed',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Colors.grey.shade600),
+        ),
+      );
+    }
 
     return Container(
+      padding: _responsivePadding,
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            blurRadius: 20,
-            spreadRadius: 2,
-            offset: Offset(0, 4),
+        border: Border(top: BorderSide(color: Colors.grey.shade300)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Payment Options',
+              style: TextStyle(fontWeight: FontWeight.bold)),
+          SizedBox(height: 12),
+
+          DropdownButtonFormField<String>(
+            value: _paymentMethod,
+            decoration: InputDecoration(
+              labelText: 'Payment Method',
+              border:
+                  OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            items: ['Cash', 'Card', 'Bank Transfer', 'Mobile Money']
+                .map((method) =>
+                    DropdownMenuItem(value: method, child: Text(method)))
+                .toList(),
+            onChanged: (value) => setState(() => _paymentMethod = value!),
+          ),
+          SizedBox(height: 12),
+
+          TextFormField(
+            controller: _notesController,
+            decoration: InputDecoration(
+              labelText: 'Notes (Optional)',
+              border:
+                  OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            maxLines: 2,
+          ),
+          SizedBox(height: 20),
+
+          // Action Buttons
+          Column(
+            children: [
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _isProcessing
+                      ? null
+                      : () => _processTransaction(payNow: false),
+                  icon: Icon(Icons.receipt),
+                  label: Text('CREATE INVOICE ONLY'),
+                  style: OutlinedButton.styleFrom(
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                  ),
+                ),
+              ),
+              SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _isProcessing
+                      ? null
+                      : () => _processTransaction(payNow: true),
+                  icon: _isProcessing
+                      ? SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.white),
+                          ))
+                      : Icon(Icons.payment),
+                  label: Text('PROCESS PAYMENT'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
-      padding: _responsivePadding,
-      child: Form(
-        key: _paymentFormKey,
+    );
+  }
+
+  void _showCartBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.7,
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header
-            Row(
-              children: [
-                Container(
-                  padding: EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.green.shade100,
-                    borderRadius: BorderRadius.circular(8),
+            Container(
+              padding: EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
+              ),
+              child: Row(
+                children: [
+                  Text('Shopping Cart',
+                      style:
+                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  Spacer(),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: Icon(Icons.close),
                   ),
-                  child: Icon(Icons.payment, color: Colors.green.shade700),
-                ),
-                SizedBox(width: 12),
-                Text(
-                  'Process Payment',
-                  style: TextStyle(
-                    fontSize: _isMobile ? 18 : 22,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey[800],
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
-            SizedBox(height: _isMobile ? 16 : 24),
-
-            if (_selectedStudent == null)
-              Container(
-                padding: EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.orange.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.orange.shade200),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.info, color: Colors.orange.shade600),
-                    SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Please select a student to process payment',
-                        style: TextStyle(
-                          color: Colors.orange.shade700,
-                          fontSize: _isMobile ? 14 : 16,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              )
-            else ...[
-              _buildPaymentAmountSection(balance),
-              SizedBox(height: _isMobile ? 12 : 16),
-
-              // Quick Amount Buttons
-              Text(
-                'Quick Amounts',
-                style: TextStyle(
-                  fontSize: _isMobile ? 14 : 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey[700],
-                ),
-              ),
-              SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
+            Expanded(child: _buildCartPanel()),
+            Container(
+              padding: EdgeInsets.all(16),
+              child: Row(
                 children: [
-                  ..._quickAmounts
-                      .map((amount) => _buildQuickAmountChip(amount)),
-                  if (balance > 0)
-                    _buildQuickAmountChip(balance, isBalance: true),
-                ],
-              ),
-              SizedBox(height: _isMobile ? 16 : 24),
-
-              // Payment Method
-              Text(
-                'Payment Method',
-                style: TextStyle(
-                  fontSize: _isMobile ? 14 : 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey[700],
-                ),
-              ),
-              SizedBox(height: 8),
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.grey[50],
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey.shade300),
-                ),
-                child: DropdownButtonFormField<String>(
-                  value: _paymentMethod,
-                  decoration: InputDecoration(
-                    border: InputBorder.none,
-                    contentPadding: EdgeInsets.all(16),
-                  ),
-                  items: ['Cash', 'Mobile Money']
-                      .map((method) => DropdownMenuItem(
-                            value: method,
-                            child: Text(method),
-                          ))
-                      .toList(),
-                  onChanged: (value) => setState(() => _paymentMethod = value!),
-                ),
-              ),
-              SizedBox(height: _isMobile ? 16 : 24),
-
-              // Receipt Option
-              Row(
-                children: [
-                  Checkbox(
-                    value: _generateReceipt,
-                    onChanged: (value) =>
-                        setState(() => _generateReceipt = value!),
-                    activeColor: Colors.blue.shade600,
-                  ),
                   Expanded(
-                    child: Text(
-                      'Generate receipt',
-                      style: TextStyle(
-                        fontSize: _isMobile ? 14 : 16,
-                        color: Colors.grey[700],
-                      ),
+                    child: OutlinedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _processTransaction(payNow: false);
+                      },
+                      child: Text('INVOICE ONLY'),
+                    ),
+                  ),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _processTransaction(payNow: true);
+                      },
+                      style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white),
+                      child: Text('PAY NOW'),
                     ),
                   ),
                 ],
               ),
-              SizedBox(height: _isMobile ? 24 : 32),
-
-              // SMART PROCESS PAYMENT BUTTON
-              _buildProcessPaymentButton(),
-            ],
+            ),
           ],
         ),
       ),
     );
   }
-
-// 7. UPDATE _selectStudent TO TRIGGER BUTTON STATE UPDATE:
-  void _selectStudent(User student) {
-    setState(() {
-      _selectedStudent = student;
-      _searchController.text = '${student.fname} ${student.lname}';
-      _showSearchResults = false;
-      _currentStep = 'details';
-    });
-
-    // Add to recent students
-    if (!_recentStudents.any((s) => s.id == student.id)) {
-      _recentStudents.insert(0, student);
-      if (_recentStudents.length > 5) {
-        _recentStudents.removeLast();
-      }
-    }
-
-    _scaleController.reset();
-    _scaleController.forward();
-
-    // Use EXACT same balance calculation as student details screen
-    final balance = _getStudentBalance(student);
-    if (balance > 0) {
-      _paymentAmountController.text = balance.toStringAsFixed(2);
-    }
-
-    // TRIGGER BUTTON STATE UPDATE
-    setState(() {
-      _isFormValid = _paymentFormKey.currentState?.validate() ?? false;
-    });
-  }
-
-// 4. UPDATED _processPayment METHOD WITH VALIDATION:
-  void _processPayment() async {
-    if (_selectedStudent == null || _paymentAmountController.text.isEmpty) {
-      _showEnhancedSnackbar('Please select a student and enter payment amount',
-          SnackbarType.error);
-      return;
-    }
-
-    // VALIDATE FORM FIRST
-    if (!_paymentFormKey.currentState!.validate()) {
-      _showEnhancedSnackbar('Please fix the errors above', SnackbarType.error);
-      return;
-    }
-
-    final amount = double.tryParse(_paymentAmountController.text);
-    if (amount == null || amount <= 0) {
-      setState(() {
-        _paymentAmountError = 'Please enter a valid payment amount';
-      });
-      _showEnhancedSnackbar(
-          'Please enter a valid payment amount', SnackbarType.error);
-      return;
-    }
-
-    // DOUBLE CHECK AGAINST CURRENT BALANCE
-    final currentBalance = _getStudentBalance(_selectedStudent!);
-    if (amount > currentBalance) {
-      setState(() {
-        _paymentAmountError =
-            'Amount cannot exceed balance (\$${currentBalance.toStringAsFixed(2)})';
-      });
-      _showEnhancedSnackbar(
-          'Payment amount (\$${amount.toStringAsFixed(2)}) cannot exceed outstanding balance (\$${currentBalance.toStringAsFixed(2)})',
-          SnackbarType.error);
-      return;
-    }
-
-    // CHECK IF BALANCE IS ZERO
-    if (currentBalance == 0) {
-      _showEnhancedSnackbar(
-          'This student has no outstanding balance to pay', SnackbarType.error);
-      return;
-    }
-
-    setState(() {
-      _isProcessing = true;
-      _currentStep = 'processing';
-      _paymentAmountError = null; // Clear any errors
-    });
-
-    try {
-      // Use EXACT same logic as payment dialog - filter unpaid invoices
-      final unpaidInvoices = _getUnpaidInvoices(_selectedStudent!);
-
-      if (unpaidInvoices.isEmpty) {
-        throw Exception('No outstanding invoices found for this student');
-      }
-
-      // EXACT same sorting logic as payment dialog
-      unpaidInvoices.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-      final invoice = unpaidInvoices.first;
-
-      // EXACT same reference generation as payment dialog
-      final reference = ReceiptService.generateReference();
-
-      // EXACT same Payment object creation as payment dialog
-      final payment = Payment(
-        invoiceId: invoice.id!,
-        amount: amount,
-        method: _paymentMethod,
-        paymentDate: DateTime.now(),
-        notes: _notesController.text.trim().isEmpty
-            ? null
-            : _notesController.text.trim(),
-        reference: reference,
-        receiptGenerated: false,
-        userId: userController.currentUser.value?.id ?? 1,
-      );
-
-      print('POS Payment details:');
-      print('- Invoice ID: ${payment.invoiceId}');
-      print('- Invoice Balance: ${invoice.balance}');
-      print('- Payment Amount: ${payment.amount}');
-      print('- Method: ${payment.method}');
-      print('- Reference: ${payment.reference}');
-      print('- Generate Receipt: $_generateReceipt');
-
-      // Use EXACT same logic as payment dialog _processSingleInvoicePayment
-      if (_generateReceipt) {
-        print('Using recordPaymentWithReceipt...');
-        await billingController.recordPaymentWithReceipt(
-            payment, invoice, _selectedStudent!);
-      } else {
-        print('Using recordPayment...');
-        await billingController.recordPayment(payment);
-      }
-
-      print('Payment processing completed successfully');
-
-      setState(() {
-        _currentStep = 'success';
-      });
-
-      _showEnhancedSnackbar(
-        'Payment of \$${amount.toStringAsFixed(2)} processed successfully!',
-        SnackbarType.success,
-      );
-
-      // Auto-clear after success
-      Future.delayed(Duration(seconds: 2), () {
-        if (mounted) _clearAll();
-      });
-    } catch (e) {
-      print('Payment processing error: $e');
-      _showEnhancedSnackbar(
-          'Error processing payment: ${e.toString()}', SnackbarType.error);
-      setState(() {
-        _currentStep = 'payment';
-      });
-    } finally {
-      setState(() {
-        _isProcessing = false;
-      });
-    }
-  }
-
-// 5. UPDATE _clearAll METHOD TO RESET VALIDATION:
-  void _clearAll() {
-    setState(() {
-      _selectedStudent = null;
-      _paymentAmountController.clear();
-      _notesController.clear();
-      _searchController.clear();
-      _showSearchResults = false;
-      _currentStep = 'search';
-      _operationMode = 'payment';
-      _paymentMethod = 'Cash';
-      _generateReceipt = true;
-      _isProcessing = false;
-      _paymentAmountError = null; // CLEAR VALIDATION ERRORS
-    });
-    _paymentFormKey.currentState?.reset(); // RESET FORM VALIDATION
-  }
-
-  Future<void> _selectDueDate() async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _invoiceDueDate,
-      firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(Duration(days: 365)),
-    );
-    if (picked != null && picked != _invoiceDueDate) {
-      setState(() {
-        _invoiceDueDate = picked;
-      });
-    }
-  }
-
-  void _createInvoice() async {
-    if (_selectedStudent == null || _selectedCourse == null) {
-      _showEnhancedSnackbar(
-          'Please select a student and course', SnackbarType.error);
-      return;
-    }
-
-    final lessons = int.tryParse(_lessonsController.text) ?? 1;
-    if (lessons <= 0) {
-      _showEnhancedSnackbar(
-          'Please enter a valid number of lessons', SnackbarType.error);
-      return;
-    }
-
-    setState(() {
-      _isProcessing = true;
-      _currentStep = 'processing';
-    });
-
-    try {
-      final invoice = Invoice(
-        studentId: _selectedStudent!.id!,
-        courseId: _selectedCourse!.id!,
-        invoiceNumber: 'INV-${DateTime.now().toUtc().millisecondsSinceEpoch}',
-        totalAmount: _selectedCourse!.price * lessons.toDouble(),
-        pricePerLesson: _selectedCourse!.price.toDouble(),
-        amountPaid: 0.0,
-        dueDate: _invoiceDueDate,
-        status: 'pending',
-        createdAt: DateTime.now(),
-        lessons: lessons,
-      );
-
-      await billingController.createInvoice(invoice);
-
-      setState(() {
-        _currentStep = 'success';
-      });
-
-      _showEnhancedSnackbar(
-        'Invoice created successfully for ${lessons} lesson(s)!',
-        SnackbarType.success,
-      );
-
-      // Auto-clear after success
-      Future.delayed(Duration(seconds: 2), () {
-        if (mounted) _clearAll();
-      });
-    } catch (e) {
-      _showEnhancedSnackbar(
-          'Error creating invoice: ${e.toString()}', SnackbarType.error);
-      setState(() {
-        _currentStep = 'invoice';
-      });
-    } finally {
-      setState(() {
-        _isProcessing = false;
-      });
-    }
-  }
 }
 
-enum SnackbarType { success, error, info }
+// Helper Classes
+class CartItem {
+  final Course course;
+  final int quantity;
+  final double pricePerUnit;
+
+  CartItem({
+    required this.course,
+    required this.quantity,
+    required this.pricePerUnit,
+  });
+
+  double get totalPrice => quantity * pricePerUnit;
+
+  CartItem copyWith({
+    Course? course,
+    int? quantity,
+    double? pricePerUnit,
+  }) {
+    return CartItem(
+      course: course ?? this.course,
+      quantity: quantity ?? this.quantity,
+      pricePerUnit: pricePerUnit ?? this.pricePerUnit,
+    );
+  }
+}
