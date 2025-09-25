@@ -221,38 +221,46 @@ class SchoolRegistrationController extends GetxController {
 
       // Create schools table if it doesn't exist
       await db.execute('''
-        CREATE TABLE IF NOT EXISTS schools (
-          id TEXT PRIMARY KEY,
-          name TEXT NOT NULL,
-          address TEXT,
-          location TEXT,
-          phone TEXT,
-          email TEXT,
-          website TEXT,
-          start_time TEXT,
-          end_time TEXT,
-          operating_days TEXT,
-          invitation_code TEXT UNIQUE,
-          status TEXT DEFAULT 'active',
-          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-          updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-      ''');
+      CREATE TABLE IF NOT EXISTS schools (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        address TEXT,
+        location TEXT,
+        phone TEXT,
+        email TEXT,
+        website TEXT,
+        start_time TEXT,
+        end_time TEXT,
+        operating_days TEXT,
+        invitation_code TEXT UNIQUE,
+        status TEXT DEFAULT 'active',
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )
+    ''');
 
-      // Save school data
+      // ✅ FIXED: Use form data since API doesn't return all fields
+      final operatingDaysString = operatingDays.join(',');
+      final location =
+          '${cityController.text.trim()}, ${countryController.text.trim()}';
+
+      // Save school data using both API response and form data
       await db.insert(
           'schools',
           {
             'id': school['id'].toString(),
             'name': school['name'],
-            'address': school['address'],
-            'location': '${school['city']}, ${school['country']}',
-            'phone': school['phone'],
-            'email': school['email'],
-            'website': school['website'] ?? '',
-            'start_time': school['start_time'],
-            'end_time': school['end_time'],
-            'operating_days': (school['operating_days'] as List).join(','),
+            // ✅ Use form data for fields not returned by API
+            'address': schoolAddressController.text.trim(),
+            'location': location,
+            'phone': phoneController.text.trim(),
+            'email': emailController.text.trim(),
+            'website': websiteController.text.trim().isEmpty
+                ? null
+                : websiteController.text.trim(),
+            'start_time': _timeOfDayToString(startTime.value),
+            'end_time': _timeOfDayToString(endTime.value),
+            'operating_days': operatingDaysString, // ✅ Use local form data
             'invitation_code': school['invitation_code'],
             'status': 'active',
             'created_at': DateTime.now().toIso8601String(),
@@ -272,42 +280,53 @@ class SchoolRegistrationController extends GetxController {
 
     try {
       final db = await _dbHelper.database;
-      final admin = result['admin'];
+      final adminUser =
+          result['admin_user']; // ✅ Changed from 'admin' to 'admin_user'
       final school = result['school'];
 
       // Create users table if it doesn't exist
       await db.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-          id TEXT PRIMARY KEY,
-          school_id TEXT NOT NULL,
-          email TEXT NOT NULL UNIQUE,
-          password TEXT NOT NULL,
-          role TEXT DEFAULT 'staff',
-          fname TEXT,
-          lname TEXT,
-          phone TEXT,
-          date_of_birth TEXT,
-          gender TEXT DEFAULT 'other',
-          status TEXT DEFAULT 'active',
-          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-          updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (school_id) REFERENCES schools (id)
-        )
-      ''');
+      CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        school_id TEXT NOT NULL,
+        email TEXT NOT NULL UNIQUE,
+        password TEXT NOT NULL,
+        role TEXT DEFAULT 'staff',
+        fname TEXT,
+        lname TEXT,
+        phone TEXT,
+        date_of_birth TEXT,
+        gender TEXT DEFAULT 'other',
+        status TEXT DEFAULT 'active',
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (school_id) REFERENCES schools (id)
+      )
+    ''');
+
+      // ✅ Parse the admin user name from the API response
+      final fullName = adminUser['name']?.toString() ?? '';
+      final nameParts = fullName.split(' ');
+      final firstName = nameParts.isNotEmpty
+          ? nameParts.first
+          : adminFirstNameController.text.trim();
+      final lastName = nameParts.length > 1
+          ? nameParts.sublist(1).join(' ')
+          : adminLastNameController.text.trim();
 
       // Save admin user for local authentication
       await db.insert(
           'users',
           {
-            'id': admin['id'].toString(),
+            'id': adminUser['id'].toString(),
             'school_id': school['id'].toString(),
-            'email': admin['email'],
-            'password': adminPasswordController
-                .text, // Use 'password' field name to match your local table
-            'role': admin['role'],
-            'fname': admin['fname'], // Use 'fname' to match your local table
-            'lname': admin['lname'], // Use 'lname' to match your local table
-            'phone': admin['phone'],
+            'email': adminUser['email'],
+            'password':
+                adminPasswordController.text, // Store the password from form
+            'role': 'admin', // Default to admin role
+            'fname': firstName,
+            'lname': lastName,
+            'phone': adminPhoneController.text.trim(),
             'status': 'active',
             'date_of_birth': DateTime.now()
                 .subtract(Duration(days: 365 * 30))
@@ -323,6 +342,11 @@ class SchoolRegistrationController extends GetxController {
       print('❌ Step 3 Failed: Failed to setup local auth - $e');
       throw Exception('Failed to setup local authentication: $e');
     }
+  }
+
+  /// Helper method: Convert TimeOfDay to string
+  String _timeOfDayToString(TimeOfDay time) {
+    return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
   }
 
   /// Step 4: Update app settings
@@ -374,78 +398,109 @@ class SchoolRegistrationController extends GetxController {
 
     try {
       final school = result['school'];
-      final admin = result['admin'];
-      final trialDays = result['trial_days_remaining'] ?? 30;
+      final adminUser =
+          result['admin_user']; // ✅ Fixed: Use 'admin_user' not 'admin'
+      final trialDays = 30; // Default trial days
 
-      // ✅ STEP 1: Set user as authenticated in AuthController
-      final authController = Get.find<AuthController>();
+      // ✅ CRITICAL: Auto-login the user after registration
+      await _autoLoginUser(adminUser, school);
 
-      // Create user object from registration result
-      final user = User.fromJson({
-        'id': admin['id'],
-        'email': admin['email'],
-        'fname': admin['fname'],
-        'lname': admin['lname'],
-        'role': admin['role'],
-        'phone': admin['phone'],
-        'status': 'active',
-        'school_id': school['id'].toString(),
-      });
-
-      // Set current user and login state
-      authController.currentUser.value = user;
-      authController.isLoggedIn.value = true;
-      authController.userEmail.value = admin['email'];
-
-      print('✅ User authenticated: ${admin['email']}');
-
-      // ✅ STEP 2: Show success dialog with PIN setup message
-      await Get.dialog(
+      // Show success dialog
+      Get.dialog(
         AlertDialog(
           title: Row(
             children: [
-              Icon(Icons.check_circle, color: Colors.green.shade600, size: 32),
+              Icon(Icons.celebration, color: Colors.green.shade600),
               const SizedBox(width: 12),
-              const Expanded(child: Text('Registration Successful!')),
+              const Text('🎉 Registration Complete!'),
             ],
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('🏫 School: ${school['name']}'),
-              const SizedBox(height: 8),
-              Text('🎫 Invitation Code: ${school['invitation_code']}'),
-              const SizedBox(height: 8),
-              Text('⏱️ Trial Period: $trialDays days'),
+              Text(
+                'Welcome to ${school['name']}!',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               const SizedBox(height: 16),
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: Colors.blue.shade50,
-                  borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: Colors.blue.shade200),
+                  borderRadius: BorderRadius.circular(8),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Icon(Icons.security,
-                            color: Colors.blue.shade600, size: 20),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Security Setup Required',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.blue.shade600,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
                     Text(
-                      'For faster and more secure access, you\'ll now set up a 4-digit PIN. '
+                      '🔑 Invitation Code: ${school['invitation_code']}',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue.shade800,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Share this code with your staff to join your school.',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade50,
+                  border: Border.all(color: Colors.green.shade200),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '🎁 Free Trial: $trialDays days',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green.shade800,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Enjoy all premium features during your trial period.',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  border: Border.all(color: Colors.orange.shade200),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '📱 Next Step: Set up your PIN',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.orange.shade800,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
                       'This will be used for all future logins instead of your email and password.',
                       style: TextStyle(
                         fontSize: 13,
@@ -459,27 +514,95 @@ class SchoolRegistrationController extends GetxController {
           ),
           actions: [
             ElevatedButton(
-              onPressed: () => Get.back(),
+              onPressed: () {
+                Get.back();
+                _navigateToMain();
+              },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.green.shade600,
                 foregroundColor: Colors.white,
               ),
-              child: const Text('Continue to PIN Setup'),
+              child: const Text('Continue to Dashboard'),
             ),
           ],
         ),
         barrierDismissible: false,
       );
 
-      // ✅ STEP 3: Navigate to PIN setup instead of login
-      await SchoolSelectionController.markFirstRunCompleted();
-      Get.offAllNamed('/pin-setup');
-
-      print('✅ Step 5 Complete: Redirecting to PIN setup');
+      print('✅ Step 5 Complete: User auto-logged in and ready to continue');
     } catch (e) {
       print('❌ Step 5 Failed: Navigation error - $e');
-      // Fallback: still navigate to PIN setup
-      Get.offAllNamed('/pin-setup');
+      // Fallback: still try to navigate to main
+      _navigateToMain();
+    }
+  }
+
+  /// Auto-login the newly registered user
+  Future<void> _autoLoginUser(
+      Map<String, dynamic> adminUser, Map<String, dynamic> school) async {
+    try {
+      print('🔐 Auto-logging in registered user...');
+
+      // Get AuthController and login the user
+      final authController = Get.find<AuthController>();
+
+      // Create user object from registration data
+      final user = User(
+          id: adminUser['id'],
+          schoolId: school['id'].toString(),
+          email: adminUser['email'],
+          role: 'admin',
+          fname: _extractFirstName(adminUser['name'] ?? ''),
+          lname: _extractLastName(adminUser['name'] ?? ''),
+          phone: adminPhoneController.text.trim(),
+          status: 'active',
+          date_of_birth: DateTime.now().subtract(Duration(days: 365 * 30)),
+          gender: 'other',
+          password: '',
+          address: '',
+          idnumber: '',
+          created_at: DateTime.now() // Not needed for authenticated user
+          );
+
+      // Set the user as authenticated
+      authController.currentUser(user);
+      authController.isLoggedIn(true);
+
+      // Mark first run as completed
+      await SchoolSelectionController.markFirstRunCompleted();
+
+      print('✅ User auto-logged in successfully');
+    } catch (e) {
+      print('❌ Auto-login failed: $e');
+      // Don't throw - let the navigation continue
+    }
+  }
+
+  /// Extract first name from full name
+  String _extractFirstName(String fullName) {
+    if (fullName.isEmpty) return adminFirstNameController.text.trim();
+    return fullName.split(' ').first;
+  }
+
+  /// Extract last name from full name
+  String _extractLastName(String fullName) {
+    if (fullName.isEmpty) return adminLastNameController.text.trim();
+    final parts = fullName.split(' ');
+    return parts.length > 1
+        ? parts.sublist(1).join(' ')
+        : adminLastNameController.text.trim();
+  }
+
+  /// Navigate to main application
+  void _navigateToMain() {
+    print('🏠 Navigating to main application...');
+    try {
+      // Clear all previous routes and go to main
+      Get.offAllNamed('/main');
+    } catch (e) {
+      print('❌ Navigation to main failed: $e');
+      // Fallback: go to dashboard
+      Get.offAllNamed('/dashboard');
     }
   }
 
@@ -587,10 +710,5 @@ class SchoolRegistrationController extends GetxController {
         ],
       ),
     );
-  }
-
-  /// Convert TimeOfDay to string
-  String _timeOfDayToString(TimeOfDay time) {
-    return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
   }
 }

@@ -7,7 +7,7 @@ import 'package:http/http.dart' as http;
 
 class ApiService {
   static String? _token;
-  static String baseUrl = 'https://driving.fonpos.co.zw/api/';
+  static String baseUrl = 'https://driving.fonpos.co.zw/api';
 
   // Enhanced timeout settings for production
   static const Duration connectTimeout = Duration(seconds: 30);

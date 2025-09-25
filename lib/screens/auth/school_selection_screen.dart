@@ -21,12 +21,12 @@ class SchoolSelectionScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: 40),
+                const SizedBox(height: 70),
 
                 // App Logo/Header
                 _buildHeader(),
 
-                const SizedBox(height: 10),
+                const SizedBox(height: 30),
 
                 // Welcome Text
                 Text(
@@ -38,7 +38,7 @@ class SchoolSelectionScreen extends StatelessWidget {
                   textAlign: TextAlign.center,
                 ),
 
-                const SizedBox(height: 8),
+                const SizedBox(height: 16),
 
                 Text(
                   'How do you want to get started?',

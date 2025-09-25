@@ -5,7 +5,7 @@ import 'dart:convert';
 import 'api_service.dart';
 
 class SchoolApiService {
-  static const String baseUrl = 'https://driving.fonpos.co.zw/api/';
+  static const String baseUrl = 'https://driving.fonpos.co.zw/api';
 
   /// Register a new school online with enhanced error handling
   static Future<Map<String, dynamic>> registerSchool({
@@ -43,8 +43,8 @@ class SchoolApiService {
         'start_time': startTime,
         'end_time': endTime,
         'operating_days': operatingDays,
-        'admin_first_name': adminFirstName,
-        'admin_last_name': adminLastName,
+        'admin_fname': adminFirstName,
+        'admin_lname': adminLastName,
         'admin_email': adminEmail,
         'admin_password': adminPassword,
         'admin_password_confirmation': adminPassword,

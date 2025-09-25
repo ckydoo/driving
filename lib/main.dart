@@ -87,7 +87,7 @@ Future<void> _initializeDatabaseAndMigrations() async {
 void _configureApiService() {
   // Configure your API base URL here
   // You should replace this with your actual Laravel API URL
-  const String apiBaseUrl = 'https://driving.fonpos.co.zw/api/';
+  const String apiBaseUrl = 'https://driving.fonpos.co.zw/api';
 
   // Set up API configuration
   ApiService.configure(baseUrl: apiBaseUrl);

@@ -130,7 +130,7 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
           ),
           backgroundColor: Colors.grey.shade800,
           duration: _exitTimeLimit,
-          behavior: SnackBarBehavior.fixed,
+          behavior: SnackBarBehavior.floating,
           margin: const EdgeInsets.all(16),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8),
