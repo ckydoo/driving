@@ -2,13 +2,11 @@ plugins {
     id "com.android.application"
     id "kotlin-android"
     id "dev.flutter.flutter-gradle-plugin"
-    // ADD THIS LINE for Firebase
-    id 'com.google.gms.google-services'
 }
 
 android {
     namespace = "com.codzlabzim.driving"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 35
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -23,13 +21,11 @@ android {
 
     defaultConfig {
         applicationId = "com.codzlabzim.driving"
-        // IMPORTANT: Firebase requires minSdk 19+, you have 23 which is good
         minSdk = 23
         targetSdk = 35
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         
-        // ADD THIS for better Firebase compatibility
         multiDexEnabled true
     }
 
@@ -45,12 +41,6 @@ flutter {
 }
 
 dependencies {
-    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:1.2.2'
-    
-    // ADD THESE Firebase dependencies if needed
-    implementation platform('com.google.firebase:firebase-bom:32.7.0')
-    implementation 'com.google.firebase:firebase-analytics'
-    
-    // ADD MultiDex support for Firebase
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:1.2.2' 
     implementation 'androidx.multidex:multidex:2.0.1'
 }
