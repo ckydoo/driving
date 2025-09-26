@@ -9,6 +9,12 @@ class ApiService {
   static String? _token;
   static String baseUrl = 'https://driving.fonpos.co.zw/api';
 
+  /// Check if we have a valid token
+  static bool get hasToken => _token != null && _token!.isNotEmpty;
+
+  /// Get current token (for debugging)
+  static String? get currentToken => _token;
+
   // Enhanced timeout settings for production
   static const Duration connectTimeout = Duration(seconds: 30);
   static const Duration receiveTimeout =
@@ -69,55 +75,6 @@ class ApiService {
 
       final data = _handleResponse(response);
       return data['data'] ?? {};
-    });
-  }
-
-  /// Register a new device with the server
-  static Future<void> registerDevice({
-    required String schoolId,
-    required String deviceId,
-  }) async {
-    return _withRetry(() async {
-      print('📱 Registering device: $deviceId for school: $schoolId');
-
-      final response = await _makeRequest(
-        'POST',
-        '/sync/register-device',
-        body: {
-          'school_id': schoolId, // Added this - your server needs it
-          'device_id': deviceId,
-          'platform': Platform.operatingSystem,
-          'app_version': '1.0.0', // Get from package_info if available
-        },
-        timeout: sendTimeout,
-      );
-
-      _handleResponse(response);
-      print('✅ Device registered successfully');
-    });
-  }
-
-  /// Download all data for a school (first-time setup)
-  static Future<Map<String, dynamic>> downloadAllSchoolData({
-    required String schoolId,
-  }) async {
-    return _withRetry(() async {
-      print('⬇️ Downloading all data for school: $schoolId');
-
-      final response = await _makeRequest(
-        'GET',
-        '/sync/download-all',
-        queryParams: {'school_id': schoolId},
-        timeout: receiveTimeout, // Longer timeout for large data
-      );
-
-      final data = _handleResponse(response);
-      final result = data['data'] ?? {};
-
-      print('✅ Downloaded school data:');
-      _logDataCounts(result);
-
-      return result;
     });
   }
 
@@ -277,7 +234,7 @@ class ApiService {
         formattedChanges = changes;
         print('📋 Using List format: ${changes.length} items');
       } else {
-        throw ApiException('Invalid changes format', 400, {'changes': changes});
+        throw ApiException(400, 'Invalid changes format');
       }
 
       final response = await _makeRequest(
@@ -418,109 +375,6 @@ class ApiService {
     }
   }
 
-  /// Handle HTTP response with proper error checking
-  static Map<String, dynamic> _handleResponse(http.Response response) {
-    print('🔍 Response Status: ${response.statusCode}');
-    print('🔍 Response Body: ${response.body}');
-
-    try {
-      final data = json.decode(response.body) as Map<String, dynamic>;
-
-      // ✅ FIX: Handle successful status codes (200-299)
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        // Check if server explicitly marked as success
-        final serverSuccess = data['success'] ?? false;
-        final uploaded = data['data']?['uploaded'] ?? 0;
-        final errors = data['data']?['errors'] ?? [];
-
-        // ✅ FIXED: Consider upload successful if:
-        // 1. Server says success=true, OR
-        // 2. Server uploaded > 0 items, OR
-        // 3. Server has no errors and reasonable response
-        final actuallySuccessful = serverSuccess ||
-            uploaded > 0 ||
-            (errors.isEmpty && data.containsKey('data'));
-
-        if (actuallySuccessful) {
-          // Override success flag if server got it wrong
-          data['success'] = true;
-          print('✅ Response processed successfully');
-          return data;
-        } else {
-          // Server returned 200 but with actual errors
-          final errorMessage = data['message'] ?? 'Server processing failed';
-          print('⚠️ Server returned 200 but failed processing: $errorMessage');
-          throw ApiException(errorMessage, response.statusCode, data);
-        }
-      } else {
-        // Handle error status codes (400+)
-        final errorMessage = data['message'] ?? 'Server error occurred';
-        print('❌ Server error ${response.statusCode}: $errorMessage');
-        throw ApiException(errorMessage, response.statusCode, data);
-      }
-    } catch (e) {
-      if (e is ApiException) {
-        rethrow;
-      }
-
-      print('❌ Failed to parse response: $e');
-      throw ApiException('Invalid server response format', response.statusCode,
-          {'raw_body': response.body});
-    }
-  }
-
-  /// Retry mechanism for failed requests
-  static Future<T> _withRetry<T>(Future<T> Function() operation) async {
-    int attempt = 0;
-    Exception? lastException;
-
-    while (attempt < maxRetries) {
-      try {
-        attempt++;
-        if (attempt > 1) {
-          print('🔄 Retry attempt $attempt/$maxRetries');
-        }
-
-        return await operation();
-      } on SocketException catch (e) {
-        lastException = e;
-        print('❌ Network error (attempt $attempt): ${e.message}');
-
-        if (attempt < maxRetries) {
-          print('⏳ Retrying in ${retryDelay.inSeconds}s...');
-          await Future.delayed(retryDelay);
-        }
-      } on TimeoutException catch (e) {
-        lastException = e;
-        print('❌ Timeout error (attempt $attempt): ${e.message}');
-
-        if (attempt < maxRetries) {
-          print('⏳ Retrying in ${retryDelay.inSeconds}s...');
-          await Future.delayed(retryDelay);
-        }
-      } on Exception catch (e) {
-        // Don't retry for authentication/permission errors or client errors
-        if (e.toString().contains('Authentication') ||
-            e.toString().contains('Access forbidden') ||
-            e.toString().contains('Invalid JSON')) {
-          throw e;
-        }
-
-        lastException = e;
-        print('❌ Request error (attempt $attempt): $e');
-
-        if (attempt < maxRetries) {
-          print('⏳ Retrying in ${retryDelay.inSeconds}s...');
-          await Future.delayed(retryDelay);
-        }
-      }
-    }
-
-    print('💥 All $maxRetries attempts failed');
-    throw lastException ??
-        Exception('Request failed after $maxRetries attempts');
-  }
-
   /// Log data counts for debugging
   static void _logDataCounts(Map<String, dynamic> data) {
     final tables = [
@@ -632,6 +486,133 @@ class ApiService {
     });
   }
 
+  /// Enhanced device registration with better error handling
+  static Future<Map<String, dynamic>> registerDevice({
+    required String deviceId,
+    required String schoolId,
+  }) async {
+    print('📱 Registering device: $deviceId for school: $schoolId');
+
+    // Check if we have a token
+    if (!hasToken) {
+      throw Exception(
+          'No authentication token available. Please sign in with password first.');
+    }
+
+    return _withRetry(() async {
+      final response = await _makeRequest(
+        'POST',
+        '/sync/register-device',
+        body: {
+          'device_id': deviceId,
+          'school_id': schoolId,
+        },
+        timeout: connectTimeout,
+      );
+
+      final data = _handleResponse(response);
+      print('✅ Device registration successful');
+      return data['data'] ?? data;
+    });
+  }
+
+  /// Enhanced download all data with better error handling
+  static Future<Map<String, dynamic>> downloadAllSchoolData({
+    required String schoolId,
+  }) async {
+    print('⬇️ Downloading all data for school: $schoolId');
+
+    // Check if we have a token
+    if (!hasToken) {
+      throw Exception(
+          'No authentication token available. Please sign in with password first.');
+    }
+
+    return _withRetry(() async {
+      final response = await _makeRequest(
+        'GET',
+        '/sync/download-all',
+        queryParams: {
+          'school_id': schoolId,
+        },
+        timeout: receiveTimeout, // Longer timeout for large downloads
+      );
+
+      final data = _handleResponse(response);
+      print('✅ All school data downloaded successfully');
+      return data['data'] ?? data;
+    });
+  }
+
+  /// Enhanced error handling for responses
+  static Map<String, dynamic> _handleResponse(http.Response response) {
+    print('🔍 Response Status: ${response.statusCode}');
+    print('🔍 Response Body: ${response.body}');
+
+    if (response.statusCode == 401) {
+      // Token is invalid/expired
+      print('❌ Authentication failed - token may be expired');
+      clearToken(); // Clear the invalid token
+      throw ApiException(401, 'Authentication failed. Please sign in again.');
+    }
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      try {
+        return json.decode(response.body);
+      } catch (e) {
+        print('❌ JSON decode error: $e');
+        throw ApiException(response.statusCode, 'Invalid server response');
+      }
+    }
+
+    // Handle other HTTP errors
+    String errorMessage = 'Server error ${response.statusCode}';
+
+    try {
+      final errorData = json.decode(response.body);
+      errorMessage = errorData['message'] ?? errorMessage;
+    } catch (e) {
+      print('⚠️ Could not parse error response: $e');
+    }
+
+    print('❌ Server error ${response.statusCode}: $errorMessage');
+    throw ApiException(response.statusCode, errorMessage);
+  }
+
+  /// Enhanced retry mechanism with better error handling
+  static Future<T> _withRetry<T>(Future<T> Function() operation) async {
+    int attempts = 0;
+
+    while (attempts < maxRetries) {
+      attempts++;
+
+      try {
+        print('🔄 Attempt $attempts/$maxRetries');
+        return await operation();
+      } catch (e) {
+        print('❌ Request error (attempt $attempts): $e');
+
+        // Don't retry on authentication errors
+        if (e is ApiException && e.statusCode == 401) {
+          print('🚫 Not retrying authentication error');
+          rethrow;
+        }
+
+        // Don't retry on the last attempt
+        if (attempts >= maxRetries) {
+          print('💥 All $maxRetries attempts failed');
+          rethrow;
+        }
+
+        // Wait before retrying
+        print('⏳ Retrying in ${retryDelay.inSeconds}s...');
+        await Future.delayed(retryDelay);
+      }
+    }
+
+    throw Exception('All retry attempts failed');
+  }
+
   /// User logout
   static Future<void> logout() async {
     try {
@@ -644,13 +625,12 @@ class ApiService {
   }
 }
 
-// ✅ Custom exception for better error handling
+/// Custom exception for API errors
 class ApiException implements Exception {
-  final String message;
   final int statusCode;
-  final Map<String, dynamic> data;
+  final String message;
 
-  ApiException(this.message, this.statusCode, this.data);
+  ApiException(this.statusCode, this.message);
 
   @override
   String toString() => 'ApiException($statusCode): $message';

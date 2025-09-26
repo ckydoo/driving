@@ -249,7 +249,7 @@ class _PaymentDialogState extends State<PaymentDialog>
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        'Pay All Outstanding Invoices',
+                        'Pay All',
                         style: TextStyle(
                           fontWeight: FontWeight.w600,
                           color: _payAllMode
@@ -917,44 +917,44 @@ class _PaymentDialogState extends State<PaymentDialog>
                           // Payment Method
                           _buildPaymentMethodSection(isSmallScreen),
 
+                          // SizedBox(height: isSmallScreen ? 16 : 20),
+
+                          // // Notes
+                          // TextFormField(
+                          //   controller: _notesController,
+                          //   maxLines: isSmallScreen ? 2 : 3,
+                          //   decoration: InputDecoration(
+                          //     labelText: 'Notes (Optional)',
+                          //     labelStyle:
+                          //         TextStyle(fontSize: isSmallScreen ? 14 : 16),
+                          //     hintText: _payAllMode
+                          //         ? 'Payment for all outstanding invoices...'
+                          //         : 'Add payment notes...',
+                          //     hintStyle:
+                          //         TextStyle(fontSize: isSmallScreen ? 12 : 14),
+                          //     border: OutlineInputBorder(
+                          //       borderRadius: BorderRadius.circular(10),
+                          //     ),
+                          //     focusedBorder: OutlineInputBorder(
+                          //       borderRadius: BorderRadius.circular(10),
+                          //       borderSide: BorderSide(
+                          //         color: _payAllMode
+                          //             ? Colors.green.shade600
+                          //             : Colors.blue.shade600,
+                          //         width: 2,
+                          //       ),
+                          //     ),
+                          //     contentPadding:
+                          //         EdgeInsets.all(isSmallScreen ? 12 : 16),
+                          //   ),
+                          // ),
+
                           SizedBox(height: isSmallScreen ? 16 : 20),
 
-                          // Notes
-                          TextFormField(
-                            controller: _notesController,
-                            maxLines: isSmallScreen ? 2 : 3,
-                            decoration: InputDecoration(
-                              labelText: 'Notes (Optional)',
-                              labelStyle:
-                                  TextStyle(fontSize: isSmallScreen ? 14 : 16),
-                              hintText: _payAllMode
-                                  ? 'Payment for all outstanding invoices...'
-                                  : 'Add payment notes...',
-                              hintStyle:
-                                  TextStyle(fontSize: isSmallScreen ? 12 : 14),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(10),
-                                borderSide: BorderSide(
-                                  color: _payAllMode
-                                      ? Colors.green.shade600
-                                      : Colors.blue.shade600,
-                                  width: 2,
-                                ),
-                              ),
-                              contentPadding:
-                                  EdgeInsets.all(isSmallScreen ? 12 : 16),
-                            ),
-                          ),
+                          // // Receipt Options
+                          // _buildReceiptOptionsSection(isSmallScreen),
 
-                          SizedBox(height: isSmallScreen ? 16 : 20),
-
-                          // Receipt Options
-                          _buildReceiptOptionsSection(isSmallScreen),
-
-                          SizedBox(height: isSmallScreen ? 20 : 24),
+                          // SizedBox(height: isSmallScreen ? 20 : 24),
 
                           // Action Buttons
                           isVerySmallScreen

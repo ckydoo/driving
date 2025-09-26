@@ -393,19 +393,17 @@ class SchoolRegistrationController extends GetxController {
 
   /// Step 5: Show success and navigate
   Future<void> _showSuccessAndNavigate(Map<String, dynamic> result) async {
-    print(
-        '🎉 Step 5: Registration complete - setting up PIN authentication...');
+    print('🎉 Step 5: Registration complete - redirecting to PIN setup...');
 
     try {
       final school = result['school'];
-      final adminUser =
-          result['admin_user']; // ✅ Fixed: Use 'admin_user' not 'admin'
+      final adminUser = result['admin_user'];
       final trialDays = 30; // Default trial days
 
       // ✅ CRITICAL: Auto-login the user after registration
       await _autoLoginUser(adminUser, school);
 
-      // Show success dialog
+      // Show success dialog with corrected navigation
       Get.dialog(
         AlertDialog(
           title: Row(
@@ -422,11 +420,11 @@ class SchoolRegistrationController extends GetxController {
               Text(
                 'Welcome to ${school['name']}!',
                 style: const TextStyle(
-                  fontSize: 18,
+                  fontSize: 16,
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -438,44 +436,17 @@ class SchoolRegistrationController extends GetxController {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '🔑 Invitation Code: ${school['invitation_code']}',
+                      '🎯 Your $trialDays-day trial is now active',
                       style: TextStyle(
-                        fontSize: 16,
+                        fontSize: 14,
                         fontWeight: FontWeight.bold,
                         color: Colors.blue.shade800,
                       ),
                     ),
                     const SizedBox(height: 4),
-                    const Text(
-                      'Share this code with your staff to join your school.',
-                      style: TextStyle(fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.green.shade50,
-                  border: Border.all(color: Colors.green.shade200),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
                     Text(
-                      '🎁 Free Trial: $trialDays days',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.green.shade800,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Enjoy all premium features during your trial period.',
-                      style: TextStyle(fontSize: 12),
+                      'Explore all features and see how our platform can help manage your driving school.',
+                      style: const TextStyle(fontSize: 12),
                     ),
                   ],
                 ),
@@ -492,7 +463,7 @@ class SchoolRegistrationController extends GetxController {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '📱 Next Step: Set up your PIN',
+                      '🔐 Next Step: Set up your PIN',
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
@@ -501,7 +472,7 @@ class SchoolRegistrationController extends GetxController {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'This will be used for all future logins instead of your email and password.',
+                      'Create a 4-digit PIN for secure and quick access to your account.',
                       style: TextStyle(
                         fontSize: 13,
                         color: Colors.blue.shade700,
@@ -513,27 +484,65 @@ class SchoolRegistrationController extends GetxController {
             ],
           ),
           actions: [
+            // Add "Skip for now" option
+            TextButton(
+              onPressed: () {
+                Get.back();
+                _navigateToMain(); // Skip PIN setup, go directly to main
+              },
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.grey.shade600,
+              ),
+              child: const Text('Skip for now'),
+            ),
+            // Primary action: Setup PIN
             ElevatedButton(
               onPressed: () {
                 Get.back();
-                _navigateToMain();
+                _navigateToPinSetup(); // ✅ Fixed: Go to PIN setup instead of main
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.green.shade600,
                 foregroundColor: Colors.white,
               ),
-              child: const Text('Continue to Dashboard'),
+              child: const Text('Set up PIN'),
             ),
           ],
         ),
         barrierDismissible: false,
       );
 
-      print('✅ Step 5 Complete: User auto-logged in and ready to continue');
+      print('✅ Step 5 Complete: User ready for PIN setup or main app');
     } catch (e) {
       print('❌ Step 5 Failed: Navigation error - $e');
-      // Fallback: still try to navigate to main
+      // Fallback: still try to navigate to PIN setup
+      _navigateToPinSetup();
+    }
+  }
+
+  /// Navigate to PIN setup (NEW METHOD)
+  void _navigateToPinSetup() {
+    print('🔐 Navigating to PIN setup...');
+    try {
+      // Navigate to PIN setup screen
+      Get.offAllNamed('/pin-setup');
+    } catch (e) {
+      print('❌ Navigation to PIN setup failed: $e');
+      // Fallback: go to main app
       _navigateToMain();
+    }
+  }
+
+  /// Navigate to main application (existing method)
+  void _navigateToMain() {
+    print('🏠 Navigating to main application...');
+    try {
+      // Clear all previous routes and go to main
+      Get.offAllNamed('/main');
+    } catch (e) {
+      print('❌ Navigation to main failed: $e');
+      // Fallback: go to dashboard
+      Get.offAllNamed('/dashboard');
     }
   }
 
@@ -591,19 +600,6 @@ class SchoolRegistrationController extends GetxController {
     return parts.length > 1
         ? parts.sublist(1).join(' ')
         : adminLastNameController.text.trim();
-  }
-
-  /// Navigate to main application
-  void _navigateToMain() {
-    print('🏠 Navigating to main application...');
-    try {
-      // Clear all previous routes and go to main
-      Get.offAllNamed('/main');
-    } catch (e) {
-      print('❌ Navigation to main failed: $e');
-      // Fallback: go to dashboard
-      Get.offAllNamed('/dashboard');
-    }
   }
 
   /// Show no internet dialog
