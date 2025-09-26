@@ -1,5 +1,6 @@
 // lib/services/app_bindings.dart - FIXED VERSION
 import 'package:driving/controllers/auth_controller.dart';
+import 'package:driving/controllers/subscription_controller.dart';
 import 'package:driving/controllers/sync_controller.dart';
 import 'package:driving/controllers/settings_controller.dart';
 import 'package:driving/controllers/user_controller.dart';
@@ -73,6 +74,8 @@ class AppBindings extends Bindings {
       if (!Get.isRegistered<PinController>()) {
         Get.put<PinController>(PinController(), permanent: true);
         print('✅ PinController initialized');
+        Get.put(SubscriptionController(),
+            permanent: true); // Initialize subscription controller
       }
       print('✅ PIN authentication initialization completed');
     } catch (e) {

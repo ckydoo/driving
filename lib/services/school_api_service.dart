@@ -5,7 +5,7 @@ import 'dart:convert';
 import 'api_service.dart';
 
 class SchoolApiService {
-  static const String baseUrl = 'https://driving.fonpos.co.zw/api';
+  static const String baseUrl = 'http://192.168.9.108:8000/api';
 
   /// Register a new school online with enhanced error handling
   static Future<Map<String, dynamic>> registerSchool({
