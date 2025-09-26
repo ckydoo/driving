@@ -3,10 +3,12 @@ import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/controllers/pin_controller.dart';
 import 'package:driving/controllers/school_selection_controller.dart';
 import 'package:driving/controllers/settings_controller.dart';
+import 'package:driving/controllers/subscription_controller.dart';
 import 'package:driving/routes/app_routes.dart';
 import 'package:driving/screens/auth/login_screen.dart';
 import 'package:driving/services/school_config_service.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:get/get.dart';
 import 'package:driving/services/app_bindings.dart';
 import 'package:driving/services/api_service.dart';
@@ -26,6 +28,9 @@ void main() async {
 
   // STEP 2: Initialize core dependencies
   await _initializeCoreDependencies();
+  Get.put(SubscriptionController());
+  Stripe.publishableKey =
+      "pk_test_your_publishable_key_here"; // Add your Stripe publishable key
 
   // STEP 3: Initialize app bindings (which includes all controllers and sync)
   await AppBindings().dependencies();
