@@ -7,6 +7,7 @@ import 'package:driving/controllers/subscription_controller.dart';
 import 'package:driving/routes/app_routes.dart';
 import 'package:driving/screens/auth/login_screen.dart';
 import 'package:driving/services/school_config_service.dart';
+import 'package:driving/services/subscription_cache.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:get/get.dart';
@@ -105,6 +106,8 @@ void _initializeDatabaseFactory() {
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
       sqfliteFfiInit();
       databaseFactory = databaseFactoryFfi;
+      SubscriptionCache.initializeTable();
+
       print('✅ Database factory initialized for desktop platform');
     } else {
       print('✅ Using default database factory for mobile platform');
@@ -152,7 +155,7 @@ Future<void> _initializeDatabaseAndMigrations() async {
 void _configureApiService() {
   // Configure your API base URL here
   // You should replace this with your actual Laravel API URL
-  const String apiBaseUrl = 'http://192.168.9.128:8000/api';
+  const String apiBaseUrl = 'http://192.168.8.172:8000/api';
 
   // Set up API configuration
   ApiService.configure(baseUrl: apiBaseUrl);
@@ -209,14 +212,13 @@ class DrivingSchoolApp extends StatelessWidget {
       ),
 
       // Use protected routes with middleware
+      initialRoute: AppRoutes.initial, // ✅ Use routes system
       getPages: AppRoutes.routes,
-      // Use AuthenticationWrapper to determine initial route with school selection
+      debugShowCheckedModeBanner: false,
+      unknownRoute: GetPage(name: '/notfound', page: () => const LoginScreen()),
       home: const AuthenticationWrapper(),
 
-      debugShowCheckedModeBanner: false,
-
       // Handle unknown routes
-      unknownRoute: GetPage(name: '/notfound', page: () => const LoginScreen()),
     );
   }
 }
@@ -229,7 +231,6 @@ class AuthenticationWrapper extends StatefulWidget {
 }
 
 class _AuthenticationWrapperState extends State<AuthenticationWrapper> {
-  // Add this flag as a class member
   bool _isNavigating = false;
 
   @override
@@ -243,7 +244,7 @@ class _AuthenticationWrapperState extends State<AuthenticationWrapper> {
     _isNavigating = true;
 
     try {
-      print('🔍 === DETERMINING INITIAL ROUTE - TABLE CONFLICT FIX ===');
+      print('🔍 === DETERMINING INITIAL ROUTE - COMPLETE FIX ===');
       await Future.delayed(const Duration(milliseconds: 300));
 
       final settingsController = Get.find<SettingsController>();
@@ -256,16 +257,14 @@ class _AuthenticationWrapperState extends State<AuthenticationWrapper> {
 
       String initialRoute;
 
-      // STEP 1: Check if business/school setup is complete (checks both tables now)
-      final isSchoolSetupComplete = settingsController.isBusinessInfoComplete();
-      final isFirstRun = await SchoolSelectionController.isFirstRun();
+      // STEP 1: Check if business/school setup is complete
+      final isSchoolSetupComplete = await _checkSchoolConfigurationFixed();
 
       print('🏫 School setup complete: $isSchoolSetupComplete');
-      print('🏫 First run: $isFirstRun');
       print(
           '📊 Settings state: ${settingsController.getBusinessInfoSummary()}');
 
-      if (!isSchoolSetupComplete || isFirstRun) {
+      if (!isSchoolSetupComplete) {
         print('🏫 School setup needed - redirect to school selection');
         initialRoute = '/school-selection';
       }
@@ -313,42 +312,70 @@ class _AuthenticationWrapperState extends State<AuthenticationWrapper> {
     }
   }
 
-  Future<bool> _checkSchoolConfiguration() async {
+  /// FIXED: More lenient school configuration check with auto-sync
+  Future<bool> _checkSchoolConfigurationFixed() async {
     try {
-      // Check if school data exists in database
       final db = await DatabaseHelper.instance.database;
 
-      // Check schools table
+      // Method 1: Check schools table
       final schoolResult = await db.query('schools', limit: 1);
+      bool hasSchoolInTable = schoolResult.isNotEmpty;
 
-      // Check settings table for school configuration
+      // Method 2: Check settings table
       final settingsResult = await db.query(
         'settings',
         where: 'key IN (?, ?, ?)',
         whereArgs: ['business_name', 'school_id', 'enable_multi_tenant'],
       );
 
-      // School is configured if:
-      // 1. At least one school exists in schools table
-      // 2. Business name is set
-      // 3. School ID is set
-      bool hasSchoolData = schoolResult.isNotEmpty;
       bool hasBusinessName = settingsResult.any((row) =>
           row['key'] == 'business_name' &&
           row['value'] != null &&
           row['value'].toString().trim().isNotEmpty);
+
       bool hasSchoolId = settingsResult.any((row) =>
           row['key'] == 'school_id' &&
           row['value'] != null &&
           row['value'].toString().trim().isNotEmpty);
 
-      bool isConfigured = hasSchoolData && hasBusinessName && hasSchoolId;
+      // FIXED: Configuration is valid if EITHER:
+      // 1. We have a school in the schools table AND a school_id in settings
+      // 2. OR we have business_name in settings (fallback for single-tenant)
+      bool isConfigured = (hasSchoolInTable && hasSchoolId) || hasBusinessName;
 
-      print('🏫 School configuration check:');
-      print('   Has school data: $hasSchoolData');
+      print('🏫 School configuration check (FIXED):');
+      print('   Has school in table: $hasSchoolInTable');
       print('   Has business name: $hasBusinessName');
       print('   Has school ID: $hasSchoolId');
       print('   Is configured: $isConfigured');
+
+      // ADDITIONAL FIX: If we have school in table but no school_id in settings,
+      // automatically sync them
+      if (hasSchoolInTable && !hasSchoolId) {
+        print('🔧 Auto-fixing: Syncing school ID to settings...');
+        final schoolData = schoolResult.first;
+        final schoolId = schoolData['id']?.toString();
+
+        if (schoolId != null && schoolId.isNotEmpty) {
+          await db.insert(
+            'settings',
+            {'key': 'school_id', 'value': schoolId},
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+
+          // Also sync other school data to settings if missing
+          if (!hasBusinessName && schoolData['name'] != null) {
+            await db.insert(
+              'settings',
+              {'key': 'business_name', 'value': schoolData['name']},
+              conflictAlgorithm: ConflictAlgorithm.replace,
+            );
+          }
+
+          print('✅ Auto-fix complete - school data synced to settings');
+          return true;
+        }
+      }
 
       return isConfigured;
     } catch (e) {
@@ -360,7 +387,6 @@ class _AuthenticationWrapperState extends State<AuthenticationWrapper> {
   /// Check if user has stored authentication
   Future<bool> _checkStoredAuthentication() async {
     try {
-      // Check if there are any users in the database
       final db = await DatabaseHelper.instance.database;
       final users = await db.query('users', limit: 1);
 
@@ -369,95 +395,31 @@ class _AuthenticationWrapperState extends State<AuthenticationWrapper> {
         return false;
       }
 
-      // Check if auth controller has remembered login
       final authController = Get.find<AuthController>();
-
-      // Load remembered email if exists
-      await authController.loadRememberedEmail();
-
-      bool hasRememberedEmail = authController.userEmail.value.isNotEmpty;
-
-      print('🔐 Authentication check:');
-      print('   Has users: ${users.isNotEmpty}');
-      print('   Has remembered email: $hasRememberedEmail');
-
-      // If we have users and potentially remembered login, consider as having auth
-      return users.isNotEmpty;
+      return authController.isLoggedIn.value;
     } catch (e) {
       print('❌ Error checking stored authentication: $e');
       return false;
     }
   }
 
-  // Helper method to check if users exist
+  /// Check if any users exist in database
   Future<bool> _checkIfUsersExist() async {
     try {
-      final users = await DatabaseHelper.instance.getUsers();
+      final db = await DatabaseHelper.instance.database;
+      final users = await db.query('users', limit: 1);
       return users.isNotEmpty;
     } catch (e) {
-      print('⚠️ Error checking users: $e');
+      print('❌ Error checking users: $e');
       return false;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Colors.blue.shade800,
-              Colors.blue.shade600,
-              Colors.blue.shade400,
-            ],
-          ),
-        ),
-        child: const Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Logo
-              Icon(Icons.school, size: 80, color: Colors.white),
-              SizedBox(height: 24),
-
-              // Title
-              Text(
-                'DRIVING SCHOOL',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-              SizedBox(height: 8),
-
-              Text(
-                'Management System',
-                style: TextStyle(fontSize: 16, color: Colors.white70),
-              ),
-              SizedBox(height: 40),
-
-              // Loading indicator
-              SizedBox(
-                width: 40,
-                height: 40,
-                child: CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                  strokeWidth: 3,
-                ),
-              ),
-              SizedBox(height: 16),
-
-              Text(
-                'Initializing...',
-                style: TextStyle(color: Colors.white70, fontSize: 14),
-              ),
-            ],
-          ),
-        ),
+    return const Scaffold(
+      body: Center(
+        child: CircularProgressIndicator(),
       ),
     );
   }

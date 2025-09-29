@@ -2,6 +2,7 @@
 
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/models/user.dart';
+import 'package:driving/routes/app_routes.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -538,7 +539,7 @@ class SchoolRegistrationController extends GetxController {
     print('🏠 Navigating to main application...');
     try {
       // Clear all previous routes and go to main
-      Get.offAllNamed('/main');
+      AppRoutes.toMain();
     } catch (e) {
       print('❌ Navigation to main failed: $e');
       // Fallback: go to dashboard

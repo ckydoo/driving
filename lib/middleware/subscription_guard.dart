@@ -1,20 +1,32 @@
-// lib/middleware/subscription_guard.dart - FIXED WITH REAL-TIME CHECK
+// lib/middleware/subscription_guard.dart - RELIABLE VERSION
+// This version ensures subscription data is loaded BEFORE checking
 
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/controllers/subscription_controller.dart';
-import 'package:driving/screens/subscription/subscription_screen.dart';
+import 'package:driving/services/subscription_cache.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 class SubscriptionGuard extends GetMiddleware {
   @override
-  RouteSettings? redirect(String? route) {
+  int? get priority => 2;
+
+  @override
+  GetPage? onPageCalled(GetPage? page) {
     try {
-      // Skip check for subscription-related routes
-      if (route?.contains('/subscription') == true ||
+      final route = page?.name;
+
+      // Skip check for these routes
+      if (route == '/subscription' ||
+          route?.contains('subscription') == true ||
           route == '/login' ||
-          route == '/school-selection') {
-        return null;
+          route == '/school-selection' ||
+          route == '/school-registration' ||
+          route == '/pin-setup' ||
+          route == '/pin-login') {
+        print(
+            '✅ Allowing access to: $route (excluded from subscription check)');
+        return page;
       }
 
       final authController = Get.find<AuthController>();
@@ -22,255 +34,491 @@ class SubscriptionGuard extends GetMiddleware {
 
       // Only check if user is logged in
       if (!authController.isLoggedIn.value) {
-        return null; // Auth middleware will handle this
+        return page;
       }
 
-      print('🔐 Subscription Guard Check:');
-      print('   Route: ${route}');
+      print('🔐 Subscription Guard Check for route: $route');
 
-      // CRITICAL: Refresh status from server before allowing access
-      try {
-        print('🔄 Checking current subscription status from server...');
-        subscriptionController.loadSubscriptionData();
-      } catch (e) {
-        print('⚠️ Failed to check subscription status: $e');
-        // If we can't check, allow access (fail open) but log the error
-        return null;
-      }
+      // Return a loading page that will check subscription and then navigate
+      return GetPage(
+        name: route ?? '/checking',
+        page: () => _SubscriptionCheckingScreen(
+          targetRoute: route ?? '/main',
+          targetPage: page?.page,
+        ),
+      );
+    } catch (e) {
+      print('❌ Subscription Guard Error: $e');
+      return page;
+    }
+  }
+}
+
+/// Screen that checks subscription status before allowing access
+class _SubscriptionCheckingScreen extends StatefulWidget {
+  final String targetRoute;
+  final GetPageBuilder? targetPage;
+
+  const _SubscriptionCheckingScreen({
+    Key? key,
+    required this.targetRoute,
+    this.targetPage,
+  }) : super(key: key);
+
+  @override
+  State<_SubscriptionCheckingScreen> createState() =>
+      _SubscriptionCheckingScreenState();
+}
+
+class _SubscriptionCheckingScreenState
+    extends State<_SubscriptionCheckingScreen> {
+  bool _isChecking = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkSubscriptionAndProceed();
+  }
+
+  Future<void> _checkSubscriptionAndProceed() async {
+    try {
+      print('🔄 Loading subscription status...');
+      final subscriptionController = Get.find<SubscriptionController>();
+
+      // Load fresh subscription data from server
+      await subscriptionController.loadSubscriptionData();
 
       final status = subscriptionController.subscriptionStatus.value;
       final trialDays = subscriptionController.remainingTrialDays.value;
 
-      print('   Status from server: $status');
-      print('   Trial Days: $trialDays');
+      print('📊 Subscription Status: $status');
+      print('📊 Trial Days: $trialDays');
 
-      // Block if suspended
+      // Check if blocked
       if (status == 'suspended') {
         print('🚫 BLOCKED: Subscription suspended');
-        _showSubscriptionDialog(
-          'Subscription Suspended',
-          'Your subscription has been suspended. Please contact support or update your payment method.',
-          canUpgrade: false,
-          status: 'suspended',
-        );
-        return RouteSettings(name: '/subscription');
+        _showBlockedScreen('suspended');
+        return;
       }
 
-      // Block if expired
       if (status == 'expired') {
         print('🚫 BLOCKED: Subscription expired');
-        _showSubscriptionDialog(
-          'Subscription Expired',
-          'Your subscription has expired. Please renew to continue using the service.',
-          canUpgrade: true,
-          status: 'expired',
-        );
-        return RouteSettings(name: '/subscription');
+        _showBlockedScreen('expired');
+        return;
       }
 
-      // Block if trial expired
       if (status == 'trial' && trialDays <= 0) {
         print('🚫 BLOCKED: Trial expired');
-        _showSubscriptionDialog(
-          'Trial Expired',
-          'Your free trial has ended. Please subscribe to continue using the service.',
-          canUpgrade: true,
-          status: 'trial_expired',
-        );
-        return RouteSettings(name: '/subscription');
+        _showBlockedScreen('trial_expired');
+        return;
       }
 
-      print('✅ ALLOWED: Subscription is $status with $trialDays days');
-      return null; // Allow access
+      // Allow access - navigate to target page
+      print('✅ ALLOWED: Proceeding to ${widget.targetRoute}');
+
+      if (!mounted) return;
+
+      // Navigate to the actual target
+      WidgetsFlutterBinding.ensureInitialized();
+      Future.microtask(() {
+        if (widget.targetPage != null) {
+          Get.off(() => widget.targetPage!());
+        } else {
+          Get.offNamed(widget.targetRoute);
+        }
+      });
     } catch (e) {
-      print('❌ Subscription Guard Error: $e');
-      print('Stack trace: ${StackTrace.current}');
-      return null; // Allow access if error (fail open)
+      print('❌ Error checking subscription: $e');
+
+      // CRITICAL: Don't fail open - check cache instead
+      if (!mounted) return;
+
+      print('📦 Network error - checking cached subscription data');
+
+      try {
+        final cachedData = await SubscriptionCache.getCachedSubscriptionData();
+
+        if (cachedData == null) {
+          // No cache - must block access until online
+          _showNoCacheError();
+          return;
+        }
+
+        final status = cachedData['subscription_status'] as String;
+        final trialDays = cachedData['remaining_trial_days'] as int;
+        final daysSinceSync = cachedData['days_since_sync'] as int;
+
+        print('📦 Using cached data (offline):');
+        print('   Status: $status');
+        print('   Trial Days: $trialDays');
+        print('   Days since sync: $daysSinceSync');
+
+        // Cache too old (>7 days) - require internet
+        if (daysSinceSync > 7) {
+          _showStaleCacheError(daysSinceSync);
+          return;
+        }
+
+        // Check cached status
+        if (status == 'suspended' ||
+            status == 'expired' ||
+            (status == 'trial' && trialDays <= 0)) {
+          _showBlockedScreen(status == 'suspended'
+              ? 'suspended'
+              : status == 'expired'
+                  ? 'expired'
+                  : 'trial_expired');
+          return;
+        }
+
+        // Allow access with cached data
+        print('✅ ALLOWED: Using valid cached subscription');
+        Future.microtask(() {
+          if (widget.targetPage != null) {
+            Get.off(() => widget.targetPage!());
+          } else {
+            Get.offNamed(widget.targetRoute);
+          }
+        });
+      } catch (cacheError) {
+        print('❌ Cache error: $cacheError');
+        _showNoCacheError();
+      }
     }
   }
 
-  void _showSubscriptionDialog(
-    String title,
-    String message, {
-    bool canUpgrade = true,
-    required String status,
-  }) {
-    // Use Future.delayed to avoid dialog during build
-    Future.delayed(Duration(milliseconds: 500), () {
-      if (Get.context != null && !Get.isDialogOpen!) {
-        IconData icon;
-        Color iconColor;
+  void _showBlockedScreen(String reason) {
+    if (!mounted) return;
 
-        switch (status) {
-          case 'suspended':
-            icon = Icons.block;
-            iconColor = Colors.red[700]!;
-            break;
-          case 'expired':
-            icon = Icons.warning_amber_rounded;
-            iconColor = Colors.orange[700]!;
-            break;
-          case 'trial_expired':
-            icon = Icons.access_time_filled;
-            iconColor = Colors.blue[700]!;
-            break;
-          default:
-            icon = Icons.info_outline;
-            iconColor = Colors.grey[700]!;
-        }
+    setState(() {
+      _isChecking = false;
+    });
+  }
 
-        Get.dialog(
-          WillPopScope(
-            onWillPop: () async => false,
-            child: AlertDialog(
-              title: Row(
-                children: [
-                  Icon(icon, color: iconColor, size: 28),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      title,
-                      style: TextStyle(fontSize: 18),
-                    ),
+  void _showNoCacheError() {
+    if (!mounted) return;
+
+    Get.dialog(
+      AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.cloud_off, color: Colors.red[700]),
+            SizedBox(width: 12),
+            Text('Internet Required'),
+          ],
+        ),
+        content: Text(
+          'Cannot verify your subscription without internet connection.\n\n'
+          'Please connect to the internet and try again.',
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () {
+              Get.back();
+              Get.offAllNamed('/login');
+            },
+            child: Text('Exit'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Get.back();
+              setState(() {
+                _isChecking = true;
+              });
+              _checkSubscriptionAndProceed();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue[700],
+            ),
+            child: Text('Retry'),
+          ),
+        ],
+      ),
+      barrierDismissible: false,
+    );
+  }
+
+  void _showStaleCacheError(int daysSinceSync) {
+    if (!mounted) return;
+
+    Get.dialog(
+      AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber, color: Colors.orange[700]),
+            SizedBox(width: 12),
+            Text('Subscription Verification Required'),
+          ],
+        ),
+        content: Text(
+          'Your subscription data is $daysSinceSync days old.\n\n'
+          'Please connect to the internet to verify your subscription status.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Get.back();
+              Get.offAllNamed('/login');
+            },
+            child: Text('Logout'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Get.back();
+              setState(() {
+                _isChecking = true;
+              });
+              _checkSubscriptionAndProceed();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue[700],
+            ),
+            child: Text('Retry'),
+          ),
+        ],
+      ),
+      barrierDismissible: false,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isChecking) {
+      // Show loading while checking
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 24),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Show blocking screen
+    final subscriptionController = Get.find<SubscriptionController>();
+    final status = subscriptionController.subscriptionStatus.value;
+
+    String reason;
+    String title;
+    String message;
+    String? contactEmail;
+    bool showUpgradeButton;
+    Color primaryColor;
+    IconData icon;
+
+    if (status == 'suspended') {
+      reason = 'suspended';
+      title = 'Account Suspended';
+      message =
+          'Your subscription has been suspended. Please update your payment method or contact support.';
+      contactEmail = 'support@drivesync.com';
+      showUpgradeButton = true;
+      primaryColor = Colors.red;
+      icon = Icons.block;
+    } else if (status == 'expired') {
+      reason = 'expired';
+      title = 'Subscription Expired';
+      message =
+          'Your subscription has expired. Please renew to continue using all features.';
+      contactEmail = null;
+      showUpgradeButton = true;
+      primaryColor = Colors.orange;
+      icon = Icons.warning_amber_rounded;
+    } else {
+      reason = 'trial_expired';
+      title = 'Free Trial Ended';
+      message =
+          'Your free trial has ended. Subscribe now to continue using the service.';
+      contactEmail = null;
+      showUpgradeButton = true;
+      primaryColor = Colors.blue;
+      icon = Icons.access_time_filled;
+    }
+
+    return Scaffold(
+      body: Container(
+        width: double.infinity,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [primaryColor!, primaryColor!],
+          ),
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(32.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Icon
+                Container(
+                  padding: EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    shape: BoxShape.circle,
                   ),
-                ],
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    message,
-                    style: TextStyle(fontSize: 16),
+                  child: Icon(
+                    icon,
+                    size: 80,
+                    color: Colors.white,
                   ),
-                  if (!canUpgrade) ...[
-                    SizedBox(height: 16),
-                    Container(
-                      padding: EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.blue[50],
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.support_agent, color: Colors.blue[700]),
-                          SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Please contact support for assistance.',
-                              style: TextStyle(color: Colors.blue[900]),
-                            ),
-                          ),
-                        ],
+                ),
+
+                SizedBox(height: 32),
+
+                // Title
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+
+                SizedBox(height: 16),
+
+                // Message
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 18,
+                    color: Colors.white.withOpacity(0.9),
+                    height: 1.5,
+                  ),
+                ),
+
+                // Contact email (for suspended accounts)
+                if (contactEmail != null) ...[
+                  SizedBox(height: 24),
+                  Container(
+                    padding: EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.3),
+                        width: 2,
                       ),
                     ),
-                  ],
-                  if (canUpgrade && status == 'trial_expired') ...[
-                    SizedBox(height: 16),
-                    Container(
-                      padding: EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [Colors.blue[600]!, Colors.blue[800]!],
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.email_outlined,
+                          color: Colors.white,
+                          size: 32,
                         ),
-                        borderRadius: BorderRadius.circular(8),
+                        SizedBox(height: 8),
+                        Text(
+                          'Contact Support',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          contactEmail,
+                          style: TextStyle(
+                            fontSize: 18,
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
+                SizedBox(height: 48),
+
+                // Action buttons
+                if (showUpgradeButton) ...[
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Get.offAllNamed('/subscription');
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: primaryColor,
+                        padding: EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        elevation: 4,
                       ),
                       child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.star, color: Colors.white),
+                          Icon(Icons.payment, size: 24),
                           SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Upgrade now to unlock all premium features!',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w500,
-                              ),
+                          Text(
+                            reason == 'suspended'
+                                ? 'Update Payment Method'
+                                : 'View Subscription Plans',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
                         ],
                       ),
                     ),
-                  ],
+                  ),
+                  SizedBox(height: 16),
                 ],
-              ),
-              actions: [
-                if (canUpgrade) ...[
-                  TextButton(
-                    onPressed: () {
-                      Get.back();
-                      // Go back to previous screen
-                      Get.back();
+
+                // Logout button
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: () async {
+                      final authController = Get.find<AuthController>();
+                      await authController.signOut();
+                      Get.offAllNamed('/login');
                     },
-                    child: Text('Go Back'),
-                  ),
-                  ElevatedButton(
-                    onPressed: () {
-                      Get.back();
-                      // Stay on subscription screen
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue[700],
+                    style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.white,
+                      side: BorderSide(color: Colors.white, width: 2),
+                      padding: EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
-                    child: Text('View Plans'),
-                  ),
-                ] else ...[
-                  ElevatedButton(
-                    onPressed: () {
-                      Get.back();
-                      Get.back(); // Go back to previous screen
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue[700],
-                      foregroundColor: Colors.white,
+                    child: Text(
+                      'Logout',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                    child: Text('OK'),
                   ),
-                ],
+                ),
               ],
             ),
           ),
-          barrierDismissible: false,
-        );
-      }
-    });
+        ),
+      ),
+    );
   }
 }
 
 /// Helper to check subscription status from anywhere in the app
 class SubscriptionHelper {
-  /// Check if subscription is currently active (checks server)
-  static Future<bool> checkIsActive() async {
-    try {
-      if (!Get.isRegistered<SubscriptionController>()) {
-        return true; // Fail open if controller not registered
-      }
-
-      final controller = Get.find<SubscriptionController>();
-
-      // Refresh from server
-      try {
-        await controller.loadSubscriptionData();
-      } catch (e) {
-        print('⚠️ Could not refresh subscription status: $e');
-        // Use cached value if refresh fails
-      }
-
-      final status = controller.subscriptionStatus.value;
-      final trialDays = controller.remainingTrialDays.value;
-
-      return status == 'active' || (status == 'trial' && trialDays > 0);
-    } catch (e) {
-      print('Error checking subscription: $e');
-      return true; // Fail open
-    }
-  }
-
   static bool get isSubscriptionActive {
     try {
       if (!Get.isRegistered<SubscriptionController>()) {
-        return true; // Fail open if controller not registered
+        return true;
       }
 
       final controller = Get.find<SubscriptionController>();
@@ -280,15 +528,34 @@ class SubscriptionHelper {
           (status == 'trial' && controller.remainingTrialDays.value > 0);
     } catch (e) {
       print('Error checking subscription: $e');
-      return true; // Fail open
+      return true;
+    }
+  }
+
+  static Future<bool> checkIsActive() async {
+    try {
+      if (!Get.isRegistered<SubscriptionController>()) {
+        return true;
+      }
+
+      final controller = Get.find<SubscriptionController>();
+
+      try {
+        await controller.loadSubscriptionData();
+      } catch (e) {
+        print('⚠️ Could not refresh subscription status: $e');
+      }
+
+      return isSubscriptionActive;
+    } catch (e) {
+      print('Error checking subscription: $e');
+      return true;
     }
   }
 
   static bool get isTrialExpired {
     try {
-      if (!Get.isRegistered<SubscriptionController>()) {
-        return false;
-      }
+      if (!Get.isRegistered<SubscriptionController>()) return false;
 
       final controller = Get.find<SubscriptionController>();
       return controller.subscriptionStatus.value == 'trial' &&
@@ -300,9 +567,7 @@ class SubscriptionHelper {
 
   static bool get isSuspended {
     try {
-      if (!Get.isRegistered<SubscriptionController>()) {
-        return false;
-      }
+      if (!Get.isRegistered<SubscriptionController>()) return false;
 
       final controller = Get.find<SubscriptionController>();
       return controller.subscriptionStatus.value == 'suspended';
@@ -313,71 +578,12 @@ class SubscriptionHelper {
 
   static bool get isExpired {
     try {
-      if (!Get.isRegistered<SubscriptionController>()) {
-        return false;
-      }
+      if (!Get.isRegistered<SubscriptionController>()) return false;
 
       final controller = Get.find<SubscriptionController>();
       return controller.subscriptionStatus.value == 'expired';
     } catch (e) {
       return false;
     }
-  }
-
-  static void showUpgradeDialog() {
-    Get.dialog(
-      AlertDialog(
-        title: Text('Upgrade Required'),
-        content: Text(
-            'This feature requires an active subscription. Would you like to view available plans?'),
-        actions: [
-          TextButton(
-            onPressed: () => Get.back(),
-            child: Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Get.back();
-              Get.toNamed('/subscription');
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue[700],
-              foregroundColor: Colors.white,
-            ),
-            child: Text('View Plans'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Show blocking dialog when subscription check fails
-  static void showBlockedDialog(String reason) {
-    Future.delayed(Duration(milliseconds: 300), () {
-      if (!Get.isDialogOpen!) {
-        Get.dialog(
-          AlertDialog(
-            title: Row(
-              children: [
-                Icon(Icons.block, color: Colors.red[700]),
-                SizedBox(width: 12),
-                Text('Access Blocked'),
-              ],
-            ),
-            content: Text(reason),
-            actions: [
-              ElevatedButton(
-                onPressed: () {
-                  Get.back();
-                  Get.offAllNamed('/subscription');
-                },
-                child: Text('View Subscription'),
-              ),
-            ],
-          ),
-          barrierDismissible: false,
-        );
-      }
-    });
   }
 }

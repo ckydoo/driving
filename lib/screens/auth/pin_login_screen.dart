@@ -1,4 +1,5 @@
 // lib/screens/auth/enhanced_pin_login_screen.dart - Complete Fixed Version
+import 'package:driving/routes/app_routes.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
@@ -137,11 +138,11 @@ class _PinLoginScreenState extends State<PinLoginScreen>
         // Check if sync is available
         if (ApiService.hasToken) {
           print('✅ Sync available - proceeding to main app');
-          Get.offAllNamed('/main');
+          AppRoutes.toMain();
         } else {
           print('⚠️ PIN login successful but sync unavailable');
           // Still go to main app - user will see sync dialogs if needed
-          Get.offAllNamed('/main');
+          AppRoutes.toMain();
         }
       } else {
         print('❌ PIN verification failed');
@@ -267,7 +268,7 @@ class _PinLoginScreenState extends State<PinLoginScreen>
               TextButton(
                 onPressed: () {
                   Get.back();
-                  Get.offAllNamed('/main');
+                  AppRoutes.toMain();
                 },
                 child: const Text('Continue Offline'),
               ),

@@ -62,8 +62,11 @@ class SchoolSelectionController extends GetxController {
       // Step 1: Start loading
       isLoading(true);
       isAuthenticating(true);
-      loadingMessage.value = 'Connecting to server...';
 
+      loadingMessage.value = 'Connecting to server...';
+      await ensureSchoolDataPersistence({
+        'name': schoolName,
+      });
       // Close the join dialog first
       Get.back();
 
@@ -516,6 +519,134 @@ class SchoolSelectionController extends GetxController {
     } catch (e) {
       print('❌ Error authenticating user: $e');
       return false;
+    }
+  }
+
+  /// CRITICAL FIX: Ensure school data is saved to BOTH tables
+  Future<void> ensureSchoolDataPersistence(Map<String, dynamic> school) async {
+    try {
+      print('🔧 Ensuring school data persistence...');
+      final db = await _dbHelper.database;
+      final schoolIdString = school['id']?.toString() ?? '';
+
+      if (schoolIdString.isEmpty) {
+        throw Exception('School ID is empty');
+      }
+
+      // STEP 1: Verify school exists in schools table
+      final schoolCheck = await db.query(
+        'schools',
+        where: 'id = ?',
+        whereArgs: [schoolIdString],
+      );
+
+      if (schoolCheck.isEmpty) {
+        print('⚠️ School not in schools table, inserting...');
+        await db.insert('schools', {
+          'id': schoolIdString,
+          'name': school['name'],
+          'location': school['location'],
+          'phone': school['phone'],
+          'email': school['email'],
+          'address': school['address'] ?? '',
+          'status': 'active',
+          'invitation_code': school['invitation_code'],
+          'created_at': DateTime.now().toIso8601String(),
+          'updated_at': DateTime.now().toIso8601String(),
+        });
+      }
+
+      // STEP 2: Verify school_id exists in settings table
+      final settingsCheck = await db.query(
+        'settings',
+        where: 'key = ?',
+        whereArgs: ['school_id'],
+      );
+
+      if (settingsCheck.isEmpty ||
+          settingsCheck.first['value'] != schoolIdString) {
+        print('⚠️ School ID not in settings, inserting...');
+        await db.insert(
+          'settings',
+          {'key': 'school_id', 'value': schoolIdString},
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+
+      // STEP 3: Verify business_name exists in settings
+      final businessNameCheck = await db.query(
+        'settings',
+        where: 'key = ?',
+        whereArgs: ['business_name'],
+      );
+
+      if (businessNameCheck.isEmpty) {
+        print('⚠️ Business name not in settings, inserting...');
+        await db.insert(
+          'settings',
+          {'key': 'business_name', 'value': school['name']},
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+
+      // STEP 4: Verify first_run_completed flag
+      await db.insert(
+        'settings',
+        {'key': 'first_run_completed', 'value': '1'},
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+
+      // STEP 5: Update SettingsController
+      final settingsController = Get.find<SettingsController>();
+      settingsController.schoolId(schoolIdString);
+      settingsController.setBusinessName(school['name'] ?? '');
+      settingsController.setBusinessAddress(school['address'] ?? '');
+      settingsController.setBusinessPhone(school['phone'] ?? '');
+      settingsController.setBusinessEmail(school['email'] ?? '');
+
+      print('✅ School data persistence verified');
+
+      // STEP 6: Verify the data was saved
+      await _verifySchoolDataSaved(schoolIdString);
+    } catch (e) {
+      print('❌ Error ensuring school data persistence: $e');
+      throw Exception('Failed to persist school data: $e');
+    }
+  }
+
+  /// Verify school data is actually saved
+  Future<void> _verifySchoolDataSaved(String schoolId) async {
+    try {
+      final db = await _dbHelper.database;
+
+      // Check schools table
+      final schoolResult = await db.query(
+        'schools',
+        where: 'id = ?',
+        whereArgs: [schoolId],
+      );
+
+      // Check settings table
+      final settingsResult = await db.query(
+        'settings',
+        where: 'key IN (?, ?)',
+        whereArgs: ['school_id', 'business_name'],
+      );
+
+      print('🔍 Verification Results:');
+      print('   Schools table: ${schoolResult.isNotEmpty ? "✅" : "❌"}');
+      print('   Settings table entries: ${settingsResult.length}');
+
+      for (var setting in settingsResult) {
+        print('   - ${setting['key']}: ${setting['value']}');
+      }
+
+      if (schoolResult.isEmpty || settingsResult.length < 2) {
+        throw Exception('School data verification failed');
+      }
+    } catch (e) {
+      print('❌ Verification failed: $e');
+      throw e;
     }
   }
 

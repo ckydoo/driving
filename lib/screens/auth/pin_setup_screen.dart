@@ -1,4 +1,5 @@
 // lib/screens/auth/pin_setup_screen.dart
+import 'package:driving/routes/app_routes.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
@@ -126,7 +127,7 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
 
         if (widget.isInitialSetup) {
           // Navigate to main app
-          Get.offAllNamed('/main');
+          AppRoutes.toMain();
         } else {
           // Just go back
           Get.back();

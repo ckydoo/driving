@@ -320,296 +320,432 @@ class SubscriptionSettingsScreen extends StatelessWidget {
 
   Widget _buildPackageCard(SubscriptionPackage package) {
     final isCurrentPackage = controller.currentPackage.value?.id == package.id;
-    final isTrialPackage = package.name.toLowerCase().contains('trial');
+    final isTrial = package.slug == 'trial';
+    final currentStatus = controller.subscriptionStatus.value;
 
-    print('🔍 Building package card: ${package.name}');
-    print('🔍 Features count: ${package.features.length}');
-    print('🔍 Monthly price: ${package.monthlyPrice}');
+    // Determine if trial can be selected
+    bool canSelectTrial = false;
+    String? trialBlockReason;
 
-    return Obx(() {
-      final selectedPeriod = controller.billingPeriod.value;
-      final price = selectedPeriod == 'yearly'
-          ? (package.yearlyPrice ?? package.monthlyPrice)
-          : package.monthlyPrice;
+    if (isTrial) {
+      // Trial can only be selected if:
+      // 1. User has NEVER had a trial before (new account)
+      // 2. Admin manually resets trial
 
-      return Card(
-        margin: EdgeInsets.only(bottom: 16),
-        elevation: isCurrentPackage ? 8 : 2,
-        shape: RoundedRectangleBorder(
+      if (currentStatus == 'trial') {
+        // Already on trial
+        canSelectTrial = false;
+        trialBlockReason = 'You are currently on a free trial';
+      } else if (currentStatus == 'expired' ||
+          currentStatus == 'suspended' ||
+          currentStatus == 'cancelled' ||
+          currentStatus == 'active') {
+        // Has used trial before - can't use again
+        canSelectTrial = false;
+        trialBlockReason = 'Trial period has already been used';
+      } else {
+        // Should not happen, but allow for safety
+        canSelectTrial = false;
+        trialBlockReason = 'Trial not available';
+      }
+    }
+
+    return Card(
+      elevation: isCurrentPackage ? 6 : 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: isCurrentPackage
+            ? BorderSide(color: Colors.blue[700]!, width: 3)
+            : BorderSide.none,
+      ),
+      margin: EdgeInsets.only(bottom: 16),
+      child: Container(
+        decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
-          side: isCurrentPackage
-              ? BorderSide(color: Colors.blue[700]!, width: 2)
-              : BorderSide.none,
+          gradient: isCurrentPackage
+              ? LinearGradient(
+                  colors: [Colors.blue[50]!, Colors.blue[100]!],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                )
+              : null,
         ),
-        child: Stack(
-          children: [
-            // Popular badge
-            if (package.isPopular && !isCurrentPackage)
-              Positioned(
-                top: 0,
-                right: 0,
-                child: Container(
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [Colors.orange[400]!, Colors.orange[600]!],
-                    ),
-                    borderRadius: BorderRadius.only(
-                      topRight: Radius.circular(16),
-                      bottomLeft: Radius.circular(16),
-                    ),
-                  ),
-                  child: Text(
-                    'POPULAR',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-
-            // Current package badge
-            if (isCurrentPackage)
-              Positioned(
-                top: 0,
-                right: 0,
-                child: Container(
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.blue[700],
-                    borderRadius: BorderRadius.only(
-                      topRight: Radius.circular(16),
-                      bottomLeft: Radius.circular(16),
-                    ),
-                  ),
-                  child: Text(
-                    'CURRENT',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-
-            Padding(
-              padding: EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        child: Padding(
+          padding: EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Package name and current badge
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // Package name
-                  Text(
-                    package.name,
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey[800],
-                    ),
-                  ),
-                  SizedBox(height: 8),
-
-                  // Description
-                  if (package.description != null &&
-                      package.description!.isNotEmpty)
-                    Text(
-                      package.description!,
+                  Expanded(
+                    child: Text(
+                      package.name,
                       style: TextStyle(
-                        color: Colors.grey[600],
-                        fontSize: 14,
-                        height: 1.4,
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: isCurrentPackage
+                            ? Colors.blue[900]
+                            : Colors.grey[800],
                       ),
                     ),
-                  SizedBox(height: 16),
-
-                  // Price
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '\$${price.toStringAsFixed(2)}',
-                        style: TextStyle(
-                          fontSize: 36,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.blue[700],
-                        ),
-                      ),
-                      SizedBox(width: 8),
-                      Padding(
-                        padding: EdgeInsets.only(top: 12),
-                        child: Text(
-                          selectedPeriod == 'yearly' ? '/year' : '/month',
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 16,
-                          ),
-                        ),
-                      ),
-                    ],
                   ),
-
-                  // Yearly savings
-                  if (selectedPeriod == 'yearly' &&
-                      package.yearlyDiscount > 0) ...[
-                    SizedBox(height: 8),
+                  if (isCurrentPackage)
                     Container(
                       padding:
                           EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
-                        color: Colors.green[50],
+                        color: Colors.blue[700],
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
-                        'Save ${package.yearlyDiscount}% annually',
+                        'CURRENT',
                         style: TextStyle(
-                          color: Colors.green[700],
-                          fontSize: 12,
+                          color: Colors.white,
                           fontWeight: FontWeight.bold,
+                          fontSize: 12,
                         ),
                       ),
                     ),
-                  ],
-
-                  SizedBox(height: 24),
-                  Divider(),
-                  SizedBox(height: 16),
-
-                  // Features
-                  Text(
-                    'Features:',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      color: Colors.grey[800],
-                    ),
-                  ),
-                  SizedBox(height: 12),
-
-                  // Show features (max 6)
-                  ...package.features
-                      .take(6)
-                      .map((feature) => Padding(
-                            padding: EdgeInsets.only(bottom: 8),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Icon(
-                                  Icons.check_circle,
-                                  size: 20,
-                                  color: Colors.green[600],
-                                ),
-                                SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    feature,
-                                    style: TextStyle(
-                                      color: Colors.grey[700],
-                                      fontSize: 15,
-                                      height: 1.4,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ))
-                      .toList(),
-
-                  if (package.features.length > 6) ...[
-                    SizedBox(height: 8),
-                    Text(
-                      '+ ${package.features.length - 6} more features',
-                      style: TextStyle(
-                        color: Colors.blue[600],
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-
-                  SizedBox(height: 24),
-
-                  // Limits display
-                  if (!isTrialPackage && package.limits.isNotEmpty) ...[
+                  if (package.isPopular && !isCurrentPackage)
                     Container(
-                      padding: EdgeInsets.all(16),
+                      padding:
+                          EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
-                        color: Colors.grey[50],
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey[200]!),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'What\'s included:',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                              color: Colors.grey[700],
-                            ),
-                          ),
-                          SizedBox(height: 12),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _buildLimitItem('Students',
-                                    package.getLimit('max_students')),
-                              ),
-                              Expanded(
-                                child: _buildLimitItem('Instructors',
-                                    package.getLimit('max_instructors')),
-                              ),
-                              Expanded(
-                                child: _buildLimitItem('Vehicles',
-                                    package.getLimit('max_vehicles')),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    SizedBox(height: 24),
-                  ],
-
-                  // Action button
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton(
-                      onPressed: isCurrentPackage
-                          ? null
-                          : () {
-                              print(
-                                  '💰 Upgrade button pressed for: ${package.name}');
-                              controller.upgradeToPackage(package);
-                            },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor:
-                            isCurrentPackage ? Colors.grey : Colors.blue[700],
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        elevation: isCurrentPackage ? 0 : 2,
+                        color: Colors.orange[600],
+                        borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
-                        isCurrentPackage ? 'Current Plan' : 'Upgrade Now',
+                        'POPULAR',
                         style: TextStyle(
-                          fontSize: 16,
+                          color: Colors.white,
                           fontWeight: FontWeight.bold,
+                          fontSize: 12,
                         ),
+                      ),
+                    ),
+                ],
+              ),
+
+              SizedBox(height: 8),
+
+              // Description
+              Text(
+                package.description!,
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontSize: 14,
+                ),
+              ),
+
+              SizedBox(height: 16),
+
+              // Price
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '\$${package.getPrice(controller.billingPeriod.value).toStringAsFixed(0)}',
+                    style: TextStyle(
+                      fontSize: 36,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue[700],
+                    ),
+                  ),
+                  SizedBox(width: 8),
+                  Padding(
+                    padding: EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      '/${controller.billingPeriod.value == 'yearly' ? 'year' : 'month'}',
+                      style: TextStyle(
+                        color: Colors.grey[600],
+                        fontSize: 16,
                       ),
                     ),
                   ),
                 ],
               ),
+
+              if (controller.billingPeriod.value == 'yearly')
+                Padding(
+                  padding: EdgeInsets.only(top: 4),
+                  child: Text(
+                    'Save \$${((package.monthlyPrice * 12) - package.yearlyPrice!).toStringAsFixed(0)} per year',
+                    style: TextStyle(
+                      color: Colors.green[700],
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+
+              SizedBox(height: 20),
+
+              // Features
+              ...package.features.map((feature) => Padding(
+                    padding: EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.check_circle,
+                          color: Colors.green[600],
+                          size: 20,
+                        ),
+                        SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            feature,
+                            style: TextStyle(
+                              color: Colors.grey[700],
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )),
+
+              SizedBox(height: 20),
+
+              // Action button
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: isTrial && !canSelectTrial
+                      ? null // Disable if trial and can't be selected
+                      : isCurrentPackage
+                          ? null // Disable if already current package
+                          : () => _handlePackageSelection(package),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isCurrentPackage
+                        ? Colors.grey[400]
+                        : isTrial && !canSelectTrial
+                            ? Colors.grey[300]
+                            : Colors.blue[700],
+                    foregroundColor: Colors.white,
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: isCurrentPackage || (isTrial && !canSelectTrial)
+                        ? 0
+                        : 2,
+                  ),
+                  child: Text(
+                    isCurrentPackage
+                        ? 'Current Plan'
+                        : isTrial && !canSelectTrial
+                            ? 'Not Available'
+                            : isTrial
+                                ? 'Start Free Trial'
+                                : 'Select Plan',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+
+              // Show reason why trial is blocked
+              if (isTrial && !canSelectTrial && trialBlockReason != null)
+                Padding(
+                  padding: EdgeInsets.only(top: 12),
+                  child: Container(
+                    padding: EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.orange[50],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.orange[200]!),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.info_outline,
+                            color: Colors.orange[700], size: 20),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            trialBlockReason,
+                            style: TextStyle(
+                              color: Colors.orange[900],
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _handlePackageSelection(SubscriptionPackage package) {
+    final isTrial = package.slug == 'trial';
+    final currentStatus = controller.subscriptionStatus.value;
+
+    // Block trial if already used
+    if (isTrial) {
+      if (currentStatus == 'trial') {
+        Get.snackbar(
+          'Already on Trial',
+          'You are currently using your free trial period.',
+          backgroundColor: Colors.orange[100],
+          colorText: Colors.orange[900],
+          icon: Icon(Icons.info_outline, color: Colors.orange[900]),
+        );
+        return;
+      } else {
+        // Trial has been used before
+        Get.dialog(
+          AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.block, color: Colors.red[700]),
+                SizedBox(width: 12),
+                Text('Trial Not Available'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Your free trial period has already been used.',
+                  style: TextStyle(fontSize: 16),
+                ),
+                SizedBox(height: 16),
+                Container(
+                  padding: EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue[50],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.lightbulb_outline, color: Colors.blue[700]),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Choose one of our paid plans to continue using the service.',
+                          style: TextStyle(
+                            color: Colors.blue[900],
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              ElevatedButton(
+                onPressed: () => Get.back(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue[700],
+                ),
+                child: Text('OK'),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+    }
+
+    // For paid packages - check if it's the current package
+    if (controller.currentPackage.value?.id == package.id) {
+      Get.snackbar(
+        'Current Package',
+        'You are already subscribed to this package.',
+        backgroundColor: Colors.blue[100],
+        colorText: Colors.blue[900],
+      );
+      return;
+    }
+
+    // Show upgrade confirmation dialog
+    Get.dialog(
+      AlertDialog(
+        title: Text('Subscribe to ${package.name}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('You\'re about to subscribe to:'),
+            SizedBox(height: 12),
+            Container(
+              padding: EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.blue[50],
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    package.name,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    '\$${package.getPrice(controller.billingPeriod.value).toStringAsFixed(2)}/${controller.billingPeriod.value == 'yearly' ? 'year' : 'month'}',
+                    style: TextStyle(
+                      color: Colors.blue[700],
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    'Billing: ${controller.billingPeriod.value}',
+                    style: TextStyle(
+                      color: Colors.grey[600],
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: 16),
+            Text(
+              currentStatus == 'trial'
+                  ? 'Your trial will be upgraded immediately.'
+                  : 'Your current subscription will be upgraded immediately.',
+              style: TextStyle(
+                color: Colors.grey[600],
+                fontSize: 14,
+              ),
             ),
           ],
         ),
-      );
-    });
+        actions: [
+          TextButton(
+            onPressed: () => Get.back(),
+            child: Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Get.back();
+              controller.upgradeToPackage(package);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue[700],
+            ),
+            child: Text('Subscribe Now'),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildLimitItem(String label, int limit) {

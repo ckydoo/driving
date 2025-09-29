@@ -14,7 +14,7 @@ class SubscriptionService {
 
     switch (environment) {
       case 'development':
-        return 'http://192.168.9.128:8000/api';
+        return 'http://192.168.8.172:8000/api';
       case 'production':
         return 'https://your-production-domain.com/api'; // REPLACE WITH YOUR DOMAIN
       default:
@@ -448,6 +448,44 @@ class SubscriptionService {
     } catch (e) {
       print('❌ Network connectivity check failed: $e');
       return false;
+    }
+  }
+
+  /// Check trial eligibility
+  Future<Map<String, dynamic>> checkTrialEligibility() async {
+    try {
+      final url = '$_baseUrl/subscription/check-trial-eligibility';
+      print('📡 Checking trial eligibility from: $url');
+
+      final response = await http
+          .get(
+        Uri.parse(url),
+        headers: await _getAuthHeaders(),
+      )
+          .timeout(
+        Duration(seconds: 10),
+        onTimeout: () {
+          throw Exception(
+              'Request timeout - please check your internet connection');
+        },
+      );
+
+      print('📥 Trial eligibility response code: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        print('✅ Trial eligibility retrieved');
+
+        return data['data'] ?? data;
+      } else if (response.statusCode == 401) {
+        throw Exception('Authentication failed. Please login again.');
+      } else {
+        throw Exception(
+            'Failed to check trial eligibility (${response.statusCode})');
+      }
+    } catch (e) {
+      print('❌ Exception checking trial eligibility: $e');
+      rethrow;
     }
   }
 
