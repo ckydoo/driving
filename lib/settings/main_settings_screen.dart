@@ -1,4 +1,5 @@
 // lib/screens/settings/main_settings_screen.dart
+import 'package:driving/services/sync_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../controllers/settings_controller.dart';
@@ -809,5 +810,258 @@ class MainSettingsScreen extends StatelessWidget {
       }
     }
     return times;
+  }
+
+  Widget _buildSyncManagementSection() {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Column(
+        children: [
+          _buildSettingsTile(
+            icon: Icons.cloud_sync,
+            title: 'Clear Pending Sync',
+            subtitle: 'Clear old sync data stored locally',
+            trailing: ElevatedButton.icon(
+              onPressed: () => _showClearSyncDialog(),
+              icon: Icon(Icons.delete_sweep, size: 20),
+              label: Text('Clear'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+                foregroundColor: Colors.white,
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              ),
+            ),
+          ),
+          Divider(height: 1),
+          _buildSettingsTile(
+            icon: Icons.info_outline,
+            title: 'View Pending Changes',
+            subtitle: 'See what\'s waiting to sync',
+            trailing: Icon(Icons.chevron_right),
+            onTap: () => _showPendingChangesInfo(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showClearSyncDialog() {
+    Get.dialog(
+      AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
+            SizedBox(width: 12),
+            Text('Clear Pending Sync?'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'This will clear all pending sync data stored locally.',
+              style: TextStyle(fontSize: 14),
+            ),
+            SizedBox(height: 12),
+            Container(
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange[50],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '⚠️ WARNING:',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.orange[900],
+                    ),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    'Any unsynced changes will be lost. Make sure your data is already synced to the server.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.orange[900],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back(),
+            child: Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Get.back(); // Close dialog
+              await _clearPendingSync();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+            ),
+            child: Text('Clear Sync Data'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _clearPendingSync() async {
+    try {
+      // Show loading
+      Get.dialog(
+        Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Clearing sync data...'),
+                ],
+              ),
+            ),
+          ),
+        ),
+        barrierDismissible: false,
+      );
+
+      // Clear pending changes
+      await SyncService.clearAllPendingChanges();
+
+      // Close loading dialog
+      Get.back();
+
+      // Show success
+      Get.snackbar(
+        'Success',
+        'Pending sync data cleared successfully',
+        backgroundColor: Colors.green[100],
+        colorText: Colors.green[900],
+        icon: Icon(Icons.check_circle, color: Colors.green[900]),
+        duration: Duration(seconds: 3),
+      );
+    } catch (e) {
+      // Close loading dialog if still open
+      if (Get.isDialogOpen ?? false) {
+        Get.back();
+      }
+
+      // Show error
+      Get.snackbar(
+        'Error',
+        'Failed to clear sync data: $e',
+        backgroundColor: Colors.red[100],
+        colorText: Colors.red[900],
+        icon: Icon(Icons.error_outline, color: Colors.red[900]),
+        duration: Duration(seconds: 3),
+      );
+    }
+  }
+
+  Future<void> _showPendingChangesInfo() async {
+    try {
+      // Show loading
+      Get.dialog(
+        Center(child: CircularProgressIndicator()),
+        barrierDismissible: false,
+      );
+
+      // Get pending changes info
+      final info = await SyncService.getPendingChangesInfo();
+
+      // Close loading
+      Get.back();
+
+      // Show info dialog
+      Get.dialog(
+        AlertDialog(
+          title: Text('Pending Sync Changes'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (info['has_pending'] == false) ...[
+                Icon(Icons.check_circle, color: Colors.green, size: 48),
+                SizedBox(height: 12),
+                Text(
+                  'No pending changes!',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                SizedBox(height: 8),
+                Text('All data is synced.'),
+              ] else ...[
+                Text(
+                  'Total: ${info['count']} items',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                SizedBox(height: 12),
+                Text('Breakdown by table:'),
+                SizedBox(height: 8),
+                ...((info['breakdown'] as Map<String, int>?)?.entries.map((e) =>
+                        Padding(
+                          padding: EdgeInsets.symmetric(vertical: 4),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text('${e.key}:'),
+                              Text(
+                                '${e.value} items',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                        )) ??
+                    []),
+              ],
+            ],
+          ),
+          actions: [
+            if (info['has_pending'] == true)
+              TextButton(
+                onPressed: () {
+                  Get.back();
+                  _showClearSyncDialog();
+                },
+                style: TextButton.styleFrom(foregroundColor: Colors.orange),
+                child: Text('Clear This Data'),
+              ),
+            ElevatedButton(
+              onPressed: () => Get.back(),
+              child: Text('OK'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      // Close loading if still open
+      if (Get.isDialogOpen ?? false) {
+        Get.back();
+      }
+
+      Get.snackbar(
+        'Error',
+        'Failed to get pending changes info: $e',
+        backgroundColor: Colors.red[100],
+        colorText: Colors.red[900],
+      );
+    }
   }
 }

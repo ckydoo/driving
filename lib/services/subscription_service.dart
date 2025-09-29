@@ -1,4 +1,4 @@
-// lib/services/subscription_service.dart
+// lib/services/subscription_service.dart - FIXED RETURN TYPES
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:get/get.dart';
@@ -7,13 +7,26 @@ import '../controllers/auth_controller.dart';
 import '../models/subscription_package.dart';
 
 class SubscriptionService {
-  static const String _baseUrl =
-      'http://192.168.9.108:8000/api'; // Replace with your actual API URL
+  // Environment-based API URL
+  static String get _baseUrl {
+    const environment =
+        String.fromEnvironment('ENV', defaultValue: 'development');
 
+    switch (environment) {
+      case 'development':
+        return 'http://192.168.9.108:8000/api';
+      case 'production':
+        return 'https://your-production-domain.com/api'; // REPLACE WITH YOUR DOMAIN
+      default:
+        return 'http://192.168.9.108:8000/api';
+    }
+  }
+
+  // Get subscription packages - Returns List<SubscriptionPackage>
   Future<List<SubscriptionPackage>> getSubscriptionPackages() async {
     try {
       final response = await http.get(
-        Uri.parse('$_baseUrl/api/subscription/packages'),
+        Uri.parse('$_baseUrl/subscription/packages'),
         headers: await _getAuthHeaders(),
       );
 
@@ -28,18 +41,22 @@ class SubscriptionService {
             .map((json) => SubscriptionPackage.fromJson(json))
             .toList();
       } else {
+        print('❌ Failed to load packages: ${response.statusCode}');
+        print('Response: ${response.body}');
         throw Exception(
             'Failed to load subscription packages: ${response.statusCode}');
       }
     } catch (e) {
+      print('❌ Error fetching packages: $e');
       throw Exception('Error fetching packages: $e');
     }
   }
 
+  // Get subscription status - Returns Map<String, dynamic>
   Future<Map<String, dynamic>> getSubscriptionStatus() async {
     try {
       final response = await http.get(
-        Uri.parse('$_baseUrl/api/subscription/status'),
+        Uri.parse('$_baseUrl/subscription/status'),
         headers: await _getAuthHeaders(),
       );
 
@@ -47,19 +64,25 @@ class SubscriptionService {
         final data = json.decode(response.body);
         return data['data'] ?? data;
       } else {
+        print('❌ Failed to get subscription status: ${response.statusCode}');
         throw Exception(
             'Failed to get subscription status: ${response.statusCode}');
       }
     } catch (e) {
+      print('❌ Error getting subscription status: $e');
       throw Exception('Error getting subscription status: $e');
     }
   }
 
+  // Create payment intent - Returns String (client_secret)
   Future<String> createPaymentIntent(
       int packageId, String billingPeriod) async {
     try {
+      print(
+          '🔄 Creating payment intent for package $packageId ($billingPeriod)');
+
       final response = await http.post(
-        Uri.parse('$_baseUrl/api/subscription/create-payment-intent'),
+        Uri.parse('$_baseUrl/subscription/create-payment-intent'),
         headers: await _getAuthHeaders(),
         body: json.encode({
           'package_id': packageId,
@@ -67,24 +90,49 @@ class SubscriptionService {
         }),
       );
 
+      print('📥 Payment intent response: ${response.statusCode}');
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        return data['data']['client_secret'] ?? data['client_secret'];
+
+        // Extract client_secret from response
+        String? clientSecret;
+
+        if (data is Map<String, dynamic>) {
+          // Try multiple possible locations for client_secret
+          clientSecret = data['client_secret'] as String? ??
+              data['data']?['client_secret'] as String?;
+        }
+
+        if (clientSecret == null || clientSecret.isEmpty) {
+          print('❌ Response data: $data');
+          throw Exception('No client secret in response');
+        }
+
+        print('✅ Payment intent created successfully');
+        print('🔑 Client secret: ${clientSecret.substring(0, 20)}...');
+        return clientSecret;
       } else {
         final errorData = json.decode(response.body);
-        throw Exception(
-            errorData['message'] ?? 'Failed to create payment intent');
+        final errorMessage =
+            errorData['message'] ?? 'Failed to create payment intent';
+        print('❌ Payment intent error: $errorMessage');
+        throw Exception(errorMessage);
       }
     } catch (e) {
-      throw Exception('Error creating payment intent: $e');
+      print('❌ Error creating payment intent: $e');
+      rethrow;
     }
   }
 
+  // Confirm payment - Returns bool
   Future<bool> confirmPayment(
       String paymentIntentId, int packageId, String billingPeriod) async {
     try {
+      print('🔄 Confirming payment: $paymentIntentId');
+
       final response = await http.post(
-        Uri.parse('$_baseUrl/api/subscription/confirm-payment'),
+        Uri.parse('$_baseUrl/subscription/confirm-payment'),
         headers: await _getAuthHeaders(),
         body: json.encode({
           'payment_intent_id': paymentIntentId,
@@ -93,31 +141,41 @@ class SubscriptionService {
         }),
       );
 
-      return response.statusCode == 200;
+      print('📥 Confirmation response: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        print('✅ Payment confirmed successfully');
+        return true;
+      } else {
+        print('❌ Payment confirmation failed: ${response.body}');
+        return false;
+      }
     } catch (e) {
-      print('Error confirming payment: $e');
+      print('❌ Error confirming payment: $e');
       return false;
     }
   }
 
+  // Cancel subscription - Returns bool
   Future<bool> cancelSubscription() async {
     try {
       final response = await http.post(
-        Uri.parse('$_baseUrl/api/subscription/cancel'),
+        Uri.parse('$_baseUrl/subscription/cancel'),
         headers: await _getAuthHeaders(),
       );
 
       return response.statusCode == 200;
     } catch (e) {
-      print('Error canceling subscription: $e');
+      print('❌ Error canceling subscription: $e');
       return false;
     }
   }
 
+  // Get billing history - Returns List<Map<String, dynamic>>
   Future<List<Map<String, dynamic>>> getBillingHistory() async {
     try {
       final response = await http.get(
-        Uri.parse('$_baseUrl/api/subscription/billing-history'),
+        Uri.parse('$_baseUrl/subscription/billing-history'),
         headers: await _getAuthHeaders(),
       );
 
@@ -129,10 +187,14 @@ class SubscriptionService {
             'Failed to get billing history: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error getting billing history: $e');
+      print('❌ Error getting billing history: $e');
       return [];
     }
   }
+
+  // ============================================
+  // Private Helper Methods
+  // ============================================
 
   /// Get authentication headers with token from AuthController
   Future<Map<String, String>> _getAuthHeaders() async {
@@ -145,7 +207,7 @@ class SubscriptionService {
         if (token != null) 'Authorization': 'Bearer $token',
       };
     } catch (e) {
-      print('Error getting auth headers: $e');
+      print('⚠️ Error getting auth headers: $e');
       return {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
@@ -178,7 +240,7 @@ class SubscriptionService {
 
       return null;
     } catch (e) {
-      print('Error getting stored auth token: $e');
+      print('⚠️ Error getting stored auth token: $e');
       return null;
     }
   }
@@ -187,75 +249,5 @@ class SubscriptionService {
   Future<bool> isAuthenticated() async {
     final token = await _getStoredAuthToken();
     return token != null && token.isNotEmpty;
-  }
-
-  /// Get current user email for token storage
-  String? _getCurrentUserEmail() {
-    try {
-      if (Get.isRegistered<AuthController>()) {
-        final authController = Get.find<AuthController>();
-        return authController.currentUser.value?.email;
-      }
-      return null;
-    } catch (e) {
-      print('Error getting current user email: $e');
-      return null;
-    }
-  }
-
-  /// Store new auth token (called after successful authentication)
-  Future<void> storeAuthToken(String token) async {
-    try {
-      final email = _getCurrentUserEmail();
-      if (email != null) {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('api_token_$email', token);
-      }
-    } catch (e) {
-      print('Error storing auth token: $e');
-    }
-  }
-
-  /// Clear stored auth token
-  Future<void> clearAuthToken() async {
-    try {
-      final email = _getCurrentUserEmail();
-      if (email != null) {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.remove('api_token_$email');
-      }
-    } catch (e) {
-      print('Error clearing auth token: $e');
-    }
-  }
-
-  /// Test API connection
-  Future<bool> testConnection() async {
-    try {
-      final response = await http.get(
-        Uri.parse('$_baseUrl/api/user'),
-        headers: await _getAuthHeaders(),
-      );
-
-      return response.statusCode == 200;
-    } catch (e) {
-      print('Connection test failed: $e');
-      return false;
-    }
-  }
-
-  /// Handle API errors and token refresh if needed
-  Future<void> _handleApiError(http.Response response) async {
-    if (response.statusCode == 401) {
-      // Token might be expired, clear it
-      await clearAuthToken();
-
-      // Notify AuthController to handle re-authentication
-      if (Get.isRegistered<AuthController>()) {
-        final authController = Get.find<AuthController>();
-        // You might want to trigger a re-login flow here
-        print('API token expired, user needs to re-authenticate');
-      }
-    }
   }
 }

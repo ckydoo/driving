@@ -1,5 +1,6 @@
 // lib/widgets/sync_status_widget.dart - FIXED VERSION
 
+import 'package:driving/services/sync_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../controllers/sync_controller.dart';
@@ -412,10 +413,10 @@ class SyncStatusWidget extends StatelessWidget {
               width: double.infinity,
               child: ElevatedButton.icon(
                 onPressed: () {
-                  Get.find<NavigationController>().navigateToPage('settings');
+                  SyncService.clearAllPendingChanges();
                 },
                 icon: Icon(Icons.settings, size: 18),
-                label: Text('More Settings'),
+                label: Text('Clear Pending Changes'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.grey[700],
                   foregroundColor: Colors.white,

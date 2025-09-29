@@ -39,6 +39,63 @@ void main() async {
   runApp(const DrivingSchoolApp());
 }
 
+/// Initialize Stripe with proper configuration
+Future<void> _initializeStripe() async {
+  print('💳 Initializing Stripe...');
+
+  try {
+    // ============================================
+    // STRIPE CONFIGURATION
+    // ============================================
+
+    // Option 1: Use environment variable (RECOMMENDED FOR PRODUCTION)
+    // Run with: flutter run --dart-define=STRIPE_PUBLISHABLE_KEY=pk_live_your_key
+    const stripePublishableKey = String.fromEnvironment(
+      'STRIPE_PUBLISHABLE_KEY',
+      defaultValue:
+          'pk_test_51QYLJqP7xCaykPOxjqmyRQ2wSDZMwfWtvLAoJu38SRJzwEL0iq9mdhBFVuOo8JPfVYMM9VxM5pGmFTbjjJBb7QwR00vkHpKyQV', // Your test key for development
+    );
+
+    // Option 2: Hardcode for development (CHANGE FOR PRODUCTION)
+    // const stripePublishableKey = 'pk_test_your_test_key_here'; // Development
+    // const stripePublishableKey = 'pk_live_your_live_key_here'; // Production
+
+    if (stripePublishableKey.isEmpty) {
+      print('⚠️ WARNING: Stripe publishable key is empty!');
+      print('⚠️ Subscription features will not work properly.');
+      return;
+    }
+
+    // Validate key format
+    if (!stripePublishableKey.startsWith('pk_')) {
+      print('⚠️ WARNING: Invalid Stripe key format!');
+      print('⚠️ Key should start with pk_test_ or pk_live_');
+      return;
+    }
+
+    // Set Stripe publishable key
+    Stripe.publishableKey = stripePublishableKey;
+
+    // Log which environment we're using (be careful in production!)
+    if (stripePublishableKey.startsWith('pk_test_')) {
+      print('✅ Stripe initialized in TEST mode');
+      print('💡 Test card: 4242 4242 4242 4242');
+    } else if (stripePublishableKey.startsWith('pk_live_')) {
+      print('✅ Stripe initialized in LIVE/PRODUCTION mode');
+    }
+
+    // Optional: Set merchant identifier for Apple Pay (iOS only)
+    if (Platform.isIOS) {
+      Stripe.merchantIdentifier = 'merchant.com.yourdomain.drivesync';
+    }
+
+    print('✅ Stripe initialization completed successfully');
+  } catch (e) {
+    print('❌ Error initializing Stripe: $e');
+    print('⚠️ Subscription features may not work properly');
+  }
+}
+
 /// Initialize database factory for different platforms
 void _initializeDatabaseFactory() {
   try {
@@ -92,7 +149,7 @@ Future<void> _initializeDatabaseAndMigrations() async {
 void _configureApiService() {
   // Configure your API base URL here
   // You should replace this with your actual Laravel API URL
-  const String apiBaseUrl = 'http://192.168.9.108:8000/api';
+  const String apiBaseUrl = 'http://192.168.9.128:8000/api';
 
   // Set up API configuration
   ApiService.configure(baseUrl: apiBaseUrl);

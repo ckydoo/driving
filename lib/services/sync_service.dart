@@ -827,4 +827,70 @@ class SyncService {
       print('❌ Failed to clear sync data: $e');
     }
   }
+
+  static Future<void> clearAllPendingChanges() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      // Remove the pending changes
+      await prefs.remove('sync_pending_changes');
+
+      // Also clear related sync data
+      await prefs.remove('last_sync_timestamp');
+      await prefs.remove('sync_debug_log');
+      await prefs.remove('sync_last_error');
+
+      print('✅ Cleared all pending sync changes from SharedPreferences');
+      print('✅ Your next sync will start fresh!');
+
+      return;
+    } catch (e) {
+      print('❌ Error clearing pending changes: $e');
+      rethrow;
+    }
+  }
+
+  /// Get pending changes info (for debugging)
+  static Future<Map<String, dynamic>> getPendingChangesInfo() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final pendingChangesJson = prefs.getString('sync_pending_changes');
+
+      if (pendingChangesJson == null || pendingChangesJson.isEmpty) {
+        return {
+          'has_pending': false,
+          'count': 0,
+          'message': 'No pending changes found'
+        };
+      }
+
+      final pendingChanges = json.decode(pendingChangesJson);
+
+      int totalCount = 0;
+      Map<String, int> breakdown = {};
+
+      if (pendingChanges is Map) {
+        for (final entry in pendingChanges.entries) {
+          final table = entry.key;
+          final items = entry.value as List;
+          breakdown[table] = items.length;
+          totalCount += items.length;
+        }
+      }
+
+      return {
+        'has_pending': true,
+        'count': totalCount,
+        'breakdown': breakdown,
+        'message': 'Found $totalCount pending changes'
+      };
+    } catch (e) {
+      return {
+        'has_pending': false,
+        'count': 0,
+        'error': e.toString(),
+        'message': 'Error reading pending changes'
+      };
+    }
+  }
 }
