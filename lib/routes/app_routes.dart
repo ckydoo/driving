@@ -1,11 +1,14 @@
-// lib/routes/app_routes.dart - Complete routing system
+// lib/routes/app_routes.dart - FIXED WITH SUBSCRIPTION CHECK
 import 'package:driving/main.dart';
 import 'package:driving/middleware/auth_middleware.dart';
+import 'package:driving/middleware/subscription_guard.dart'; // ADD THIS
+import 'package:driving/screens/startup/subscription_check_screen.dart'; // ADD THIS
 import 'package:driving/screens/auth/login_screen.dart';
 import 'package:driving/screens/auth/enhanced_pin_login_screen.dart';
 import 'package:driving/screens/auth/pin_setup_screen.dart';
 import 'package:driving/screens/auth/school_registration_screen.dart';
 import 'package:driving/screens/auth/school_selection_screen.dart';
+import 'package:driving/screens/subscription/subscription_screen.dart'; // ADD THIS
 import 'package:driving/widgets/main_layout.dart';
 import 'package:get/get.dart';
 
@@ -25,6 +28,9 @@ class AppRoutes {
   static const String main = '/main';
   static const String dashboard = '/dashboard';
 
+  // ADD THIS
+  static const String subscription = '/subscription';
+
   // Feature routes
   static const String students = '/students';
   static const String instructors = '/instructors';
@@ -42,21 +48,24 @@ class AppRoutes {
 
   static final routes = [
     // === INITIALIZATION & SCHOOL SELECTION ===
+
+    // NEW: Initial route now goes through subscription check
+    GetPage(
+      name: initial,
+      page: () => const SubscriptionCheckScreen(nextRoute: '/main'),
+    ),
+
     GetPage(
       name: schoolSelection,
       page: () => const SchoolSelectionScreen(),
     ),
+
     GetPage(
       name: schoolRegistration,
       page: () => const SchoolRegistrationScreen(),
     ),
-    // Initial loading screen
-    GetPage(
-      name: initial,
-      page: () => const AuthenticationWrapper(),
-    ),
 
-    // === AUTHENTICATION ROUTES ===
+    // === AUTHENTICATION ROUTES (No subscription check) ===
 
     // Traditional email/password login
     GetPage(
@@ -66,7 +75,7 @@ class AppRoutes {
       transitionDuration: const Duration(milliseconds: 300),
     ),
 
-    // PIN-based login (enhanced with school context)
+    // PIN-based login
     GetPage(
       name: pinLogin,
       page: () => const EnhancedPinLoginScreen(),
@@ -94,32 +103,53 @@ class AppRoutes {
       transitionDuration: const Duration(milliseconds: 300),
     ),
 
-    // === MAIN APPLICATION ROUTES ===
+    // === SUBSCRIPTION ROUTES (Always accessible) ===
 
-    // Main application entry point
+    GetPage(
+      name: subscription,
+      page: () => SubscriptionScreen(),
+      middlewares: [
+        AuthenticatedMiddleware(),
+        // NO SubscriptionGuard - must be accessible even when suspended
+      ],
+      transition: Transition.fadeIn,
+    ),
+
+    // === MAIN APPLICATION ROUTES (ALL WITH SUBSCRIPTION CHECK) ===
+
+    // Main application entry point - NOW WITH SUBSCRIPTION GUARD
     GetPage(
       name: main,
       page: () => const ResponsiveMainLayout(),
-      middlewares: [AuthenticatedMiddleware()],
+      middlewares: [
+        AuthenticatedMiddleware(),
+        SubscriptionGuard(), // ADD THIS
+      ],
       transition: Transition.fadeIn,
       transitionDuration: const Duration(milliseconds: 400),
     ),
 
-    // Dashboard
+    // Dashboard - NOW WITH SUBSCRIPTION GUARD
     GetPage(
       name: dashboard,
       page: () => const ResponsiveMainLayout(),
-      middlewares: [AuthenticatedMiddleware()],
+      middlewares: [
+        AuthenticatedMiddleware(),
+        SubscriptionGuard(), // ADD THIS
+      ],
       transition: Transition.noTransition,
     ),
 
-    // === FEATURE ROUTES (All use main layout with role checking) ===
+    // === FEATURE ROUTES (All use ResponsiveMainLayout with subscription check) ===
 
     // Student Management (Instructors & Admins)
     GetPage(
       name: students,
       page: () => const ResponsiveMainLayout(),
-      middlewares: [InstructorMiddleware()],
+      middlewares: [
+        InstructorMiddleware(),
+        SubscriptionGuard(), // ADD THIS
+      ],
       transition: Transition.noTransition,
     ),
 
@@ -127,7 +157,10 @@ class AppRoutes {
     GetPage(
       name: instructors,
       page: () => const ResponsiveMainLayout(),
-      middlewares: [AdminMiddleware()],
+      middlewares: [
+        AdminMiddleware(),
+        SubscriptionGuard(), // ADD THIS
+      ],
       transition: Transition.noTransition,
     ),
 
@@ -135,7 +168,10 @@ class AppRoutes {
     GetPage(
       name: users,
       page: () => const ResponsiveMainLayout(),
-      middlewares: [AdminMiddleware()],
+      middlewares: [
+        AdminMiddleware(),
+        SubscriptionGuard(), // ADD THIS
+      ],
       transition: Transition.noTransition,
     ),
 
@@ -143,7 +179,10 @@ class AppRoutes {
     GetPage(
       name: courses,
       page: () => const ResponsiveMainLayout(),
-      middlewares: [InstructorMiddleware()],
+      middlewares: [
+        InstructorMiddleware(),
+        SubscriptionGuard(), // ADD THIS
+      ],
       transition: Transition.noTransition,
     ),
 
@@ -151,7 +190,10 @@ class AppRoutes {
     GetPage(
       name: fleet,
       page: () => const ResponsiveMainLayout(),
-      middlewares: [AdminMiddleware()],
+      middlewares: [
+        AdminMiddleware(),
+        SubscriptionGuard(), // ADD THIS
+      ],
       transition: Transition.noTransition,
     ),
 
@@ -159,7 +201,10 @@ class AppRoutes {
     GetPage(
       name: schedules,
       page: () => const ResponsiveMainLayout(),
-      middlewares: [InstructorMiddleware()],
+      middlewares: [
+        InstructorMiddleware(),
+        SubscriptionGuard(), // ADD THIS
+      ],
       transition: Transition.noTransition,
     ),
 
@@ -167,7 +212,10 @@ class AppRoutes {
     GetPage(
       name: billing,
       page: () => const ResponsiveMainLayout(),
-      middlewares: [AdminMiddleware()],
+      middlewares: [
+        AdminMiddleware(),
+        SubscriptionGuard(), // ADD THIS
+      ],
       transition: Transition.noTransition,
     ),
 
@@ -175,7 +223,10 @@ class AppRoutes {
     GetPage(
       name: settings,
       page: () => const ResponsiveMainLayout(),
-      middlewares: [AuthenticatedMiddleware()],
+      middlewares: [
+        AuthenticatedMiddleware(),
+        SubscriptionGuard(), // ADD THIS
+      ],
       transition: Transition.noTransition,
     ),
 
@@ -183,7 +234,10 @@ class AppRoutes {
     GetPage(
       name: quickSearch,
       page: () => const ResponsiveMainLayout(),
-      middlewares: [AuthenticatedMiddleware()],
+      middlewares: [
+        AuthenticatedMiddleware(),
+        SubscriptionGuard(), // ADD THIS
+      ],
       transition: Transition.noTransition,
     ),
 
@@ -191,7 +245,10 @@ class AppRoutes {
     GetPage(
       name: receipts,
       page: () => const ResponsiveMainLayout(),
-      middlewares: [InstructorMiddleware()],
+      middlewares: [
+        InstructorMiddleware(),
+        SubscriptionGuard(), // ADD THIS
+      ],
       transition: Transition.noTransition,
     ),
 
@@ -199,7 +256,10 @@ class AppRoutes {
     GetPage(
       name: pos,
       page: () => const ResponsiveMainLayout(),
-      middlewares: [AuthenticatedMiddleware()],
+      middlewares: [
+        AuthenticatedMiddleware(),
+        SubscriptionGuard(), // ADD THIS
+      ],
       transition: Transition.noTransition,
     ),
   ];
@@ -225,9 +285,14 @@ class AppRoutes {
     }
   }
 
-  /// Navigate to main application
+  /// Navigate to main application (goes through subscription check)
   static void toMain() {
     Get.offAllNamed(main);
+  }
+
+  /// Navigate to subscription screen
+  static void toSubscription() {
+    Get.toNamed(subscription);
   }
 
   /// Navigate to specific feature

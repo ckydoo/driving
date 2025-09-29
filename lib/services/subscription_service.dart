@@ -1,4 +1,4 @@
-// lib/services/subscription_service.dart - FIXED RETURN TYPES
+// lib/services/subscription_service.dart - FIXED WITH ENHANCED DEBUGGING
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:get/get.dart';
@@ -14,7 +14,7 @@ class SubscriptionService {
 
     switch (environment) {
       case 'development':
-        return 'http://192.168.9.108:8000/api';
+        return 'http://192.168.9.128:8000/api';
       case 'production':
         return 'https://your-production-domain.com/api'; // REPLACE WITH YOUR DOMAIN
       default:
@@ -22,55 +22,217 @@ class SubscriptionService {
     }
   }
 
+  // Get auth headers with token - FIXED TO MATCH AuthController METHOD
+  Future<Map<String, String>> _getAuthHeaders() async {
+    try {
+      // Get token using the SAME method as AuthController
+      final token = await _getStoredAuthToken();
+
+      print('🔑 Auth token exists: ${token != null}');
+      if (token != null) {
+        print(
+            '🔑 Token prefix: ${token.substring(0, min(20, token.length))}...');
+      }
+
+      return {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      };
+    } catch (e) {
+      print('❌ Error getting auth headers: $e');
+      return {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      };
+    }
+  }
+
+  // Get stored auth token using the SAME method as AuthController
+  Future<String?> _getStoredAuthToken() async {
+    try {
+      // First try to get from AuthController if available
+      if (Get.isRegistered<AuthController>()) {
+        final authController = Get.find<AuthController>();
+        final user = authController.currentUser.value;
+
+        if (user?.email != null) {
+          final prefs = await SharedPreferences.getInstance();
+          final token = prefs.getString('api_token_${user!.email}');
+
+          if (token != null) {
+            print('✅ Token found for user: ${user.email}');
+            return token;
+          } else {
+            print('⚠️ No token found for user: ${user.email}');
+          }
+        } else {
+          print('⚠️ No current user in AuthController');
+        }
+      } else {
+        print('⚠️ AuthController not registered');
+      }
+
+      // Fallback: try to get from any stored token
+      final prefs = await SharedPreferences.getInstance();
+      final keys = prefs.getKeys().where((key) => key.startsWith('api_token_'));
+
+      if (keys.isNotEmpty) {
+        final token = prefs.getString(keys.first);
+        print('✅ Fallback token found: ${keys.first}');
+        return token;
+      }
+
+      print('❌ No authentication token found anywhere');
+      return null;
+    } catch (e) {
+      print('❌ Error getting stored auth token: $e');
+      return null;
+    }
+  }
+
+  // Check if user is authenticated
+  Future<bool> isAuthenticated() async {
+    final token = await _getStoredAuthToken();
+    return token != null && token.isNotEmpty;
+  }
+
   // Get subscription packages - Returns List<SubscriptionPackage>
   Future<List<SubscriptionPackage>> getSubscriptionPackages() async {
     try {
-      final response = await http.get(
-        Uri.parse('$_baseUrl/subscription/packages'),
-        headers: await _getAuthHeaders(),
+      final url = '$_baseUrl/subscription/packages';
+      print('📡 Fetching packages from: $url');
+
+      final headers = await _getAuthHeaders();
+      print('📡 Request headers: ${headers.keys.toList()}');
+
+      final response = await http
+          .get(
+        Uri.parse(url),
+        headers: headers,
+      )
+          .timeout(
+        Duration(seconds: 30),
+        onTimeout: () {
+          throw Exception(
+              'Request timeout - please check your internet connection');
+        },
       );
+
+      print('📥 Response status: ${response.statusCode}');
+      print('📥 Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
+        print('✅ Successfully decoded response');
+        print('🔍 Response type: ${data.runtimeType}');
 
         // Handle both direct array and wrapped response
-        final List<dynamic> packagesJson =
-            data is List ? data : data['data'] ?? data['packages'] ?? [];
+        final List<dynamic> packagesJson;
 
-        return packagesJson
-            .map((json) => SubscriptionPackage.fromJson(json))
+        if (data is List) {
+          print('✅ Response is direct array');
+          packagesJson = data;
+        } else if (data is Map<String, dynamic>) {
+          print('✅ Response is wrapped object');
+          packagesJson = data['data'] ?? data['packages'] ?? [];
+          print('🔍 Found ${packagesJson.length} packages in data');
+        } else {
+          print('❌ Unexpected response format');
+          packagesJson = [];
+        }
+
+        if (packagesJson.isEmpty) {
+          print('⚠️ No packages found in response');
+          print('⚠️ Full response: $data');
+        }
+
+        final packages = packagesJson
+            .map((json) {
+              try {
+                print('🔄 Parsing package: ${json['name']}');
+                return SubscriptionPackage.fromJson(json);
+              } catch (e) {
+                print('❌ Error parsing package: $e');
+                print('❌ Package data: $json');
+                return null;
+              }
+            })
+            .whereType<SubscriptionPackage>()
             .toList();
+
+        print('✅ Successfully parsed ${packages.length} packages');
+        for (var pkg in packages) {
+          print('  - ${pkg.name}: \$${pkg.monthlyPrice}/mo');
+        }
+
+        return packages;
+      } else if (response.statusCode == 401) {
+        print('❌ Authentication failed - token may be expired');
+        throw Exception('Authentication failed. Please login again.');
+      } else if (response.statusCode == 404) {
+        print('❌ API endpoint not found');
+        throw Exception('Subscription API not found. Please contact support.');
       } else {
         print('❌ Failed to load packages: ${response.statusCode}');
-        print('Response: ${response.body}');
+        print('❌ Response body: ${response.body}');
         throw Exception(
-            'Failed to load subscription packages: ${response.statusCode}');
+            'Failed to load subscription packages (${response.statusCode})');
       }
     } catch (e) {
-      print('❌ Error fetching packages: $e');
-      throw Exception('Error fetching packages: $e');
+      print('❌ Exception fetching packages: $e');
+      print('❌ Stack trace: ${StackTrace.current}');
+      rethrow;
     }
   }
 
   // Get subscription status - Returns Map<String, dynamic>
   Future<Map<String, dynamic>> getSubscriptionStatus() async {
     try {
-      final response = await http.get(
-        Uri.parse('$_baseUrl/subscription/status'),
+      final url = '$_baseUrl/subscription/status';
+      print('📡 Fetching subscription status from: $url');
+
+      final response = await http
+          .get(
+        Uri.parse(url),
         headers: await _getAuthHeaders(),
+      )
+          .timeout(
+        Duration(seconds: 30),
+        onTimeout: () {
+          throw Exception(
+              'Request timeout - please check your internet connection');
+        },
       );
+
+      print('📥 Status response code: ${response.statusCode}');
+      print('📥 Status response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        return data['data'] ?? data;
+
+        // Handle wrapped response
+        if (data is Map<String, dynamic>) {
+          final statusData = data['data'] ?? data;
+          print('✅ Subscription status retrieved');
+          print('🔍 Status: ${statusData['subscription_status']}');
+          print('🔍 Trial days: ${statusData['remaining_trial_days']}');
+
+          return statusData;
+        }
+
+        return data;
+      } else if (response.statusCode == 401) {
+        print('❌ Authentication failed getting status');
+        throw Exception('Authentication failed. Please login again.');
       } else {
         print('❌ Failed to get subscription status: ${response.statusCode}');
         throw Exception(
-            'Failed to get subscription status: ${response.statusCode}');
+            'Failed to get subscription status (${response.statusCode})');
       }
     } catch (e) {
       print('❌ Error getting subscription status: $e');
-      throw Exception('Error getting subscription status: $e');
+      rethrow;
     }
   }
 
@@ -81,16 +243,30 @@ class SubscriptionService {
       print(
           '🔄 Creating payment intent for package $packageId ($billingPeriod)');
 
-      final response = await http.post(
-        Uri.parse('$_baseUrl/subscription/create-payment-intent'),
+      final url = '$_baseUrl/subscription/create-payment-intent';
+      print('📡 POST to: $url');
+
+      final body = json.encode({
+        'package_id': packageId,
+        'billing_period': billingPeriod,
+      });
+      print('📤 Request body: $body');
+
+      final response = await http
+          .post(
+        Uri.parse(url),
         headers: await _getAuthHeaders(),
-        body: json.encode({
-          'package_id': packageId,
-          'billing_period': billingPeriod,
-        }),
+        body: body,
+      )
+          .timeout(
+        Duration(seconds: 30),
+        onTimeout: () {
+          throw Exception('Payment request timeout - please try again');
+        },
       );
 
       print('📥 Payment intent response: ${response.statusCode}');
+      print('📥 Payment response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -101,17 +277,26 @@ class SubscriptionService {
         if (data is Map<String, dynamic>) {
           // Try multiple possible locations for client_secret
           clientSecret = data['client_secret'] as String? ??
-              data['data']?['client_secret'] as String?;
+              data['data']?['client_secret'] as String? ??
+              data['clientSecret'] as String?;
         }
 
         if (clientSecret == null || clientSecret.isEmpty) {
+          print('❌ No client secret in response');
           print('❌ Response data: $data');
-          throw Exception('No client secret in response');
+          throw Exception('No payment client secret received from server');
         }
 
         print('✅ Payment intent created successfully');
-        print('🔑 Client secret: ${clientSecret.substring(0, 20)}...');
+        print('🔑 Client secret received (length: ${clientSecret.length})');
         return clientSecret;
+      } else if (response.statusCode == 401) {
+        throw Exception('Authentication failed. Please login again.');
+      } else if (response.statusCode == 422) {
+        final errorData = json.decode(response.body);
+        final errorMessage = errorData['message'] ?? 'Validation error';
+        print('❌ Validation error: $errorMessage');
+        throw Exception(errorMessage);
       } else {
         final errorData = json.decode(response.body);
         final errorMessage =
@@ -131,40 +316,72 @@ class SubscriptionService {
     try {
       print('🔄 Confirming payment: $paymentIntentId');
 
-      final response = await http.post(
-        Uri.parse('$_baseUrl/subscription/confirm-payment'),
+      final url = '$_baseUrl/subscription/confirm-payment';
+      print('📡 POST to: $url');
+
+      final body = json.encode({
+        'payment_intent_id': paymentIntentId,
+        'package_id': packageId,
+        'billing_period': billingPeriod,
+      });
+
+      final response = await http
+          .post(
+        Uri.parse(url),
         headers: await _getAuthHeaders(),
-        body: json.encode({
-          'payment_intent_id': paymentIntentId,
-          'package_id': packageId,
-          'billing_period': billingPeriod,
-        }),
+        body: body,
+      )
+          .timeout(
+        Duration(seconds: 30),
+        onTimeout: () {
+          throw Exception('Payment confirmation timeout');
+        },
       );
 
       print('📥 Confirmation response: ${response.statusCode}');
+      print('📥 Confirmation body: ${response.body}');
 
       if (response.statusCode == 200) {
         print('✅ Payment confirmed successfully');
         return true;
       } else {
         print('❌ Payment confirmation failed: ${response.body}');
-        return false;
+        final errorData = json.decode(response.body);
+        throw Exception(errorData['message'] ?? 'Payment confirmation failed');
       }
     } catch (e) {
       print('❌ Error confirming payment: $e');
-      return false;
+      rethrow;
     }
   }
 
   // Cancel subscription - Returns bool
   Future<bool> cancelSubscription() async {
     try {
-      final response = await http.post(
-        Uri.parse('$_baseUrl/subscription/cancel'),
+      print('🔄 Canceling subscription');
+
+      final url = '$_baseUrl/subscription/cancel';
+      final response = await http
+          .post(
+        Uri.parse(url),
         headers: await _getAuthHeaders(),
+      )
+          .timeout(
+        Duration(seconds: 30),
+        onTimeout: () {
+          throw Exception('Cancel request timeout');
+        },
       );
 
-      return response.statusCode == 200;
+      print('📥 Cancel response: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        print('✅ Subscription canceled successfully');
+        return true;
+      } else {
+        print('❌ Cancel failed: ${response.body}');
+        return false;
+      }
     } catch (e) {
       print('❌ Error canceling subscription: $e');
       return false;
@@ -174,80 +391,66 @@ class SubscriptionService {
   // Get billing history - Returns List<Map<String, dynamic>>
   Future<List<Map<String, dynamic>>> getBillingHistory() async {
     try {
-      final response = await http.get(
-        Uri.parse('$_baseUrl/subscription/billing-history'),
+      print('🔄 Fetching billing history');
+
+      final url = '$_baseUrl/subscription/billing-history';
+      final response = await http
+          .get(
+        Uri.parse(url),
         headers: await _getAuthHeaders(),
+      )
+          .timeout(
+        Duration(seconds: 30),
+        onTimeout: () {
+          throw Exception('Billing history request timeout');
+        },
       );
+
+      print('📥 Billing history response: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        return List<Map<String, dynamic>>.from(data['data'] ?? []);
+        final List<dynamic> history = data['data'] ?? data['history'] ?? [];
+
+        print('✅ Retrieved ${history.length} billing records');
+
+        return List<Map<String, dynamic>>.from(history);
       } else {
-        throw Exception(
-            'Failed to get billing history: ${response.statusCode}');
+        print('❌ Failed to get billing history: ${response.statusCode}');
+        return [];
       }
     } catch (e) {
-      print('❌ Error getting billing history: $e');
+      print('❌ Error fetching billing history: $e');
       return [];
     }
   }
 
-  // ============================================
-  // Private Helper Methods
-  // ============================================
-
-  /// Get authentication headers with token from AuthController
-  Future<Map<String, String>> _getAuthHeaders() async {
+  // Helper method to check network connectivity
+  Future<bool> checkConnectivity() async {
     try {
-      final token = await _getStoredAuthToken();
+      print('🔍 Checking network connectivity...');
 
-      return {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        if (token != null) 'Authorization': 'Bearer $token',
-      };
+      final response = await http
+          .get(
+        Uri.parse('$_baseUrl/health'),
+      )
+          .timeout(
+        Duration(seconds: 5),
+        onTimeout: () {
+          throw Exception('Network timeout');
+        },
+      );
+
+      final isConnected = response.statusCode == 200;
+      print(isConnected ? '✅ Network connected' : '❌ Network unavailable');
+
+      return isConnected;
     } catch (e) {
-      print('⚠️ Error getting auth headers: $e');
-      return {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      };
+      print('❌ Network connectivity check failed: $e');
+      return false;
     }
   }
 
-  /// Get stored auth token using the same method as AuthController
-  Future<String?> _getStoredAuthToken() async {
-    try {
-      // First try to get from AuthController if available
-      if (Get.isRegistered<AuthController>()) {
-        final authController = Get.find<AuthController>();
-        final user = authController.currentUser.value;
-
-        if (user?.email != null) {
-          final prefs = await SharedPreferences.getInstance();
-          final token = prefs.getString('api_token_${user!.email}');
-          return token;
-        }
-      }
-
-      // Fallback: try to get from any stored token
-      final prefs = await SharedPreferences.getInstance();
-      final keys = prefs.getKeys().where((key) => key.startsWith('api_token_'));
-
-      if (keys.isNotEmpty) {
-        return prefs.getString(keys.first);
-      }
-
-      return null;
-    } catch (e) {
-      print('⚠️ Error getting stored auth token: $e');
-      return null;
-    }
-  }
-
-  /// Check if user is authenticated
-  Future<bool> isAuthenticated() async {
-    final token = await _getStoredAuthToken();
-    return token != null && token.isNotEmpty;
-  }
+  // Helper to get min value
+  int min(int a, int b) => a < b ? a : b;
 }

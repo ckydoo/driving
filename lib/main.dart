@@ -22,7 +22,8 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   print('🚀 === STARTING DRIVING SCHOOL APP ===');
-
+  // CRITICAL: Initialize Stripe FIRST before anything else
+  await _initializeStripe();
   // STEP 1: Initialize database factory FIRST (critical for desktop platforms)
   _initializeDatabaseFactory();
 
@@ -48,51 +49,53 @@ Future<void> _initializeStripe() async {
     // STRIPE CONFIGURATION
     // ============================================
 
-    // Option 1: Use environment variable (RECOMMENDED FOR PRODUCTION)
-    // Run with: flutter run --dart-define=STRIPE_PUBLISHABLE_KEY=pk_live_your_key
-    const stripePublishableKey = String.fromEnvironment(
-      'STRIPE_PUBLISHABLE_KEY',
-      defaultValue:
-          'pk_test_51QYLJqP7xCaykPOxjqmyRQ2wSDZMwfWtvLAoJu38SRJzwEL0iq9mdhBFVuOo8JPfVYMM9VxM5pGmFTbjjJBb7QwR00vkHpKyQV', // Your test key for development
-    );
+    // YOUR STRIPE PUBLISHABLE KEY
+    // Replace this with your actual Stripe key
+    const stripePublishableKey =
+        'pk_test_51SBdNe4IPjryss42NdJPH4l504YGckq7apiZI48usKi0QSRG65E8qEtByVP307sfIJIstrpF3Z17pDjxiz7HoJcK00nwrBuBSx';
 
-    // Option 2: Hardcode for development (CHANGE FOR PRODUCTION)
-    // const stripePublishableKey = 'pk_test_your_test_key_here'; // Development
-    // const stripePublishableKey = 'pk_live_your_live_key_here'; // Production
-
+    // Validate key exists
     if (stripePublishableKey.isEmpty) {
-      print('⚠️ WARNING: Stripe publishable key is empty!');
-      print('⚠️ Subscription features will not work properly.');
-      return;
+      print('❌ ERROR: Stripe publishable key is empty!');
+      print('❌ Add your key in main.dart line ~45');
+      throw Exception('Stripe key not configured');
     }
 
     // Validate key format
-    if (!stripePublishableKey.startsWith('pk_')) {
-      print('⚠️ WARNING: Invalid Stripe key format!');
-      print('⚠️ Key should start with pk_test_ or pk_live_');
-      return;
+    if (!stripePublishableKey.startsWith('pk_test_') &&
+        !stripePublishableKey.startsWith('pk_live_')) {
+      print('❌ ERROR: Invalid Stripe key format!');
+      print('❌ Key should start with pk_test_ or pk_live_');
+      throw Exception('Invalid Stripe key format');
     }
 
-    // Set Stripe publishable key
+    // Set Stripe publishable key - THIS IS THE CRITICAL LINE
     Stripe.publishableKey = stripePublishableKey;
-
-    // Log which environment we're using (be careful in production!)
-    if (stripePublishableKey.startsWith('pk_test_')) {
-      print('✅ Stripe initialized in TEST mode');
-      print('💡 Test card: 4242 4242 4242 4242');
-    } else if (stripePublishableKey.startsWith('pk_live_')) {
-      print('✅ Stripe initialized in LIVE/PRODUCTION mode');
-    }
 
     // Optional: Set merchant identifier for Apple Pay (iOS only)
     if (Platform.isIOS) {
       Stripe.merchantIdentifier = 'merchant.com.yourdomain.drivesync';
+      print('✅ Apple Pay merchant ID set');
+    }
+
+    // Log which environment we're using
+    if (stripePublishableKey.startsWith('pk_test_')) {
+      print('✅ Stripe initialized in TEST mode');
+      print('💡 Test cards:');
+      print('   - Success: 4242 4242 4242 4242');
+      print('   - Decline: 4000 0000 0000 0002');
+      print('   - 3D Secure: 4000 0025 0000 3155');
+    } else if (stripePublishableKey.startsWith('pk_live_')) {
+      print('✅ Stripe initialized in LIVE/PRODUCTION mode');
+      print('⚠️  WARNING: Using live Stripe keys!');
     }
 
     print('✅ Stripe initialization completed successfully');
   } catch (e) {
-    print('❌ Error initializing Stripe: $e');
-    print('⚠️ Subscription features may not work properly');
+    print('❌ CRITICAL ERROR: Stripe initialization failed!');
+    print('❌ Error: $e');
+    print('❌ Subscription features will NOT work!');
+    // Don't throw - let app continue but subscriptions won't work
   }
 }
 
