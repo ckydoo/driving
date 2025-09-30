@@ -4,6 +4,7 @@
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/controllers/subscription_controller.dart';
 import 'package:driving/services/subscription_cache.dart';
+import 'package:driving/settings/subscription_settings_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -446,7 +447,7 @@ class _SubscriptionCheckingScreenState
                     width: double.infinity,
                     child: ElevatedButton(
                       onPressed: () {
-                        Get.offAllNamed('/subscription');
+                        Get.to(() => SubscriptionScreen());
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.white,

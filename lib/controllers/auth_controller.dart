@@ -833,18 +833,32 @@ class AuthController extends GetxController {
         return false;
       }
 
+      print('📧 PIN verified for user: $pinUserEmail');
+
       // Load user from local cache
       await _loadUserFromCache(pinUserEmail);
-      if (!isLoggedIn.value) {
+
+      // Check if user was loaded successfully
+      if (currentUser.value == null) {
         error.value =
-            'Authentication failed. Please sign in with email and password.';
+            'User data not found. Please sign in with email and password.';
         return false;
       }
+
+      // User is now loaded, verify login state
+      if (!isLoggedIn.value) {
+        print(
+            '⚠️ Warning: User loaded but isLoggedIn still false, setting to true');
+        isLoggedIn.value = true;
+      }
+
+      print('✅ PIN authentication successful for ${currentUser.value!.email}');
+      print('✅ User: ${currentUser.value!.fname} ${currentUser.value!.lname}');
+      print('✅ Login status: ${isLoggedIn.value}');
 
       // CRITICAL: Restore API token for sync operations
       await _restoreApiTokenForSync(pinUserEmail);
 
-      print('✅ PIN authentication successful');
       return true;
     } catch (e) {
       print('❌ PIN authentication error: $e');

@@ -26,9 +26,9 @@ class SubscriptionScreen extends StatelessWidget {
     });
 
     return Scaffold(
-      backgroundColor: Color(0xFF1E1E96),
+      backgroundColor: Colors.white, // White background
       appBar: AppBar(
-        backgroundColor: Color(0xFF1E1E96),
+        backgroundColor: Color(0xFF2563EB), // Changed from 0xFF1E1E96
         elevation: 0,
         leading: IconButton(
           icon: Icon(Icons.arrow_back, color: Colors.white),
@@ -97,7 +97,7 @@ class SubscriptionScreen extends StatelessWidget {
                 child: Text(
                   'Choose Subscription:',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: Color(0xFF0F172A), // Dark text for white background
                     fontSize: 18,
                     fontWeight: FontWeight.w600,
                   ),
@@ -120,7 +120,7 @@ class SubscriptionScreen extends StatelessWidget {
                       Text(
                         'Pay \$${price.toStringAsFixed(2)} USD',
                         style: TextStyle(
-                          color: Colors.green[300],
+                          color: Color(0xFF059669), // Changed to success green
                           fontSize: 24,
                           fontWeight: FontWeight.bold,
                         ),
@@ -131,7 +131,8 @@ class SubscriptionScreen extends StatelessWidget {
                         Text(
                           'Save ${_selectedPackage.value!.yearlyDiscount}% with yearly billing',
                           style: TextStyle(
-                            color: Colors.amber[300],
+                            color:
+                                Color(0xFFD97706), // Changed to warning orange
                             fontSize: 14,
                             fontWeight: FontWeight.w500,
                           ),
@@ -149,7 +150,8 @@ class SubscriptionScreen extends StatelessWidget {
                   'Select your subscription plan and payment method below',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    color: Colors.white70,
+                    color: Color(
+                        0xFF64748B), // Secondary gray for white background
                     fontSize: 13,
                   ),
                 ),
@@ -161,7 +163,7 @@ class SubscriptionScreen extends StatelessWidget {
                 child: Text(
                   'Payment Methods',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: Color(0xFF0F172A), // Dark text for white background
                     fontSize: 18,
                     fontWeight: FontWeight.w600,
                   ),
@@ -245,7 +247,8 @@ class SubscriptionScreen extends StatelessWidget {
                             ? _handleSubscribe
                             : null,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.teal[600],
+                          backgroundColor:
+                              Color(0xFF059669), // Changed to success green
                           disabledBackgroundColor: Colors.grey[600],
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -287,12 +290,14 @@ class SubscriptionScreen extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(Icons.verified_user,
-                          color: Colors.green[300], size: 16),
+                          color: Color(0xFF059669),
+                          size: 16), // Changed to success green
                       SizedBox(width: 8),
                       Text(
                         'Secure Payment by Stripe',
                         style: TextStyle(
-                          color: Colors.white70,
+                          color: Color(
+                              0xFF64748B), // Secondary gray for white background
                           fontSize: 12,
                         ),
                       ),
@@ -307,9 +312,11 @@ class SubscriptionScreen extends StatelessWidget {
                     margin: EdgeInsets.all(20),
                     padding: EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Colors.blue[800]?.withOpacity(0.3),
+                      color: Color(0xFF2563EB)
+                          .withOpacity(0.3), // Changed to primary blue
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.blue[300]!, width: 1),
+                      border: Border.all(
+                          color: Color(0xFF2563EB).withOpacity(0.5), width: 1),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -368,7 +375,9 @@ class SubscriptionScreen extends StatelessWidget {
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.schedule, color: Colors.orange[700]),
+                        Icon(Icons.schedule,
+                            color:
+                                Color(0xFFD97706)), // Changed to warning orange
                         SizedBox(width: 12),
                         Expanded(
                           child: Column(
@@ -377,7 +386,7 @@ class SubscriptionScreen extends StatelessWidget {
                               Text(
                                 'Trial Period Active',
                                 style: TextStyle(
-                                  color: Colors.orange[900],
+                                  color: Color(0xFF0F172A), // Changed to dark
                                   fontSize: 14,
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -386,7 +395,8 @@ class SubscriptionScreen extends StatelessWidget {
                               Text(
                                 '${controller.remainingTrialDays.value} days remaining (Expires $formattedDate)',
                                 style: TextStyle(
-                                  color: Colors.orange[700],
+                                  color: Color(
+                                      0xFFD97706), // Changed to warning orange
                                   fontSize: 12,
                                 ),
                               ),
@@ -459,18 +469,26 @@ class SubscriptionScreen extends StatelessWidget {
           decoration: BoxDecoration(
             gradient: isSelected
                 ? LinearGradient(
-                    colors: [Color(0xFF4A148C), Color(0xFF1E1E96)],
+                    colors: [
+                      Color(0xFF1D4ED8),
+                      Color(0xFF2563EB)
+                    ], // Changed to primary dark and primary
                     begin: Alignment.centerLeft,
                     end: Alignment.centerRight,
                   )
                 : LinearGradient(
-                    colors: [Color(0xFF7B4BA3), Color(0xFF4DB8A8)],
+                    colors: [
+                      Color(0xFF64748B),
+                      Color(0xFF2563EB)
+                    ], // Changed to secondary and primary
                     begin: Alignment.centerLeft,
                     end: Alignment.centerRight,
                   ),
             borderRadius: BorderRadius.circular(12),
             border: package.isPopular && !isSelected
-                ? Border.all(color: Colors.amber, width: 2)
+                ? Border.all(
+                    color: Color(0xFFD97706),
+                    width: 2) // Changed to warning orange
                 : null,
           ),
           child: Row(
@@ -496,13 +514,14 @@ class SubscriptionScreen extends StatelessWidget {
                             padding: EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
-                              color: Colors.amber,
+                              color: Color(
+                                  0xFFD97706), // Changed to warning orange
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
                               'POPULAR',
                               style: TextStyle(
-                                color: Colors.black87,
+                                color: Colors.white,
                                 fontSize: 10,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -555,13 +574,16 @@ class SubscriptionScreen extends StatelessWidget {
               : Colors.white.withOpacity(0.3),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected ? Color(0xFF1E1E96) : Colors.transparent,
+            color: isSelected
+                ? Color(0xFF2563EB)
+                : Colors.transparent, // Changed to primary blue
             width: 2,
           ),
           boxShadow: isSelected
               ? [
                   BoxShadow(
-                    color: Color(0xFF1E1E96).withOpacity(0.3),
+                    color: Color(0xFF2563EB)
+                        .withOpacity(0.3), // Changed to primary blue
                     blurRadius: 8,
                     offset: Offset(0, 2),
                   ),
@@ -575,13 +597,16 @@ class SubscriptionScreen extends StatelessWidget {
               padding: EdgeInsets.all(width * 0.12), // Responsive padding
               decoration: BoxDecoration(
                 color: isAvailable
-                    ? Color(0xFF1E1E96).withOpacity(0.1)
+                    ? Color(0xFF2563EB)
+                        .withOpacity(0.1) // Changed to primary blue
                     : Colors.grey.withOpacity(0.2),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(
                 icon,
-                color: isAvailable ? Color(0xFF1E1E96) : Colors.grey,
+                color: isAvailable
+                    ? Color(0xFF2563EB)
+                    : Colors.grey, // Changed to primary blue
                 size: width * 0.28, // Responsive icon size
               ),
             ),
@@ -619,7 +644,7 @@ class SubscriptionScreen extends StatelessWidget {
               SizedBox(height: 3),
               Icon(
                 Icons.check_circle,
-                color: Color(0xFF1E1E96),
+                color: Color(0xFF2563EB), // Changed to primary blue
                 size: width * 0.18, // Responsive checkmark
               ),
             ],
@@ -682,7 +707,8 @@ class SubscriptionScreen extends StatelessWidget {
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             title: Row(
               children: [
-                Icon(Icons.payment, color: Color(0xFF1E1E96)),
+                Icon(Icons.payment,
+                    color: Color(0xFF2563EB)), // Changed to primary blue
                 SizedBox(width: 12),
                 Text('Confirm Subscription'),
               ],
@@ -699,7 +725,7 @@ class SubscriptionScreen extends StatelessWidget {
                 Container(
                   padding: EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.blue[50],
+                    color: Color(0xFFF8FAFC), // Changed to light
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Column(
@@ -710,7 +736,7 @@ class SubscriptionScreen extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
-                          color: Color(0xFF1E1E96),
+                          color: Color(0xFF2563EB), // Changed to primary blue
                         ),
                       ),
                       SizedBox(height: 8),
@@ -723,7 +749,8 @@ class SubscriptionScreen extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
-                              color: Colors.green[700],
+                              color:
+                                  Color(0xFF059669), // Changed to success green
                             ),
                           ),
                         ],
@@ -746,7 +773,9 @@ class SubscriptionScreen extends StatelessWidget {
                 SizedBox(height: 16),
                 Row(
                   children: [
-                    Icon(Icons.info_outline, size: 16, color: Colors.blue[700]),
+                    Icon(Icons.info_outline,
+                        size: 16,
+                        color: Color(0xFF2563EB)), // Changed to primary blue
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -766,7 +795,7 @@ class SubscriptionScreen extends StatelessWidget {
               ElevatedButton(
                 onPressed: () => Get.back(result: true),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Color(0xFF1E1E96),
+                  backgroundColor: Color(0xFF2563EB), // Changed to primary blue
                   padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 ),
                 child: Text('Proceed to Payment'),
