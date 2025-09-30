@@ -310,8 +310,7 @@ class MainSettingsScreen extends StatelessWidget {
                   children: [
                     Expanded(
                       child: OutlinedButton(
-                        onPressed: () =>
-                            Get.to(() => SubscriptionSettingsScreen()),
+                        onPressed: () => Get.to(() => SubscriptionScreen()),
                         style: OutlinedButton.styleFrom(
                           side: BorderSide(color: Colors.white),
                           shape: RoundedRectangleBorder(
@@ -328,8 +327,7 @@ class MainSettingsScreen extends StatelessWidget {
                       SizedBox(width: 12),
                       Expanded(
                         child: ElevatedButton(
-                          onPressed: () =>
-                              Get.to(() => SubscriptionSettingsScreen()),
+                          onPressed: () => Get.to(() => SubscriptionScreen()),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.white,
                             foregroundColor: isTrialExpiring
@@ -475,16 +473,6 @@ class MainSettingsScreen extends StatelessWidget {
             ListTile(
               title: Text('English'),
               trailing: Icon(Icons.check, color: Colors.blue),
-              onTap: () => Get.back(),
-            ),
-            ListTile(
-              title: Text('Spanish (Coming Soon)'),
-              enabled: false,
-              onTap: () => Get.back(),
-            ),
-            ListTile(
-              title: Text('French (Coming Soon)'),
-              enabled: false,
               onTap: () => Get.back(),
             ),
           ],
@@ -746,7 +734,7 @@ class MainSettingsScreen extends StatelessWidget {
             Text(
                 'DriveSync Pro is a comprehensive driving school management system designed to streamline operations and enhance learning experiences.'),
             SizedBox(height: 16),
-            Text('© 2024 DriveSync Pro. All rights reserved.'),
+            Text('© 2025 DriveSync Pro. All rights reserved.'),
           ],
         ),
         actions: [

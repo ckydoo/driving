@@ -184,7 +184,7 @@ class _SettingsScreenState extends State<SettingsScreen>
             icon: Icons.subscriptions,
             label: 'Subscription',
             onTap: () {
-              Get.to(() => SubscriptionSettingsScreen());
+              Get.to(() => SubscriptionScreen());
             },
           ),
         if (authController.hasAnyRole(['admin', 'instructor']))
