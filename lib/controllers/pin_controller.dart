@@ -7,6 +7,7 @@ import 'package:get/get.dart';
 
 class PinController extends GetxController {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  static const String _userVerifiedKey = 'user_verified';
 
   // Observable variables
   final RxBool isPinSet = false.obs;
@@ -24,7 +25,6 @@ class PinController extends GetxController {
   static const String _pinEnabledKey = 'pin_enabled';
   static const String _pinAttemptsKey = 'pin_attempts';
   static const String _lockoutTimeKey = 'lockout_time';
-  static const String _userVerifiedKey = 'user_verified';
   static const String _pinUserEmailKey =
       'pin_user_email'; // NEW: Store which user the PIN belongs to
 
@@ -55,11 +55,6 @@ class PinController extends GetxController {
     } catch (e) {
       debugPrint('Error initializing PIN state: $e');
     }
-  }
-
-  Future<bool> isUserVerified() async {
-    final verified = await _secureStorage.read(key: _userVerifiedKey);
-    return verified == 'true';
   }
 
   Future<void> setUserVerified(bool verified) async {
@@ -371,6 +366,39 @@ class PinController extends GetxController {
     if (!isPinEnabled.value) return 'Disabled';
     if (!isPinSet.value) return 'Not Set';
     return 'Active';
+  }
+
+  /// Mark user as verified after successful PIN login
+  Future<void> markUserAsVerified() async {
+    try {
+      await _secureStorage.write(key: _userVerifiedKey, value: 'true');
+      debugPrint('✅ User marked as verified');
+    } catch (e) {
+      debugPrint('❌ Error marking user as verified: $e');
+    }
+  }
+
+  /// Check if user has been verified via PIN
+  Future<bool> isUserVerified() async {
+    try {
+      final verified = await _secureStorage.read(key: _userVerifiedKey);
+      final isVerified = verified == 'true';
+      debugPrint('🔍 User verification status: $isVerified');
+      return isVerified;
+    } catch (e) {
+      debugPrint('❌ Error checking user verification: $e');
+      return false;
+    }
+  }
+
+  /// Clear user verification (call on logout)
+  Future<void> clearUserVerification() async {
+    try {
+      await _secureStorage.delete(key: _userVerifiedKey);
+      debugPrint('🧹 User verification cleared');
+    } catch (e) {
+      debugPrint('❌ Error clearing verification: $e');
+    }
   }
 
   // NEW: Get detailed PIN info for debugging

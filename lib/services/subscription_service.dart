@@ -14,7 +14,7 @@ class SubscriptionService {
 
     switch (environment) {
       case 'development':
-        return 'http://192.168.9.101:8000/api';
+        return 'http://192.168.9.107:8000/api';
       case 'production':
         return 'https://your-production-domain.com/api'; // REPLACE WITH YOUR DOMAIN
       default:
