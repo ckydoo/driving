@@ -8,7 +8,6 @@ import 'package:driving/screens/auth/enhanced_pin_login_screen.dart';
 import 'package:driving/screens/auth/pin_setup_screen.dart';
 import 'package:driving/screens/auth/school_registration_screen.dart';
 import 'package:driving/screens/auth/school_selection_screen.dart';
-import 'package:driving/screens/subscription/subscription_screen.dart'; // ADD THIS
 import 'package:driving/widgets/main_layout.dart';
 import 'package:get/get.dart';
 
@@ -104,16 +103,6 @@ class AppRoutes {
     ),
 
     // === SUBSCRIPTION ROUTES (Always accessible) ===
-
-    GetPage(
-      name: subscription,
-      page: () => SubscriptionScreen(),
-      middlewares: [
-        AuthenticatedMiddleware(),
-        // NO SubscriptionGuard - must be accessible even when suspended
-      ],
-      transition: Transition.fadeIn,
-    ),
 
     // === MAIN APPLICATION ROUTES (ALL WITH SUBSCRIPTION CHECK) ===
 

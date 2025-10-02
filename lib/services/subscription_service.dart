@@ -22,6 +22,62 @@ class SubscriptionService {
     }
   }
 
+  /// Create Stripe Checkout Session (for desktop platforms)
+  Future<String> createCheckoutSession(
+      int packageId, String billingPeriod) async {
+    try {
+      print('🔄 Creating Stripe Checkout session for package $packageId');
+
+      final url = '$_baseUrl/subscription/create-checkout-session';
+      print('📡 POST to: $url');
+
+      final body = json.encode({
+        'package_id': packageId,
+        'billing_period': billingPeriod,
+      });
+
+      final response = await http
+          .post(
+        Uri.parse(url),
+        headers: await _getAuthHeaders(),
+        body: body,
+      )
+          .timeout(
+        Duration(seconds: 60),
+        onTimeout: () {
+          throw Exception('Checkout session creation timeout');
+        },
+      );
+
+      print('📥 Checkout session response: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+
+        String? checkoutUrl;
+        if (data['success'] == true && data['data'] != null) {
+          checkoutUrl = data['data']['checkout_url'] as String?;
+        }
+
+        if (checkoutUrl == null || checkoutUrl.isEmpty) {
+          throw Exception('No checkout URL received');
+        }
+
+        print('✅ Checkout session created');
+        print('🔗 Checkout URL: $checkoutUrl');
+        return checkoutUrl;
+      } else {
+        final errorData = json.decode(response.body);
+        final errorMessage =
+            errorData['message'] ?? 'Failed to create checkout session';
+        throw Exception(errorMessage);
+      }
+    } catch (e) {
+      print('❌ Error creating checkout session: $e');
+      rethrow;
+    }
+  }
+
   // Get auth headers with token - FIXED TO MATCH AuthController METHOD
   Future<Map<String, String>> _getAuthHeaders() async {
     try {
@@ -252,6 +308,7 @@ class SubscriptionService {
       });
       print('📤 Request body: $body');
 
+      // INCREASED TIMEOUT TO 60 SECONDS
       final response = await http
           .post(
         Uri.parse(url),
@@ -259,9 +316,11 @@ class SubscriptionService {
         body: body,
       )
           .timeout(
-        Duration(seconds: 30),
+        Duration(seconds: 60), // CHANGED FROM 30 TO 60 SECONDS
         onTimeout: () {
-          throw Exception('Payment request timeout - please try again');
+          print('⏰ Request timeout after 60 seconds');
+          throw Exception(
+              'Payment request is taking longer than usual. Please check your connection and try again.');
         },
       );
 
@@ -275,10 +334,16 @@ class SubscriptionService {
         String? clientSecret;
 
         if (data is Map<String, dynamic>) {
-          // Try multiple possible locations for client_secret
-          clientSecret = data['client_secret'] as String? ??
-              data['data']?['client_secret'] as String? ??
-              data['clientSecret'] as String?;
+          // Handle both response formats
+          if (data['success'] == true && data['data'] != null) {
+            // New format: { success: true, data: { client_secret: "..." } }
+            clientSecret = data['data']['client_secret'] as String?;
+          } else {
+            // Legacy format
+            clientSecret = data['client_secret'] as String? ??
+                data['data']?['client_secret'] as String? ??
+                data['clientSecret'] as String?;
+          }
         }
 
         if (clientSecret == null || clientSecret.isEmpty) {
@@ -291,12 +356,27 @@ class SubscriptionService {
         print('🔑 Client secret received (length: ${clientSecret.length})');
         return clientSecret;
       } else if (response.statusCode == 401) {
+        print('❌ Authentication failed');
         throw Exception('Authentication failed. Please login again.');
+      } else if (response.statusCode == 404) {
+        print('❌ Package not found');
+        throw Exception(
+            'Selected package not found. Please refresh and try again.');
       } else if (response.statusCode == 422) {
         final errorData = json.decode(response.body);
         final errorMessage = errorData['message'] ?? 'Validation error';
         print('❌ Validation error: $errorMessage');
         throw Exception(errorMessage);
+      } else if (response.statusCode == 429) {
+        print('❌ Too many requests');
+        throw Exception(
+            'Too many payment attempts. Please wait a moment and try again.');
+      } else if (response.statusCode >= 500) {
+        print('❌ Server error: ${response.statusCode}');
+        final errorData = json.decode(response.body);
+        final errorMessage = errorData['message'] ?? 'Server error';
+        throw Exception(
+            'Payment service temporarily unavailable: $errorMessage');
       } else {
         final errorData = json.decode(response.body);
         final errorMessage =
@@ -304,6 +384,9 @@ class SubscriptionService {
         print('❌ Payment intent error: $errorMessage');
         throw Exception(errorMessage);
       }
+    } on http.ClientException catch (e) {
+      print('❌ Network error: $e');
+      throw Exception('Network error. Please check your internet connection.');
     } catch (e) {
       print('❌ Error creating payment intent: $e');
       rethrow;

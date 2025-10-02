@@ -1,12 +1,14 @@
 // lib/controllers/subscription_controller.dart - FIXED VERSION
+import 'dart:io';
+
 import 'package:driving/models/subscription_package.dart';
-import 'package:driving/screens/subscription/subscription_screen.dart';
 import 'package:driving/services/subscription_cache.dart';
 import 'package:driving/services/subscription_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:get/get.dart';
 import 'package:driving/controllers/auth_controller.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class SubscriptionController extends GetxController {
   // Observable variables
@@ -54,45 +56,10 @@ class SubscriptionController extends GetxController {
     }
   }
 
-  // Show authentication required dialog
-  void _showAuthRequiredDialog() {
-    Get.dialog(
-      AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.lock_outline, color: Colors.orange[700]),
-            SizedBox(width: 12),
-            Text('Authentication Required'),
-          ],
-        ),
-        content: Text(
-          'Your session has expired or you need to login to access subscription features.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Get.back(),
-            child: Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Get.back();
-              Get.toNamed('/login');
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue[700],
-              foregroundColor: Colors.white,
-            ),
-            child: Text('Login'),
-          ),
-        ],
-      ),
-      barrierDismissible: false,
-    );
-  }
-
   // ============================================
   // Upgrade to a subscription package
   // ============================================
+
   Future<void> upgradeToPackage(SubscriptionPackage package) async {
     try {
       print('💰 Starting upgrade to: ${package.name}');
@@ -111,76 +78,25 @@ class SubscriptionController extends GetxController {
       final confirmed = await _showUpgradeConfirmation(package);
       if (!confirmed) {
         print('❌ User cancelled upgrade');
+        isLoading(false);
         return;
       }
 
-      // Create payment intent
-      final clientSecret = await _subscriptionService.createPaymentIntent(
-        package.id,
-        billingPeriod.value,
-      );
-
-      print('✅ Payment intent created');
-
-      // Initialize payment sheet
-      await Stripe.instance.initPaymentSheet(
-        paymentSheetParameters: SetupPaymentSheetParameters(
-          paymentIntentClientSecret: clientSecret,
-          merchantDisplayName: 'Driving School',
-          style: ThemeMode.system,
-        ),
-      );
-
-      print('✅ Payment sheet initialized');
-
-      // Present payment sheet
-      await Stripe.instance.presentPaymentSheet();
-
-      print('✅ Payment completed');
-
-      // Confirm payment with backend
-      final paymentIntentId = clientSecret.split('_secret').first;
-      final success = await _subscriptionService.confirmPayment(
-        paymentIntentId,
-        package.id,
-        billingPeriod.value,
-      );
-
-      if (success) {
-        print('✅ Payment confirmed by backend');
-
-        // Reload subscription data
-        await loadSubscriptionData();
-
-        Get.snackbar(
-          'Success',
-          'Successfully upgraded to ${package.name}!',
-          backgroundColor: Colors.green[100],
-          colorText: Colors.green[900],
-          icon: Icon(Icons.check_circle, color: Colors.green[700]),
-          duration: Duration(seconds: 4),
-        );
+      // CHECK PLATFORM AND USE APPROPRIATE METHOD
+      if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+        // Desktop platforms: Use Stripe Checkout (web-based)
+        print('🖥️ Desktop platform detected - using Stripe Checkout');
+        await _processWithStripeCheckout(package);
       } else {
-        throw Exception('Payment confirmation failed');
+        // Mobile platforms: Use native Stripe Payment Sheet
+        print('📱 Mobile platform detected - using Payment Sheet');
+        await _processWithPaymentSheet(package);
       }
-    } on StripeException catch (e) {
-      print('❌ Stripe error: ${e.error.localizedMessage}');
-      errorMessage.value = e.error.localizedMessage ?? 'Payment failed';
-
-      Get.snackbar(
-        'Payment Cancelled',
-        'The payment was not completed',
-        backgroundColor: Colors.orange[100],
-        colorText: Colors.orange[900],
-        icon: Icon(Icons.info_outline, color: Colors.orange[700]),
-      );
     } catch (e) {
       print('❌ Upgrade error: $e');
-      errorMessage.value = 'Upgrade failed: $e';
-
       Get.snackbar(
         'Error',
-        'Failed to upgrade subscription',
+        'Failed to complete payment: ${e.toString()}',
         backgroundColor: Colors.red[100],
         colorText: Colors.red[900],
         icon: Icon(Icons.error_outline, color: Colors.red[900]),
@@ -190,7 +106,182 @@ class SubscriptionController extends GetxController {
     }
   }
 
-  // Show upgrade confirmation dialog
+  /// METHOD 1: Stripe Checkout (for Windows/Desktop)
+  Future<void> _processWithStripeCheckout(SubscriptionPackage package) async {
+    try {
+      print('🔄 Creating Stripe Checkout session...');
+
+      // Call backend to create checkout session
+      final checkoutUrl = await _subscriptionService.createCheckoutSession(
+        package.id,
+        billingPeriod.value,
+      );
+
+      print('✅ Checkout session created');
+      print('🌐 Opening browser: $checkoutUrl');
+
+      // Open Stripe Checkout in browser
+      final uri = Uri.parse(checkoutUrl);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(
+          uri,
+          mode: LaunchMode.externalApplication, // Opens in default browser
+        );
+
+        // Show info dialog
+        Get.dialog(
+          AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.open_in_browser, color: Colors.blue[700]),
+                SizedBox(width: 12),
+                Text('Complete Payment'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Your browser has been opened to complete the payment.',
+                  style: TextStyle(fontSize: 16),
+                ),
+                SizedBox(height: 16),
+                Text(
+                  'After completing payment, return here and click "Check Payment Status".',
+                  style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Get.back(),
+                child: Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Get.back();
+                  _checkPaymentStatus(package);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue[700],
+                ),
+                child: Text('Check Payment Status'),
+              ),
+            ],
+          ),
+          barrierDismissible: false,
+        );
+      } else {
+        throw Exception('Could not open browser');
+      }
+    } catch (e) {
+      print('❌ Stripe Checkout error: $e');
+      rethrow;
+    }
+  }
+
+  /// METHOD 2: Payment Sheet (for Android/iOS)
+  Future<void> _processWithPaymentSheet(SubscriptionPackage package) async {
+    try {
+      print('🔄 Creating payment intent...');
+
+      final clientSecret = await _subscriptionService.createPaymentIntent(
+        package.id,
+        billingPeriod.value,
+      );
+
+      print('✅ Payment intent created');
+      print('🔄 Initializing payment sheet...');
+
+      await Stripe.instance.initPaymentSheet(
+        paymentSheetParameters: SetupPaymentSheetParameters(
+          paymentIntentClientSecret: clientSecret,
+          merchantDisplayName: 'Driving School',
+          style: ThemeMode.system,
+        ),
+      );
+
+      print('✅ Payment sheet initialized');
+      await Stripe.instance.presentPaymentSheet();
+      print('✅ Payment completed');
+
+      // Confirm with backend
+      final paymentIntentId = clientSecret.split('_secret').first;
+      final success = await _subscriptionService.confirmPayment(
+        paymentIntentId,
+        package.id,
+        billingPeriod.value,
+      );
+
+      if (success) {
+        print('✅ Payment confirmed');
+        await loadSubscriptionData();
+
+        Get.snackbar(
+          'Success! 🎉',
+          'Successfully upgraded to ${package.name}!',
+          backgroundColor: Colors.green[100],
+          colorText: Colors.green[900],
+          icon: Icon(Icons.check_circle, color: Colors.green[700]),
+        );
+
+        Get.back();
+      }
+    } catch (e) {
+      print('❌ Payment sheet error: $e');
+      rethrow;
+    }
+  }
+
+  /// Check payment status after returning from browser
+  Future<void> _checkPaymentStatus(SubscriptionPackage package) async {
+    try {
+      Get.dialog(
+        Center(child: CircularProgressIndicator()),
+        barrierDismissible: false,
+      );
+
+      // Wait a bit for webhook to process
+      await Future.delayed(Duration(seconds: 2));
+
+      // Reload subscription data
+      await loadSubscriptionData();
+
+      Get.back(); // Close loading dialog
+
+      // Check if subscription was updated
+      if (currentPackage.value?.id == package.id) {
+        Get.snackbar(
+          'Success! 🎉',
+          'Payment completed! You are now on ${package.name} plan.',
+          backgroundColor: Colors.green[100],
+          colorText: Colors.green[900],
+          icon: Icon(Icons.check_circle, color: Colors.green[700]),
+          duration: Duration(seconds: 4),
+        );
+        Get.back(); // Close subscription screen
+      } else {
+        Get.snackbar(
+          'Checking...',
+          'Payment may still be processing. Please wait a moment.',
+          backgroundColor: Colors.orange[100],
+          colorText: Colors.orange[900],
+          icon: Icon(Icons.info_outline, color: Colors.orange[700]),
+        );
+      }
+    } catch (e) {
+      print('❌ Status check error: $e');
+      Get.back(); // Close loading dialog
+      Get.snackbar(
+        'Error',
+        'Could not verify payment status. Please check your subscription.',
+        backgroundColor: Colors.orange[100],
+        colorText: Colors.orange[900],
+      );
+    }
+  }
+
+// Helper method for upgrade confirmation dialog
   Future<bool> _showUpgradeConfirmation(SubscriptionPackage package) async {
     final price = billingPeriod.value == 'yearly'
         ? package.yearlyPrice ?? package.monthlyPrice
@@ -255,13 +346,49 @@ class SubscriptionController extends GetxController {
               backgroundColor: Colors.blue[700],
               foregroundColor: Colors.white,
             ),
-            child: Text('Upgrade Now'),
+            child: Text('Continue to Payment'),
           ),
         ],
       ),
     );
 
     return result ?? false;
+  }
+
+// Auth required dialog
+  void _showAuthRequiredDialog() {
+    Get.dialog(
+      AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.lock_outline, color: Colors.orange[700]),
+            SizedBox(width: 12),
+            Text('Login Required'),
+          ],
+        ),
+        content: Text(
+          'You need to be logged in to upgrade your subscription.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back(),
+            child: Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Get.back();
+              Get.toNamed('/login');
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue[700],
+              foregroundColor: Colors.white,
+            ),
+            child: Text('Login'),
+          ),
+        ],
+      ),
+      barrierDismissible: false,
+    );
   }
 
   // Show trial expired dialog

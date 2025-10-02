@@ -31,8 +31,6 @@ void main() async {
   // STEP 2: Initialize core dependencies
   await _initializeCoreDependencies();
   Get.put(SubscriptionController());
-  Stripe.publishableKey =
-      "pk_test_your_publishable_key_here"; // Add your Stripe publishable key
 
   // STEP 3: Initialize app bindings (which includes all controllers and sync)
   await AppBindings().dependencies();
