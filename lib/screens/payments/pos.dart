@@ -1,4 +1,6 @@
 // lib/screens/payments/pos_screen.dart
+import 'package:driving/controllers/settings_controller.dart';
+import 'package:driving/services/print_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
@@ -921,6 +923,155 @@ class _POSScreenState extends State<POSScreen> {
     });
   }
 
+  Future<void> _processPaymentAndPrint() async {
+    // STEP 1: Validate
+    if (_selectedStudent == null) {
+      _showError('Please select a student');
+      return;
+    }
+
+    if (_cartItems.isEmpty) {
+      _showError('Cart is empty. Add items before processing payment.');
+      return;
+    }
+
+    // STEP 2: Set processing state
+    setState(() {
+      _isProcessing = true;
+    });
+
+    try {
+      // STEP 3: Process payment (existing logic)
+      await _processPayment();
+
+      // STEP 4: Generate receipt number
+      final receiptNumber =
+          'RCP-${DateTime.now().toUtc().millisecondsSinceEpoch}';
+
+      // STEP 5: Prepare receipt items
+      final receiptItems = _cartItems
+          .map((item) => ReceiptItem(
+                itemName: item.course.name,
+                quantity: item.quantity,
+                unitPrice: item.course.price.toDouble(),
+                totalPrice: item.totalPrice,
+              ))
+          .toList();
+
+      // STEP 6: Check if auto-print is enabled
+      final settingsController = Get.find<SettingsController>();
+      final shouldAutoPrint = settingsController.autoPrintReceiptValue;
+
+      if (shouldAutoPrint) {
+        // Auto-print receipt
+        try {
+          await PrintService.printReceipt(
+            receiptNumber: receiptNumber,
+            student: _selectedStudent!,
+            items: receiptItems,
+            total: _cartTotal,
+            paymentMethod: _paymentMethod,
+            notes: _notesController.text.trim(),
+          );
+
+          _showSuccess('Payment processed and receipt printed successfully!');
+        } catch (e) {
+          print('❌ Print error: $e');
+          // Show success for payment but note print issue
+          _showSuccess('Payment processed successfully! (Print failed: $e)');
+        }
+      } else {
+        // Show option to print
+        _showSuccess('Payment processed successfully!');
+        _showPrintDialog(receiptNumber, receiptItems);
+      }
+
+      // STEP 7: Clear cart
+      setState(() {
+        _cartItems.clear();
+        _selectedStudent = null;
+        _studentSearchController.clear();
+        _notesController.clear();
+        _paymentMethod = 'Cash';
+      });
+    } catch (e) {
+      print('❌ Payment Error: $e');
+
+      String errorMessage = 'Payment processing failed: ${e.toString()}';
+
+      if (e.toString().contains('student') ||
+          e.toString().contains('Student')) {
+        errorMessage =
+            'Student information error. Please reselect the student and try again.';
+      } else if (e.toString().contains('course')) {
+        errorMessage =
+            'Course information error. Please clear cart and re-add items.';
+      } else if (e.toString().contains('network') ||
+          e.toString().contains('connection')) {
+        errorMessage =
+            'Network error. Please check your connection and try again.';
+      } else if (e.toString().contains('database') ||
+          e.toString().contains('SQL')) {
+        errorMessage = 'Database error. Please try again or contact support.';
+      }
+
+      _showError(errorMessage);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+        });
+      }
+    }
+  }
+
+// Show print dialog if auto-print is disabled
+  void _showPrintDialog(String receiptNumber, List<ReceiptItem> receiptItems) {
+    Get.dialog(
+      AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.print, color: Colors.blue[700]),
+            SizedBox(width: 8),
+            Text('Print Receipt?'),
+          ],
+        ),
+        content:
+            Text('Would you like to print a receipt for this transaction?'),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back(),
+            child: Text('No'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () async {
+              Get.back();
+              try {
+                await PrintService.printReceipt(
+                  receiptNumber: receiptNumber,
+                  student: _selectedStudent!,
+                  items: receiptItems,
+                  total: _cartTotal,
+                  paymentMethod: _paymentMethod,
+                  notes: _notesController.text.trim(),
+                );
+                _showSuccess('Receipt printed successfully!');
+              } catch (e) {
+                _showError('Failed to print receipt: $e');
+              }
+            },
+            icon: Icon(Icons.print),
+            label: Text('Print'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue[700],
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSelectedStudentInfo() {
     final initials =
         '${_selectedStudent!.fname?[0] ?? ''}${_selectedStudent!.lname?[0] ?? ''}';
@@ -1148,26 +1299,30 @@ class _POSScreenState extends State<POSScreen> {
               SizedBox(width: 12),
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: _isProcessing
-                      ? null
-                      : () => _processTransaction(payNow: true),
+                  onPressed: _isProcessing ? null : _processPaymentAndPrint,
                   icon: _isProcessing
                       ? SizedBox(
-                          width: 16,
-                          height: 16,
+                          width: 20,
+                          height: 20,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
                             valueColor:
                                 AlwaysStoppedAnimation<Color>(Colors.white),
-                          ))
+                          ),
+                        )
                       : Icon(Icons.payment),
-                  label: Text('PAY NOW'),
+                  label: Text(
+                    _isProcessing ? 'Processing...' : 'Complete Payment',
+                    style: TextStyle(fontSize: _responsiveFontSize),
+                  ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
+                    backgroundColor: Colors.green[600],
                     foregroundColor: Colors.white,
-                    padding: EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8)),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: _isMobile ? 24 : 32,
+                      vertical: _isMobile ? 12 : 16,
+                    ),
+                    minimumSize: Size(double.infinity, 50),
                   ),
                 ),
               ),

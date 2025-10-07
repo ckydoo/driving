@@ -1,4 +1,5 @@
 import 'package:driving/controllers/sync_controller.dart';
+import 'package:driving/services/print_service.dart';
 import 'package:driving/services/sync_service.dart';
 import 'package:driving/settings/subscription_settings_screen.dart';
 import 'package:driving/widgets/sync_status_widget.dart';
@@ -24,7 +25,7 @@ class _SettingsScreenState extends State<SettingsScreen>
   int get _tabCount {
     int count = 1; // Appearance tab is always visible
     if (authController.hasAnyRole(['admin', 'instructor'])) {
-      count += 6; // Scheduling, Billing, Instructor, Notifications, Advanced
+      count += 6; // Changed from 8 to 5 (removed Advanced)
     }
     return count;
   }
@@ -33,13 +34,17 @@ class _SettingsScreenState extends State<SettingsScreen>
   List<String> get _availableTabs {
     List<String> tabs = [];
     if (authController.hasAnyRole(['admin', 'instructor'])) {
-      tabs.addAll(
-          ['Business', 'Scheduling', 'Billing', 'Instructor', 'Notifications']);
+      tabs.addAll([
+        'Business',
+        'Scheduling',
+        'Billing',
+        'Instructor',
+        'Notifications',
+        'Printer' // ADD THIS
+      ]);
     }
     tabs.add('Appearance');
-    if (authController.hasAnyRole(['admin', 'instructor'])) {
-      tabs.add('Advanced');
-    }
+
     return tabs;
   }
 
@@ -155,12 +160,11 @@ class _SettingsScreenState extends State<SettingsScreen>
         _buildBillingSettings(),
         _buildInstructorSettings(),
         _buildNotificationSettings(),
+        _buildPrinterSettings(),
       ]);
     }
     views.add(_buildAppearanceSettings());
-    if (authController.hasAnyRole(['admin', 'instructor'])) {
-      views.add(_buildAdvancedSettings());
-    }
+
     return views;
   }
 
@@ -208,6 +212,960 @@ class _SettingsScreenState extends State<SettingsScreen>
           ),
       ],
     );
+  }
+
+// Add this as a new tab in your settings_screen.dart
+  // Replace your _buildPrinterSettings() method in settings_screen.dart with this:
+
+  Widget _buildPrinterSettings() {
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSectionHeader('Thermal Printer Configuration'),
+          _buildSettingsCard([
+            // REPLACED: Text field with printer selector
+            _buildPrinterSelector(),
+
+            _buildDropdownTile(
+              'Paper Size',
+              'Select paper width',
+              settingsController.printerPaperSize,
+              ['58mm', '80mm'],
+              (value) {
+                settingsController.printerPaperSize.value = value;
+                settingsController.savePrinterSettings();
+              },
+              (value) => value,
+            ),
+            _buildSwitchTile(
+              'Auto-Print on Payment',
+              'Automatically print receipt after successful payment',
+              settingsController.autoPrintReceipt,
+              (value) {
+                settingsController.autoPrintReceipt.value = value;
+                settingsController.savePrinterSettings();
+              },
+            ),
+            _buildTextFieldTile(
+              'Number of Copies',
+              'How many copies to print (1-3)',
+              settingsController.receiptCopies,
+              Icons.copy_all,
+            ),
+          ]),
+
+          SizedBox(height: 20),
+
+          _buildSectionHeader('Receipt Customization'),
+          _buildSettingsCard([
+            _buildTextFieldTile(
+              'Receipt Header',
+              'Top text on receipt (e.g., Thank you for your business)',
+              settingsController.receiptHeader,
+              Icons.text_fields,
+            ),
+            _buildTextFieldTile(
+              'Receipt Footer',
+              'Bottom text on receipt (e.g., Visit us again)',
+              settingsController.receiptFooter,
+              Icons.text_fields,
+            ),
+          ]),
+
+          SizedBox(height: 20),
+
+          // Test Print Button with status indicator
+          Center(
+            child: Column(
+              children: [
+                Obx(() => settingsController.printerName.value.isEmpty
+                    ? Container(
+                        padding: EdgeInsets.all(12),
+                        margin: EdgeInsets.only(bottom: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.orange[50],
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.orange[200]!),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.warning,
+                                color: Colors.orange[700], size: 20),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'No printer selected. Search for printers above.',
+                                style: TextStyle(
+                                  color: Colors.orange[700],
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : SizedBox.shrink()),
+                ElevatedButton.icon(
+                  onPressed: settingsController.printerName.value.isEmpty
+                      ? null
+                      : () => _printTestReceipt(),
+                  icon: Icon(Icons.print),
+                  label: Text('Test Print Receipt'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue[700],
+                    foregroundColor: Colors.white,
+                    padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                    disabledBackgroundColor: Colors.grey[300],
+                    disabledForegroundColor: Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+// Add the printer selector widget method
+  // Replace _buildPrinterSelector() in settings_screen.dart
+
+  Widget _buildPrinterSelector() {
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.print, size: 20, color: Colors.blue[700]),
+              SizedBox(width: 8),
+              Text(
+                'Printer Selection',
+                style: TextStyle(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 16,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 12),
+
+          // Selected Printer Display
+          Obx(() => Container(
+                padding: EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey[300]!),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      settingsController.printerName.value.isEmpty
+                          ? Icons.print_disabled
+                          : Icons.print,
+                      color: settingsController.printerName.value.isEmpty
+                          ? Colors.grey
+                          : Colors.green,
+                    ),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            settingsController.printerName.value.isEmpty
+                                ? 'No printer selected'
+                                : settingsController.printerName.value,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w500,
+                              color:
+                                  settingsController.printerName.value.isEmpty
+                                      ? Colors.grey[600]
+                                      : Colors.black87,
+                            ),
+                          ),
+                          if (settingsController.printerName.value.isEmpty)
+                            Text(
+                              'Choose printer type below and search',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    if (settingsController.printerName.value.isNotEmpty)
+                      IconButton(
+                        icon: Icon(Icons.close, size: 20),
+                        onPressed: () {
+                          settingsController.printerName.value = '';
+                          settingsController.savePrinterSettings();
+                        },
+                        tooltip: 'Clear selection',
+                        color: Colors.grey[600],
+                      ),
+                  ],
+                ),
+              )),
+
+          SizedBox(height: 16),
+
+          // Printer Type Selection
+          Text(
+            'Choose Printer Type',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: Colors.grey[700],
+            ),
+          ),
+          SizedBox(height: 12),
+
+          // Printer Type Cards
+          Row(
+            children: [
+              Expanded(
+                child: _buildPrinterTypeCard(
+                  icon: Icons.bluetooth,
+                  label: 'Bluetooth',
+                  type: 'bluetooth',
+                  color: Colors.blue,
+                ),
+              ),
+              SizedBox(width: 8),
+              Expanded(
+                child: _buildPrinterTypeCard(
+                  icon: Icons.usb,
+                  label: 'USB',
+                  type: 'usb',
+                  color: Colors.orange,
+                ),
+              ),
+              SizedBox(width: 8),
+              Expanded(
+                child: _buildPrinterTypeCard(
+                  icon: Icons.wifi,
+                  label: 'Network',
+                  type: 'network',
+                  color: Colors.green,
+                ),
+              ),
+            ],
+          ),
+
+          SizedBox(height: 16),
+
+          // Search Button - only enabled if type is selected
+          Obx(() => ElevatedButton.icon(
+                onPressed: _selectedPrinterType.value.isEmpty
+                    ? null
+                    : () =>
+                        _searchForPrintersByType(_selectedPrinterType.value),
+                icon: Icon(Icons.search),
+                label: Text(
+                  _selectedPrinterType.value.isEmpty
+                      ? 'Select a printer type first'
+                      : 'Search ${_selectedPrinterType.value.capitalize} Printers',
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue[600],
+                  foregroundColor: Colors.white,
+                  minimumSize: Size(double.infinity, 50),
+                  disabledBackgroundColor: Colors.grey[300],
+                  disabledForegroundColor: Colors.grey[600],
+                ),
+              )),
+        ],
+      ),
+    );
+  }
+
+// Add this reactive variable at the top of your _SettingsScreenState class
+  final RxString _selectedPrinterType = ''.obs;
+
+// Build printer type selection card
+  Widget _buildPrinterTypeCard({
+    required IconData icon,
+    required String label,
+    required String type,
+    required Color color,
+  }) {
+    return Obx(() {
+      final isSelected = _selectedPrinterType.value == type;
+
+      return InkWell(
+        onTap: () {
+          _selectedPrinterType.value = type;
+        },
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+          decoration: BoxDecoration(
+            color: isSelected ? color.withOpacity(0.1) : Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isSelected ? color : Colors.grey[300]!,
+              width: isSelected ? 2 : 1,
+            ),
+          ),
+          child: Column(
+            children: [
+              Icon(
+                icon,
+                color: isSelected ? color : Colors.grey[600],
+                size: 32,
+              ),
+              SizedBox(height: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  color: isSelected ? color : Colors.grey[700],
+                ),
+              ),
+              if (isSelected)
+                Padding(
+                  padding: EdgeInsets.only(top: 4),
+                  child: Icon(
+                    Icons.check_circle,
+                    color: color,
+                    size: 16,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+    });
+  }
+
+// Search for printers by specific type
+  void _searchForPrintersByType(String type) async {
+    try {
+      // Show loading dialog
+      Get.dialog(
+        WillPopScope(
+          onWillPop: () async => false,
+          child: Center(
+            child: Card(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Searching for ${type.capitalize} printers...'),
+                    SizedBox(height: 8),
+                    Text(
+                      _getPrinterTypeDescription(type),
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        barrierDismissible: false,
+      );
+
+      // Call the printer discovery service with type filter
+      List<PrinterInfo> printers = [];
+
+      try {
+        printers = await PrintService.discoverPrintersByType(type);
+      } catch (e) {
+        Get.back(); // Close loading
+
+        // Handle permission errors
+        if (e.toString().contains('PERMISSION_DENIED')) {
+          _showPermissionDialog(type);
+          return;
+        }
+
+        Get.snackbar(
+          'Error',
+          'Failed to search for printers: $e',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+        );
+        return;
+      }
+
+      Get.back(); // Close loading
+
+      // Show results
+      if (printers.isEmpty) {
+        _showNoPrintersDialog(type);
+      } else {
+        _showPrinterSelectionDialog(printers, type);
+      }
+    } catch (e) {
+      Get.back(); // Close loading if open
+      Get.snackbar(
+        'Error',
+        'Failed to search for printers: $e',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    }
+  }
+
+// Get description for printer type
+  String _getPrinterTypeDescription(String type) {
+    switch (type) {
+      case 'bluetooth':
+        return 'Scanning paired Bluetooth devices...';
+      case 'usb':
+        return 'Checking USB connections...';
+      case 'network':
+        return 'Scanning network for printers...';
+      default:
+        return 'Searching...';
+    }
+  }
+
+// Show permission dialog
+  void _showPermissionDialog(String type) {
+    Get.dialog(
+      AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.bluetooth_disabled, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Permission Required'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'To discover ${type.capitalize} printers, we need your permission.',
+              style: TextStyle(fontSize: 14),
+            ),
+            SizedBox(height: 16),
+            Container(
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue[50],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'What to do:',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  SizedBox(height: 8),
+                  Text('1. Allow permission when prompted'),
+                  Text('2. Try searching again'),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back(),
+            child: Text('Cancel'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              Get.back();
+              Future.delayed(Duration(seconds: 1), () {
+                _searchForPrintersByType(type);
+              });
+            },
+            icon: Icon(Icons.refresh),
+            label: Text('Try Again'),
+          ),
+        ],
+      ),
+    );
+  }
+
+// Show no printers dialog
+  void _showNoPrintersDialog(String type) {
+    Get.dialog(
+      AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.print_disabled, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('No ${type.capitalize} Printers Found'),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Please check the following:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 12),
+              ..._getChecklistForType(type),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back(),
+            child: Text('Cancel'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              Get.back();
+              _searchForPrintersByType(type);
+            },
+            icon: Icon(Icons.refresh),
+            label: Text('Try Again'),
+          ),
+        ],
+      ),
+    );
+  }
+
+// Get checklist items based on printer type
+  List<Widget> _getChecklistForType(String type) {
+    List<String> items = [];
+
+    switch (type) {
+      case 'bluetooth':
+        items = [
+          'Bluetooth is enabled on your device',
+          'Printer is powered on',
+          'Printer is paired in Bluetooth settings',
+          'Printer is within range (< 10 meters)',
+        ];
+        break;
+      case 'usb':
+        items = [
+          'Printer is powered on',
+          'USB cable is properly connected',
+          'USB drivers are installed',
+          'Printer is recognized by the system',
+        ];
+        break;
+      case 'network':
+        items = [
+          'Printer is powered on',
+          'Printer is connected to WiFi',
+          'Device and printer are on same network',
+          'Printer has a valid IP address',
+        ];
+        break;
+    }
+
+    return items.map((item) => _buildChecklistItem(item)).toList();
+  }
+
+// Update the printer selection dialog to show type
+  void _showPrinterSelectionDialog(List<PrinterInfo> printers, String type) {
+    Get.dialog(
+      AlertDialog(
+        title: Row(
+          children: [
+            Icon(_getPrinterTypeIcon(type), color: Colors.blue[700]),
+            SizedBox(width: 8),
+            Text('Select ${type.capitalize} Printer'),
+          ],
+        ),
+        content: Container(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.check_circle, color: Colors.green, size: 16),
+                  SizedBox(width: 8),
+                  Text(
+                    'Found ${printers.length} ${type} printer${printers.length > 1 ? 's' : ''}',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                  ),
+                ],
+              ),
+              SizedBox(height: 16),
+              Container(
+                constraints: BoxConstraints(maxHeight: 400),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: printers.length,
+                  itemBuilder: (context, index) {
+                    final printer = printers[index];
+                    final isSelected =
+                        settingsController.printerName.value == printer.name;
+
+                    return Card(
+                      color: isSelected ? Colors.blue[50] : Colors.white,
+                      elevation: isSelected ? 3 : 1,
+                      margin: EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        leading: Container(
+                          padding: EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? Colors.blue[100]
+                                : Colors.grey[100],
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(
+                            _getPrinterIcon(printer.type),
+                            color: isSelected
+                                ? Colors.blue[700]
+                                : Colors.grey[600],
+                            size: 28,
+                          ),
+                        ),
+                        title: Text(
+                          printer.name,
+                          style: TextStyle(
+                            fontWeight:
+                                isSelected ? FontWeight.bold : FontWeight.w500,
+                          ),
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SizedBox(height: 4),
+                            Row(
+                              children: [
+                                Icon(Icons.info_outline,
+                                    size: 12, color: Colors.grey[600]),
+                                SizedBox(width: 4),
+                                Text(
+                                  printer.description,
+                                  style: TextStyle(fontSize: 11),
+                                ),
+                              ],
+                            ),
+                            if (printer.address?.isNotEmpty ?? false)
+                              Row(
+                                children: [
+                                  Icon(Icons.location_on,
+                                      size: 12, color: Colors.grey[600]),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    printer.address!,
+                                    style: TextStyle(fontSize: 10),
+                                  ),
+                                ],
+                              ),
+                          ],
+                        ),
+                        trailing: isSelected
+                            ? Icon(Icons.check_circle,
+                                color: Colors.green, size: 28)
+                            : Icon(Icons.radio_button_unchecked,
+                                color: Colors.grey, size: 28),
+                        onTap: () {
+                          settingsController.printerName.value = printer.name;
+                          settingsController.savePrinterSettings();
+                          Get.back();
+
+                          // Reset printer type selection
+                          _selectedPrinterType.value = '';
+
+                          Get.snackbar(
+                            'Printer Selected',
+                            '${printer.name} is now your default printer',
+                            snackPosition: SnackPosition.BOTTOM,
+                            backgroundColor: Colors.green,
+                            colorText: Colors.white,
+                            icon: Icon(Icons.check_circle, color: Colors.white),
+                          );
+                        },
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back(),
+            child: Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
+// Helper to get icon for printer type
+  IconData _getPrinterTypeIcon(String type) {
+    switch (type) {
+      case 'bluetooth':
+        return Icons.bluetooth;
+      case 'usb':
+        return Icons.usb;
+      case 'network':
+        return Icons.wifi;
+      default:
+        return Icons.print;
+    }
+  }
+
+// Add printer search method
+  void _searchForPrinters() async {
+    try {
+      // Show loading dialog
+      Get.dialog(
+        WillPopScope(
+          onWillPop: () async => false,
+          child: Center(
+            child: Card(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Searching for printers...'),
+                    SizedBox(height: 8),
+                    Text(
+                      'This includes Bluetooth, USB, and Network printers',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        barrierDismissible: false,
+      );
+
+      // Call the printer discovery service
+      List<PrinterInfo> printers = [];
+
+      try {
+        printers = await PrintService.discoverPrinters();
+      } catch (e) {
+        // Close loading dialog
+        Get.back();
+
+        // Check if it's a permission error
+        if (e.toString().contains('PERMISSION_DENIED')) {
+          Get.dialog(
+            AlertDialog(
+              title: Row(
+                children: [
+                  Icon(Icons.bluetooth_disabled, color: Colors.orange),
+                  SizedBox(width: 8),
+                  Text('Bluetooth Permission Required'),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'To discover Bluetooth printers, we need permission to access Bluetooth.',
+                    style: TextStyle(fontSize: 14),
+                  ),
+                  SizedBox(height: 16),
+                  Text(
+                    'Please:',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  Text('1. Grant Bluetooth permission'),
+                  Text('2. Try searching again'),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Get.back(),
+                  child: Text('Cancel'),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    Get.back();
+                    // Retry after user grants permission
+                    Future.delayed(Duration(seconds: 1), () {
+                      _searchForPrinters();
+                    });
+                  },
+                  icon: Icon(Icons.refresh),
+                  label: Text('Try Again'),
+                ),
+              ],
+            ),
+          );
+          return;
+        }
+
+        // Other errors
+        Get.snackbar(
+          'Error',
+          'Failed to search for printers: $e',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+        );
+        return;
+      }
+
+      // Close loading dialog
+      Get.back();
+
+      // Show results
+      if (printers.isEmpty) {
+        Get.dialog(
+          AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.print_disabled, color: Colors.orange),
+                SizedBox(width: 8),
+                Text('No Printers Found'),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'No printers were found. Please ensure:',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  SizedBox(height: 12),
+                  _buildChecklistItem('Printer is powered on'),
+                  _buildChecklistItem('Bluetooth is enabled on your device'),
+                  _buildChecklistItem(
+                      'Bluetooth printer is paired in Settings'),
+                  _buildChecklistItem('USB printer is properly connected'),
+                  _buildChecklistItem('Network printer is on same WiFi'),
+                  SizedBox(height: 12),
+                  Container(
+                    padding: EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.blue[50],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.blue[200]!),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.info_outline,
+                            color: Colors.blue[700], size: 20),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'For Bluetooth printers: First pair them in your device Bluetooth settings',
+                            style: TextStyle(
+                                fontSize: 12, color: Colors.blue[900]),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Get.back(),
+                child: Text('Cancel'),
+              ),
+              ElevatedButton.icon(
+                onPressed: () {
+                  Get.back();
+                  _searchForPrinters(); // Try again
+                },
+                icon: Icon(Icons.refresh),
+                label: Text('Try Again'),
+              ),
+            ],
+          ),
+        );
+      } else {
+        _showPrinterSelectionDialog(printers, 'all');
+      }
+    } catch (e) {
+      Get.back(); // Close loading if open
+      Get.snackbar(
+        'Error',
+        'Failed to search for printers: $e',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    }
+  }
+
+// Helper widget for checklist items
+  Widget _buildChecklistItem(String text) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.check_circle_outline, size: 16, color: Colors.green),
+          SizedBox(width: 8),
+          Expanded(
+            child: Text(text, style: TextStyle(fontSize: 13)),
+          ),
+        ],
+      ),
+    );
+  }
+
+// Helper to get printer icon based on type
+  IconData _getPrinterIcon(String type) {
+    final typeLower = type.toLowerCase();
+    if (typeLower.contains('usb')) return Icons.usb;
+    if (typeLower.contains('network') || typeLower.contains('wifi'))
+      return Icons.wifi;
+    if (typeLower.contains('bluetooth')) return Icons.bluetooth;
+    return Icons.print;
+  }
+
+// 5. Add the test print method
+  void _printTestReceipt() async {
+    try {
+      Get.snackbar(
+        'Test Print',
+        'Sending test receipt to printer...',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.blue,
+        colorText: Colors.white,
+      );
+
+      await PrintService.printTestReceipt();
+
+      Get.snackbar(
+        'Success',
+        'Test receipt sent to printer!',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
+    } catch (e) {
+      Get.snackbar(
+        'Error',
+        'Failed to print: $e',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    }
   }
 
   Widget _buildQuickActionButton({
@@ -920,55 +1878,6 @@ class _SettingsScreenState extends State<SettingsScreen>
               (value) => '${value} lesson${value == 1 ? '' : 's'}',
             ),
           ]),
-        ],
-      ),
-    );
-  }
-
-  // Update advanced settings with smooth sliders
-  Widget _buildAdvancedSettings() {
-    return SingleChildScrollView(
-      padding: EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildSectionHeader('Data Management'),
-          _buildSettingsCard([
-            _buildSwitchTile(
-              'Enable Data Backup',
-              'Automatically backup data to cloud storage',
-              settingsController.enableDataBackup,
-              settingsController.toggleDataBackup,
-            ),
-            _buildSwitchTile(
-              'Enable Auto-Save',
-              'Automatically save changes while working',
-              settingsController.enableAutoSave,
-              settingsController.toggleAutoSave,
-            ),
-          ]),
-          SizedBox(height: 16),
-          Obx(() => settingsController.enableAutoSave.value
-              ? Column(children: [
-                  _buildSectionHeader('Auto-Save Settings'),
-                  _buildSettingsCard([
-                    _buildSliderTile(
-                      'Auto-Save Interval',
-                      'Minutes between automatic saves',
-                      settingsController.autoSaveInterval,
-                      settingsController.tempAutoSaveInterval,
-                      1.0,
-                      30.0,
-                      1.0,
-                      settingsController.updateAutoSaveIntervalTemp,
-                      settingsController.commitAutoSaveInterval,
-                      (value) => '${value} min',
-                    ),
-                  ]),
-                  SizedBox(height: 16),
-                ])
-              : SizedBox.shrink()),
-          // ... rest of advanced settings
         ],
       ),
     );

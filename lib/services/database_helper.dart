@@ -1393,4 +1393,45 @@ class DatabaseHelper {
       throw e;
     }
   }
+
+  Future<void> migratePrinterSettings() async {
+    final db = await database;
+
+    try {
+      print('🔄 Migrating printer settings...');
+
+      // Check if printer settings already exist
+      final existingSettings = await db.query(
+        'settings',
+        where: 'key = ?',
+        whereArgs: ['printer_name'],
+      );
+
+      if (existingSettings.isEmpty) {
+        // Insert default printer settings
+        final defaultSettings = [
+          {'key': 'printer_name', 'value': ''},
+          {'key': 'printer_paper_size', 'value': '80mm'},
+          {'key': 'auto_print_receipt', 'value': '0'},
+          {'key': 'receipt_copies', 'value': '1'},
+          {'key': 'receipt_header', 'value': 'Thank You!'},
+          {'key': 'receipt_footer', 'value': 'Visit us again'},
+        ];
+
+        for (var setting in defaultSettings) {
+          await db.insert(
+            'settings',
+            setting,
+            conflictAlgorithm: ConflictAlgorithm.ignore,
+          );
+        }
+
+        print('✅ Printer settings migrated successfully');
+      } else {
+        print('ℹ️ Printer settings already exist, skipping migration');
+      }
+    } catch (e) {
+      print('❌ Error migrating printer settings: $e');
+    }
+  }
 }

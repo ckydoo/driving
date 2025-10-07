@@ -9,6 +9,23 @@
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
+    <!-- Bluetooth Permissions for Android 11 and below -->
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+    
+    <!-- Bluetooth Permissions for Android 12+ -->
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+    
+    <!-- Location permission (required for Bluetooth scanning on Android 10-11) -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    
+    <!-- Internet permission (for network printers) -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    
+    <!-- Feature declaration -->
+    <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
+
     <!-- For scheduled notifications (if you plan to use them) -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>

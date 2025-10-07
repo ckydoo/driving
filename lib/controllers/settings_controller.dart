@@ -66,10 +66,37 @@ class SettingsController extends GetxController {
   final RxString businessStartTime = '09:00'.obs;
   final RxString businessEndTime = '17:00'.obs;
 
+  String get businessNameValue => businessName.value;
+  set businessNameValue(String value) => businessName.value = value;
+  String get businessAddressValue => businessAddress.value;
+  set businessAddressValue(String value) => businessAddress.value = value;
+  String get businessCityValue => businessCity.value;
+  set businessCityValue(String value) => businessCity.value = value;
+  String get businessCountryValue => businessCountry.value;
+  set businessCountryValue(String value) => businessCountry.value = value;
+  String get businessPhoneValue => businessPhone.value;
+  set businessPhoneValue(String value) => businessPhone.value = value;
+
   final RxInt _tempBreakBetweenLessons = 15.obs;
   final RxInt _tempLessonStartReminder = 15.obs;
   final RxInt _tempLowLessonThreshold = 3.obs;
   final RxInt _tempAutoSaveInterval = 5.obs;
+
+  var printerName = ''.obs;
+  var printerPaperSize = '80mm'.obs;
+  var autoPrintReceipt = false.obs;
+  var receiptCopies = '1'.obs;
+  var receiptHeader = 'Thank You!'.obs;
+  var receiptFooter = 'Visit us again'.obs;
+
+// ============ PRINTER GETTERS ============
+
+  String get printerNameValue => printerName.value;
+  String get printerPaperSizeValue => printerPaperSize.value;
+  bool get autoPrintReceiptValue => autoPrintReceipt.value;
+  int get receiptCopiesValue => int.tryParse(receiptCopies.value) ?? 1;
+  String get receiptHeaderValue => receiptHeader.value;
+  String get receiptFooterValue => receiptFooter.value;
 
   final RxBool _isInitialized = false.obs;
   bool isBusinessInfoComplete() {
@@ -116,6 +143,7 @@ class SettingsController extends GetxController {
     _initializeSettingsWithDefaults().then((_) {
       // Mark as initialized after settings are loaded
       _isInitialized.value = true;
+
       print('🎯 SettingsController fully initialized');
     }).catchError((e) {
       print('❌ Settings initialization failed: $e');
@@ -1259,7 +1287,7 @@ class SettingsController extends GetxController {
 
       // Step 3: Load from database (more complete data)
       await loadSettingsFromDatabase();
-
+      await loadPrinterSettings(); // ADD THIS LINE
       // Step 4: Verify persistence (this was causing the issue)
       bool verified = await verifySettingsPersistence();
       if (!verified) {
@@ -1501,6 +1529,126 @@ class SettingsController extends GetxController {
     } catch (e) {
       print('❌ Error saving all settings: $e');
       throw e;
+    }
+  }
+
+  // ============ LOAD PRINTER SETTINGS ============
+
+  Future<void> loadPrinterSettings() async {
+    try {
+      final db = await _dbHelper.database;
+      print('📖 Loading printer settings...');
+
+      final printerNameResult = await db.query(
+        'settings',
+        where: 'key = ?',
+        whereArgs: ['printer_name'],
+      );
+      if (printerNameResult.isNotEmpty) {
+        printerName.value = printerNameResult.first['value'] as String;
+      }
+
+      final paperSizeResult = await db.query(
+        'settings',
+        where: 'key = ?',
+        whereArgs: ['printer_paper_size'],
+      );
+      if (paperSizeResult.isNotEmpty) {
+        printerPaperSize.value = paperSizeResult.first['value'] as String;
+      }
+
+      final autoPrintResult = await db.query(
+        'settings',
+        where: 'key = ?',
+        whereArgs: ['auto_print_receipt'],
+      );
+      if (autoPrintResult.isNotEmpty) {
+        autoPrintReceipt.value =
+            (autoPrintResult.first['value'] as String) == '1';
+      }
+
+      final copiesResult = await db.query(
+        'settings',
+        where: 'key = ?',
+        whereArgs: ['receipt_copies'],
+      );
+      if (copiesResult.isNotEmpty) {
+        receiptCopies.value = copiesResult.first['value'] as String;
+      }
+
+      final headerResult = await db.query(
+        'settings',
+        where: 'key = ?',
+        whereArgs: ['receipt_header'],
+      );
+      if (headerResult.isNotEmpty) {
+        receiptHeader.value = headerResult.first['value'] as String;
+      }
+
+      final footerResult = await db.query(
+        'settings',
+        where: 'key = ?',
+        whereArgs: ['receipt_footer'],
+      );
+      if (footerResult.isNotEmpty) {
+        receiptFooter.value = footerResult.first['value'] as String;
+      }
+
+      print('✅ Printer settings loaded successfully');
+    } catch (e) {
+      print('❌ Error loading printer settings: $e');
+    }
+  }
+
+// ============ SAVE PRINTER SETTINGS ============
+
+  Future<void> savePrinterSettings() async {
+    try {
+      final db = await _dbHelper.database;
+      print('💾 Saving printer settings...');
+
+      await db.insert(
+        'settings',
+        {'key': 'printer_name', 'value': printerName.value},
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+
+      await db.insert(
+        'settings',
+        {'key': 'printer_paper_size', 'value': printerPaperSize.value},
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+
+      await db.insert(
+        'settings',
+        {
+          'key': 'auto_print_receipt',
+          'value': autoPrintReceipt.value ? '1' : '0'
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+
+      await db.insert(
+        'settings',
+        {'key': 'receipt_copies', 'value': receiptCopies.value},
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+
+      await db.insert(
+        'settings',
+        {'key': 'receipt_header', 'value': receiptHeader.value},
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+
+      await db.insert(
+        'settings',
+        {'key': 'receipt_footer', 'value': receiptFooter.value},
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+
+      print('✅ Printer settings saved successfully');
+    } catch (e) {
+      print('❌ Error saving printer settings: $e');
     }
   }
 }

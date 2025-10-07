@@ -141,7 +141,8 @@ Future<void> _initializeDatabaseAndMigrations() async {
     final db = await DatabaseHelper.instance.database;
     await DatabaseMigration.runMigrations(db);
     await AppInitialization.initialize();
-
+    await DatabaseHelper.instance.migratePrinterSettings();
+    print('Printer settings migration completed');
     print('✅ Database and migrations completed successfully');
   } catch (e) {
     print('❌ Database/migration initialization failed: $e');
