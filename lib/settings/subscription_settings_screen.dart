@@ -244,40 +244,133 @@ class SubscriptionScreen extends StatelessWidget {
       final currentPlan = controller.currentPackage.value;
       if (currentPlan == null) return SizedBox.shrink();
 
+      final status = controller.subscriptionStatus.value;
+      final expiryDate = controller.remainingTrialDays.value;
+
+      // Calculate days left
+      int? daysLeft = expiryDate;
+      String expiryText = 'Not available';
+      if (daysLeft != null) {
+        final now = DateTime.now();
+        final expiry = now.add(Duration(days: daysLeft));
+        daysLeft = expiry.difference(now).inDays;
+
+        if (daysLeft < 0) {
+          expiryText = 'Expired';
+        } else if (daysLeft == 0) {
+          expiryText = 'Expires today';
+        } else if (daysLeft == 1) {
+          expiryText = '1 day left';
+        } else {
+          expiryText = '$daysLeft days left';
+        }
+      }
+
+      // Determine status color and icon
+      Color statusColor;
+      IconData statusIcon;
+      String statusText = status ?? 'Unknown';
+
+      switch (status?.toLowerCase()) {
+        case 'active':
+          statusColor = Colors.green;
+          statusIcon = Icons.check_circle;
+          statusText = 'Active';
+          break;
+        case 'trial':
+          statusColor = Colors.blue;
+          statusIcon = Icons.schedule;
+          statusText = 'Trial';
+          break;
+        case 'expired':
+        case 'cancelled':
+          statusColor = Colors.red;
+          statusIcon = Icons.cancel;
+          statusText = status == 'expired' ? 'Expired' : 'Cancelled';
+          break;
+        case 'pending':
+          statusColor = Colors.orange;
+          statusIcon = Icons.pending;
+          statusText = 'Pending';
+          break;
+        default:
+          statusColor = Colors.grey;
+          statusIcon = Icons.info;
+      }
+
       return Container(
         margin: EdgeInsets.all(20),
         padding: EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Color(0xFF2563EB).withOpacity(0.3),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: Color(0xFF2563EB).withOpacity(0.5),
-            width: 1,
+          gradient: LinearGradient(
+            colors: [Color(0xFF2563EB), Color(0xFF1E40AF)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
           ),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Color(0xFF2563EB).withOpacity(0.3),
+              blurRadius: 8,
+              offset: Offset(0, 4),
+            ),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Header
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Icon(Icons.info_outline, color: Colors.blue[200], size: 20),
-                SizedBox(width: 8),
-                Text(
-                  'Current Plan',
-                  style: TextStyle(
-                    color: Colors.blue[200],
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
+                Row(
+                  children: [
+                    Icon(Icons.workspace_premium,
+                        color: Colors.white, size: 20),
+                    SizedBox(width: 8),
+                    Text(
+                      'Current Subscription',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+                // Status badge
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: statusColor,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(statusIcon, color: Colors.white, size: 14),
+                      SizedBox(width: 4),
+                      Text(
+                        statusText,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
-            SizedBox(height: 8),
+            SizedBox(height: 16),
+
+            // Plan name and price
             Text(
               currentPlan.name,
               style: TextStyle(
                 color: Colors.white,
-                fontSize: 16,
+                fontSize: 20,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -285,8 +378,59 @@ class SubscriptionScreen extends StatelessWidget {
             Text(
               '\$${currentPlan.monthlyPrice.toStringAsFixed(2)}/month',
               style: TextStyle(
-                color: Colors.white70,
-                fontSize: 14,
+                color: Colors.white.withOpacity(0.9),
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+
+            SizedBox(height: 16),
+
+            // Expiry information
+            Container(
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    daysLeft != null && daysLeft < 7
+                        ? Icons.warning_amber_rounded
+                        : Icons.calendar_today,
+                    color: daysLeft != null && daysLeft < 7
+                        ? Colors.amber
+                        : Colors.white.withOpacity(0.9),
+                    size: 18,
+                  ),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          expiryText,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        if (expiryDate != null) ...[
+                          SizedBox(height: 2),
+                          Text(
+                            'Expires: ${DateFormat('MMM dd, yyyy').format(DateTime.now().add(Duration(days: expiryDate)))}',
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.7),
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
