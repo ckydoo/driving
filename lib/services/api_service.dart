@@ -7,7 +7,7 @@ import 'package:http/http.dart' as http;
 
 class ApiService {
   static String? _token;
-  static String baseUrl = 'http://192.168.9.107:8000/api';
+  static String baseUrl = 'https://driving.fonpos.co.zw/api';
 
   /// Check if we have a valid token
   static bool get hasToken => _token != null && _token!.isNotEmpty;

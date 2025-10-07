@@ -63,10 +63,9 @@ class SchoolSelectionController extends GetxController {
       isLoading(true);
       isAuthenticating(true);
 
-      loadingMessage.value = 'Connecting to server...';
-      await ensureSchoolDataPersistence({
-        'name': schoolName,
-      });
+      // ❌ REMOVED: Don't call ensureSchoolDataPersistence here
+      // It doesn't have an ID yet!
+
       // Close the join dialog first
       Get.back();
 
@@ -74,6 +73,7 @@ class SchoolSelectionController extends GetxController {
       _showLoadingDialog();
 
       // Step 3: Check connectivity
+      loadingMessage.value = 'Checking connection...';
       final isOnline = await SchoolApiService.isOnline();
 
       if (isOnline) {
@@ -162,67 +162,6 @@ class SchoolSelectionController extends GetxController {
   void _closeLoadingDialog() {
     if (Get.isDialogOpen == true) {
       Get.back();
-    }
-  }
-
-  /// Enhanced online authentication with loading states
-  Future<void> _joinSchoolOnline(
-      String schoolName, String email, String password) async {
-    try {
-      loadingMessage.value = 'Verifying school credentials...';
-
-      // Authenticate with API
-      final result = await SchoolApiService.authenticateSchoolUser(
-        schoolIdentifier: schoolName,
-        email: email,
-        password: password,
-      );
-
-      loadingMessage.value = 'Setting up your account...';
-      isAuthenticating(false);
-      isSettingUpAccount(true);
-
-      // Give UI time to update
-      await Future.delayed(Duration(milliseconds: 500));
-
-      // Save school and user info locally for offline access
-      await _saveOnlineResultLocally(result);
-
-      // Update settings controller
-      await _setCurrentSchool(result['school']);
-
-      // Set user as authenticated in AuthController
-      final authController = Get.find<AuthController>();
-      final user = User.fromJson({
-        'id': result['user']['id'],
-        'email': result['user']['email'],
-        'fname': result['user']['fname'] ?? '',
-        'lname': result['user']['lname'] ?? '',
-        'role': result['user']['role'],
-        'phone': result['user']['phone'] ?? '',
-        'status': 'active',
-        'school_id': result['school']['id'].toString(),
-      });
-
-      authController.currentUser.value = user;
-      authController.isLoggedIn.value = true;
-      authController.userEmail.value = result['user']['email'];
-
-      print('✅ User authenticated after joining: ${result['user']['email']}');
-
-      _clearForm();
-      _closeLoadingDialog();
-
-      // Show success dialog with smooth transition
-      await _showSuccessDialogAndNavigate(
-        schoolName: result['school']['name'],
-        isOnline: true,
-        trialDays: result['trial_days_remaining'] ?? 0,
-      );
-    } catch (e) {
-      _closeLoadingDialog();
-      print('❌ Online authentication failed: $e');
-      throw Exception('Online authentication failed: $e');
     }
   }
 
@@ -390,56 +329,213 @@ class SchoolSelectionController extends GetxController {
     passwordController.clear();
   }
 
-  /// Save online authentication result locally
+  // Replace these methods in your school_selection_controller.dart
+
+  /// Save online authentication result locally - FIXED VERSION
   Future<void> _saveOnlineResultLocally(Map<String, dynamic> result) async {
     try {
+      print('🔍 === SAVING ONLINE RESULT ===');
+      print('Result keys: ${result.keys.toList()}');
+      print('School data: ${result['school']}');
+      print('User data: ${result['user']}');
+
       final db = await _dbHelper.database;
       final school = result['school'];
       final user = result['user'];
 
-      // Save school if not exists
-      await db.insert(
-          'schools',
-          {
-            'id': school['id'].toString(),
-            'name': school['name'],
-            'address': school['address'] ?? '',
-            'location': '${school['city'] ?? ''}, ${school['country'] ?? ''}',
-            'phone': school['phone'] ?? '',
-            'email': school['email'] ?? '',
-            'website': school['website'] ?? '',
-            'start_time': school['start_time'] ?? '09:00',
-            'end_time': school['end_time'] ?? '17:00',
-            'operating_days': (school['operating_days'] as List? ??
-                    ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'])
-                .join(','),
-            'invitation_code': school['invitation_code'] ?? '',
-            'status': 'active',
-            'created_at': DateTime.now().toIso8601String(),
-          },
-          conflictAlgorithm: ConflictAlgorithm.ignore);
+      // CRITICAL FIX: Handle integer IDs and convert to string
+      final schoolId = school['id']?.toString() ?? '';
+      final userId = user['id']?.toString() ?? '';
 
-      // Save user if not exists
+      if (schoolId.isEmpty || schoolId == 'null') {
+        print('❌ School data: $school');
+        throw Exception('School ID is missing or empty');
+      }
+      if (userId.isEmpty || userId == 'null') {
+        print('❌ User data: $user');
+        throw Exception('User ID is missing or empty');
+      }
+
+      print('💾 Saving school: ID=$schoolId, Name=${school['name']}');
+
+      // Save school - Handle missing optional fields
       await db.insert(
-          'users',
-          {
-            'id': user['id'].toString(),
-            'school_id': school['id'].toString(),
-            'email': user['email'],
-            'password': 'online_user', // Placeholder for online users
-            'role': user['role'],
-            'fname': user['fname'] ?? '',
-            'lname': user['lname'] ?? '',
-            'phone': user['phone'] ?? '',
-            'status': 'active',
-            'created_at': DateTime.now().toIso8601String(),
-          },
-          conflictAlgorithm: ConflictAlgorithm.ignore);
+        'schools',
+        {
+          'id': schoolId,
+          'name': school['name']?.toString() ?? 'Unknown School',
+          'address': school['address']?.toString() ?? '',
+          'location':
+              '${school['city'] ?? ''}, ${school['country'] ?? ''}'.trim(),
+          'phone': school['phone']?.toString() ?? '',
+          'email': school['email']?.toString() ?? '',
+          'website': school['website']?.toString() ?? '',
+          'start_time': school['start_time']?.toString() ?? '09:00',
+          'end_time': school['end_time']?.toString() ?? '17:00',
+          'operating_days': school['operating_days'] != null
+              ? (school['operating_days'] is List
+                  ? (school['operating_days'] as List).join(',')
+                  : school['operating_days'].toString())
+              : 'Mon,Tue,Wed,Thu,Fri',
+          'invitation_code': school['invitation_code']?.toString() ?? '',
+          'status': 'active',
+          'created_at': DateTime.now().toIso8601String(),
+        },
+        conflictAlgorithm:
+            ConflictAlgorithm.replace, // Use replace instead of ignore
+      );
+
+      print('💾 Saving user: ID=$userId, Email=${user['email']}');
+
+      // CRITICAL FIX: Handle combined name field from API
+      String firstName = '';
+      String lastName = '';
+
+      if (user['fname'] != null && user['lname'] != null) {
+        // If API provides separate fname/lname
+        firstName = user['fname'].toString();
+        lastName = user['lname'].toString();
+      } else if (user['name'] != null) {
+        // If API provides combined name (like "Myla Chikso")
+        final nameParts = user['name'].toString().split(' ');
+        firstName = nameParts.first;
+        lastName = nameParts.length > 1 ? nameParts.sublist(1).join(' ') : '';
+      }
+
+      // Save user
+      await db.insert(
+        'users',
+        {
+          'id': userId,
+          'school_id': schoolId,
+          'email': user['email']?.toString() ?? '',
+          'password': 'online_authenticated', // Placeholder for online users
+          'role': user['role']?.toString() ?? 'staff',
+          'fname': firstName,
+          'lname': lastName,
+          'phone': user['phone']?.toString() ?? '',
+          'date_of_birth':
+              user['date_of_birth']?.toString() ?? '2000-01-01', // ✅ ADDED
+          'gender':
+              user['gender']?.toString() ?? 'other', // ✅ ADDED (if needed)
+          'status': 'active',
+          'created_at': DateTime.now().toIso8601String(),
+        },
+        conflictAlgorithm:
+            ConflictAlgorithm.replace, // Use replace instead of ignore
+      );
 
       print('✅ Online result saved locally for offline access');
     } catch (e) {
       print('❌ Failed to save online result locally: $e');
+      print('❌ Stack trace: ${StackTrace.current}');
       // Don't throw - this is just for offline access
+    }
+  }
+
+  /// Enhanced online authentication - FIXED VERSION
+  Future<void> _joinSchoolOnline(
+      String schoolName, String email, String password) async {
+    try {
+      loadingMessage.value = 'Verifying school credentials...';
+
+      // Authenticate with API
+      final result = await SchoolApiService.authenticateSchoolUser(
+        schoolIdentifier: schoolName,
+        email: email,
+        password: password,
+      );
+
+      print('🔍 API Result received: ${result.keys.toList()}');
+
+      // CRITICAL: Validate response structure
+      if (result['school'] == null) {
+        throw Exception('API response missing school data');
+      }
+      if (result['user'] == null) {
+        throw Exception('API response missing user data');
+      }
+      if (result['school']['id'] == null) {
+        throw Exception('School data missing ID');
+      }
+      if (result['user']['id'] == null) {
+        throw Exception('User data missing ID');
+      }
+
+      loadingMessage.value = 'Setting up your account...';
+      isAuthenticating(false);
+      isSettingUpAccount(true);
+
+      // Give UI time to update
+      await Future.delayed(Duration(milliseconds: 500));
+
+      // ✅ NOW call ensureSchoolDataPersistence with FULL school data (has ID)
+      await ensureSchoolDataPersistence({
+        'id': result['school']['id'].toString(),
+        'name': result['school']['name'],
+        'invitation_code': result['school']['invitation_code'],
+        'address': result['school']['address'] ?? '',
+        'phone': result['school']['phone'] ?? '',
+        'email': result['school']['email'] ?? '',
+        'location':
+            '${result['school']['city'] ?? ''}, ${result['school']['country'] ?? ''}'
+                .trim(),
+      });
+
+      // Save school and user info locally for offline access
+      await _saveOnlineResultLocally(result);
+
+      // Update settings controller
+      await _setCurrentSchool(result['school']);
+
+      // Set user as authenticated in AuthController
+      final authController = Get.find<AuthController>();
+
+      // FIXED: Handle combined name field
+      String firstName = '';
+      String lastName = '';
+
+      if (result['user']['fname'] != null && result['user']['lname'] != null) {
+        firstName = result['user']['fname'].toString();
+        lastName = result['user']['lname'].toString();
+      } else if (result['user']['name'] != null) {
+        final nameParts = result['user']['name'].toString().split(' ');
+        firstName = nameParts.first;
+        lastName = nameParts.length > 1 ? nameParts.sublist(1).join(' ') : '';
+      }
+
+      final user = User.fromJson({
+        'id': result['user']['id']?.toString() ?? '',
+        'email': result['user']['email']?.toString() ?? '',
+        'fname': firstName,
+        'lname': lastName,
+        'role': result['user']['role']?.toString() ?? 'staff',
+        'phone': result['user']['phone']?.toString() ?? '',
+        'status': 'active',
+        'school_id': result['school']['id']?.toString() ?? '',
+      });
+
+      authController.currentUser.value = user;
+      authController.isLoggedIn.value = true;
+      authController.userEmail.value =
+          result['user']['email']?.toString() ?? '';
+
+      print('✅ User authenticated after joining: ${result['user']['email']}');
+
+      _clearForm();
+      _closeLoadingDialog();
+
+      // Show success dialog with smooth transition
+      await _showSuccessDialogAndNavigate(
+        schoolName: result['school']['name']?.toString() ?? 'School',
+        isOnline: true,
+        trialDays: result['trial_days_remaining'] ?? 0,
+      );
+    } catch (e) {
+      _closeLoadingDialog();
+      print('❌ Online authentication failed: $e');
+      print('❌ Stack trace: ${StackTrace.current}');
+      throw Exception('Online authentication failed: $e');
     }
   }
 
