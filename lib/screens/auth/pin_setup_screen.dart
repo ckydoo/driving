@@ -1,10 +1,12 @@
 // lib/screens/auth/pin_setup_screen.dart
 import 'package:driving/routes/app_routes.dart';
+import 'package:driving/services/api_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:driving/controllers/pin_controller.dart';
 import 'package:driving/controllers/auth_controller.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class PinSetupScreen extends StatefulWidget {
   final bool isInitialSetup;
@@ -110,13 +112,12 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
     isLoading.value = true;
 
     try {
+      // Setup the PIN
       bool success;
       if (widget.isInitialSetup) {
-        // For initial setup, use AuthController method to associate with current user
         final authController = Get.find<AuthController>();
         success = await authController.setupPinFromSettings(currentPin);
       } else {
-        // For settings setup, also use AuthController method
         final authController = Get.find<AuthController>();
         success = await authController.setupPinFromSettings(currentPin);
       }
@@ -125,11 +126,49 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
         // Mark user as verified for PIN login
         await _pinController.setUserVerified(true);
 
+        // CRITICAL FIX: Ensure API token is set before navigating
         if (widget.isInitialSetup) {
-          // Navigate to main app
+          print('🔑 Ensuring API token is set before navigation...');
+
+          final authController = Get.find<AuthController>();
+          final user = authController.currentUser.value;
+
+          if (user != null && user.email != null) {
+            // Get the stored token
+            final prefs = await SharedPreferences.getInstance();
+            final tokenKey = 'api_token_${user.email}';
+            final storedToken = prefs.getString(tokenKey);
+
+            if (storedToken != null && storedToken.isNotEmpty) {
+              print('✅ Token found: ${storedToken.substring(0, 10)}...');
+
+              // Set it in ApiService BEFORE navigating
+              ApiService.setToken(storedToken);
+              print('✅ Token set in ApiService');
+
+              // Verify it was set
+              if (ApiService.hasToken && ApiService.currentToken != null) {
+                print('✅ Token verified in ApiService');
+                print('   hasToken: true');
+                print(
+                    '   token: ${ApiService.currentToken!.substring(0, 10)}...');
+              } else {
+                print('⚠️ Token not properly set in ApiService');
+              }
+            } else {
+              print('⚠️ No stored token found for ${user.email}');
+              print('💡 User can still proceed - will work offline');
+            }
+          }
+
+          // Small delay to ensure token is fully set
+          await Future.delayed(Duration(milliseconds: 100));
+
+          // NOW navigate to main app
+          print('🏠 Navigating to main app...');
           AppRoutes.toMain();
         } else {
-          // Just go back
+          // Just go back for settings setup
           Get.back();
         }
       }

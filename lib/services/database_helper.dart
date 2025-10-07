@@ -259,6 +259,7 @@ class DatabaseHelper {
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         last_login TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         last_login_method TEXT,
+        is_super_admin INTEGER NOT NULL DEFAULT 0,
         FOREIGN KEY (school_id) REFERENCES schools (id)
       )
     ''');
@@ -330,7 +331,17 @@ class DatabaseHelper {
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
       )
     ''');
-
+    await db.execute('''
+  CREATE TABLE IF NOT EXISTS subscription_cache (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    subscription_status TEXT,
+    remaining_trial_days INTEGER,
+    subscription_expires_at TEXT,
+    current_package_id INTEGER,
+    current_package_name TEXT,
+    last_synced_at TEXT
+  )
+''');
     print('✅ All tables created');
   }
 

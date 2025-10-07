@@ -2,12 +2,14 @@
 import 'dart:io';
 
 import 'package:driving/models/subscription_package.dart';
+import 'package:driving/services/api_service.dart';
 import 'package:driving/services/subscription_cache.dart';
 import 'package:driving/services/subscription_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:get/get.dart';
 import 'package:driving/controllers/auth_controller.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class SubscriptionController extends GetxController {
@@ -391,54 +393,6 @@ class SubscriptionController extends GetxController {
     );
   }
 
-  // Show trial expired dialog
-  void _showTrialExpiredDialog() {
-    Get.dialog(
-      AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.warning_amber_rounded,
-                color: Colors.orange[700], size: 28),
-            SizedBox(width: 12),
-            Text('Trial Expired'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Your free trial has ended.',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-            ),
-            SizedBox(height: 12),
-            Text(
-              'Upgrade to a paid plan to continue using all features.',
-              style: TextStyle(color: Colors.grey[600]),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Get.back(),
-            child: Text('Later'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Get.back();
-              // Already on subscription screen, just scroll to top
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue[700],
-              foregroundColor: Colors.white,
-            ),
-            child: Text('View Plans'),
-          ),
-        ],
-      ),
-    );
-  }
-
   // Cancel subscription
   Future<void> cancelSubscription() async {
     try {
@@ -502,107 +456,6 @@ class SubscriptionController extends GetxController {
     return result ?? false;
   }
 
-  /// Load subscription data from local cache (offline mode)
-  Future<void> _loadFromCache() async {
-    try {
-      final cachedData = await SubscriptionCache.getCachedSubscriptionData();
-
-      if (cachedData == null) {
-        print('❌ No cached data available');
-
-        // No cache - default to trial expired for safety
-        subscriptionStatus.value = 'trial';
-        remainingTrialDays.value = 0;
-        errorMessage.value =
-            'No internet connection. Please connect to verify subscription.';
-
-        _showOfflineWarning();
-        return;
-      }
-
-      // Load from cache
-      subscriptionStatus.value = cachedData['subscription_status'] as String;
-      remainingTrialDays.value = cachedData['remaining_trial_days'] as int;
-
-      final daysSinceSync = cachedData['days_since_sync'] as int;
-
-      print('✅ Loaded from cache (offline mode):');
-      print('   - Status: ${subscriptionStatus.value}');
-      print('   - Trial days: ${remainingTrialDays.value}');
-      print('   - Last synced: $daysSinceSync days ago');
-
-      // Show warning if cache is old
-      if (daysSinceSync > 7) {
-        _showStaleDataWarning(daysSinceSync);
-      } else {
-        _showOfflineMode();
-      }
-    } catch (e) {
-      print('❌ Error loading from cache: $e');
-
-      // Absolute fallback - block access
-      subscriptionStatus.value = 'trial';
-      remainingTrialDays.value = 0;
-    }
-  }
-
-  /// Show warning when using offline mode
-  void _showOfflineMode() {
-    Get.snackbar(
-      'Offline Mode',
-      'Using cached subscription data. Connect to internet to sync.',
-      backgroundColor: Colors.blue[100],
-      colorText: Colors.blue[900],
-      icon: Icon(Icons.cloud_off, color: Colors.blue[900]),
-      duration: Duration(seconds: 3),
-    );
-  }
-
-  /// Show warning when cached data is stale
-  void _showStaleDataWarning(int daysSinceSync) {
-    Get.snackbar(
-      'Subscription Data Outdated',
-      'Subscription data is $daysSinceSync days old. Please connect to internet to verify.',
-      backgroundColor: Colors.orange[100],
-      colorText: Colors.orange[900],
-      icon: Icon(Icons.warning_amber, color: Colors.orange[900]),
-      duration: Duration(seconds: 5),
-    );
-  }
-
-  /// Show warning when no cached data available
-  void _showOfflineWarning() {
-    Get.dialog(
-      AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.cloud_off, color: Colors.orange[700]),
-            SizedBox(width: 12),
-            Text('No Internet Connection'),
-          ],
-        ),
-        content: Text(
-          'Cannot verify your subscription status without internet connection.\n\n'
-          'Please connect to the internet to continue.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Get.back(),
-            child: Text('OK'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Get.back();
-              loadSubscriptionData(); // Retry
-            },
-            child: Text('Retry'),
-          ),
-        ],
-      ),
-      barrierDismissible: false,
-    );
-  }
-
   /// Check if user is eligible for trial
   Future<bool> checkTrialEligibility() async {
     try {
@@ -622,7 +475,7 @@ class SubscriptionController extends GetxController {
     }
   }
 
-  /// Load subscription data with trial eligibility
+  /// Load subscription data with better error handling
   Future<void> loadSubscriptionData() async {
     try {
       isLoading(true);
@@ -630,15 +483,28 @@ class SubscriptionController extends GetxController {
 
       print('🔄 Loading subscription data...');
 
-      // Verify authentication first
-      final isAuth = await _subscriptionService.isAuthenticated();
-      if (!isAuth) {
-        print('❌ Not authenticated - checking offline cache');
+      // FIRST: Check if we have a valid auth token
+      final hasToken = await _verifyAuthToken();
+
+      if (!hasToken) {
+        print('⚠️ No valid auth token - using cached data');
         await _loadFromCache();
-        return;
+
+        // If we have cached data that's recent, allow access
+        final cacheAge = await _getCacheAge();
+        if (cacheAge != null && cacheAge < 7) {
+          print('✅ Using recent cached data (${cacheAge} days old)');
+          return;
+        } else {
+          print('❌ Cache is too old or missing');
+          // Don't block - let the subscription guard handle it
+          subscriptionStatus.value = 'trial';
+          remainingTrialDays.value = 0;
+          return;
+        }
       }
 
-      print('✅ Authentication verified, attempting online load');
+      print('✅ Auth token available, fetching fresh data...');
 
       try {
         // Load packages and current status concurrently
@@ -658,7 +524,7 @@ class SubscriptionController extends GetxController {
         subscriptionStatus.value = statusData['subscription_status'] ?? 'trial';
         remainingTrialDays.value = statusData['remaining_trial_days'] ?? 0;
 
-        // NEW: Load trial eligibility
+        // Load trial eligibility
         if (statusData['trial_eligibility'] != null) {
           final trialEligibility =
               statusData['trial_eligibility'] as Map<String, dynamic>;
@@ -702,6 +568,121 @@ class SubscriptionController extends GetxController {
       await _loadFromCache();
     } finally {
       isLoading(false);
+    }
+  }
+
+  /// NEW: Verify we have a valid auth token
+  Future<bool> _verifyAuthToken() async {
+    try {
+      // Check if AuthController is available and has a user
+      if (Get.isRegistered<AuthController>()) {
+        final authController = Get.find<AuthController>();
+
+        if (authController.isLoggedIn.value &&
+            authController.currentUser.value != null) {
+          final email = authController.currentUser.value!.email;
+
+          // Try to get the stored token
+          final token = await _getStoredAuthToken();
+
+          if (token != null && token.isNotEmpty) {
+            print('✅ Auth token found: ${token.substring(0, 10)}...');
+
+            // Set it in ApiService if not already set
+            if (!ApiService.hasToken) {
+              ApiService.setToken(token);
+              print('✅ Token set in ApiService');
+            }
+
+            return true;
+          } else {
+            print('⚠️ No auth token found for $email');
+            return false;
+          }
+        }
+      }
+
+      print('⚠️ AuthController not available or user not logged in');
+      return false;
+    } catch (e) {
+      print('❌ Error verifying auth token: $e');
+      return false;
+    }
+  }
+
+  /// NEW: Get cache age in days
+  Future<int?> _getCacheAge() async {
+    try {
+      final cachedData = await SubscriptionCache.getCachedSubscriptionData();
+
+      if (cachedData != null && cachedData['synced_at'] != null) {
+        final syncedAt = DateTime.parse(cachedData['synced_at']);
+        final now = DateTime.now();
+        final difference = now.difference(syncedAt);
+
+        return difference.inDays;
+      }
+
+      return null;
+    } catch (e) {
+      print('❌ Error getting cache age: $e');
+      return null;
+    }
+  }
+
+  /// Load from cached data
+  Future<void> _loadFromCache() async {
+    try {
+      final cachedData = await SubscriptionCache.getCachedSubscriptionData();
+
+      if (cachedData != null) {
+        subscriptionStatus.value = cachedData['status'] ?? 'trial';
+        remainingTrialDays.value = cachedData['trial_days'] ?? 0;
+
+        print('✅ Loaded from cache:');
+        print('   - Status: ${subscriptionStatus.value}');
+        print('   - Trial days: ${remainingTrialDays.value}');
+
+        // Check cache age
+        if (cachedData['synced_at'] != null) {
+          final syncedAt = DateTime.parse(cachedData['synced_at']);
+          final daysSinceSync = DateTime.now().difference(syncedAt).inDays;
+          print('   - Cache age: $daysSinceSync days');
+        }
+      } else {
+        print('❌ No cached data available');
+        // Default to trial with 0 days
+        subscriptionStatus.value = 'trial';
+        remainingTrialDays.value = 0;
+      }
+    } catch (e) {
+      print('❌ Error loading from cache: $e');
+      // Default to trial with 0 days
+      subscriptionStatus.value = 'trial';
+      remainingTrialDays.value = 0;
+    }
+  }
+
+  /// Get stored auth token (same method as AuthController)
+  Future<String?> _getStoredAuthToken() async {
+    try {
+      if (Get.isRegistered<AuthController>()) {
+        final authController = Get.find<AuthController>();
+        final user = authController.currentUser.value;
+
+        if (user != null && user.email != null) {
+          final prefs = await SharedPreferences.getInstance();
+          final key = 'api_token_${user.email}';
+          final token = prefs.getString(key);
+
+          return token;
+        }
+      }
+
+      return null;
+    } catch (e) {
+      print('❌ Error getting stored auth token: $e');
+      return null;
     }
   }
 }

@@ -1,5 +1,6 @@
 // lib/controllers/auth_controller.dart - Local-Only Authentication
 import 'package:crypto/crypto.dart';
+import 'package:driving/controllers/sync_controller.dart';
 import 'package:driving/models/user.dart';
 import 'package:driving/services/api_service.dart';
 import 'package:driving/services/database_helper.dart';
@@ -264,11 +265,19 @@ class AuthController extends GetxController {
     }
 
     try {
-      final success = await _pinController.setupPin(pin,
-          userEmail: currentUser.value!.email);
+      final email = currentUser.value!.email;
+
+      print('🔐 === SETTING UP PIN ===');
+      print('📧 Email: $email');
+
+      // Setup the PIN
+      final success = await _pinController.setupPin(pin, userEmail: email);
 
       if (success) {
-        print('✅ PIN setup successful for ${currentUser.value!.email}');
+        print('✅ PIN setup successful for $email');
+
+        // CRITICAL: Ensure API token is available
+        await _ensureTokenIsAvailable(email);
       }
 
       return success;
@@ -276,6 +285,53 @@ class AuthController extends GetxController {
       print('❌ PIN setup error: $e');
       error.value = 'PIN setup failed: ${e.toString()}';
       return false;
+    }
+  }
+
+  Future<void> _ensureTokenIsAvailable(String email) async {
+    try {
+      print('🔑 === ENSURING TOKEN IS AVAILABLE ===');
+
+      // Check if ApiService already has a token
+      if (ApiService.hasToken && ApiService.currentToken != null) {
+        print(
+            '✅ ApiService already has token: ${ApiService.currentToken!.substring(0, 10)}...');
+
+        // Make sure it's also in storage for future sessions
+        final storedToken = await _getStoredApiToken(email);
+        if (storedToken == null || storedToken != ApiService.currentToken) {
+          print('💾 Saving current ApiService token to storage...');
+          await _storeApiToken(email, ApiService.currentToken!);
+        }
+        return;
+      }
+
+      print('⚠️ ApiService has no token, checking storage...');
+
+      // Try to get from storage
+      final storedToken = await _getStoredApiToken(email);
+
+      if (storedToken != null && storedToken.isNotEmpty) {
+        print('✅ Token found in storage: ${storedToken.substring(0, 10)}...');
+
+        // Set it in ApiService
+        ApiService.setToken(storedToken);
+        print('✅ Token set in ApiService');
+
+        // Verify
+        if (ApiService.hasToken && ApiService.currentToken != null) {
+          print('✅ Token verified and ready for API calls');
+        } else {
+          print('❌ Failed to set token in ApiService');
+        }
+      } else {
+        print('❌ No token found anywhere!');
+        print(
+            '⚠️ This means the initial login did not save the token properly');
+        print('💡 User will need to re-login with email/password');
+      }
+    } catch (e) {
+      print('❌ Error ensuring token: $e');
     }
   }
 
@@ -752,26 +808,13 @@ class AuthController extends GetxController {
       final storedToken = prefs.getString(key);
       if (storedToken != null && storedToken == token) {
         print('✅ TOKEN VERIFIED IN STORAGE!');
-        print('✅ Stored token matches original');
-      } else if (storedToken != null) {
-        print('⚠️ Token stored but DOESN\'T MATCH!');
-        print('   Original: ${token.substring(0, 20)}...');
-        print('   Stored: ${storedToken.substring(0, 20)}...');
       } else {
-        print('❌ TOKEN NOT FOUND IN STORAGE!');
+        print('❌ TOKEN STORAGE FAILED!');
       }
 
-      // List all stored keys for debugging
-      final allKeys = prefs.getKeys();
-      final tokenKeys = allKeys.where((k) => k.startsWith('api_token_'));
-      print('📋 All token keys in storage: $tokenKeys');
-
-      // Also set it in ApiService immediately
+      // ALSO set it in ApiService immediately
       ApiService.setToken(token);
       print('✅ Token also set in ApiService');
-      print('   ApiService.hasToken: ${ApiService.hasToken}');
-      print(
-          '   ApiService.currentToken: ${ApiService.currentToken?.substring(0, 20)}...');
 
       print('✅ === TOKEN STORAGE COMPLETE ===');
     } catch (e, stackTrace) {
@@ -788,21 +831,16 @@ class AuthController extends GetxController {
 
       print('\n🔐 === API LOGIN ATTEMPT ===');
       print('📧 Email: $email');
-      print('📱 Password length: ${password.length}');
 
       if (email.isEmpty || password.isEmpty) {
         error.value = 'Email and password are required';
-        print('❌ Empty credentials');
         return false;
       }
-
-      print('📡 Calling ApiService.login...');
 
       // Call Laravel API for authentication
       final loginResponse = await ApiService.login(email, password);
 
       print('✅ API Response received');
-      print('📦 Response keys: ${loginResponse.keys.join(', ')}');
 
       // Extract user data and token
       final userData = loginResponse['user'];
@@ -814,56 +852,53 @@ class AuthController extends GetxController {
         return false;
       }
 
-      print('✅ API authentication successful');
-      print('🔑 Token received: ${token.substring(0, 10)}...');
-      print('👤 User data received: ${userData['email']}');
+      print('✅ Token received: ${token.substring(0, 10)}...');
 
-      // CRITICAL: Store token for future PIN logins
+      // CRITICAL: Store token IMMEDIATELY after receiving it
       print('💾 Storing token...');
       await _storeApiToken(email, token);
       print('✅ Token storage complete');
 
       // Set user as logged in
-      print('👤 Creating User object...');
       final user = User.fromJson(userData);
       currentUser.value = user;
       isLoggedIn.value = true;
 
-      print('✅ User set: ${user.fname} ${user.lname} (${user.role})');
-      print('✅ School ID: ${user.schoolId}');
-      print('✅ Login status: ${isLoggedIn.value}');
+      print('✅ Login complete for: ${user.fname} ${user.lname}');
 
-      // Save email for future sessions if remember me is enabled
+      // Save email if remember me
       if (rememberMe.value) {
         userEmail.value = email;
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('remembered_email', email);
-        print('✅ Email remembered');
       }
 
-      // Also save to local database for offline access
-      print('💾 Saving user to local database...');
+      // Save to local database
       await _saveUserToLocal(userData);
-      print('✅ User saved to local database');
+      await _triggerPostLoginSync();
 
-      print('✅ === LOGIN COMPLETE ===');
-      print('Summary:');
-      print('  - User: ${user.fname} ${user.lname}');
-      print('  - Email: ${user.email}');
-      print('  - Role: ${user.role}');
-      print('  - School ID: ${user.schoolId}');
-      print('  - Token stored: YES');
-      print('  - isLoggedIn: ${isLoggedIn.value}');
+      // FINAL VERIFICATION
+      print('🔍 === FINAL TOKEN VERIFICATION ===');
+      print('   ApiService.hasToken: ${ApiService.hasToken}');
+      if (ApiService.currentToken != null) {
+        print(
+            '   ApiService.currentToken: ${ApiService.currentToken!.substring(0, 10)}...');
+      }
+
+      final verifyStored = await _getStoredApiToken(email);
+      if (verifyStored != null) {
+        print('   Stored token: ${verifyStored.substring(0, 10)}...');
+        print('   ✅ Token is properly stored and available');
+      } else {
+        print('   ❌ WARNING: Token not in storage!');
+      }
 
       return true;
     } catch (e, stackTrace) {
-      print('❌ === API LOGIN ERROR ===');
-      print('❌ Error: $e');
-      print('❌ Stack trace: $stackTrace');
+      print('❌ API LOGIN ERROR: $e');
       error.value = 'Login failed: ${e.toString()}';
 
-      // Fallback to local login if API fails
-      print('🔄 Attempting local fallback login...');
+      // Fallback to local login
       return await login(email, password);
     } finally {
       isLoading.value = false;
@@ -919,112 +954,7 @@ class AuthController extends GetxController {
 // Helper function
   int min(int a, int b) => a < b ? a : b;
 
-  /// Test if the current API token works - ENHANCED VERSION
-  Future<bool> _testApiConnection() async {
-    try {
-      print('🧪 Testing API connection...');
-      print('🧪 Token available: ${ApiService.hasToken}');
-
-      // CRITICAL FIX: Use currentToken instead of hasToken
-      if (!ApiService.hasToken || ApiService.currentToken == null) {
-        print('❌ No token to test');
-        return false;
-      }
-
-      // Make a simple authenticated request to test the token
-      final response = await http.get(
-        Uri.parse('${ApiService.baseUrl}/auth/user'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': 'Bearer ${ApiService.currentToken}', // ✅ FIXED!
-        },
-      ).timeout(
-        Duration(seconds: 10),
-        onTimeout: () => http.Response('Timeout', 408),
-      );
-
-      print('🧪 API test response: ${response.statusCode}');
-
-      if (response.statusCode == 200) {
-        print('✅ Token is valid and working');
-        return true;
-      } else if (response.statusCode == 401) {
-        print('❌ Token is invalid or expired (401)');
-        return false;
-      } else if (response.statusCode == 403) {
-        // 403 means token is VALID but user doesn't have permission for THIS endpoint
-        // This is OK for our purposes - the token works!
-        print(
-            '✅ Token is valid (403 = authenticated but no permission for this endpoint)');
-        return true; // Changed from false to true!
-      } else {
-        print('⚠️ Unexpected response: ${response.statusCode}');
-        // Assume token is valid if not 401
-        return response.statusCode != 401;
-      }
-    } catch (e) {
-      print('🧪 API connection test failed: $e');
-      return false;
-    }
-  }
-
-  /// Enhanced PIN authentication with proper token handling - FIXED VERSION
-  Future<bool> authenticateWithPin(String pin) async {
-    try {
-      print('🔐 === PIN AUTHENTICATION START ===');
-
-      // Verify PIN locally
-      final isValidPin = await _pinController.verifyPin(pin);
-      if (!isValidPin) {
-        error.value = 'Invalid PIN';
-        print('❌ PIN verification failed');
-        return false;
-      }
-
-      // Get email associated with PIN
-      final pinUserEmail = await _pinController.getPinUserEmail();
-      if (pinUserEmail == null) {
-        error.value = 'No user associated with PIN';
-        print('❌ No user email found for PIN');
-        return false;
-      }
-
-      print('📧 PIN verified for user: $pinUserEmail');
-
-      // Load user from local cache
-      await _loadUserFromCache(pinUserEmail);
-
-      // Check if user was loaded successfully
-      if (currentUser.value == null) {
-        error.value =
-            'User data not found. Please sign in with email and password.';
-        print('❌ User data not found in cache');
-        return false;
-      }
-
-      // CRITICAL: Set authentication state IMMEDIATELY
-      isLoggedIn.value = true;
-      userEmail.value = pinUserEmail;
-
-      print(
-          '✅ User loaded: ${currentUser.value!.fname} ${currentUser.value!.lname}');
-      print('✅ Login status set to: ${isLoggedIn.value}');
-
-      // Try to restore API token for sync operations
-      await _restoreApiTokenForSync(pinUserEmail);
-
-      print('✅ === PIN AUTHENTICATION COMPLETE ===');
-      return true;
-    } catch (e) {
-      print('❌ PIN authentication error: $e');
-      error.value = 'PIN authentication failed: ${e.toString()}';
-      isLoggedIn.value = false;
-      return false;
-    }
-  }
-
-  /// Restore API token after PIN login - ENHANCED VERSION
+  /// Restore API token after PIN login - FIXED VERSION
   Future<void> _restoreApiTokenForSync(String email) async {
     try {
       print('🔄 === RESTORING API TOKEN ===');
@@ -1049,50 +979,172 @@ class AuthController extends GetxController {
         final isWorking = await _testApiConnection();
 
         if (isWorking) {
-          print('✅ API token is VALID and WORKING');
-          print('✅ User can now sync data');
-
-          // Show success message
-          Get.snackbar(
-            'Sync Enabled',
-            'You can now sync your data',
-            duration: Duration(seconds: 2),
-            backgroundColor: Colors.green[100],
-            colorText: Colors.green[900],
-            icon: Icon(Icons.cloud_done, color: Colors.green),
-          );
+          print('✅ API token is valid and working');
         } else {
-          print('❌ Stored token is EXPIRED/INVALID');
-          await _clearStoredToken(email);
-
-          // Show info message (don't block, just inform)
-          Get.snackbar(
-            'Sync Unavailable',
-            'Sign in with password to enable sync',
-            duration: Duration(seconds: 3),
-            backgroundColor: Colors.orange[100],
-            colorText: Colors.orange[900],
-            icon: Icon(Icons.cloud_off, color: Colors.orange),
-          );
+          print('⚠️ Token exists but may be expired');
+          print('💡 User can still use app offline, will re-login when needed');
         }
       } else {
-        print('⚠️ No stored API token found');
+        print('⚠️ No stored token found for $email');
+        print('💡 User can still use app offline, but sync will be limited');
+      }
+    } catch (e) {
+      print('⚠️ Error restoring token: $e');
+      print('💡 Continuing anyway - user can work offline');
+    }
+  }
 
-        // Show info message
-        Get.snackbar(
-          'Offline Mode',
-          'Sign in with password to enable sync',
-          duration: Duration(seconds: 3),
-          backgroundColor: Colors.blue[100],
-          colorText: Colors.blue[900],
-          icon: Icon(Icons.cloud_off, color: Colors.blue),
-        );
+  /// Test if the current API token works - FIXED VERSION
+  Future<bool> _testApiConnection() async {
+    try {
+      print('🧪 Testing API connection...');
+      print('🧪 Token available: ${ApiService.hasToken}');
+
+      if (!ApiService.hasToken || ApiService.currentToken == null) {
+        print('❌ No token to test');
+        return false;
       }
 
-      print('✅ === TOKEN RESTORATION COMPLETE ===');
+      // Make a simple authenticated request to test the token
+      final response = await http.get(
+        Uri.parse('${ApiService.baseUrl}/auth/user'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': 'Bearer ${ApiService.currentToken}',
+        },
+      ).timeout(
+        Duration(seconds: 10),
+        onTimeout: () => http.Response('Timeout', 408),
+      );
+
+      print('🧪 API test response: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        print('✅ Token is valid and working');
+        return true;
+      } else if (response.statusCode == 401) {
+        print('❌ Token is invalid or expired (401)');
+        return false;
+      } else if (response.statusCode == 403) {
+        // FIXED: 403 means token is VALID but user doesn't have permission
+        // This is OK - the token works for authentication!
+        print('✅ Token is valid (403 = authenticated but limited permissions)');
+        return true; // Changed from false to true!
+      } else if (response.statusCode == 408) {
+        print('⏱️ Request timeout');
+        return false;
+      } else {
+        print('⚠️ Unexpected response: ${response.statusCode}');
+        // Assume token might still be valid
+        return true;
+      }
     } catch (e) {
-      print('⚠️ Could not restore API token: $e');
-      // Don't show error - just continue in offline mode
+      print('❌ Error testing connection: $e');
+      return false;
+    }
+  }
+
+  /// ALSO ADD: Better PIN authentication that ensures token is loaded
+  Future<bool> authenticateWithPin(String pin) async {
+    try {
+      print('\n🔐 === PIN AUTHENTICATION ===');
+      print('📌 Entered PIN length: ${pin.length}');
+      isLoading.value = true;
+      error.value = '';
+
+      // Verify PIN first
+      final pinController = Get.find<PinController>();
+      final isValid = await pinController.verifyPin(pin);
+
+      if (!isValid) {
+        print('❌ Invalid PIN');
+        error.value = 'Invalid PIN. Please try again.';
+        return false;
+      }
+
+      print('✅ PIN is valid');
+
+      // Get the email associated with this PIN
+      final pinUserEmail = await pinController.getPinUserEmail();
+
+      if (pinUserEmail == null || pinUserEmail.isEmpty) {
+        print('❌ No user email found for this PIN');
+        error.value =
+            'PIN setup is incomplete. Please sign in with email and password.';
+        return false;
+      }
+
+      print('📧 PIN user email: $pinUserEmail');
+
+      // Load user from local database
+      final userData = await _getUserFromLocal(pinUserEmail);
+
+      if (userData == null) {
+        error.value =
+            'User data not found. Please sign in with email and password.';
+        print('❌ User data not found in cache');
+        return false;
+      }
+
+      // CRITICAL: Set authentication state IMMEDIATELY
+      isLoggedIn.value = true;
+      userEmail.value = pinUserEmail;
+      currentUser.value = User.fromJson(userData);
+
+      print(
+          '✅ User loaded: ${currentUser.value!.fname} ${currentUser.value!.lname}');
+      print('✅ Login status set to: ${isLoggedIn.value}');
+
+      // CRITICAL: Restore API token for sync operations
+      print('🔑 Restoring API token...');
+      await _restoreApiTokenForSync(pinUserEmail);
+      await _triggerPostLoginSync();
+      print('✅ Sync triggered if online');
+      // IMPORTANT: Verify token was restored
+      final tokenRestored =
+          ApiService.hasToken && ApiService.currentToken != null;
+      print('🔑 Token restored: $tokenRestored');
+
+      if (tokenRestored) {
+        print('✅ Token available for subscription check');
+      } else {
+        print('⚠️ No token available - subscription check will use cache');
+      }
+
+      print('✅ === PIN AUTHENTICATION COMPLETE ===');
+      return true;
+    } catch (e) {
+      print('❌ PIN authentication error: $e');
+      error.value = 'PIN authentication failed: ${e.toString()}';
+      isLoggedIn.value = false;
+      return false;
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  /// Get user data from local database
+  Future<Map<String, dynamic>?> _getUserFromLocal(String email) async {
+    try {
+      print('📂 Getting user from local database: $email');
+
+      final users = await DatabaseHelper.instance.getUsers();
+      final userData = users
+          .where((u) =>
+              u['email']?.toString().toLowerCase() == email.toLowerCase())
+          .firstOrNull;
+
+      if (userData != null) {
+        print('✅ User found in local database');
+        return userData;
+      } else {
+        print('❌ User not found in local database');
+        return null;
+      }
+    } catch (e) {
+      print('❌ Error getting user from local database: $e');
+      return null;
     }
   }
 
@@ -1141,6 +1193,41 @@ class AuthController extends GetxController {
       print('🧹 Cleared stored token for: $email');
     } catch (e) {
       print('❌ Error clearing token: $e');
+    }
+  }
+
+  /// Trigger sync after successful login
+  Future<void> _triggerPostLoginSync() async {
+    try {
+      print('🔄 === POST-LOGIN AUTO-SYNC ===');
+
+      if (!Get.isRegistered<SyncController>()) {
+        print('⚠️ SyncController not registered');
+        return;
+      }
+
+      final syncController = Get.find<SyncController>();
+
+      if (!syncController.isOnline.value) {
+        print('⚠️ Offline - skipping auto-sync');
+        return;
+      }
+
+      if (syncController.isSyncing.value) {
+        print('⚠️ Sync already in progress');
+        return;
+      }
+
+      print('✅ Triggering auto-sync after login...');
+
+      Future.delayed(Duration(milliseconds: 800), () {
+        if (Get.isRegistered<SyncController>()) {
+          Get.find<SyncController>().performFullSync();
+          print('✅ Auto-sync triggered');
+        }
+      });
+    } catch (e) {
+      print('⚠️ Error triggering auto-sync: $e');
     }
   }
 
