@@ -839,31 +839,86 @@ class SettingsController extends GetxController {
           final schoolData = schoolRecords.first;
           print('🏫 Found school record: ${schoolData['name']}');
 
-          // Merge school data into settings if local data is incomplete
-          if (businessName.value.isEmpty && schoolData['name'] != null) {
+          // FIXED: Always populate from schools table (remove isEmpty checks)
+          if (schoolData['name'] != null) {
             businessName.value = schoolData['name'].toString();
+            print('✅ Updated business name: ${businessName.value}');
           }
-          if (businessAddress.value.isEmpty && schoolData['address'] != null) {
+
+          if (schoolData['address'] != null) {
             businessAddress.value = schoolData['address'].toString();
+            print('✅ Updated business address: ${businessAddress.value}');
           }
-          if (businessPhone.value.isEmpty && schoolData['phone'] != null) {
+
+          if (schoolData['phone'] != null) {
             businessPhone.value = schoolData['phone'].toString();
+            print('✅ Updated business phone: ${businessPhone.value}');
           }
-          if (businessEmail.value.isEmpty && schoolData['email'] != null) {
+
+          if (schoolData['email'] != null) {
             businessEmail.value = schoolData['email'].toString();
+            print('✅ Updated business email: ${businessEmail.value}');
+          }
+
+          if (schoolData['city'] != null) {
+            businessCity.value = schoolData['city'].toString();
+            print('✅ Updated business city: ${businessCity.value}');
+          }
+
+          if (schoolData['country'] != null) {
+            businessCountry.value = schoolData['country'].toString();
+            print('✅ Updated business country: ${businessCountry.value}');
+          }
+
+          if (schoolData['website'] != null) {
+            businessWebsite.value = schoolData['website'].toString();
+            print('✅ Updated business website: ${businessWebsite.value}');
+          }
+
+          if (schoolData['start_time'] != null) {
+            businessStartTime.value = schoolData['start_time'].toString();
+            print('✅ Updated business start time: ${businessStartTime.value}');
+          }
+
+          if (schoolData['end_time'] != null) {
+            businessEndTime.value = schoolData['end_time'].toString();
+            print('✅ Updated business end time: ${businessEndTime.value}');
+          }
+
+          if (schoolData['operating_days'] != null) {
+            // Parse operating days if it's stored as JSON string
+            final operatingDaysData = schoolData['operating_days'];
+            if (operatingDaysData is String) {
+              try {
+                final decoded = jsonDecode(operatingDaysData);
+                if (decoded is List) {
+                  operatingDays.value =
+                      decoded.map((e) => e.toString()).toList();
+                }
+              } catch (e) {
+                // If not JSON, treat as comma-separated
+                operatingDays.value =
+                    operatingDaysData.split(',').map((e) => e.trim()).toList();
+              }
+            }
+            print('✅ Updated operating days: ${operatingDays.value}');
+          }
+
+          if (schoolData['license_number'] != null) {
+            // You might want to add a license_number field to your settings
+            print(
+                'ℹ️ License number available: ${schoolData['license_number']}');
           }
 
           // Update school-specific settings
           schoolId.value = currentSchoolId;
           schoolDisplayName.value = schoolData['name']?.toString() ?? '';
 
-          // If we merged data, save it to settings table for future use
-          if (schoolData['name'] != null) {
-            print('💾 Saving merged school data to settings...');
-            await _saveMergedData();
-          }
+          // Save merged data to settings table
+          print('💾 Saving merged school data to settings...');
+          await _saveMergedData();
 
-          print('✅ Successfully merged school data into settings');
+          print('✅ Successfully merged ALL school data into settings');
         } else {
           print('⚠️ No school record found for ID: $currentSchoolId');
         }

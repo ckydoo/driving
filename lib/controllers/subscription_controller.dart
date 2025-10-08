@@ -505,6 +505,19 @@ class SubscriptionController extends GetxController {
       try {
         print('🌐 Loading subscription data from server...');
 
+        // 🔥 CRITICAL FIX: Load packages FIRST
+        print('📦 Loading available packages...');
+        try {
+          final packages = await _subscriptionService.getSubscriptionPackages();
+          availablePackages.value = packages;
+          print('✅ Loaded ${packages.length} packages');
+        } catch (e) {
+          print('⚠️ Failed to load packages: $e');
+          // Don't fail completely if packages fail to load
+          // User can still see their subscription status
+        }
+
+        // Then load subscription status
         final statusData = await _subscriptionService.getSubscriptionStatus();
 
         if (statusData != null) {
@@ -532,6 +545,7 @@ class SubscriptionController extends GetxController {
           print('✅ Subscription data loaded from server:');
           print('   - Status: ${subscriptionStatus.value}');
           print('   - Trial days: ${remainingTrialDays.value}');
+          print('   - Available packages: ${availablePackages.length}');
 
           // IMPORTANT: Cache this data for offline use
           await SubscriptionCache.saveSubscriptionData(
