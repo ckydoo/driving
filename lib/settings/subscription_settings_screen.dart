@@ -1,4 +1,5 @@
 // lib/settings/subscription_settings_screen.dart
+import 'package:driving/services/subscription_cache.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
@@ -14,11 +15,9 @@ class SubscriptionScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Auto-select first non-trial package on load
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_selectedPackage.value == null &&
           controller.availablePackages.isNotEmpty) {
-        // Find first non-trial package or use first package
         final firstPaidPackage = controller.availablePackages.firstWhere(
           (pkg) => pkg.slug != 'trial',
           orElse: () => controller.availablePackages.first,
@@ -40,7 +39,7 @@ class SubscriptionScreen extends StatelessWidget {
           onPressed: () => Get.back(),
         ),
         title: Text(
-          'Subscribe',
+          'Subscription',
           style: TextStyle(
             color: Colors.white,
             fontSize: 20,
@@ -51,10 +50,12 @@ class SubscriptionScreen extends StatelessWidget {
           IconButton(
             icon: Icon(Icons.refresh, color: Colors.white),
             onPressed: () => controller.loadSubscriptionData(),
+            tooltip: 'Refresh',
           ),
         ],
       ),
       body: Obx(() {
+        // Show loading spinner
         if (controller.isLoading.value) {
           return Center(
             child: Column(
@@ -63,7 +64,7 @@ class SubscriptionScreen extends StatelessWidget {
                 CircularProgressIndicator(color: Colors.white),
                 SizedBox(height: 16),
                 Text(
-                  'Loading subscription plans...',
+                  'Loading subscription...',
                   style: TextStyle(color: Colors.white),
                 ),
               ],
@@ -71,27 +72,55 @@ class SubscriptionScreen extends StatelessWidget {
           );
         }
 
+        // FIXED: Check if offline AND show cached data
+        final isOffline = controller.availablePackages.isEmpty;
+        final hasCurrentSubscription =
+            controller.subscriptionStatus.value.isNotEmpty &&
+                    controller.subscriptionStatus.value != 'trial' ||
+                controller.remainingTrialDays.value > 0;
+
+        if (isOffline && hasCurrentSubscription) {
+          // SHOW CACHED SUBSCRIPTION INFO WHEN OFFLINE
+          return _buildOfflineView();
+        }
+
+        // No data at all (not even cache)
         if (controller.availablePackages.isEmpty) {
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.error_outline, size: 64, color: Colors.white54),
+                Icon(Icons.cloud_off, size: 64, color: Colors.grey[400]),
                 SizedBox(height: 16),
                 Text(
-                  'No subscription packages available',
-                  style: TextStyle(color: Colors.white, fontSize: 16),
+                  'Unable to load subscription data',
+                  style: TextStyle(
+                    color: Colors.grey[700],
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-                SizedBox(height: 16),
-                ElevatedButton(
+                SizedBox(height: 8),
+                Text(
+                  'Please check your internet connection',
+                  style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                  textAlign: TextAlign.center,
+                ),
+                SizedBox(height: 24),
+                ElevatedButton.icon(
                   onPressed: () => controller.loadSubscriptionData(),
-                  child: Text('Retry'),
+                  icon: Icon(Icons.refresh),
+                  label: Text('Retry'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Color(0xFF2563EB),
+                    foregroundColor: Colors.white,
+                    padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                  ),
                 ),
               ],
             ),
           );
         }
-
         return SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -437,6 +466,428 @@ class SubscriptionScreen extends StatelessWidget {
         ),
       );
     });
+  }
+
+  Widget _buildOfflineView() {
+    return FutureBuilder<Map<String, dynamic>?>(
+      future: SubscriptionCache.getCachedSubscriptionData(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return Center(child: CircularProgressIndicator());
+        }
+
+        final cachedData = snapshot.data!;
+        final status = cachedData['subscription_status'] as String;
+        final trialDays = cachedData['remaining_trial_days'] as int;
+        final expiresAtStr = cachedData['subscription_expires_at'] as String?;
+        final isActive = status == 'active';
+        final isTrial = status == 'trial';
+
+        // Calculate exact time remaining
+        DateTime? expiresAt;
+        Duration? timeRemaining;
+        if (expiresAtStr != null) {
+          expiresAt = DateTime.parse(expiresAtStr);
+          timeRemaining = expiresAt.difference(DateTime.now());
+        }
+
+        return SingleChildScrollView(
+          padding: EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Offline indicator banner
+              Container(
+                width: double.infinity,
+                padding: EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.orange[50],
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.orange[300]!),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.cloud_off, color: Colors.orange[700], size: 24),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Offline Mode',
+                            style: TextStyle(
+                              color: Colors.orange[900],
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            'Showing cached subscription data from ${_formatCacheAge(cachedData['last_synced_at'])}',
+                            style: TextStyle(
+                              color: Colors.orange[800],
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              SizedBox(height: 24),
+
+              // Current subscription status
+              Text(
+                'Current Subscription',
+                style: TextStyle(
+                  color: Color(0xFF0F172A),
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+
+              SizedBox(height: 16),
+
+              // Subscription card with detailed time
+              Container(
+                width: double.infinity,
+                padding: EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: isActive
+                        ? [Color(0xFF2563EB), Color(0xFF1D4ED8)]
+                        : [Color(0xFF059669), Color(0xFF047857)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: (isActive ? Colors.blue : Colors.green)
+                          .withOpacity(0.3),
+                      blurRadius: 20,
+                      offset: Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          isActive ? Icons.verified : Icons.access_time,
+                          color: Colors.white,
+                          size: 32,
+                        ),
+                        SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                isActive ? 'Pro Subscription' : 'Free Trial',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              if (controller.currentPackage.value != null)
+                                Text(
+                                  controller.currentPackage.value!.name,
+                                  style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding:
+                              EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            status.toUpperCase(),
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    SizedBox(height: 24),
+
+                    Divider(color: Colors.white.withOpacity(0.3), thickness: 1),
+
+                    SizedBox(height: 24),
+
+                    // Time remaining with detailed breakdown
+                    if (timeRemaining != null &&
+                        timeRemaining.inSeconds > 0) ...[
+                      Row(
+                        children: [
+                          Icon(Icons.schedule, color: Colors.white70, size: 20),
+                          SizedBox(width: 8),
+                          Text(
+                            'Time Remaining',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 16),
+
+                      // Large display of days
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          Text(
+                            '${timeRemaining.inDays}',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 56,
+                              fontWeight: FontWeight.bold,
+                              height: 1,
+                            ),
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            timeRemaining.inDays == 1 ? 'day' : 'days',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      SizedBox(height: 16),
+
+                      // Detailed time breakdown
+                      Container(
+                        padding: EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children: [
+                            _buildTimeUnit(
+                              timeRemaining.inHours % 24,
+                              'hours',
+                            ),
+                            Container(
+                              width: 1,
+                              height: 30,
+                              color: Colors.white.withOpacity(0.3),
+                            ),
+                            _buildTimeUnit(
+                              timeRemaining.inMinutes % 60,
+                              'minutes',
+                            ),
+                            Container(
+                              width: 1,
+                              height: 30,
+                              color: Colors.white.withOpacity(0.3),
+                            ),
+                            _buildTimeUnit(
+                              timeRemaining.inSeconds % 60,
+                              'seconds',
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      SizedBox(height: 16),
+
+                      // Expiry date
+                      Container(
+                        padding: EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.event, color: Colors.white70, size: 16),
+                            SizedBox(width: 8),
+                            Text(
+                              'Expires: ${_formatExpiryDate(expiresAt!)}',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ] else if (isTrial) ...[
+                      // Fallback to days only if no expiry date
+                      Text(
+                        '$trialDays',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 56,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        '${trialDays == 1 ? 'day' : 'days'} remaining',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 18,
+                        ),
+                      ),
+                    ],
+
+                    // Active subscription info
+                    if (isActive &&
+                        controller.currentPackage.value != null) ...[
+                      Row(
+                        children: [
+                          Icon(Icons.payment, color: Colors.white70, size: 20),
+                          SizedBox(width: 8),
+                          Text(
+                            'Monthly Fee',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                        '\$${controller.currentPackage.value!.monthlyPrice?.toStringAsFixed(0) ?? '0'}',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 32,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+
+              SizedBox(height: 24),
+
+              // Info message
+              Container(
+                padding: EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.blue[50],
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.blue[200]!),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.blue[700]),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Connect to internet to upgrade or manage your subscription.',
+                        style: TextStyle(
+                          color: Colors.blue[900],
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              SizedBox(height: 24),
+
+              // Retry button
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => controller.loadSubscriptionData(),
+                  icon: Icon(Icons.refresh),
+                  label: Text('Connect and Refresh'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Color(0xFF2563EB),
+                    foregroundColor: Colors.white,
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // Helper: Build time unit widget
+  Widget _buildTimeUnit(int value, String unit) {
+    return Column(
+      children: [
+        Text(
+          value.toString().padLeft(2, '0'),
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        SizedBox(height: 4),
+        Text(
+          unit,
+          style: TextStyle(
+            color: Colors.white70,
+            fontSize: 11,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Helper: Format cache age
+  String _formatCacheAge(String? lastSyncedStr) {
+    if (lastSyncedStr == null) return 'unknown';
+
+    final lastSynced = DateTime.parse(lastSyncedStr);
+    final diff = DateTime.now().difference(lastSynced);
+
+    if (diff.inMinutes < 1) return 'just now';
+    if (diff.inHours < 1) return '${diff.inMinutes} minutes ago';
+    if (diff.inDays < 1) return '${diff.inHours} hours ago';
+    return '${diff.inDays} days ago';
+  }
+
+  // Helper: Format expiry date
+  String _formatExpiryDate(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final expiry = DateTime(date.year, date.month, date.day);
+
+    if (expiry == today) {
+      return 'Today at ${DateFormat('HH:mm').format(date)}';
+    } else if (expiry == today.add(Duration(days: 1))) {
+      return 'Tomorrow at ${DateFormat('HH:mm').format(date)}';
+    } else {
+      return DateFormat('MMM dd, yyyy \'at\' HH:mm').format(date);
+    }
   }
 
   Widget _buildPackageSelectionCard(SubscriptionPackage package) {

@@ -481,93 +481,194 @@ class SubscriptionController extends GetxController {
       isLoading(true);
       errorMessage.value = '';
 
-      print('🔄 Loading subscription data...');
+      print('\n🔄 === LOADING SUBSCRIPTION DATA ===');
 
-      // FIRST: Check if we have a valid auth token
-      final hasToken = await _verifyAuthToken();
+      // CRITICAL: Check internet connectivity first
+      bool hasInternet = await _checkInternetConnection();
 
-      if (!hasToken) {
-        print('⚠️ No valid auth token - using cached data');
-        await _loadFromCache();
-
-        // If we have cached data that's recent, allow access
-        final cacheAge = await _getCacheAge();
-        if (cacheAge != null && cacheAge < 7) {
-          print('✅ Using recent cached data (${cacheAge} days old)');
-          return;
-        } else {
-          print('❌ Cache is too old or missing');
-          // Don't block - let the subscription guard handle it
-          subscriptionStatus.value = 'trial';
-          remainingTrialDays.value = 0;
-          return;
-        }
+      if (!hasInternet) {
+        print('📡 No internet - loading from cache directly');
+        await _loadFromCacheWithValidation();
+        return;
       }
 
-      print('✅ Auth token available, fetching fresh data...');
+      // Verify we have auth token before making API calls
+      final hasValidToken = await _verifyAuthToken();
 
+      if (!hasValidToken) {
+        print('⚠️ No valid auth token - using cached data');
+        await _loadFromCacheWithValidation();
+        return;
+      }
+
+      // Try loading from server
       try {
-        // Load packages and current status concurrently
-        final results = await Future.wait([
-          _subscriptionService.getSubscriptionPackages(),
-          _subscriptionService.getSubscriptionStatus(),
-        ]).timeout(
-          Duration(seconds: 15),
-          onTimeout: () {
-            throw Exception('Network timeout');
-          },
-        );
+        print('🌐 Loading subscription data from server...');
 
-        availablePackages.value = results[0] as List<SubscriptionPackage>;
-        final statusData = results[1] as Map<String, dynamic>;
+        final statusData = await _subscriptionService.getSubscriptionStatus();
 
-        subscriptionStatus.value = statusData['subscription_status'] ?? 'trial';
-        remainingTrialDays.value = statusData['remaining_trial_days'] ?? 0;
+        if (statusData != null) {
+          subscriptionStatus.value =
+              statusData['subscription_status'] as String? ?? 'trial';
+          remainingTrialDays.value = statusData['remaining_trial_days'] ?? 0;
 
-        // Load trial eligibility
-        if (statusData['trial_eligibility'] != null) {
-          final trialEligibility =
-              statusData['trial_eligibility'] as Map<String, dynamic>;
-          canStartTrial.value = trialEligibility['can_start_trial'] ?? false;
-          hasUsedTrial.value = trialEligibility['has_used_trial'] ?? false;
+          // Load trial eligibility
+          if (statusData['trial_eligibility'] != null) {
+            final trialEligibility =
+                statusData['trial_eligibility'] as Map<String, dynamic>;
+            canStartTrial.value = trialEligibility['can_start_trial'] ?? false;
+            hasUsedTrial.value = trialEligibility['has_used_trial'] ?? false;
 
-          print('🎫 Trial Eligibility:');
-          print('   Can start trial: ${canStartTrial.value}');
-          print('   Has used trial: ${hasUsedTrial.value}');
+            print('🎫 Trial Eligibility:');
+            print('   Can start trial: ${canStartTrial.value}');
+            print('   Has used trial: ${hasUsedTrial.value}');
+          }
+
+          if (statusData['current_package'] != null) {
+            currentPackage.value = availablePackages.firstWhereOrNull(
+                (pkg) => pkg.id == statusData['current_package']['id']);
+          }
+
+          print('✅ Subscription data loaded from server:');
+          print('   - Status: ${subscriptionStatus.value}');
+          print('   - Trial days: ${remainingTrialDays.value}');
+
+          // IMPORTANT: Cache this data for offline use
+          await SubscriptionCache.saveSubscriptionData(
+            status: subscriptionStatus.value,
+            trialDays: remainingTrialDays.value,
+            expiresAt: statusData['subscription_expires_at'],
+            packageId: currentPackage.value?.id,
+            packageName: currentPackage.value?.name,
+          );
+
+          print('✅ Subscription data cached successfully');
         }
-
-        if (statusData['current_package'] != null) {
-          currentPackage.value = availablePackages.firstWhereOrNull(
-              (pkg) => pkg.id == statusData['current_package']['id']);
-        }
-
-        print('✅ Subscription data loaded from server:');
-        print('   - Status: ${subscriptionStatus.value}');
-        print('   - Trial days: ${remainingTrialDays.value}');
-
-        // Cache this data for offline use
-        await SubscriptionCache.saveSubscriptionData(
-          status: subscriptionStatus.value,
-          trialDays: remainingTrialDays.value,
-          expiresAt: statusData['subscription_expires_at'],
-          packageId: currentPackage.value?.id,
-          packageName: currentPackage.value?.name,
-        );
       } catch (e) {
         // Network error or timeout - use cached data
         print('⚠️ Failed to load from server: $e');
         print('📦 Falling back to cached subscription data');
 
-        await _loadFromCache();
+        await _loadFromCacheWithValidation();
       }
     } catch (e) {
       print('❌ Error loading subscription data: $e');
       errorMessage.value = 'Failed to load subscription data: ${e.toString()}';
 
       // Try cache as last resort
-      await _loadFromCache();
+      await _loadFromCacheWithValidation();
     } finally {
       isLoading(false);
+    }
+  }
+
+  /// NEW: Check internet connectivity
+  Future<bool> _checkInternetConnection() async {
+    try {
+      // Quick connectivity check
+      final result = await InternetAddress.lookup('google.com')
+          .timeout(Duration(seconds: 3));
+
+      if (result.isNotEmpty && result[0].rawAddress.isNotEmpty) {
+        print('✅ Internet connection available');
+        return true;
+      }
+      return false;
+    } catch (e) {
+      print('❌ No internet connection: $e');
+      return false;
+    }
+  }
+
+  /// NEW: Load from cache with smart validation
+  Future<void> _loadFromCacheWithValidation() async {
+    try {
+      print('📦 Loading subscription from cache...');
+
+      final cachedData = await SubscriptionCache.getCachedSubscriptionData();
+
+      if (cachedData == null) {
+        print('⚠️ No cached data available');
+
+        // Check if user just logged in
+        if (Get.isRegistered<AuthController>()) {
+          final authController = Get.find<AuthController>();
+          if (authController.isLoggedIn.value) {
+            // User is authenticated but no cache - assume trial
+            print('ℹ️ Authenticated user with no cache - defaulting to trial');
+            subscriptionStatus.value = 'trial';
+            remainingTrialDays.value = 30; // Give benefit of doubt
+
+            // Show warning
+            Get.snackbar(
+              'Offline Mode',
+              'Unable to verify subscription. Please connect to internet.',
+              backgroundColor: Colors.orange[700],
+              colorText: Colors.white,
+              icon: Icon(Icons.cloud_off, color: Colors.white),
+              duration: Duration(seconds: 5),
+            );
+            return;
+          }
+        }
+
+        // Not authenticated - block with trial expired
+        subscriptionStatus.value = 'trial';
+        remainingTrialDays.value = 0;
+        return;
+      }
+
+      // Load from cache
+      final status = cachedData['subscription_status'] as String;
+      final trialDays = cachedData['remaining_trial_days'] as int;
+      final daysSinceSync = cachedData['days_since_sync'] as int;
+
+      print('✅ Loaded from cache:');
+      print('   - Status: $status');
+      print('   - Trial days: $trialDays');
+      print('   - Days since sync: $daysSinceSync');
+
+      // Set values
+      subscriptionStatus.value = status;
+      remainingTrialDays.value = trialDays;
+
+      // Load package info if available
+      if (cachedData['current_package'] != null) {
+        final pkgData = cachedData['current_package'] as Map<String, dynamic>;
+        currentPackage.value = availablePackages
+            .firstWhereOrNull((pkg) => pkg.id == pkgData['id']);
+      }
+
+      // Show warning if cache is getting old
+      if (daysSinceSync > 7) {
+        print('⚠️ Cache is $daysSinceSync days old');
+        Get.snackbar(
+          'Subscription Check Needed',
+          'Last verified $daysSinceSync days ago. Please connect to internet soon.',
+          backgroundColor: Colors.orange[700],
+          colorText: Colors.white,
+          icon: Icon(Icons.warning_amber, color: Colors.white),
+          duration: Duration(seconds: 5),
+        );
+      }
+
+      print('✅ Successfully loaded from cache');
+    } catch (e) {
+      print('❌ Error loading from cache: $e');
+
+      // Final fallback - if authenticated, give trial status
+      if (Get.isRegistered<AuthController>()) {
+        final authController = Get.find<AuthController>();
+        if (authController.isLoggedIn.value) {
+          subscriptionStatus.value = 'trial';
+          remainingTrialDays.value = 30;
+          return;
+        }
+      }
+
+      // Not authenticated - block
+      subscriptionStatus.value = 'trial';
+      remainingTrialDays.value = 0;
     }
   }
 

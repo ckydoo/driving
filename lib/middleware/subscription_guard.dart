@@ -83,10 +83,10 @@ class _SubscriptionCheckingScreenState
 
   Future<void> _checkSubscriptionAndProceed() async {
     try {
-      print('🔄 Loading subscription status...');
+      print('🔄 Checking subscription status...');
       final subscriptionController = Get.find<SubscriptionController>();
 
-      // Load fresh subscription data from server
+      // Load subscription data (handles online/offline automatically)
       await subscriptionController.loadSubscriptionData();
 
       final status = subscriptionController.subscriptionStatus.value;
@@ -95,7 +95,7 @@ class _SubscriptionCheckingScreenState
       print('📊 Subscription Status: $status');
       print('📊 Trial Days: $trialDays');
 
-      // Check if blocked
+      // Check if access should be blocked
       if (status == 'suspended') {
         print('🚫 BLOCKED: Subscription suspended');
         _showBlockedScreen('suspended');
@@ -114,13 +114,12 @@ class _SubscriptionCheckingScreenState
         return;
       }
 
-      // Allow access - navigate to target page
+      // Allow access
       print('✅ ALLOWED: Proceeding to ${widget.targetRoute}');
 
       if (!mounted) return;
 
-      // Navigate to the actual target
-      WidgetsFlutterBinding.ensureInitialized();
+      // Navigate to the target page
       Future.microtask(() {
         if (widget.targetPage != null) {
           Get.off(() => widget.targetPage!());
@@ -131,59 +130,36 @@ class _SubscriptionCheckingScreenState
     } catch (e) {
       print('❌ Error checking subscription: $e');
 
-      // CRITICAL: Don't fail open - check cache instead
-      if (!mounted) return;
+      // On any error, check if user is authenticated
+      final authController = Get.find<AuthController>();
 
-      print('📦 Network error - checking cached subscription data');
+      if (authController.isLoggedIn.value &&
+          authController.currentUser.value != null) {
+        // User is logged in - allow access with warning
+        print('⚠️ Error but user authenticated - allowing access');
 
-      try {
-        final cachedData = await SubscriptionCache.getCachedSubscriptionData();
+        Get.snackbar(
+          'Offline Mode',
+          'Unable to verify subscription. Please connect to internet.',
+          backgroundColor: Colors.orange[700],
+          colorText: Colors.white,
+          icon: Icon(Icons.cloud_off, color: Colors.white),
+          duration: Duration(seconds: 5),
+        );
 
-        if (cachedData == null) {
-          // No cache - must block access until online
-          _showNoCacheError();
-          return;
-        }
-
-        final status = cachedData['subscription_status'] as String;
-        final trialDays = cachedData['remaining_trial_days'] as int;
-        final daysSinceSync = cachedData['days_since_sync'] as int;
-
-        print('📦 Using cached data (offline):');
-        print('   Status: $status');
-        print('   Trial Days: $trialDays');
-        print('   Days since sync: $daysSinceSync');
-
-        // Cache too old (>7 days) - require internet
-        if (daysSinceSync > 7) {
-          _showStaleCacheError(daysSinceSync);
-          return;
-        }
-
-        // Check cached status
-        if (status == 'suspended' ||
-            status == 'expired' ||
-            (status == 'trial' && trialDays <= 0)) {
-          _showBlockedScreen(status == 'suspended'
-              ? 'suspended'
-              : status == 'expired'
-                  ? 'expired'
-                  : 'trial_expired');
-          return;
-        }
-
-        // Allow access with cached data
-        print('✅ ALLOWED: Using valid cached subscription');
-        Future.microtask(() {
+        // Allow access
+        Future.delayed(Duration(milliseconds: 500), () {
+          if (!mounted) return;
           if (widget.targetPage != null) {
             Get.off(() => widget.targetPage!());
           } else {
             Get.offNamed(widget.targetRoute);
           }
         });
-      } catch (cacheError) {
-        print('❌ Cache error: $cacheError');
-        _showNoCacheError();
+      } else {
+        // Not authenticated - redirect to login
+        print('❌ Not authenticated - redirecting to login');
+        Get.offAllNamed('/login');
       }
     }
   }
