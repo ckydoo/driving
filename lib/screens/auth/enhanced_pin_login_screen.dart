@@ -375,19 +375,14 @@ class _EnhancedPinLoginScreenState extends State<EnhancedPinLoginScreen>
   Widget _buildPinInput() {
     return Column(
       children: [
-        // PIN Dots Display
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: List.generate(4, (index) => _buildPinDot(index)),
-        ),
         const SizedBox(height: 40),
 
-        // Hidden PIN Input Fields
+        // PIN Input Fields (showing obscured numbers like PIN setup)
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: List.generate(4, (index) {
             return SizedBox(
-              width: 50,
+              width: 60,
               child: TextField(
                 controller: index < _pinControllers.length
                     ? _pinControllers[index]
@@ -396,28 +391,35 @@ class _EnhancedPinLoginScreenState extends State<EnhancedPinLoginScreen>
                     ? _pinFocusNodes[index]
                     : FocusNode(),
                 textAlign: TextAlign.center,
+                keyboardType: TextInputType.number,
+                obscureText: true, // Shows bullets/dots instead of numbers
+                maxLength: 1,
                 style: const TextStyle(
-                  fontSize: 24, // Changed from 0 to 24
-                  color: Colors
-                      .transparent, // Make text transparent instead of fontSize 0
+                  fontSize: 24,
                   fontWeight: FontWeight.bold,
                 ),
-                decoration: const InputDecoration(
-                  border: InputBorder.none,
-                  counterText: '', // Hide counter
-                  contentPadding: EdgeInsets.zero,
-                ),
-                maxLength: 1,
-                keyboardType: TextInputType.number,
-                obscureText:
-                    false, // Changed to false since we're making text transparent
-                onChanged: (value) => _onPinChanged(index, value),
                 inputFormatters: [
                   FilteringTextInputFormatter.digitsOnly,
                 ],
-                // Hide cursor
-                cursorColor: Colors.transparent,
-                showCursor: false,
+                decoration: InputDecoration(
+                  counterText: '',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Colors.blue, width: 2),
+                  ),
+                  errorBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Colors.red, width: 2),
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey.shade50,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+                onChanged: (value) => _onPinChanged(index, value),
               ),
             );
           }),
