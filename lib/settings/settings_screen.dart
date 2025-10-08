@@ -957,7 +957,7 @@ class _SettingsScreenState extends State<SettingsScreen>
       List<PrinterInfo> printers = [];
 
       try {
-        printers = await PrintService.discoverPrinters();
+        printers = await PrintService.discoverAllPrinters();
       } catch (e) {
         // Close loading dialog
         Get.back();

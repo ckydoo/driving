@@ -8,66 +8,36 @@ import '../models/user.dart';
 import '../models/course.dart';
 
 class PrintService {
-  static const platform = MethodChannel('com.codzlabzim.driving/thermal_print');
+  static const platform = MethodChannel('com.codzlabzim.driving/printing');
   // Discover printers by specific type
   static Future<List<PrinterInfo>> discoverPrintersByType(String type) async {
     try {
       print('🔍 Discovering $type printers...');
 
-      final result = await platform.invokeMethod('discoverPrintersByType', {
+      // Call the method that EXISTS in MainActivity.kt
+      final List<dynamic> result =
+          await platform.invokeMethod('discoverPrinters', {
         'type': type,
       });
 
-      if (result != null && result is List) {
-        final printers = result.map((printer) {
-          if (printer is Map) {
-            return PrinterInfo.fromMap(Map<String, dynamic>.from(printer));
-          }
-          return PrinterInfo(
-            name: printer.toString(),
-            type: type,
-          );
-        }).toList();
+      final printers = result.map((printer) {
+        return PrinterInfo(
+          name: printer['name'] as String,
+          type: printer['type'] as String,
+          description: printer['description'] as String? ?? '',
+        );
+      }).toList();
 
-        print('✅ Found ${printers.length} $type printers');
-        return printers;
-      }
-
-      print('⚠️ No $type printers found');
-      return [];
+      print('✅ Found ${printers.length} $type printers');
+      return printers;
     } catch (e) {
       print('❌ Error discovering $type printers: $e');
-
-      // Return mock printers for testing if needed
-      if (type == 'bluetooth') {
-        return _getMockBluetoothPrinters();
-      }
-
-      throw e;
+      return [];
     }
   }
 
-  // Mock Bluetooth printers for testing (remove in production)
-  static List<PrinterInfo> _getMockBluetoothPrinters() {
-    return [
-      PrinterInfo(
-        name: 'Epson TM-P20',
-        type: 'Bluetooth',
-        description: 'Paired Bluetooth printer',
-        address: 'AA:BB:CC:DD:EE:FF',
-      ),
-      PrinterInfo(
-        name: 'POS-58 Bluetooth',
-        type: 'Bluetooth',
-        description: 'Portable thermal printer',
-        address: '11:22:33:44:55:66',
-      ),
-    ];
-  }
-
   // Keep your existing discoverPrinters() method for backward compatibility
-  static Future<List<PrinterInfo>> discoverPrinters() async {
-    // This now searches all types
+  static Future<List<PrinterInfo>> discoverAllPrinters() async {
     final allPrinters = <PrinterInfo>[];
 
     try {
@@ -79,7 +49,7 @@ class PrintService {
       allPrinters.addAll(usb);
       allPrinters.addAll(network);
     } catch (e) {
-      print('Error discovering all printers: $e');
+      print('❌ Error discovering all printers: $e');
     }
 
     return allPrinters;
@@ -218,9 +188,6 @@ class PrintService {
     receipt.writeln('Receipt #: $receiptNumber');
     receipt.writeln('Date: ${dateFormat.format(now)}');
     receipt.writeln('Student: ${student.fullName}');
-    if (student.phone?.isNotEmpty ?? false) {
-      receipt.writeln('Phone: ${student.phone}');
-    }
 
     // Copy indication
     if (copyNumber != null && totalCopies != null) {
@@ -263,7 +230,6 @@ class PrintService {
     receipt.writeln(_leftRight('Payment Method:', paymentMethod, paperWidth));
     receipt.writeln(_leftRight(
         'Amount Paid:', '\$${total.toStringAsFixed(2)}', paperWidth));
-    receipt.writeln(_leftRight('Change:', '\$0.00', paperWidth));
     receipt.writeln();
 
     // Notes
@@ -279,7 +245,8 @@ class PrintService {
       receipt
           .writeln(_center(settingsController.receiptFooterValue, paperWidth));
     }
-    receipt.writeln(_center('Thank you for your business!', paperWidth));
+    receipt.writeln(_center('DriveSync Pro', paperWidth));
+    receipt.writeln(_center('+263784666891', paperWidth));
     receipt.writeln();
     receipt.writeln();
     receipt.writeln();
