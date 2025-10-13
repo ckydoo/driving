@@ -24,7 +24,7 @@ class BillingController extends GetxController {
   final RxList<Invoice> invoices = <Invoice>[].obs;
   final RxList<Payment> payments = <Payment>[].obs;
   final RxBool isLoading = false.obs;
-
+  var courses = <Course>[].obs;
   final DatabaseHelper _dbHelper = Get.find();
 
   @override

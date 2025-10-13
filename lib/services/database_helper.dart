@@ -280,6 +280,7 @@ class DatabaseHelper {
         cloud_storage_path TEXT,
         receipt_file_size INTEGER,
         receipt_type TEXT,
+        last_modified TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         receipt_generated INTEGER NOT NULL DEFAULT 0,
         userId INTEGER REFERENCES users(id),
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP

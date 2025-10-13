@@ -1,8 +1,10 @@
 import 'package:csv/csv.dart';
 import 'package:driving/controllers/billing_controller.dart';
+import 'package:driving/models/course.dart';
 import 'package:driving/models/invoice.dart';
 import 'package:driving/models/user.dart';
 import 'package:driving/models/payment.dart';
+import 'package:driving/services/print_service.dart';
 import 'package:driving/widgets/payment_dialog.dart';
 import 'package:driving/services/receipt_service.dart';
 import 'package:driving/services/database_helper.dart';
@@ -1564,11 +1566,13 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: OutlinedButton.icon(
+                    child: ElevatedButton.icon(
                       onPressed: () => _printReceipt(payment),
                       icon: const Icon(Icons.print, size: 16),
                       label: const Text('Print'),
-                      style: OutlinedButton.styleFrom(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green.shade600,
+                        foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 10),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
@@ -1919,28 +1923,63 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
     try {
       _showLoadingSnackbar('Preparing receipt for printing...');
 
-      if (payment.receiptPath != null && payment.receiptPath!.isNotEmpty) {
-        if (payment.receiptPath!.startsWith('https://')) {
-          // Cloud receipt - print directly from URL
-          await ReceiptService.printReceiptFromCloud(payment.receiptPath!);
-        } else {
-          // Legacy local receipt - still supported
-          await Printing.layoutPdf(
-              onLayout: (_) => File(payment.receiptPath!).readAsBytes());
-        }
-      } else {
-        // Generate new cloud receipt
-        final downloadUrl = await ReceiptService.generateReceiptSmart(payment);
+      // Find the invoice for this payment
+      final invoice = billingController.invoices.firstWhereOrNull(
+        (inv) => inv.id == payment.invoiceId,
+      );
 
-        // Update payment record
-        await _updatePaymentWithCloudReceipt(payment, downloadUrl);
-
-        // Print the new receipt
-        await ReceiptService.printReceiptFromCloud(downloadUrl);
+      if (invoice == null) {
+        _showErrorSnackbar('Invoice not found for this payment');
+        return;
       }
 
-      _showSuccessSnackbar('Receipt sent to printer');
+      // Try to get course from billingController first
+      var course = billingController.courses.firstWhereOrNull(
+        (c) => c.id == invoice.courseId,
+      );
+
+      // If not found, load from database directly
+      if (course == null) {
+        print('⚠️ Course not in controller, loading from database...');
+        final db = await DatabaseHelper.instance.database;
+        final results = await db.query(
+          'courses',
+          where: 'id = ?',
+          whereArgs: [invoice.courseId],
+        );
+
+        if (results.isEmpty) {
+          _showErrorSnackbar('Course not found for this invoice');
+          return;
+        }
+
+        course = Course.fromJson(results.first);
+      }
+
+      // Create receipt items from the invoice/payment
+      final receiptItems = [
+        ReceiptItem(
+          itemName: course.name,
+          quantity: 1,
+          unitPrice: payment.amount.toDouble(),
+          totalPrice: payment.amount.toDouble(),
+        ),
+      ];
+
+      // Use PrintService to print (same as POS screen)
+      await PrintService.printReceipt(
+        receiptNumber:
+            payment.reference ?? payment.receiptNumber ?? 'RCP-${payment.id}',
+        student: widget.student,
+        items: receiptItems,
+        total: payment.amount.toDouble(),
+        paymentMethod: payment.method,
+        notes: payment.notes,
+      );
+
+      _showSuccessSnackbar('Receipt sent to printer successfully!');
     } catch (e) {
+      print('❌ Print error: $e');
       _showErrorSnackbar('Failed to print receipt: ${e.toString()}');
     }
   }
@@ -2018,7 +2057,6 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
         'receipt_type': 'cloud',
         'receipt_generated_at': DateTime.now().toIso8601String(),
         'last_modified': DateTime.now().millisecondsSinceEpoch,
-        'firebase_synced': 0, // Mark for sync
       },
       where: 'id = ?',
       whereArgs: [payment.id],
@@ -2047,7 +2085,6 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
           'receipt_type': 'cloud',
           'receipt_generated_at': DateTime.now().toIso8601String(),
           'last_modified': DateTime.now().millisecondsSinceEpoch,
-          'firebase_synced': 0,
         });
 
         // Print the receipt
@@ -2095,7 +2132,6 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
           'receipt_type': 'cloud',
           'receipt_generated_at': DateTime.now().toIso8601String(),
           'last_modified': DateTime.now().millisecondsSinceEpoch,
-          'firebase_synced': 0,
         });
 
         // Share the receipt
@@ -2187,7 +2223,6 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
           'receipt_type': 'cloud',
           'receipt_generated_at': DateTime.now().toIso8601String(),
           'last_modified': DateTime.now().millisecondsSinceEpoch,
-          'firebase_synced': 0,
         });
 
         print('✅ Cloud receipt generated: $downloadUrl');

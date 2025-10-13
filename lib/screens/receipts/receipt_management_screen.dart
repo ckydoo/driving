@@ -1,7 +1,9 @@
 // lib/screens/receipts/responsive_receipt_management_screen.dart
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/controllers/utils/responsive_utils.dart';
+import 'package:driving/models/course.dart';
 import 'package:driving/services/database_helper.dart';
+import 'package:driving/services/print_service.dart';
 import 'package:driving/widgets/responsive_extensions.dart';
 import 'package:driving/widgets/responsive_text.dart';
 import 'package:flutter/material.dart';
@@ -833,10 +835,10 @@ class _ReceiptManagementScreenState extends State<ReceiptManagementScreen> {
               children: [
                 Expanded(
                   child: _buildResponsiveActionButton(
-                    'Reprint Receipt',
-                    Icons.visibility,
-                    Colors.blue.shade600,
-                    () => _viewReceipt(payment),
+                    'Print Receipt',
+                    Icons.print,
+                    Colors.green.shade600,
+                    () => _printReceipt(payment),
                   ),
                 ),
                 if (!payment.receiptGenerated) ...[
@@ -1427,6 +1429,81 @@ class _ReceiptManagementScreenState extends State<ReceiptManagementScreen> {
     } else {
       _showErrorSnackbar(
           'Receipt file not found. Please generate receipt first.');
+    }
+  }
+
+  void _printReceipt(Payment payment) async {
+    try {
+      _showLoadingSnackbar('Preparing receipt for printing...');
+
+      // Find the invoice for this payment
+      final invoice = billingController.invoices.firstWhereOrNull(
+        (inv) => inv.id == payment.invoiceId,
+      );
+
+      if (invoice == null) {
+        _showErrorSnackbar('Invoice not found for this payment');
+        return;
+      }
+
+      // Find the student
+      final student = userController.users.firstWhereOrNull(
+        (user) => user.id == invoice.studentId,
+      );
+
+      if (student == null) {
+        _showErrorSnackbar('Student not found');
+        return;
+      }
+
+      // Try to get course from billingController first
+      var course = billingController.courses.firstWhereOrNull(
+        (c) => c.id == invoice.courseId,
+      );
+
+      // If not found, load from database directly
+      if (course == null) {
+        print('⚠️ Course not in controller, loading from database...');
+        final db = await DatabaseHelper.instance.database;
+        final results = await db.query(
+          'courses',
+          where: 'id = ?',
+          whereArgs: [invoice.courseId],
+        );
+
+        if (results.isEmpty) {
+          _showErrorSnackbar('Course not found for this invoice');
+          return;
+        }
+
+        course = Course.fromJson(results.first);
+      }
+
+      // Create receipt items
+      final receiptItems = [
+        ReceiptItem(
+          itemName: course.name,
+          quantity: 1,
+          unitPrice: payment.amount.toDouble(),
+          totalPrice: payment.amount.toDouble(),
+        ),
+      ];
+
+      // Use PrintService to print
+      await PrintService.printReceipt(
+        receiptNumber:
+            payment.reference ?? payment.receiptNumber ?? 'RCP-${payment.id}',
+        student: student,
+        items: receiptItems,
+        total: payment.amount.toDouble(),
+        paymentMethod: payment.method,
+        notes: payment.notes,
+      );
+
+      _showSuccessSnackbar('Receipt sent to printer successfully!');
+    } catch (e) {
+      print('❌ Print error: $e');
+      _showErrorSnackbar('Failed to print receipt: ${e.toString()}');
     }
   }
 
