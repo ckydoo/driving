@@ -184,12 +184,6 @@ class DrivingSchoolApp extends StatelessWidget {
           backgroundColor: Colors.blue.shade800,
           foregroundColor: Colors.white,
         ),
-        cardTheme: CardTheme(
-          elevation: 2,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
             elevation: 2,

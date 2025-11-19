@@ -1,17 +1,26 @@
 // lib/settings/subscription_settings_screen.dart
+// COMPLETE VERSION WITH PAYNOW INTEGRATION
 import 'package:driving/services/subscription_cache.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import '../../controllers/subscription_controller.dart';
 import '../../models/subscription_package.dart';
+// ✅ ADD THESE IMPORTS FOR PAYNOW
+import '../../widgets/paynow_button.dart';
+import '../../widgets/paynow_payment_dialog.dart';
+// ✅ ADD THESE IMPORTS FOR API CALLS
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../services/api_service.dart';
 
 class SubscriptionScreen extends StatelessWidget {
   final SubscriptionController controller = Get.find<SubscriptionController>();
   final Rx<SubscriptionPackage?> _selectedPackage =
       Rx<SubscriptionPackage?>(null);
   final RxString _selectedBillingPeriod = 'monthly'.obs;
-  final RxString _selectedPaymentMethod = 'stripe'.obs;
+  final RxString _selectedPaymentMethod = 'stripe'.obs; // Keep this
 
   @override
   Widget build(BuildContext context) {
@@ -129,6 +138,9 @@ class SubscriptionScreen extends StatelessWidget {
               if (controller.currentPackage.value != null)
                 _buildCurrentPlanCard(),
 
+              // ✅ NEW: Pending invoice section with Paynow option
+              _buildPendingInvoiceSection(),
+
               // Choose Subscription Header
               Padding(
                 padding: EdgeInsets.all(20),
@@ -205,7 +217,7 @@ class SubscriptionScreen extends StatelessWidget {
               ),
               SizedBox(height: 16),
 
-              // Payment Method Selection - Responsive
+              // ✅ MODIFIED: Payment Method Selection with Paynow
               Padding(
                 padding: EdgeInsets.symmetric(horizontal: 20),
                 child: LayoutBuilder(
@@ -229,6 +241,15 @@ class SubscriptionScreen extends StatelessWidget {
                             width: responsiveCardWidth,
                           ),
                           SizedBox(width: 12),
+                          // ✅ NEW: Paynow option
+                          _buildPaymentMethodCard(
+                            method: 'paynow',
+                            icon: Icons.mobile_friendly,
+                            title: 'Paynow',
+                            isAvailable: true, // Changed to true
+                            width: responsiveCardWidth,
+                          ),
+                          SizedBox(width: 12),
                           _buildPaymentMethodCard(
                             method: 'paypal',
                             icon: Icons.paypal,
@@ -241,14 +262,6 @@ class SubscriptionScreen extends StatelessWidget {
                             method: 'mpesa',
                             icon: Icons.phone_android,
                             title: 'M-Pesa',
-                            isAvailable: false,
-                            width: responsiveCardWidth,
-                          ),
-                          SizedBox(width: 12),
-                          _buildPaymentMethodCard(
-                            method: 'bank',
-                            icon: Icons.account_balance,
-                            title: 'Bank',
                             isAvailable: false,
                             width: responsiveCardWidth,
                           ),
@@ -267,6 +280,228 @@ class SubscriptionScreen extends StatelessWidget {
       bottomNavigationBar: Obx(() => _buildBottomButton()),
     );
   }
+
+  // ========================================================================
+  // ✅ NEW METHOD: Show pending subscription invoices with payment options
+  // ========================================================================
+  Widget _buildPendingInvoiceSection() {
+    return Obx(() {
+      // Check if there's a pending subscription invoice
+      final pendingInvoice = controller.pendingSubscriptionInvoice.value;
+
+      if (pendingInvoice == null) {
+        return SizedBox.shrink(); // No pending invoice
+      }
+
+      return Container(
+        margin: EdgeInsets.all(16),
+        padding: EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.orange[50],
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.orange[200]!, width: 2),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Row(
+              children: [
+                Icon(
+                  Icons.warning_amber_rounded,
+                  color: Colors.orange[700],
+                  size: 32,
+                ),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Pending Payment',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.orange[900],
+                        ),
+                      ),
+                      Text(
+                        'Invoice: ${pendingInvoice.invoiceNumber}',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.orange[700],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+
+            SizedBox(height: 16),
+            Divider(color: Colors.orange[200]),
+            SizedBox(height: 16),
+
+            // Invoice Details
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Amount Due:',
+                    style:
+                        TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+                Text(
+                  '\$${pendingInvoice.totalAmount.toStringAsFixed(2)}',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.orange[900],
+                  ),
+                ),
+              ],
+            ),
+
+            SizedBox(height: 8),
+
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Due Date:', style: TextStyle(fontSize: 14)),
+                Text(
+                  DateFormat('MMM dd, yyyy').format(pendingInvoice.dueDate),
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: pendingInvoice.isOverdue
+                        ? Colors.red[700]
+                        : Colors.orange[700],
+                  ),
+                ),
+              ],
+            ),
+
+            if (pendingInvoice.isOverdue)
+              Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Text(
+                  '⚠️ This invoice is overdue',
+                  style: TextStyle(
+                    color: Colors.red[700],
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+
+            SizedBox(height: 20),
+
+            // ========================================================================
+            // ✅ PAYMENT OPTIONS: Stripe AND Paynow (Zimbabwe)
+            // ========================================================================
+            Text(
+              'Choose Payment Method:',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[800],
+              ),
+            ),
+            SizedBox(height: 12),
+
+            // Payment Method Buttons
+            Row(
+              children: [
+                // Stripe Button
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _payWithStripe(pendingInvoice),
+                    icon: Icon(Icons.credit_card, size: 18),
+                    label: Text('Stripe'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue[700],
+                      foregroundColor: Colors.white,
+                      padding: EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+
+                SizedBox(width: 12),
+
+                // ✅ PAYNOW BUTTON - For Zimbabwe schools
+                Expanded(
+                  child: PaynowButton(
+                    invoiceId: pendingInvoice.id,
+                    invoiceNumber: pendingInvoice.invoiceNumber,
+                    amount: pendingInvoice.totalAmount,
+                    fullWidth: true,
+                    buttonText: 'Paynow',
+                    showIcon: true,
+                    onPaymentSuccess: () {
+                      // Reload subscription data after successful payment
+                      controller.loadSubscriptionData();
+
+                      Get.snackbar(
+                        'Payment Successful! 🎉',
+                        'Your subscription has been updated.',
+                        backgroundColor: Colors.green[100],
+                        colorText: Colors.green[900],
+                        icon:
+                            Icon(Icons.check_circle, color: Colors.green[700]),
+                        duration: Duration(seconds: 4),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+
+            SizedBox(height: 12),
+
+            // Info text
+            Row(
+              children: [
+                Icon(Icons.info_outline, size: 16, color: Colors.grey[600]),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Paynow accepts EcoCash, OneMoney, and cards (Zimbabwe)',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    });
+  }
+
+  // ========================================================================
+  // ✅ NEW: Helper method to pay with Stripe
+  // ========================================================================
+  void _payWithStripe(pendingInvoice) async {
+    try {
+      // Use your existing Stripe payment logic
+      await controller.upgradeToPackage(
+        controller.currentPackage.value!,
+      );
+    } catch (e) {
+      Get.snackbar(
+        'Payment Error',
+        e.toString(),
+        backgroundColor: Colors.red[100],
+        colorText: Colors.red[900],
+        icon: Icon(Icons.error_outline, color: Colors.red[900]),
+      );
+    }
+  }
+
+  // Your existing methods continue below...
+  // (Keep all your existing _buildCurrentPlanCard, _buildOfflineView, etc.)
 
   Widget _buildCurrentPlanCard() {
     return Obx(() {
@@ -468,6 +703,7 @@ class SubscriptionScreen extends StatelessWidget {
     });
   }
 
+  // Keep all your existing helper methods...
   Widget _buildOfflineView() {
     return FutureBuilder<Map<String, dynamic>?>(
       future: SubscriptionCache.getCachedSubscriptionData(),
@@ -897,7 +1133,6 @@ class SubscriptionScreen extends StatelessWidget {
           controller.currentPackage.value?.id == package.id;
       final isTrialPackage = package.slug == 'trial';
 
-      // Calculate the display title
       String title = package.name;
       if (isCurrentPackage) {
         title = '${package.name} (Current)';
@@ -905,7 +1140,6 @@ class SubscriptionScreen extends StatelessWidget {
 
       return GestureDetector(
         onTap: () {
-          // Don't allow selecting trial package
           if (!isTrialPackage) {
             _selectedPackage.value = package;
           }
@@ -1114,7 +1348,6 @@ class SubscriptionScreen extends StatelessWidget {
     final isCurrentPackage =
         _selectedPackage.value?.id == controller.currentPackage.value?.id;
 
-    // Determine button text
     String buttonText;
     if (isCurrentPackage) {
       buttonText = 'Pay \$${selectedPrice.toStringAsFixed(2)}';
@@ -1176,6 +1409,9 @@ class SubscriptionScreen extends StatelessWidget {
         : _selectedPackage.value!.monthlyPrice;
   }
 
+  // ========================================================================
+  // ✅ MODIFIED: Handle subscribe with Paynow support
+  // ========================================================================
   void _handleSubscribe() async {
     if (_selectedPackage.value == null) {
       Get.snackbar(
@@ -1189,10 +1425,17 @@ class SubscriptionScreen extends StatelessWidget {
       return;
     }
 
+    // ✅ HANDLE PAYNOW SEPARATELY
+    if (_selectedPaymentMethod.value == 'paynow') {
+      // Show Paynow dialog directly
+      _showPaynowDialog();
+      return;
+    }
+
     if (_selectedPaymentMethod.value != 'stripe') {
       Get.snackbar(
         'Coming Soon',
-        'This payment method will be available soon. Please use Stripe.',
+        'This payment method will be available soon. Please use Stripe or Paynow.',
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Colors.orange[100],
         colorText: Colors.orange[900],
@@ -1201,12 +1444,157 @@ class SubscriptionScreen extends StatelessWidget {
       return;
     }
 
-    // Show confirmation dialog
+    // Show confirmation dialog for Stripe
     final confirmed = await _showPaymentConfirmation();
     if (!confirmed) return;
 
-    // Process payment/upgrade
+    // Process Stripe payment/upgrade
     await controller.upgradeToPackage(_selectedPackage.value!);
+  }
+
+  // ========================================================================
+  // ✅ NEW: Show Paynow dialog for new subscription (PRODUCTION READY)
+  // ========================================================================
+  void _showPaynowDialog() async {
+    if (_selectedPackage.value == null) return;
+
+    try {
+      // Show loading
+      Get.dialog(
+        Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Creating invoice...'),
+                ],
+              ),
+            ),
+          ),
+        ),
+        barrierDismissible: false,
+      );
+
+      // Step 1: Create the subscription invoice through backend
+      final invoice = await _createSubscriptionInvoice(
+        _selectedPackage.value!,
+        _selectedBillingPeriod.value,
+      );
+
+      // Close loading dialog
+      Get.back();
+
+      if (invoice == null) {
+        Get.snackbar(
+          'Error',
+          'Failed to create invoice. Please try again.',
+          backgroundColor: Colors.red[100],
+          colorText: Colors.red[900],
+          icon: Icon(Icons.error_outline, color: Colors.red[900]),
+        );
+        return;
+      }
+
+      // Step 2: Show Paynow payment dialog with the created invoice
+      Get.dialog(
+        PaynowPaymentDialog(
+          invoiceId: invoice['id'],
+          invoiceNumber: invoice['invoice_number'],
+          amount: invoice['total_amount'],
+          onPaymentSuccess: () {
+            // Reload subscription data after successful payment
+            controller.loadSubscriptionData();
+
+            Get.snackbar(
+              'Success! 🎉',
+              'Your subscription has been activated!',
+              backgroundColor: Colors.green[100],
+              colorText: Colors.green[900],
+              icon: Icon(Icons.check_circle, color: Colors.green[700]),
+              duration: Duration(seconds: 4),
+            );
+          },
+        ),
+      );
+    } catch (e) {
+      // Close loading if still open
+      if (Get.isDialogOpen ?? false) {
+        Get.back();
+      }
+
+      Get.snackbar(
+        'Error',
+        'Failed to initiate payment: ${e.toString()}',
+        backgroundColor: Colors.red[100],
+        colorText: Colors.red[900],
+        icon: Icon(Icons.error_outline, color: Colors.red[900]),
+        duration: Duration(seconds: 5),
+      );
+    }
+  }
+
+  // ========================================================================
+  // ✅ NEW: Create subscription invoice via API
+  // ========================================================================
+  Future<Map<String, dynamic>?> _createSubscriptionInvoice(
+    SubscriptionPackage package,
+    String billingPeriod,
+  ) async {
+    try {
+      print('🔄 Creating subscription invoice...');
+      print('Package: ${package.name}, Period: $billingPeriod');
+
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token');
+
+      if (token == null) {
+        throw Exception('Authentication required');
+      }
+
+      final response = await http
+          .post(
+            Uri.parse('${ApiService.baseUrl}/subscription/create-invoice'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+            body: json.encode({
+              'package_id': package.id,
+              'billing_period': billingPeriod,
+            }),
+          )
+          .timeout(Duration(seconds: 30));
+
+      print('📥 Response status: ${response.statusCode}');
+      print('📥 Response body: ${response.body}');
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = json.decode(response.body);
+
+        // Handle different response formats
+        if (data['success'] == true && data['invoice'] != null) {
+          return data['invoice'];
+        } else if (data['invoice'] != null) {
+          return data['invoice'];
+        } else if (data['data'] != null && data['data']['invoice'] != null) {
+          return data['data']['invoice'];
+        }
+
+        print('✅ Invoice created successfully');
+        return data;
+      } else {
+        final errorData = json.decode(response.body);
+        throw Exception(errorData['message'] ?? 'Failed to create invoice');
+      }
+    } catch (e) {
+      print('❌ Error creating invoice: $e');
+      rethrow;
+    }
   }
 
   Future<bool> _showPaymentConfirmation() async {
