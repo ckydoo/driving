@@ -1,5 +1,6 @@
 // lib/settings/subscription_settings_screen.dart
 // COMPLETE VERSION WITH PAYNOW INTEGRATION
+import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/services/subscription_cache.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -249,22 +250,6 @@ class SubscriptionScreen extends StatelessWidget {
                             isAvailable: true, // Changed to true
                             width: responsiveCardWidth,
                           ),
-                          SizedBox(width: 12),
-                          _buildPaymentMethodCard(
-                            method: 'paypal',
-                            icon: Icons.paypal,
-                            title: 'PayPal',
-                            isAvailable: false,
-                            width: responsiveCardWidth,
-                          ),
-                          SizedBox(width: 12),
-                          _buildPaymentMethodCard(
-                            method: 'mpesa',
-                            icon: Icons.phone_android,
-                            title: 'M-Pesa',
-                            isAvailable: false,
-                            width: responsiveCardWidth,
-                          ),
                         ],
                       ),
                     );
@@ -501,80 +486,30 @@ class SubscriptionScreen extends StatelessWidget {
   }
 
   // Your existing methods continue below...
-  // (Keep all your existing _buildCurrentPlanCard, _buildOfflineView, etc.)
-
   Widget _buildCurrentPlanCard() {
     return Obx(() {
-      final currentPlan = controller.currentPackage.value;
-      if (currentPlan == null) return SizedBox.shrink();
-
+      final package = controller.currentPackage.value;
       final status = controller.subscriptionStatus.value;
-      final expiryDate = controller.remainingTrialDays.value;
-
-      // Calculate days left
-      int? daysLeft = expiryDate;
-      String expiryText = 'Not available';
-      if (daysLeft != null) {
-        final now = DateTime.now();
-        final expiry = now.add(Duration(days: daysLeft));
-        daysLeft = expiry.difference(now).inDays;
-
-        if (daysLeft < 0) {
-          expiryText = 'Expired';
-        } else if (daysLeft == 0) {
-          expiryText = 'Expires today';
-        } else if (daysLeft == 1) {
-          expiryText = '1 day left';
-        } else {
-          expiryText = '$daysLeft days left';
-        }
-      }
-
-      // Determine status color and icon
-      Color statusColor;
-      IconData statusIcon;
-      String statusText = status ?? 'Unknown';
-
-      switch (status?.toLowerCase()) {
-        case 'active':
-          statusColor = Colors.green;
-          statusIcon = Icons.check_circle;
-          statusText = 'Active';
-          break;
-        case 'trial':
-          statusColor = Colors.blue;
-          statusIcon = Icons.schedule;
-          statusText = 'Trial';
-          break;
-        case 'expired':
-        case 'cancelled':
-          statusColor = Colors.red;
-          statusIcon = Icons.cancel;
-          statusText = status == 'expired' ? 'Expired' : 'Cancelled';
-          break;
-        case 'pending':
-          statusColor = Colors.orange;
-          statusIcon = Icons.pending;
-          statusText = 'Pending';
-          break;
-        default:
-          statusColor = Colors.grey;
-          statusIcon = Icons.info;
-      }
+      final isActive = status == 'active';
+      final isTrial = status == 'trial';
 
       return Container(
-        margin: EdgeInsets.all(20),
-        padding: EdgeInsets.all(16),
+        margin: EdgeInsets.all(16),
+        padding: EdgeInsets.all(20),
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [Color(0xFF2563EB), Color(0xFF1E40AF)],
+            colors: isActive
+                ? [Colors.green[600]!, Colors.green[800]!]
+                : isTrial
+                    ? [Colors.blue[600]!, Colors.blue[800]!]
+                    : [Colors.orange[600]!, Colors.orange[800]!],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Color(0xFF2563EB).withOpacity(0.3),
+              color: (isActive ? Colors.green : Colors.blue).withOpacity(0.3),
               blurRadius: 8,
               offset: Offset(0, 4),
             ),
@@ -583,87 +518,114 @@ class SubscriptionScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Row(
                   children: [
                     Icon(Icons.workspace_premium,
-                        color: Colors.white, size: 20),
+                        color: Colors.white, size: 24),
                     SizedBox(width: 8),
                     Text(
                       'Current Subscription',
                       style: TextStyle(
                         color: Colors.white,
-                        fontSize: 14,
+                        fontSize: 16,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],
                 ),
-                // Status badge
                 Container(
-                  padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: statusColor,
-                    borderRadius: BorderRadius.circular(12),
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(20),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(statusIcon, color: Colors.white, size: 14),
-                      SizedBox(width: 4),
-                      Text(
-                        statusText,
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
+                  child: Text(
+                    isActive
+                        ? 'Active'
+                        : isTrial
+                            ? 'Trial'
+                            : status.toUpperCase(),
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ],
             ),
             SizedBox(height: 16),
 
-            // Plan name and price
+            // ✅ Package Name
             Text(
-              currentPlan.name,
+              package?.name ?? 'No Package',
               style: TextStyle(
                 color: Colors.white,
-                fontSize: 20,
+                fontSize: 28,
                 fontWeight: FontWeight.bold,
               ),
             ),
-            SizedBox(height: 4),
-            Text(
-              '\$${currentPlan.monthlyPrice.toStringAsFixed(2)}/month',
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.9),
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
+            SizedBox(height: 8),
+
+            // ✅ Price with Billing Period
+            Obx(() => Text(
+                  controller.displayPrice, // Uses the computed property
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.9),
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                )),
+
+            // ✅ Billing Period Indicator
+            if (controller.billingPeriod.value == 'yearly') ...[
+              SizedBox(height: 4),
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '💰 Yearly billing - Save 20%!',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
-            ),
+            ],
 
             SizedBox(height: 16),
+            Divider(color: Colors.white.withOpacity(0.3)),
+            SizedBox(height: 16),
 
-            // Expiry information
+            // ✅ Expiry Information
             Container(
               padding: EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(8),
+                color: Colors.white.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
                 children: [
                   Icon(
-                    daysLeft != null && daysLeft < 7
+                    controller.subscriptionExpiresAt.value != null &&
+                            controller.subscriptionExpiresAt.value!
+                                    .difference(DateTime.now())
+                                    .inDays <
+                                7
                         ? Icons.warning_amber_rounded
                         : Icons.calendar_today,
-                    color: daysLeft != null && daysLeft < 7
+                    color: controller.subscriptionExpiresAt.value != null &&
+                            controller.subscriptionExpiresAt.value!
+                                    .difference(DateTime.now())
+                                    .inDays <
+                                7
                         ? Colors.amber
                         : Colors.white.withOpacity(0.9),
                     size: 18,
@@ -673,18 +635,19 @@ class SubscriptionScreen extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          expiryText,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        if (expiryDate != null) ...[
+                        Obx(() => Text(
+                              controller
+                                  .expiryDisplayText, // Uses the computed property
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            )),
+                        if (controller.subscriptionExpiresAt.value != null) ...[
                           SizedBox(height: 2),
                           Text(
-                            'Expires: ${DateFormat('MMM dd, yyyy').format(DateTime.now().add(Duration(days: expiryDate)))}',
+                            'Next renewal: ${DateFormat('MMM dd, yyyy').format(controller.subscriptionExpiresAt.value!)}',
                             style: TextStyle(
                               color: Colors.white.withOpacity(0.7),
                               fontSize: 12,
@@ -1504,7 +1467,7 @@ class SubscriptionScreen extends StatelessWidget {
         PaynowPaymentDialog(
           invoiceId: invoice['id'],
           invoiceNumber: invoice['invoice_number'],
-          amount: invoice['total_amount'],
+          amount: double.tryParse(invoice['total_amount'].toString()) ?? 0.0,
           onPaymentSuccess: () {
             // Reload subscription data after successful payment
             controller.loadSubscriptionData();
@@ -1548,11 +1511,44 @@ class SubscriptionScreen extends StatelessWidget {
       print('🔄 Creating subscription invoice...');
       print('Package: ${package.name}, Period: $billingPeriod');
 
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('auth_token');
+      // ✅ GET TOKEN THE CORRECT WAY - Same as subscription_service.dart
+      String? token;
+
+      if (Get.isRegistered<AuthController>()) {
+        final authController = Get.find<AuthController>();
+        final user = authController.currentUser.value;
+
+        if (user?.email != null) {
+          final prefs = await SharedPreferences.getInstance();
+          token = prefs.getString('api_token_${user!.email}');
+
+          if (token != null) {
+            print('✅ Token found for user: ${user.email}');
+          } else {
+            print('⚠️ No token found for user: ${user.email}');
+          }
+        } else {
+          print('⚠️ No current user in AuthController');
+        }
+      } else {
+        print('⚠️ AuthController not registered');
+      }
+
+      // Fallback: try to get from any stored token
+      if (token == null) {
+        final prefs = await SharedPreferences.getInstance();
+        final keys =
+            prefs.getKeys().where((key) => key.startsWith('api_token_'));
+
+        if (keys.isNotEmpty) {
+          token = prefs.getString(keys.first);
+          print('✅ Fallback token found: ${keys.first}');
+        }
+      }
 
       if (token == null) {
-        throw Exception('Authentication required');
+        print('❌ No authentication token found');
+        throw Exception('Authentication required. Please log in again.');
       }
 
       final response = await http

@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:get/get.dart';
 import 'package:driving/controllers/auth_controller.dart';
+import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -27,6 +28,43 @@ class SubscriptionController extends GetxController {
   final Rxn<dynamic> pendingSubscriptionInvoice = Rxn<dynamic>();
 
   final SubscriptionService _subscriptionService = SubscriptionService();
+  final Rx<DateTime?> subscriptionExpiresAt = Rx<DateTime?>(null);
+
+// Add computed properties for display
+  String get displayPrice {
+    if (currentPackage.value == null) return '\$0.00';
+
+    if (billingPeriod.value == 'yearly') {
+      final yearlyPrice = currentPackage.value!.yearlyPrice ??
+          (currentPackage.value!.monthlyPrice * 12);
+      return '\$${yearlyPrice.toStringAsFixed(2)}/year';
+    }
+
+    return '\$${currentPackage.value!.monthlyPrice.toStringAsFixed(2)}/month';
+  }
+
+  String get expiryDisplayText {
+    if (subscriptionExpiresAt.value == null) return 'No expiry';
+
+    final now = DateTime.now();
+    final expiry = subscriptionExpiresAt.value!;
+
+    if (expiry.isBefore(now)) {
+      return 'Expired';
+    }
+
+    final daysUntilExpiry = expiry.difference(now).inDays;
+
+    if (daysUntilExpiry == 0) {
+      return 'Expires today';
+    } else if (daysUntilExpiry == 1) {
+      return 'Expires tomorrow';
+    } else if (daysUntilExpiry <= 7) {
+      return 'Expires in $daysUntilExpiry days';
+    } else {
+      return 'Expires: ${DateFormat('MMM dd, yyyy').format(expiry)}';
+    }
+  }
 
   @override
   void onInit() {
@@ -526,6 +564,25 @@ class SubscriptionController extends GetxController {
               statusData['subscription_status'] as String? ?? 'trial';
           remainingTrialDays.value = statusData['remaining_trial_days'] ?? 0;
 
+          // ✅ ADD: Parse billing period from API response
+          billingPeriod.value =
+              statusData['billing_period'] as String? ?? 'monthly';
+          print('💳 Billing period: ${billingPeriod.value}');
+
+          // ✅ ADD: Parse subscription expiry date
+          if (statusData['subscription_expires_at'] != null) {
+            try {
+              subscriptionExpiresAt.value =
+                  DateTime.parse(statusData['subscription_expires_at']);
+              print('📅 Expires at: ${subscriptionExpiresAt.value}');
+            } catch (e) {
+              print('⚠️ Failed to parse expiry date: $e');
+              subscriptionExpiresAt.value = null;
+            }
+          } else {
+            subscriptionExpiresAt.value = null;
+          }
+
           // Load trial eligibility
           if (statusData['trial_eligibility'] != null) {
             final trialEligibility =
@@ -546,6 +603,8 @@ class SubscriptionController extends GetxController {
           print('✅ Subscription data loaded from server:');
           print('   - Status: ${subscriptionStatus.value}');
           print('   - Trial days: ${remainingTrialDays.value}');
+          print('   - Billing period: ${billingPeriod.value}');
+          print('   - Expires at: ${subscriptionExpiresAt.value}');
           print('   - Available packages: ${availablePackages.length}');
 
           // IMPORTANT: Cache this data for offline use
@@ -555,6 +614,7 @@ class SubscriptionController extends GetxController {
             expiresAt: statusData['subscription_expires_at'],
             packageId: currentPackage.value?.id,
             packageName: currentPackage.value?.name,
+            billingPeriod: billingPeriod.value, // ✅ ADD: Cache billing period
           );
 
           print('✅ Subscription data cached successfully');

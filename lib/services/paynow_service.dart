@@ -1,16 +1,38 @@
 // lib/services/paynow_service.dart
+
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:get/get.dart';
+import '../controllers/auth_controller.dart';
 import 'api_service.dart';
 
 class PaynowService {
   final String _baseUrl = ApiService.baseUrl;
 
-  // Get authentication headers
+  /// Get authentication headers with Bearer token
   Future<Map<String, String>> _getAuthHeaders() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('auth_token');
+    String? token;
+
+    // Try to get token from AuthController
+    if (Get.isRegistered<AuthController>()) {
+      final authController = Get.find<AuthController>();
+      final user = authController.currentUser.value;
+
+      if (user?.email != null) {
+        final prefs = await SharedPreferences.getInstance();
+        token = prefs.getString('api_token_${user!.email}');
+      }
+    }
+
+    // Fallback: get any available token
+    if (token == null) {
+      final prefs = await SharedPreferences.getInstance();
+      final keys = prefs.getKeys().where((key) => key.startsWith('api_token_'));
+      if (keys.isNotEmpty) {
+        token = prefs.getString(keys.first);
+      }
+    }
 
     return {
       'Content-Type': 'application/json',
@@ -21,9 +43,9 @@ class PaynowService {
 
   /// Check if user is authenticated
   Future<bool> isAuthenticated() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('auth_token');
-    return token != null && token.isNotEmpty;
+    final headers = await _getAuthHeaders();
+    final token = headers['Authorization'];
+    return token != null && token.isNotEmpty && token != 'Bearer ';
   }
 
   /// Initiate web payment (opens Paynow website)
@@ -31,14 +53,19 @@ class PaynowService {
     try {
       print('🔄 Initiating Paynow web payment for invoice $invoiceId');
 
-      final url = '$_baseUrl/school/paynow/initiate';
+      final url = '$_baseUrl/school/paynow/initiate'; // ✅ API endpoint
       final body = json.encode({'invoice_id': invoiceId});
 
       final response = await http
-          .post(Uri.parse(url), headers: await _getAuthHeaders(), body: body)
+          .post(
+            Uri.parse(url),
+            headers: await _getAuthHeaders(),
+            body: body,
+          )
           .timeout(Duration(seconds: 30));
 
       print('📥 Web payment response: ${response.statusCode}');
+      print('📥 Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -52,7 +79,8 @@ class PaynowService {
           throw Exception(data['error'] ?? 'Failed to initiate payment');
         }
       } else {
-        throw Exception('Payment initiation failed');
+        final errorData = json.decode(response.body);
+        throw Exception(errorData['error'] ?? 'Payment initiation failed');
       }
     } catch (e) {
       print('❌ Error initiating web payment: $e');
@@ -70,10 +98,11 @@ class PaynowService {
       print('🔄 Initiating Paynow mobile payment');
 
       if (!_isValidZimbabweNumber(phoneNumber)) {
-        throw Exception('Invalid phone number. Use format: 0771234567');
+        throw Exception(
+            'Invalid phone number. Must be 10 digits starting with 07');
       }
 
-      final url = '$_baseUrl/school/paynow/initiate-mobile';
+      final url = '$_baseUrl/school/paynow/initiate-mobile'; // ✅ API endpoint
       final body = json.encode({
         'invoice_id': invoiceId,
         'phone_number': phoneNumber,
@@ -81,10 +110,15 @@ class PaynowService {
       });
 
       final response = await http
-          .post(Uri.parse(url), headers: await _getAuthHeaders(), body: body)
+          .post(
+            Uri.parse(url),
+            headers: await _getAuthHeaders(),
+            body: body,
+          )
           .timeout(Duration(seconds: 30));
 
       print('📥 Mobile payment response: ${response.statusCode}');
+      print('📥 Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -98,7 +132,9 @@ class PaynowService {
           throw Exception(data['error'] ?? 'Failed to initiate mobile payment');
         }
       } else {
-        throw Exception('Mobile payment initiation failed');
+        final errorData = json.decode(response.body);
+        throw Exception(
+            errorData['error'] ?? 'Mobile payment initiation failed');
       }
     } catch (e) {
       print('❌ Error initiating mobile payment: $e');
@@ -111,64 +147,34 @@ class PaynowService {
     try {
       print('🔄 Checking payment status for invoice $invoiceId');
 
-      final url = '$_baseUrl/school/paynow/check-status';
+      final url = '$_baseUrl/school/paynow/check-status'; // ✅ API endpoint
       final body = json.encode({'invoice_id': invoiceId});
 
       final response = await http
-          .post(Uri.parse(url), headers: await _getAuthHeaders(), body: body)
+          .post(
+            Uri.parse(url),
+            headers: await _getAuthHeaders(),
+            body: body,
+          )
           .timeout(Duration(seconds: 15));
 
       print('📥 Status check response: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        if (data['success'] == true) {
-          return {
-            'success': true,
-            'paid': data['paid'] ?? false,
-            'status': data['status'] ?? 'unknown',
-            'amount': data['amount'],
-            'reference': data['reference'],
-          };
-        } else {
-          throw Exception(data['message'] ?? 'Status check failed');
-        }
+        return data;
       } else {
-        throw Exception('Status check failed');
+        throw Exception('Failed to check payment status');
       }
     } catch (e) {
       print('❌ Error checking payment status: $e');
-      rethrow;
+      return {'success': false, 'error': e.toString()};
     }
   }
 
-  /// Validate Zimbabwe phone number format
+  /// Validate Zimbabwe phone number
   bool _isValidZimbabweNumber(String phoneNumber) {
-    final cleaned = phoneNumber.replaceAll(RegExp(r'[^\d]'), '');
-    final regex = RegExp(r'^07[0-9]{8}$');
-    return regex.hasMatch(cleaned);
-  }
-
-  /// Format phone number for display
-  String formatPhoneNumber(String phoneNumber) {
-    final cleaned = phoneNumber.replaceAll(RegExp(r'[^\d]'), '');
-    if (cleaned.length == 10) {
-      return '${cleaned.substring(0, 3)} ${cleaned.substring(3, 6)} ${cleaned.substring(6)}';
-    }
-    return phoneNumber;
-  }
-
-  /// Get payment method name for display
-  String getPaymentMethodName(String method) {
-    switch (method.toLowerCase()) {
-      case 'ecocash':
-        return 'EcoCash';
-      case 'onemoney':
-        return 'OneMoney';
-      case 'web':
-        return 'Paynow Web';
-      default:
-        return method;
-    }
+    final cleanNumber = phoneNumber.replaceAll(RegExp(r'[^\d]'), '');
+    return RegExp(r'^07[0-9]{8}$').hasMatch(cleanNumber);
   }
 }

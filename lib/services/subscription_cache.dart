@@ -2,6 +2,7 @@
 // Create this new file to handle offline subscription caching
 
 import 'package:driving/services/database_helper.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class SubscriptionCache {
   static const String _tableName = 'subscription_cache';
@@ -29,35 +30,65 @@ class SubscriptionCache {
     }
   }
 
-  /// Save subscription data to local cache
   static Future<void> saveSubscriptionData({
     required String status,
     required int trialDays,
     String? expiresAt,
     int? packageId,
     String? packageName,
+    String? billingPeriod, // ✅ ADD
   }) async {
     try {
-      final db = await DatabaseHelper.instance.database;
+      final prefs = await SharedPreferences.getInstance();
 
-      // Delete old cache (we only keep one record)
-      await db.delete(_tableName);
+      await prefs.setString('subscription_status', status);
+      await prefs.setInt('trial_days', trialDays);
+      await prefs.setString(
+          'billing_period', billingPeriod ?? 'monthly'); // ✅ ADD
 
-      // Insert new cache
-      await db.insert(_tableName, {
-        'subscription_status': status,
-        'remaining_trial_days': trialDays,
-        'subscription_expires_at': expiresAt,
-        'last_synced_at': DateTime.now().toIso8601String(),
-        'current_package_id': packageId,
-        'current_package_name': packageName,
-      });
+      if (expiresAt != null) {
+        await prefs.setString('subscription_expires_at', expiresAt);
+      }
+
+      if (packageId != null) {
+        await prefs.setInt('current_package_id', packageId);
+      }
+
+      if (packageName != null) {
+        await prefs.setString('current_package_name', packageName);
+      }
+
+      await prefs.setString('synced_at', DateTime.now().toIso8601String());
 
       print('✅ Subscription data cached locally');
       print('   Status: $status');
       print('   Trial Days: $trialDays');
+      print('   Billing Period: ${billingPeriod ?? "monthly"}'); // ✅ ADD
     } catch (e) {
       print('❌ Error caching subscription data: $e');
+    }
+  }
+
+  static Future<Map<String, dynamic>?> getSubscriptionData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      final status = prefs.getString('subscription_status');
+      if (status == null) return null;
+
+      return {
+        'subscription_status': status,
+        'trial_days': prefs.getInt('trial_days') ?? 0,
+        'billing_period':
+            prefs.getString('billing_period') ?? 'monthly', // ✅ ADD
+        'subscription_expires_at': prefs.getString('subscription_expires_at'),
+        'current_package_id': prefs.getInt('current_package_id'),
+        'current_package_name': prefs.getString('current_package_name'),
+        'synced_at': prefs.getString('synced_at'),
+      };
+    } catch (e) {
+      print('❌ Error loading cached subscription: $e');
+      return null;
     }
   }
 
