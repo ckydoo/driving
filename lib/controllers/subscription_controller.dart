@@ -24,6 +24,7 @@ class SubscriptionController extends GetxController {
   final RxString errorMessage = ''.obs;
   final RxBool canStartTrial = false.obs;
   final RxBool hasUsedTrial = false.obs;
+  final Rxn<dynamic> pendingSubscriptionInvoice = Rxn<dynamic>();
 
   final SubscriptionService _subscriptionService = SubscriptionService();
 
