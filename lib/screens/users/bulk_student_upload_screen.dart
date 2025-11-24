@@ -1,4 +1,3 @@
-// lib/screens/users/bulk_student_upload_screen.dart
 import 'dart:convert';
 import 'dart:io';
 import 'package:csv/csv.dart';
@@ -109,8 +108,6 @@ class _BulkStudentUploadScreenState extends State<BulkStudentUploadScreen>
     _animationController.dispose();
     super.dispose();
   }
-
-  // Step 1: File Selection
   Future<void> _selectFile() async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -196,8 +193,6 @@ class _BulkStudentUploadScreenState extends State<BulkStudentUploadScreen>
       }
     }
   }
-
-  // Step 2: Field Mapping
   Widget _buildFieldMappingStep() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -333,8 +328,6 @@ class _BulkStudentUploadScreenState extends State<BulkStudentUploadScreen>
     return _requiredFields
         .every((field) => _fieldMapping[field]?.isNotEmpty == true);
   }
-
-  // Step 3: Data Validation
   Future<void> _proceedToValidation() async {
     setState(() {
       _currentStep = 2;
@@ -600,8 +593,6 @@ class _BulkStudentUploadScreenState extends State<BulkStudentUploadScreen>
       ),
     );
   }
-
-  // Step 4: Upload
   Future<void> _uploadStudents() async {
     setState(() {
       _isUploading = true;

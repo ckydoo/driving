@@ -1,4 +1,3 @@
-// lib/screens/payments/pos_screen.dart
 import 'package:driving/controllers/settings_controller.dart';
 import 'package:driving/services/print_service.dart';
 import 'package:flutter/material.dart';
@@ -301,7 +300,6 @@ class _POSScreenState extends State<POSScreen> {
 
   // FIXED: Enhanced payment processing with better error handling and validation
   Future<void> _processTransaction({bool payNow = true}) async {
-    // STEP 1: Show immediate validation errors and return early
     if (_selectedStudent == null) {
       _showError('Please select a student before proceeding');
       return;
@@ -311,15 +309,11 @@ class _POSScreenState extends State<POSScreen> {
       _showError('Please add items to cart before proceeding');
       return;
     }
-
-    // STEP 2: Additional safety checks
     if (_selectedStudent!.id == null) {
       _showError(
           'Selected student has invalid ID. Please select another student.');
       return;
     }
-
-    // STEP 3: Validate cart items have valid course data
     for (int i = 0; i < _cartItems.length; i++) {
       final item = _cartItems[i];
       if (item.course.id == null) {
@@ -333,8 +327,6 @@ class _POSScreenState extends State<POSScreen> {
         return;
       }
     }
-
-    // STEP 4: Start processing with loading state
     setState(() {
       _isProcessing = true;
     });
@@ -351,7 +343,6 @@ class _POSScreenState extends State<POSScreen> {
       // Clear everything after successful processing
       _clearAll();
     } catch (e, stackTrace) {
-      // STEP 5: Comprehensive error handling
       print('❌ Payment processing error: $e');
       print('❌ Stack trace: $stackTrace');
 
@@ -375,7 +366,6 @@ class _POSScreenState extends State<POSScreen> {
 
       _showError(errorMessage);
     } finally {
-      // STEP 6: Always reset processing state
       if (mounted) {
         setState(() {
           _isProcessing = false;
@@ -924,7 +914,6 @@ class _POSScreenState extends State<POSScreen> {
   }
 
   Future<void> _processPaymentAndPrint() async {
-    // STEP 1: Validate
     if (_selectedStudent == null) {
       _showError('Please select a student');
       return;
@@ -934,21 +923,14 @@ class _POSScreenState extends State<POSScreen> {
       _showError('Cart is empty. Add items before processing payment.');
       return;
     }
-
-    // STEP 2: Set processing state
     setState(() {
       _isProcessing = true;
     });
 
     try {
-      // STEP 3: Process payment (existing logic)
       await _processPayment();
-
-      // STEP 4: Generate receipt number
       final receiptNumber =
           'RCP-${DateTime.now().toUtc().millisecondsSinceEpoch}';
-
-      // STEP 5: Prepare receipt items
       final receiptItems = _cartItems
           .map((item) => ReceiptItem(
                 itemName: item.course.name,
@@ -957,8 +939,6 @@ class _POSScreenState extends State<POSScreen> {
                 totalPrice: item.totalPrice,
               ))
           .toList();
-
-      // STEP 6: Check if auto-print is enabled
       final settingsController = Get.find<SettingsController>();
       final shouldAutoPrint = settingsController.autoPrintReceiptValue;
 
@@ -985,8 +965,6 @@ class _POSScreenState extends State<POSScreen> {
         _showSuccess('Payment processed successfully!');
         _showPrintDialog(receiptNumber, receiptItems);
       }
-
-      // STEP 7: Clear cart
       setState(() {
         _cartItems.clear();
         _selectedStudent = null;
@@ -1898,8 +1876,6 @@ class _POSScreenState extends State<POSScreen> {
       ),
     );
   }
-
-// NEW: Reactive cart item for bottom sheet
   Widget _buildReactiveCartItem(
       CartItem item, int index, StateSetter setModalState) {
     return Container(
@@ -1956,8 +1932,6 @@ class _POSScreenState extends State<POSScreen> {
       ),
     );
   }
-
-// NEW: Reactive quantity controls for bottom sheet
   Widget _buildReactiveQuantityControls(
       CartItem item, int index, StateSetter setModalState) {
     return Row(
@@ -2018,8 +1992,6 @@ class _POSScreenState extends State<POSScreen> {
       ],
     );
   }
-
-// NEW: Reactive delete button for bottom sheet
   Widget _buildReactiveDeleteButton(int index, StateSetter setModalState) {
     return Container(
       width: _isMobile ? 44 : 32,

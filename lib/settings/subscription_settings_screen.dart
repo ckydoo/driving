@@ -1,4 +1,3 @@
-// lib/settings/subscription_settings_screen.dart
 // COMPLETE VERSION WITH PAYNOW INTEGRATION
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/services/subscription_cache.dart';
@@ -1441,8 +1440,6 @@ class SubscriptionScreen extends StatelessWidget {
         ),
         barrierDismissible: false,
       );
-
-      // Step 1: Create the subscription invoice through backend
       final invoice = await _createSubscriptionInvoice(
         _selectedPackage.value!,
         _selectedBillingPeriod.value,
@@ -1461,8 +1458,6 @@ class SubscriptionScreen extends StatelessWidget {
         );
         return;
       }
-
-      // Step 2: Show Paynow payment dialog with the created invoice
       Get.dialog(
         PaynowPaymentDialog(
           invoiceId: invoice['id'],

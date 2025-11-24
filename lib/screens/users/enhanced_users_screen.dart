@@ -290,8 +290,6 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
 
     final selectedStudents =
         _users.where((user) => _selectedUsers.contains(user.id)).toList();
-
-    // STEP 1: Check eligibility for all selected students
     final eligibilityResults = await _checkBulkEligibility(selectedStudents);
     final eligibleStudents = eligibilityResults
         .where((result) => result['eligible'] == true)
@@ -299,8 +297,6 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
     final ineligibleStudents = eligibilityResults
         .where((result) => result['eligible'] == false)
         .toList();
-
-    // STEP 2: Show eligibility summary dialog
     final shouldProceed =
         await _showEligibilityDialog(eligibleStudents, ineligibleStudents);
     if (!shouldProceed) return;
@@ -312,8 +308,6 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
     try {
       final failedGraduations = <String>[];
       int successCount = 0;
-
-      // STEP 3: Only graduate eligible students
       for (final studentResult in eligibleStudents) {
         try {
           final student = studentResult['student'] as User;
@@ -326,8 +320,6 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
       }
 
       await _loadUsers();
-
-      // STEP 4: Show results
       if (failedGraduations.isEmpty && successCount > 0) {
         Get.snackbar(
           snackPosition: SnackPosition.BOTTOM,
@@ -375,8 +367,6 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
       });
     }
   }
-
-  // NEW: Check eligibility for multiple students (SIMPLIFIED)
   Future<List<Map<String, dynamic>>> _checkBulkEligibility(
       List<User> students) async {
     List<Map<String, dynamic>> results = [];
@@ -455,8 +445,6 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
 
     return results;
   }
-
-  // NEW: Show eligibility dialog before proceeding
   Future<bool> _showEligibilityDialog(List<Map<String, dynamic>> eligible,
       List<Map<String, dynamic>> ineligible) async {
     if (eligible.isEmpty && ineligible.isEmpty) return false;

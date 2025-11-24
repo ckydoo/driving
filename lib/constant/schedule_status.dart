@@ -1,4 +1,3 @@
-// lib/constants/schedule_status.dart
 class ScheduleStatus {
   // Core status values
   static const String scheduled = 'Scheduled';

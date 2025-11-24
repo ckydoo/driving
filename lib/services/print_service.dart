@@ -1,4 +1,3 @@
-// lib/services/print_service.dart
 import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';

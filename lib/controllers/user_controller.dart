@@ -125,14 +125,10 @@ class UserController extends GetxController {
       print(
         'UserController: ${isUpdate ? 'Updating' : 'Adding'} user (LOCAL ONLY): ${user.fname} ${user.lname}',
       );
-
-      // Step 1: Handle updates (always local)
       if (isUpdate && user.id != null) {
         await _handleUserUpdate(user);
         return;
       }
-
-      // Step 2: Handle new user creation - LOCAL ONLY approach
       if (!isUpdate) {
         await _handleNewUserCreation(user);
       }
@@ -359,7 +355,6 @@ class UserController extends GetxController {
 
 // 2. In _handleNewUserCreation method - track user creation
   Future<void> _handleNewUserCreation(User user) async {
-    // Step 1: Check for duplicates first
     final duplicateErrors = await checkForDuplicates(user, isUpdate: false);
     if (duplicateErrors.isNotEmpty) {
       final errorMessages = duplicateErrors.values.join('\n');
@@ -373,16 +368,10 @@ class UserController extends GetxController {
       );
       throw Exception(duplicateErrors.values.first);
     }
-
-    // Step 2: Get current school ID
     final authController = Get.find<AuthController>();
     final currentSchoolId = authController.currentUser.value?.schoolId ??
         '1'; // Default to 1 for local
-
-    // Step 3: Add school_id to user
     final userWithSchool = user.copyWith(schoolId: currentSchoolId);
-
-    // Step 4: Save to LOCAL database
     print('💾 Saving to local database...');
 
     // Convert User to Map for database operation
@@ -398,8 +387,6 @@ class UserController extends GetxController {
     // Add to local observable list for immediate UI update
     _users.add(createdUser);
     print('✅ User saved locally with ID: $newUserId');
-
-    // Step 5: Show success message
     Get.snackbar(
       snackPosition: SnackPosition.BOTTOM,
       'Success',

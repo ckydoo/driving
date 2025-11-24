@@ -1,4 +1,3 @@
-// lib/services/database_migration.dart - FIXED VERSION
 
 import 'package:sqflite/sqflite.dart';
 import 'package:driving/services/database_sync_migration.dart';

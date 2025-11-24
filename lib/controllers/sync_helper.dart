@@ -1,4 +1,3 @@
-// lib/services/sync_helper.dart
 // Simple helper functions for database sync without extensions
 
 import 'package:sqflite_common/sqlite_api.dart';

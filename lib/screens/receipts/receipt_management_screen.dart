@@ -1,4 +1,3 @@
-// lib/screens/receipts/responsive_receipt_management_screen.dart
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/controllers/utils/responsive_utils.dart';
 import 'package:driving/models/course.dart';

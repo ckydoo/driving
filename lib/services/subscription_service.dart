@@ -1,4 +1,3 @@
-// lib/services/subscription_service.dart - FIXED WITH ENHANCED DEBUGGING
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:get/get.dart';

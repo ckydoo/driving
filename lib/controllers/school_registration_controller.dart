@@ -1,4 +1,3 @@
-// lib/controllers/school_registration_controller.dart - INTERNET-FIRST APPROACH
 
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/models/user.dart';
@@ -156,20 +155,10 @@ class SchoolRegistrationController extends GetxController {
     try {
       isLoading(true);
       print('🌐 === INTERNET-FIRST SCHOOL REGISTRATION ===');
-
-      // Step 1: Register school online (REQUIRED)
       final registrationResult = await _registerSchoolOnline();
-
-      // Step 2: Download and save school data locally
       await _downloadAndSaveSchoolData(registrationResult);
-
-      // Step 3: Setup local authentication
       await _setupLocalAuthentication(registrationResult);
-
-      // Step 4: Update app settings
       await _updateAppSettings(registrationResult);
-
-      // Step 5: Show success and navigate
       await _showSuccessAndNavigate(registrationResult);
     } catch (e) {
       print('❌ School registration failed: $e');

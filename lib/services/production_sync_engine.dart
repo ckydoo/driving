@@ -1,6 +1,3 @@
-// lib/services/production_sync_engine.dart
-// Create this as a new file in your Flutter project
-
 import 'dart:convert';
 import 'dart:io';
 import 'package:driving/services/sync_service.dart';
@@ -9,14 +6,9 @@ import 'package:get/get.dart';
 import 'package:crypto/crypto.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-// Import your existing services
 import '../services/api_service.dart';
 import '../services/database_helper.dart';
 import '../models/sync_result.dart';
-
-// ===================================================================
-// 1. DEVICE SYNC STATE MANAGEMENT
-// ===================================================================
 
 class DeviceSyncState {
   final String deviceId;
@@ -162,11 +154,9 @@ class ProductionSyncEngine {
     try {
       print('🚀 Starting production sync for school: $schoolId');
 
-      // Step 1: Load current device sync state
       final currentState = await _loadSyncState(schoolId);
       print('📱 Device: ${currentState.deviceId}');
 
-      // Step 2: CRITICAL FIX - Register device with server first
       try {
         print('📝 Registering device with server...');
         await ApiService.registerDevice(
@@ -180,12 +170,10 @@ class ProductionSyncEngine {
         // or this might be a network issue
       }
 
-      // Step 3: Determine strategy
       final strategy =
           await _determineSyncStrategy(currentState, forceFullSync);
       print('🎯 Sync Strategy: ${strategy.name}');
 
-      // Step 4: Execute sync based on strategy
       late SyncResult result;
 
       switch (strategy) {
@@ -199,7 +187,6 @@ class ProductionSyncEngine {
           break;
       }
 
-      // Step 5: Update sync state on success
       if (result.success) {
         final updatedState = _updateSyncState(currentState, result, strategy);
         await _saveSyncState(updatedState);
@@ -212,10 +199,6 @@ class ProductionSyncEngine {
       return SyncResult(false, 'Production sync failed: ${e.toString()}');
     }
   }
-
-  // ===================================================================
-  // FULL SYNC EXECUTION - ALSO FIXED TO ENSURE DEVICE REGISTRATION
-  // ===================================================================
 
   static Future<SyncResult> _executeFullSync(DeviceSyncState state) async {
     try {
@@ -379,7 +362,6 @@ class ProductionSyncEngine {
         '✅ Database sync completed: $totalInserted inserted, $totalFailed failed');
   }
 
-// ADD this new method to handle the conversions:
   static Map<String, dynamic> _convertRecord(
       Map<String, dynamic> data, String tableType) {
     switch (tableType) {
@@ -636,7 +618,6 @@ class ProductionSyncEngine {
     return null;
   }
 
-// ✅ NEW: Add this helper method to fix SQLite type issues
   static Map<String, dynamic> _fixSQLiteTypes(Map<String, dynamic> data) {
     final result = Map<String, dynamic>.from(data);
 

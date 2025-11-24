@@ -1,4 +1,3 @@
-// lib/screens/school_selection_screen.dart
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../controllers/school_selection_controller.dart';

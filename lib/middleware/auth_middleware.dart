@@ -1,4 +1,3 @@
-// lib/middleware/auth_middleware.dart - FIXED VERSION
 
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/controllers/pin_controller.dart';

@@ -1,4 +1,3 @@
-// lib/controllers/enhanced_settings_controller.dart
 import 'package:driving/services/database_helper.dart';
 import 'package:driving/services/school_config_service.dart';
 import 'package:flutter/material.dart';
@@ -41,8 +40,6 @@ class SettingsController extends GetxController {
   // App Preferences
   final RxString theme = 'light'.obs;
   final RxString dateFormat = 'MM/dd/yyyy'.obs;
-
-  // NEW: Advanced Settings
   final RxBool enableDataBackup = true.obs;
   final RxBool enableAutoSave = true.obs;
   final RxInt autoSaveInterval = 5.obs; // minutes
@@ -649,7 +646,6 @@ class SettingsController extends GetxController {
     businessWebsite.value = website;
   }
 
-  // NEW: Multi-tenant specific settings
   final RxBool enableMultiTenant = true.obs;
   final RxBool enableCloudSync = true.obs;
   final RxString schoolId = ''.obs;
@@ -1027,7 +1023,6 @@ class SettingsController extends GetxController {
     print('☁️ Cloud sync ${enabled ? "enabled" : "disabled"}');
   }
 
-  // NEW: Proper initialization sequence
   Future<void> _initializeSettings() async {
     try {
       print('🔧 Initializing settings...');
@@ -1046,7 +1041,6 @@ class SettingsController extends GetxController {
     }
   }
 
-// NEW: Set default settings if loading fails
   Future<void> _setDefaultSettings() async {
     print('⚠️ Setting default values due to loading failure');
 
@@ -1142,7 +1136,6 @@ class SettingsController extends GetxController {
     }
   }
 
-// NEW: Debug method to check SharedPreferences contents
   Future<void> debugSharedPreferences() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -1333,17 +1326,10 @@ class SettingsController extends GetxController {
   Future<void> _initializeSettingsWithDefaults() async {
     try {
       print('🚀 Starting settings initialization with defaults...');
-
-      // Step 1: Ensure default settings exist
       await ensureDefaultSettings();
-
-      // Step 2: Load settings (will now load defaults if needed)
       await _loadSettings();
-
-      // Step 3: Load from database (more complete data)
       await loadSettingsFromDatabase();
-      await loadPrinterSettings(); // ADD THIS LINE
-      // Step 4: Verify persistence (this was causing the issue)
+      await loadPrinterSettings();
       bool verified = await verifySettingsPersistence();
       if (!verified) {
         print('⚠️ Settings verification failed, forcing save...');
@@ -1380,13 +1366,11 @@ class SettingsController extends GetxController {
     }
   }
 
-  // NEW: Method to enable snackbars after initialization
   void enableSnackbars() {
     _isInitialized.value = true;
     print('📢 Snackbars enabled for settings updates');
   }
 
-  // NEW: Method to disable snackbars (useful for bulk operations)
   void disableSnackbars() {
     _isInitialized.value = false;
     print('🔇 Snackbars disabled for settings updates');
@@ -1431,8 +1415,6 @@ class SettingsController extends GetxController {
   // UPDATED: Enhanced test method with correct verification
   Future<void> testSettingsPersistence() async {
     print('🧪 === TESTING SETTINGS PERSISTENCE ===');
-
-    // Step 1: Clear everything to start fresh
     final prefs = await SharedPreferences.getInstance();
 
     // Clear only the problematic keys for testing
@@ -1441,21 +1423,13 @@ class SettingsController extends GetxController {
     await prefs.remove('enforce_working_hours');
 
     print('🧹 Cleared test settings');
-
-    // Step 2: Set default values (should be true)
     enforceBillingValidation.value = true;
     checkInstructorAvailability.value = true;
     enforceWorkingHours.value = true;
-
-    // Step 3: Save them explicitly
     toggleBillingValidation(true);
     toggleInstructorAvailabilityCheck(true);
     toggleWorkingHours(true);
-
-    // Step 4: Wait a moment
     await Future.delayed(Duration(milliseconds: 500));
-
-    // Step 5: Read back from SharedPreferences with correct defaults
     bool billing = prefs.getBool('enforce_billing_validation') ??
         true; // ← Using true as default
     bool instructor = prefs.getBool('check_instructor_availability') ??

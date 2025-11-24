@@ -4,7 +4,7 @@ import 'package:intl/intl.dart';
 
 class Invoice {
   final int? id;
-  final String invoiceNumber; // Add this field
+  final String invoiceNumber;
   final int studentId;
   final int courseId;
   final int lessons;
@@ -78,7 +78,7 @@ class Invoice {
   Map<String, dynamic> toMap() {
     return {
       'id': id,
-      'invoice_number': invoiceNumber, // Add this line
+      'invoice_number': invoiceNumber,
       'student': studentId,
       'course': courseId,
       'lessons': lessons,

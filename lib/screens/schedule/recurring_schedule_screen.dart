@@ -1,4 +1,3 @@
-// lib/screens/schedule/recurring_schedule_screen.dart
 import 'package:driving/controllers/navigation_controller.dart';
 import 'package:driving/controllers/settings_controller.dart';
 import 'package:driving/widgets/recuring_progress.dart';
@@ -985,7 +984,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     return messages;
   }
 
-// ADD this method for time overlap checking
   bool _hasTimeOverlap(
       TimeOfDay start1, TimeOfDay end1, TimeOfDay start2, TimeOfDay end2) {
     final start1Minutes = start1.hour * 60 + start1.minute;
@@ -1630,7 +1628,7 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
                 });
                 if (value != null && _selectedStudent != null) {
                   _updateLessonCounts();
-                  _updatePreviewCount(); // Add this to trigger validation
+                  _updatePreviewCount();
                 }
               },
             ),
@@ -1789,7 +1787,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     }
   }
 
-// FIX 2: Proper lesson duration calculation (30 minutes = 1 lesson)
   int _getLessonsPerOccurrence() {
     final startDateTime = DateTime(
       _selectedStartDate.year,
@@ -1817,12 +1814,10 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     return lessons.clamp(1, 8); // Min 1 lesson, max 8 lessons (4 hours)
   }
 
-// FIX 3: Add missing helper method
   int _getTotalLessonsToDeduct() {
     return _previewCount * _getLessonsPerOccurrence();
   }
 
-// FIX 4: Enhanced instructor availability checking for recurring schedules
   Future<void> _checkInstructorAvailabilityForRecurring() async {
     if (_selectedInstructor == null) {
       setState(() {
@@ -1921,7 +1916,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     }
   }
 
-// FIX 6: Proper day calculation excluding closed days
   int _calculateLessonsForPeriod(DateTime startDate, DateTime endDate) {
     if (endDate.isBefore(startDate)) return 0;
 
@@ -1974,7 +1968,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     return count;
   }
 
-// FIX 7: Generate proper preview dates for validation
   List<DateTime> _generatePreviewDates() {
     List<DateTime> dates = [];
     final settingsController = Get.find<SettingsController>();
@@ -2030,7 +2023,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     return dates;
   }
 
-// FIX 8: Enhanced _canSchedule method that checks all conditions
   bool _canSchedule() {
     // Check basic requirements
     if (_selectedStudent == null ||
@@ -2068,11 +2060,10 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     return true; // Allow scheduling even with conflicts (user will be warned)
   }
 
-// FIX 9: Call availability check when instructor or time changes
   void _onInstructorChanged() {
     if (mounted) {
       // _updateVehicleAvailability();
-      _checkInstructorAvailabilityForRecurring(); // Add this line
+      _checkInstructorAvailabilityForRecurring();
       _updatePreview();
     }
   }
@@ -2080,12 +2071,11 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
   void _onTimeChanged() {
     if (mounted) {
       _updateLessonCounts();
-      _checkInstructorAvailabilityForRecurring(); // Add this line
+      _checkInstructorAvailabilityForRecurring();
       _updatePreview();
     }
   }
 
-// FIX 10: Add the missing parseTimeString method with error handling
   TimeOfDay _parseTimeString(String timeString) {
     try {
       if (timeString.isEmpty || !timeString.contains(':')) {
@@ -2111,7 +2101,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     }
   }
 
-// FIX 11: Add missing helper methods
   void _updatePreview() {
     _updatePreviewCount();
     // Force UI refresh
@@ -2120,7 +2109,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     }
   }
 
-// FIX 12: Simplified closed days method (since business days aren't fully implemented yet)
   List<int> _getClosedDaysFromSettings(SettingsController settingsController) {
     // For now, return empty list - no closed days
     // This can be expanded later when business operating days are fully implemented
@@ -2139,7 +2127,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     return closedDays;
   }
 
-// FIX 13: Add helper method for day names
   String _getDayName(int weekday) {
     switch (weekday) {
       case 1:
@@ -2161,7 +2148,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     }
   }
 
-// FIX 14: Add helper method for business hours validation
   bool _isTimeOutsideBusinessHours(TimeOfDay startTime, TimeOfDay endTime,
       TimeOfDay businessStart, TimeOfDay businessEnd) {
     int startMinutes = startTime.hour * 60 + startTime.minute;
@@ -2173,7 +2159,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
         endMinutes > businessEndMinutes;
   }
 
-// FIX 15: Update your time picker handlers to call availability check
   void _selectStartTime() async {
     final TimeOfDay? picked = await showTimePicker(
       context: context,
@@ -2200,7 +2185,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     }
   }
 
-// FIX 16: Update instructor selection to call availability check
   void _onStudentChanged(User? student) {
     setState(() {
       _selectedStudent = student;
@@ -2214,7 +2198,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     _onInstructorChanged(); // This will call availability check
   }
 
-// STEP 1: Replace your existing instructor dropdown in _buildInstructorSection()
   Widget _buildInstructorSection() {
     return Card(
       child: Padding(
@@ -2274,13 +2257,10 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
                 if (value != null) {
                   _assignInstructorVehicle(value);
                   _updatePreviewCount();
-                  // NEW: Check for conflicts when instructor changes
                   _checkInstructorAndVehicleAvailability();
                 }
               },
             ),
-
-            // NEW: Add availability status display right after instructor selection
             _buildAvailabilityStatus(),
 
             SizedBox(height: 16),
@@ -2338,7 +2318,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
                   setState(() {
                     _selectedVehicle = value;
                   });
-                  // NEW: Check for vehicle conflicts when vehicle changes
                   if (_selectedClassType == 'Practical') {
                     _checkInstructorAndVehicleAvailability();
                   }
@@ -2351,7 +2330,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     );
   }
 
-// STEP 2: Update your time selection methods to trigger conflict checking
   Future<void> _selectTime(bool isStartTime) async {
     final TimeOfDay? picked = await showTimePicker(
       context: context,
@@ -2376,15 +2354,12 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
         }
       });
       _updatePreviewCount();
-
-      // NEW: Check for conflicts when time changes
       if (_selectedInstructor != null) {
         _checkInstructorAndVehicleAvailability();
       }
     }
   }
 
-// STEP 3: Update your start date selection to trigger conflict checking
   Future<void> _selectStartDate() async {
     final scheduleController = Get.find<ScheduleController>();
 
@@ -2435,15 +2410,12 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
         }
       });
       _updatePreviewCount();
-
-      // NEW: Check for conflicts when date changes
       if (_selectedInstructor != null) {
         _checkInstructorAndVehicleAvailability();
       }
     }
   }
 
-// STEP 4: Update your recurrence pattern selection to trigger conflict checking
   Widget _buildRecurrenceChip(String pattern) {
     final isSelected = _recurrencePattern == pattern;
     return FilterChip(
@@ -2454,8 +2426,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
           _recurrencePattern = pattern;
           _updatePreviewCount();
         });
-
-        // NEW: Check for conflicts when pattern changes
         if (_selectedInstructor != null) {
           _checkInstructorAndVehicleAvailability();
         }
@@ -2465,7 +2435,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     );
   }
 
-// STEP 5: Update your weekly options to trigger conflict checking
   Widget _buildWeeklyOptions() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2516,8 +2485,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
 
                   _updatePreviewCount();
                 });
-
-                // NEW: Check for conflicts when selected days change
                 if (_selectedInstructor != null) {
                   _checkInstructorAndVehicleAvailability();
                 }
@@ -2554,7 +2521,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     );
   }
 
-// STEP 6: Fix the _generateScheduleDates method to properly generate dates
   List<DateTime> _generateScheduleDates() {
     List<DateTime> dates = [];
     DateTime currentDate = _selectedStartDate;
@@ -2601,7 +2567,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     return dates;
   }
 
-// STEP 7: Fix the conflict detection method to work properly
   Future<void> _checkInstructorAndVehicleAvailability() async {
     if (_selectedInstructor == null) {
       setState(() {
@@ -2742,7 +2707,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     }
   }
 
-// STEP 8: Enhance the create button to show warnings for conflicts
   Widget _buildActionButtons() {
     final errors = _getValidationErrors();
     final hasErrors = errors.isNotEmpty;
@@ -2835,7 +2799,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     );
   }
 
-  // STEP 9: Enhanced _createRecurringSchedule method that handles conflicts properly
   Future<void> _createRecurringSchedule() async {
     print('🔄 RECURRING SCHEDULE CREATION STARTED');
 
@@ -2998,7 +2961,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
 
       for (int i = 0; i < schedules.length; i++) {
         try {
-          // FIX 1: Use silent mode to prevent individual success snackbars
           await _scheduleController.addOrUpdateSchedule(schedules[i],
               silent: true);
           savedCount++;
@@ -3025,8 +2987,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
 
       // Refresh schedule controller
       await _scheduleController.fetchSchedules();
-
-      // FIX 2: Show single consolidated success message
       if (savedCount > 0) {
         Get.snackbar(
           snackPosition: SnackPosition.BOTTOM,
@@ -3064,7 +3024,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     }
   }
 
-// FIX 3: Update the _showEnhancedResultsDialog method to fix navigation
   void _showEnhancedResultsDialog(int savedCount, int failedCount,
       int conflictsSkipped, int totalAttempted, List<String> errors) {
     Get.dialog(
@@ -3175,8 +3134,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
               onPressed: () {
                 Get.back(); // Close dialog
                 Get.back(); // Go back to previous screen
-
-                // FIX 4: Use navigation controller for safer navigation
                 try {
                   final navController = Get.find<NavigationController>();
                   navController.navigateToPage('schedules');
@@ -3217,7 +3174,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     );
   }
 
-// STEP 10: Method to check for conflicts on a single date
   Future<bool> _checkSingleDateConflict(
       DateTime startDateTime, DateTime endDateTime) async {
     // Check instructor conflicts
@@ -3259,7 +3215,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     return false; // No conflicts
   }
 
-// STEP 12: Helper method for result summary rows
   Widget _buildResultSummaryRow(String label, int count, Color color) {
     return Padding(
       padding: EdgeInsets.symmetric(vertical: 4),
@@ -3375,7 +3330,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     );
   }
 
-// STEP 14: Updated validation method that properly handles conflicts
   List<String> _getValidationErrors() {
     List<String> errors = [];
 
@@ -3495,7 +3449,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     return errors;
   }
 
-// STEP 15: Updated _canCreateRecurringSchedule method
   bool _canCreateRecurringSchedule() {
     if (_selectedStudent == null ||
         _selectedInstructor == null ||
@@ -3561,7 +3514,6 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     return true;
   }
 
-// STEP 16: Add this method to trigger conflict checks when needed
   void _triggerConflictCheck() {
     if (_selectedInstructor != null && _selectedStartDate != null) {
       // Add a small delay to ensure state is updated
@@ -3583,13 +3535,10 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
         }
       });
       _updatePreviewCount();
-
-      // Add this to trigger conflict check:
       _triggerConflictCheck();
     }
   }
 
-// STEP 18: Quick test method (you can remove this after testing)
   void _testConflictDetection() {
     print('🔧 TESTING CONFLICT DETECTION');
     print(

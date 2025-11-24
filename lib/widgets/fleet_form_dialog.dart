@@ -593,7 +593,6 @@ class _FleetFormDialogState extends State<FleetFormDialog>
         ),
         isExpanded: true,
         validator: null,
-        // FIX: Add dropdownMaxHeight to prevent overflow
         menuMaxHeight: MediaQuery.of(context).size.height * 0.4,
         itemHeight:
             isVerySmallScreen ? 48 : 56, // FIX: Set consistent item height

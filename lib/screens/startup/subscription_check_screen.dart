@@ -1,4 +1,3 @@
-// lib/screens/startup/subscription_check_screen.dart
 // This screen checks subscription before showing the main app
 
 import 'package:flutter/material.dart';

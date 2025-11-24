@@ -1,6 +1,4 @@
 // Enhanced PaymentDialog with invoice selection capability and "Pay All" option
-// lib/widgets/payment_dialog.dart
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';

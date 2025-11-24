@@ -1,4 +1,3 @@
-// lib/screens/payments/enhanced_pos_screen.dart
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
@@ -212,7 +211,6 @@ class _QuickSearchScreenState extends State<QuickSearchScreen> {
         ],
       ),
       body: SingleChildScrollView(
-        // Add this wrapper
         padding: EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

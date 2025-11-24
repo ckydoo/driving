@@ -1,4 +1,3 @@
-// lib/models/schedule.dart
 import 'billing.dart';
 import 'payment.dart';
 import 'package:driving/constant/schedule_status.dart';

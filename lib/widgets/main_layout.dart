@@ -1,4 +1,3 @@
-// lib/widgets/responsive_main_layout.dart - EXACT UX Structure, Just Responsive
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/controllers/settings_controller.dart';
 import 'package:driving/controllers/sync_controller.dart';
@@ -78,7 +77,6 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
             );
           }
 
-          // Desktop Layout (>= 768px) - Your exact current structure
           return Row(
             children: [
               _buildDesktopSidebar(
@@ -98,7 +96,6 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
     );
   }
 
-  // Add this method to handle the double tap exit functionality
   Future<bool> _handleBackButton(BuildContext context) async {
     final now = DateTime.now();
 
@@ -147,7 +144,6 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
     }
   }
 
-  // Mobile drawer - Exact content as desktop sidebar but in drawer format
   Widget _buildMobileDrawer(
     NavigationController navController,
     AuthController authController,
@@ -179,7 +175,6 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
 
                     const SizedBox(height: 8),
 
-                    // User Profile Section - NEW
                     Obx(() {
                       final user = authController.currentUser.value;
                       if (user == null) {
@@ -341,7 +336,6 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
     );
   }
 
-  // Desktop sidebar - EXACT copy of your current structure
   Widget _buildDesktopSidebar(
     NavigationController navController,
     AuthController authController,
@@ -352,7 +346,6 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
       color: Colors.blueGrey[900],
       child: Column(
         children: [
-          // Header with user info - EXACT copy
           Container(
             padding: const EdgeInsets.all(16.0),
             child: Column(
@@ -372,7 +365,6 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
               ],
             ),
           ),
-          // Navigation items - EXACT copy
           Expanded(
             child: SingleChildScrollView(
               child: Obx(() => Column(
@@ -380,7 +372,6 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
                   )),
             ),
           ),
-          // Logout button - EXACT copy
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: SizedBox(
@@ -451,8 +442,6 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
                       )),
                 ),
               ),
-
-              // NEW: Simple Sync Button - Tap to sync
               Container(
                 width: 56,
                 height: 56,
@@ -473,8 +462,6 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
                   ),
                 ),
               ),
-
-              // NEW: POS Button
               Container(
                 width: 56,
                 height: 56,
@@ -527,7 +514,6 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
             ),
           ),
 
-          // SIMPLE FIX: Just use the compact sync widget directly
           GetX<SyncController>(
             builder: (syncController) => Container(
               padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -660,7 +646,6 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
     );
   }
 
-  // Build navigation items - EXACT copy of your logic
   List<Widget> _buildNavigationItems(NavigationController navController,
       {bool autoClose = false}) {
     // SAFE USER ROLE ACCESS:
@@ -685,7 +670,6 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
       },
     ));
 
-    // Role-based navigation items - EXACT copy of your logic
     if (userRole == 'admin' || userRole == 'instructor') {
       widgets.add(_buildSidebarItem(
         Icons.school,
@@ -1008,7 +992,6 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
     );
   }
 
-  // Build regular sidebar item - EXACT copy
   Widget _buildSidebarItem(
     IconData icon,
     String title,
@@ -1242,7 +1225,6 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
   }
 }
 
-// Content area - EXACT copy
 Widget _buildContentArea(NavigationController navController) {
   return Obx(() {
     final currentPage = navController.currentPage.value;
@@ -1283,7 +1265,6 @@ Widget _buildContentArea(NavigationController navController) {
   });
 }
 
-// Get current page widget - EXACT copy
 Widget _getCurrentPageWidget(String pageKey) {
   switch (pageKey) {
     case 'dashboard':

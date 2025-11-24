@@ -1,4 +1,3 @@
-// lib/controllers/pin_controller.dart - Enhanced version with user association
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
@@ -64,13 +63,9 @@ class PinController extends GetxController {
       await _secureStorage.delete(key: _userVerifiedKey);
     }
   }
-
-  // NEW: Get the email of the user associated with the PIN
   Future<String?> getPinUserEmail() async {
     return await _secureStorage.read(key: _pinUserEmailKey);
   }
-
-  // NEW: Set the user email for the PIN
   Future<void> setPinUserEmail(String email) async {
     await _secureStorage.write(key: _pinUserEmailKey, value: email);
   }
@@ -92,8 +87,6 @@ class PinController extends GetxController {
       final hashedPin = _hashPin(pin);
       await _secureStorage.write(key: _pinHashKey, value: hashedPin);
       await _secureStorage.write(key: _pinEnabledKey, value: 'true');
-
-      // NEW: Store which user this PIN belongs to
       if (userEmail != null) {
         await _secureStorage.write(key: _pinUserEmailKey, value: userEmail);
         debugPrint('PIN associated with user: $userEmail');
@@ -400,8 +393,6 @@ class PinController extends GetxController {
       debugPrint('❌ Error clearing verification: $e');
     }
   }
-
-  // NEW: Get detailed PIN info for debugging
   Future<Map<String, dynamic>> getPinInfo() async {
     return {
       'isPinSet': isPinSet.value,

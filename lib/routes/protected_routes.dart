@@ -1,4 +1,3 @@
-// lib/routes/protected_routes.dart (Updated with School Selection)
 import 'package:driving/dashboard.dart';
 import 'package:driving/middleware/auth_middleware.dart';
 import 'package:driving/screens/auth/login_screen.dart';

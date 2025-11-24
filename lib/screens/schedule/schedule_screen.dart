@@ -1,4 +1,3 @@
-// lib/screens/schedule/responsive_schedule_screen.dart
 import 'dart:async';
 import 'package:driving/controllers/utils/responsive_utils.dart';
 import 'package:driving/models/schedule.dart';
@@ -453,8 +452,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         color: Colors.black,
       ),
       value: value,
-      isExpanded: true, // Add this to prevent overflow
-      menuMaxHeight: 300, // Limit dropdown height
+      isExpanded: true,
+      menuMaxHeight: 300,
       items: [
         const DropdownMenuItem<String>(value: null, child: Text('All')),
         ...options.map((option) => DropdownMenuItem(

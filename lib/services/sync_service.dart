@@ -1,4 +1,3 @@
-// lib/services/sync_service.dart - COMPLETE VERSION WITH ALL CONSTANTS
 
 import 'dart:convert';
 import 'dart:io';
@@ -806,8 +805,6 @@ class SyncService {
       'school_id': fleetData['school_id'],
     };
   }
-
-  // Add this method to your SyncService class
 
   static Future<void> clearAllSyncData() async {
     try {

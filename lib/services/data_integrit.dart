@@ -463,10 +463,7 @@ class DatabaseIntegrityService {
     final fixResult = FixResult();
 
     try {
-      // Fix orphaned payments
       fixResult.orphanedPaymentsFixed = await fixOrphanedPayments();
-
-      // Fix inconsistent invoice amounts
       fixResult.inconsistentAmountsFixed =
           await fixInconsistentInvoiceAmounts();
 

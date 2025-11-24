@@ -1,4 +1,3 @@
-// lib/services/consistency_checker_service.dart
 import 'package:driving/constant/schedule_status.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -262,8 +261,6 @@ class ConsistencyCheckerService extends GetxService {
 
       // Run consistency check first
       final report = await runFullConsistencyCheck();
-
-      // Fix attendance/status mismatches
       currentOperation('Fixing attendance/status mismatches...');
       final attendanceFixed = await _fixAttendanceStatusMismatches(
           List<Map<String, dynamic>>.from(

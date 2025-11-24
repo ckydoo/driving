@@ -1,4 +1,3 @@
-// lib/widgets/quick_search_widget.dart
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../controllers/navigation_controller.dart';

@@ -1,4 +1,3 @@
-// lib/widgets/pin_settings_widget.dart
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:driving/controllers/pin_controller.dart';

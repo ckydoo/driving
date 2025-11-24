@@ -1,4 +1,3 @@
-// lib/services/school_api_service.dart - ENHANCED WITH DETAILED ERROR LOGGING
 
 import 'package:http/http.dart' as http;
 import 'dart:convert';

@@ -1,4 +1,3 @@
-// lib/services/app_initialization.dart - ROBUST VERSION WITH ERROR HANDLING
 import 'package:driving/controllers/navigation_controller.dart';
 import 'package:driving/controllers/settings_controller.dart';
 
@@ -20,26 +19,15 @@ class AppInitialization {
     print('🚀 === STARTING APP INITIALIZATION ===');
 
     try {
-      // Step 1: Initialize database helper first
       print('📁 Initializing database helper...');
       Get.put(DatabaseHelper.instance, permanent: true);
       print('✅ Database helper initialized');
-
-      // Step 2: Initialize AuthController early
       print('🔐 Initializing auth controller...');
       Get.put(AuthController(), permanent: true);
       print('✅ Auth controller initialized');
-
-      // Step 3: Run database migration (with error handling)
       await _runDatabaseMigration();
-
-      // Step 4: Run schedule status migration (with error handling)
       await _runScheduleStatusMigration();
-
-      // Step 5: Initialize controllers
       await _initializeControllers();
-
-      // Step 6: Auto-seed data if needed (FIXED - no more force seeding)
 
       print('✅ === APP INITIALIZATION COMPLETED SUCCESSFULLY ===');
     } catch (e) {

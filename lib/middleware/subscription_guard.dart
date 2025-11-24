@@ -1,4 +1,3 @@
-// lib/middleware/subscription_guard.dart - RELIABLE VERSION
 // This version ensures subscription data is loaded BEFORE checking
 
 import 'package:driving/controllers/auth_controller.dart';

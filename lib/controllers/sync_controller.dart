@@ -1,4 +1,3 @@
-// lib/controllers/sync_controller.dart - FIXED VERSION
 import 'dart:async';
 import 'dart:convert';
 import 'package:driving/controllers/settings_controller.dart';
@@ -26,13 +25,12 @@ class SyncController extends GetxController {
 
   // Sync settings
   final RxBool autoSyncEnabled = true.obs;
-  final RxInt syncIntervalMinutes = 30.obs; // FIX: Changed from 1 to 30 minutes
+  final RxInt syncIntervalMinutes = 30.obs;
 
   // Background sync timer
   Timer? _syncTimer;
   Timer? _connectionCheckTimer;
 
-  // FIX: Add initialization state tracking
   bool _isInitialized = false;
   bool _isDisposed = false;
 
@@ -49,7 +47,6 @@ class SyncController extends GetxController {
     super.onClose();
   }
 
-  // FIX: Proper initialization sequence
   Future<void> _initializeController() async {
     try {
       print('🔄 Initializing SyncController...');
@@ -72,7 +69,6 @@ class SyncController extends GetxController {
     }
   }
 
-  // FIX: Check conditions before starting sync
   void _startSyncIfReady() {
     if (!_isInitialized || _isDisposed) return;
 
@@ -90,7 +86,6 @@ class SyncController extends GetxController {
   void _startConnectionMonitoring() {
     if (_isDisposed) return;
 
-    // FIX: Adjust connection check interval based on sync interval
     final checkInterval =
         Duration(seconds: syncIntervalMinutes.value < 10 ? 30 : 60);
 
@@ -219,7 +214,6 @@ class SyncController extends GetxController {
     }
   }
 
-  /// Start periodic sync - FIXED VERSION
   void startPeriodicSync() {
     if (_isDisposed || !_isInitialized) {
       print('⚠️ Cannot start periodic sync: controller not ready');
@@ -231,7 +225,6 @@ class SyncController extends GetxController {
       return;
     }
 
-    // FIX: Validate sync interval
     if (syncIntervalMinutes.value < 5) {
       print('⚠️ Sync interval too small, setting to minimum 5 minutes');
       syncIntervalMinutes.value = 5;
@@ -267,7 +260,6 @@ class SyncController extends GetxController {
     print(
         '✅ Periodic sync started (interval: ${syncIntervalMinutes.value} minutes)');
 
-    // FIX: Update connection check timer interval
     _restartConnectionMonitoring();
   }
 
@@ -287,7 +279,6 @@ class SyncController extends GetxController {
     print('🛑 All sync activities stopped');
   }
 
-  // FIX: Restart connection monitoring with appropriate interval
   void _restartConnectionMonitoring() {
     _connectionCheckTimer?.cancel();
     _startConnectionMonitoring();
@@ -473,7 +464,6 @@ class SyncController extends GetxController {
     }
   }
 
-  /// NEW: Force full data reset and sync
   Future<void> performFullReset() async {
     final confirmed = await Get.dialog<bool>(
       AlertDialog(
@@ -514,7 +504,6 @@ class SyncController extends GetxController {
     }
   }
 
-  /// NEW: Switch between production and legacy sync
   Future<void> performSmartSync() async {
     try {
       // Check if production sync engine is available
@@ -565,7 +554,6 @@ class SyncController extends GetxController {
     }
   }
 
-  /// NEW: Get sync strategy info for UI
   Map<String, dynamic> getSyncStrategyInfo() {
     return {
       'available_strategies': ['production', 'legacy', 'reset', 'auto'],
@@ -646,7 +634,6 @@ class SyncController extends GetxController {
     }
   }
 
-// Add this method to your SyncController to easily check sync status
   Future<void> debugSyncStatus() async {
     await SyncDebugHelper.printDiagnosticReport();
 
@@ -696,7 +683,6 @@ class SyncController extends GetxController {
     return null;
   }
 
-  /// Toggle auto-sync - FIXED VERSION
   void toggleAutoSync(bool enabled) {
     if (_isDisposed) return;
 
@@ -724,7 +710,6 @@ class SyncController extends GetxController {
     );
   }
 
-  /// Update sync interval - FIXED VERSION
   void updateSyncInterval(int minutes) {
     if (_isDisposed) return;
 
@@ -807,7 +792,6 @@ class SyncController extends GetxController {
     return Icons.sync_disabled;
   }
 
-  // FIX: Add method to handle auth state changes
   void onAuthStateChanged(bool isLoggedIn) {
     if (_isDisposed) return;
 

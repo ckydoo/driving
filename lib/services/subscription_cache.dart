@@ -1,4 +1,3 @@
-// lib/services/subscription_cache.dart
 // Create this new file to handle offline subscription caching
 
 import 'package:driving/services/database_helper.dart';
@@ -116,8 +115,6 @@ class SubscriptionCache {
       // Get cached status
       String cachedStatus = cache['subscription_status'] as String;
       int cachedTrialDays = cache['remaining_trial_days'] as int;
-
-      // CRITICAL: Check if subscription has expired since last sync
       if (cache['subscription_expires_at'] != null) {
         final expiresAt =
             DateTime.parse(cache['subscription_expires_at'] as String);

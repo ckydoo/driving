@@ -1284,8 +1284,6 @@ class _SingleScheduleScreenState extends State<SingleScheduleScreen> {
     if (selectedDay.isAtSameMomentAs(today) && startDateTime.isBefore(now)) {
       errors.add('Cannot schedule lessons for past times');
     }
-
-    // NEW: Check if the selected day is a business operating day
     final settingsController = Get.find<SettingsController>();
     final selectedDayName = _getDayName(_selectedDate.weekday);
 

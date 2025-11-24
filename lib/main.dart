@@ -1,7 +1,5 @@
-// lib/main.dart - FIXED VERSION with proper database initialization
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/controllers/pin_controller.dart';
-import 'package:driving/controllers/school_selection_controller.dart';
 import 'package:driving/controllers/settings_controller.dart';
 import 'package:driving/controllers/subscription_controller.dart';
 import 'package:driving/routes/app_routes.dart';
@@ -21,18 +19,13 @@ import 'dart:io' show Platform;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
   print('🚀 === STARTING DRIVING SCHOOL APP ===');
-  // CRITICAL: Initialize Stripe FIRST before anything else
   await _initializeStripe();
-  // STEP 1: Initialize database factory FIRST (critical for desktop platforms)
   _initializeDatabaseFactory();
 
-  // STEP 2: Initialize core dependencies
   await _initializeCoreDependencies();
   Get.put(SubscriptionController());
 
-  // STEP 3: Initialize app bindings (which includes all controllers and sync)
   await AppBindings().dependencies();
 
   print('✅ === APP INITIALIZATION COMPLETED ===');
@@ -44,12 +37,6 @@ Future<void> _initializeStripe() async {
   print('💳 Initializing Stripe...');
 
   try {
-    // ============================================
-    // STRIPE CONFIGURATION
-    // ============================================
-
-    // YOUR STRIPE PUBLISHABLE KEY
-    // Replace this with your actual Stripe key
     const stripePublishableKey =
         'pk_test_51SBdNe4IPjryss42NdJPH4l504YGckq7apiZI48usKi0QSRG65E8qEtByVP307sfIJIstrpF3Z17pDjxiz7HoJcK00nwrBuBSx';
 
@@ -68,10 +55,7 @@ Future<void> _initializeStripe() async {
       throw Exception('Invalid Stripe key format');
     }
 
-    // Set Stripe publishable key - THIS IS THE CRITICAL LINE
     Stripe.publishableKey = stripePublishableKey;
-
-    // Optional: Set merchant identifier for Apple Pay (iOS only)
     if (Platform.isIOS) {
       Stripe.merchantIdentifier = 'merchant.com.yourdomain.drivesync';
       print('✅ Apple Pay merchant ID set');
@@ -170,7 +154,6 @@ class DrivingSchoolApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return GetMaterialApp(
       title: 'DriveSync Pro',
-
       theme: ThemeData(
         primarySwatch: Colors.blue,
         useMaterial3: true,
@@ -203,15 +186,11 @@ class DrivingSchoolApp extends StatelessWidget {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
       ),
-
-      // Use protected routes with middleware
-      initialRoute: AppRoutes.initial, // ✅ Use routes system
+      initialRoute: AppRoutes.initial,
       getPages: AppRoutes.routes,
       debugShowCheckedModeBanner: false,
       unknownRoute: GetPage(name: '/notfound', page: () => const LoginScreen()),
       home: const AuthenticationWrapper(),
-
-      // Handle unknown routes
     );
   }
 }
@@ -237,20 +216,18 @@ class _AuthenticationWrapperState extends State<AuthenticationWrapper> {
     _isNavigating = true;
 
     try {
-      print('🔍 === DETERMINING INITIAL ROUTE - COMPLETE FIX ===');
+      print('🔍 === DETERMINING INITIAL ROUTE ===');
       await Future.delayed(const Duration(milliseconds: 300));
 
       final settingsController = Get.find<SettingsController>();
       final pinController = Get.find<PinController>();
       final authController = Get.find<AuthController>();
 
-      // CRITICAL: Load settings first to check both tables
       await settingsController.loadSettingsFromDatabase();
       await pinController.isPinEnabled();
 
       String initialRoute;
 
-      // STEP 1: Check if business/school setup is complete
       final isSchoolSetupComplete = await _checkSchoolConfigurationFixed();
 
       print('🏫 School setup complete: $isSchoolSetupComplete');
@@ -260,9 +237,7 @@ class _AuthenticationWrapperState extends State<AuthenticationWrapper> {
       if (!isSchoolSetupComplete) {
         print('🏫 School setup needed - redirect to school selection');
         initialRoute = '/school-selection';
-      }
-      // STEP 2: Check PIN authentication
-      else if (pinController.isPinSet.value &&
+      } else if (pinController.isPinSet.value &&
           pinController.isPinEnabled.value &&
           await pinController.isUserVerified()) {
         print('🔐 PIN authentication available');
@@ -274,20 +249,14 @@ class _AuthenticationWrapperState extends State<AuthenticationWrapper> {
           print('📱 Redirecting to PIN login');
           initialRoute = '/pin-login';
         }
-      }
-      // STEP 3: Check if user logged in but PIN not set
-      else if (authController.isLoggedIn.value &&
+      } else if (authController.isLoggedIn.value &&
           !pinController.isPinSet.value) {
         print('👤 User logged in, setting up PIN');
         initialRoute = '/pin-setup';
-      }
-      // STEP 4: Check if users exist
-      else if (await _checkIfUsersExist()) {
+      } else if (await _checkIfUsersExist()) {
         print('👥 Users exist - redirect to login');
         initialRoute = '/login';
-      }
-      // STEP 5: Fallback
-      else {
+      } else {
         print('🔑 Fallback to login');
         initialRoute = '/login';
       }
@@ -305,7 +274,6 @@ class _AuthenticationWrapperState extends State<AuthenticationWrapper> {
     }
   }
 
-  /// FIXED: More lenient school configuration check with auto-sync
   Future<bool> _checkSchoolConfigurationFixed() async {
     try {
       final db = await DatabaseHelper.instance.database;
@@ -331,19 +299,14 @@ class _AuthenticationWrapperState extends State<AuthenticationWrapper> {
           row['value'] != null &&
           row['value'].toString().trim().isNotEmpty);
 
-      // FIXED: Configuration is valid if EITHER:
-      // 1. We have a school in the schools table AND a school_id in settings
-      // 2. OR we have business_name in settings (fallback for single-tenant)
       bool isConfigured = (hasSchoolInTable && hasSchoolId) || hasBusinessName;
 
-      print('🏫 School configuration check (FIXED):');
+      print('🏫 School configuration check:');
       print('   Has school in table: $hasSchoolInTable');
       print('   Has business name: $hasBusinessName');
       print('   Has school ID: $hasSchoolId');
       print('   Is configured: $isConfigured');
 
-      // ADDITIONAL FIX: If we have school in table but no school_id in settings,
-      // automatically sync them
       if (hasSchoolInTable && !hasSchoolId) {
         print('🔧 Auto-fixing: Syncing school ID to settings...');
         final schoolData = schoolResult.first;
@@ -356,7 +319,6 @@ class _AuthenticationWrapperState extends State<AuthenticationWrapper> {
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
 
-          // Also sync other school data to settings if missing
           if (!hasBusinessName && schoolData['name'] != null) {
             await db.insert(
               'settings',

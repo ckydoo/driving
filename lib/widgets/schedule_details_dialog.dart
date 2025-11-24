@@ -1,4 +1,3 @@
-// lib/widgets/schedule_details_dialog.dart
 import 'package:driving/screens/schedule/create_schedule_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -99,8 +98,6 @@ class _ScheduleDetailsDialogState extends State<ScheduleDetailsDialog> {
     final fleetController = Get.find<FleetController>();
     final scheduleController = Get.find<ScheduleController>();
     final billingController = Get.find<BillingController>();
-
-    // FIX 1: Use safe null checks for finding related entities
     final student = userController.users.firstWhereOrNull(
       (user) =>
           user.id == currentSchedule.studentId &&
@@ -121,15 +118,11 @@ class _ScheduleDetailsDialogState extends State<ScheduleDetailsDialog> {
         ? fleetController.fleet
             .firstWhereOrNull((v) => v.id == currentSchedule.carId)
         : null;
-
-    // FIX 2: Get billing information with proper null safety
     final invoice = billingController.invoices.firstWhereOrNull(
       (inv) =>
           inv.studentId == currentSchedule.studentId &&
           inv.courseId == currentSchedule.courseId,
     );
-
-    // FIX 3: Use centralized lesson calculation method (if available)
     // Otherwise fallback to local calculation
     final usedLessons = scheduleController.schedules
         .where((s) =>
@@ -302,7 +295,6 @@ class _ScheduleDetailsDialogState extends State<ScheduleDetailsDialog> {
                         [
                           _buildInfoRow('Lessons Completed',
                               '${currentSchedule.lessonsCompleted ?? 0}'),
-                          // FIX 4: Calculate progress safely
                           _buildInfoRow(
                               'Progress',
                               invoice != null
@@ -723,8 +715,6 @@ class _ScheduleDetailsDialogState extends State<ScheduleDetailsDialog> {
       ),
     );
   }
-
-  // FIX 7: Calculate duration properly
   String _calculateDuration() {
     final duration = currentSchedule.end.difference(currentSchedule.start);
     final hours = duration.inHours;

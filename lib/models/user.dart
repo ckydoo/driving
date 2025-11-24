@@ -1,4 +1,3 @@
-// lib/models/user.dart - Fixed User model with proper type handling
 
 class User {
   final int? id;

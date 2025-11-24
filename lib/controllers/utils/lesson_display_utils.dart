@@ -1,4 +1,3 @@
-// lib/utils/lesson_display_utils.dart
 import 'package:driving/controllers/settings_controller.dart';
 import 'package:driving/services/lesson_counting_service.dart';
 import 'package:flutter/material.dart';

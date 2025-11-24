@@ -1,4 +1,3 @@
-// lib/screens/users/add_user_screen.dart
 import 'dart:math';
 import 'package:driving/controllers/course_controller.dart';
 import 'package:driving/controllers/billing_controller.dart';
@@ -123,8 +122,6 @@ class _AddUserScreenState extends State<AddUserScreen> {
     super.initState();
     _initializeControllers();
   }
-
-  // Add this method to generate random 8-digit password
   String _generateRandomPassword() {
     final random = Random();
     String password = '';
@@ -944,8 +941,6 @@ class _AddUserScreenState extends State<AddUserScreen> {
       ],
     );
   }
-
-  // Add this new method to show a note when editing students
   Widget _buildEditingStudentNote() {
     return Container(
       padding: EdgeInsets.all(16),
@@ -1637,7 +1632,6 @@ class _AddUserScreenState extends State<AddUserScreen> {
     Get.back();
   }
 
-// lib/screens/users/add_user_screen.dart - Fixed _submitForm method
 
   Future<void> _submitForm() async {
     if (!_formKey.currentState!.validate()) {

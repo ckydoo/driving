@@ -1,4 +1,3 @@
-// lib/services/schedule_status_migration.dart - FIXED VERSION
 import 'package:driving/constant/schedule_status.dart';
 import 'database_helper.dart';
 
@@ -54,8 +53,6 @@ class ScheduleStatusMigration {
       final db = await DatabaseHelper.instance.database;
 
       print('Fixing inconsistent attended/status combinations...');
-
-      // Fix attended lessons that aren't marked as completed
       final updatedCompleted = await db.rawUpdate('''
         UPDATE schedules 
         SET status = ? 
@@ -63,8 +60,6 @@ class ScheduleStatusMigration {
       ''', [ScheduleStatus.completed, ScheduleStatus.completed]);
 
       print('Fixed $updatedCompleted completed lessons');
-
-      // Fix cancelled lessons that are marked as attended
       final fixedCancelled = await db.rawUpdate('''
         UPDATE schedules 
         SET attended = 0 

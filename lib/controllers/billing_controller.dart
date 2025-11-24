@@ -95,13 +95,12 @@ class BillingController extends GetxController {
     try {
       isLoading(true);
       print(
-          'BillingController: fetchBillingDataForStudent called for studentId: $studentId'); // ADD THIS
+          'BillingController: fetchBillingDataForStudent called for studentId: $studentId');
       final data = await _dbHelper.getBillingForStudent(studentId);
       print(
-          'BillingController: Data from _dbHelper.getBillingForStudent: $data'); // ADD THIS
+          'BillingController: Data from _dbHelper.getBillingForStudent: $data');
       invoices.assignAll(data.map((json) => Invoice.fromJson(json)));
-      print(
-          'BillingController: Invoices after assignAll: $invoices'); // ADD THIS
+      print('BillingController: Invoices after assignAll: $invoices');
     } finally {
       isLoading(false);
     }
@@ -137,8 +136,7 @@ class BillingController extends GetxController {
       // Update in the database
       await _dbHelper.updateInvoice({
         'id': invoiceId,
-        'used_lessons':
-            usedLessons, // Add this field to your database if not exists
+        'used_lessons': usedLessons,
       });
 
       // Update locally - you might need to add usedLessons field to your Invoice model
@@ -289,7 +287,6 @@ class BillingController extends GetxController {
     }
   }
 
-// Add this method to your BillingController and call it once
   Future<void> fixInvoicePaymentSync() async {
     try {
       print('Starting invoice payment sync fix...');
@@ -355,7 +352,7 @@ class BillingController extends GetxController {
         'Invoice payment sync has been repaired',
         backgroundColor: Colors.green,
         colorText: Colors.white,
-        snackPosition: SnackPosition.BOTTOM, // Add this line
+        snackPosition: SnackPosition.BOTTOM,
       );
     } catch (e) {
       print('Error fixing invoice payment sync: $e');

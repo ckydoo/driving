@@ -1,4 +1,3 @@
-// lib/controllers/schedule_controller.dart
 import 'package:driving/controllers/billing_controller.dart';
 import 'package:driving/controllers/course_controller.dart';
 import 'package:driving/controllers/settings_controller.dart';
@@ -277,9 +276,6 @@ class ScheduleController extends GetxController {
     fetchSchedules();
   }
   // Enhanced Schedule Controller with Past Date Validation
-// Add this method to your existing ScheduleController class
-
-// Add this method to prevent scheduling in the past
   bool _isValidScheduleDate(DateTime selectedDate) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -443,8 +439,6 @@ class ScheduleController extends GetxController {
       rethrow;
     }
   }
-
-// Add this method to ScheduleController
   int getEffectiveLessonsUsed(int studentId, int courseId) {
     final settingsController = Get.find<SettingsController>();
 
@@ -775,8 +769,6 @@ class ScheduleController extends GetxController {
           .fold<int>(0, (sum, s) => sum + s.lessonsDeducted);
     }
   }
-
-  // Add this method to force refresh billing data
   Future<void> refreshBillingData() async {
     try {
       final billingController = Get.find<BillingController>();
@@ -911,8 +903,6 @@ class ScheduleController extends GetxController {
 
       // Force update to ensure UI reflects changes
       update();
-
-      // FIX: Only show snackbar if not in silent mode
       if (!silent) {
         Get.snackbar(
           snackPosition: SnackPosition.BOTTOM,
@@ -925,7 +915,6 @@ class ScheduleController extends GetxController {
         );
       }
     } catch (e) {
-      // FIX: Only show error snackbar if not in silent mode
       if (!silent) {
         Get.snackbar(
             snackPosition: SnackPosition.BOTTOM,

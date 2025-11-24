@@ -1009,8 +1009,6 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
       ],
     );
   }
-
-// Add this method to force fresh data loading
   Future<void> _initializeData() async {
     // Force refresh billing data when screen loads
     await billingController.fetchBillingData();
@@ -1160,8 +1158,6 @@ class _StudentInvoiceScreenState extends State<StudentInvoiceScreen>
       },
     );
   }
-
-// Add this method to get fresh invoice data from database
   Future<Invoice> _ensureFreshInvoiceData(int invoiceId) async {
     // Force refresh billing data
     await billingController.fetchBillingData();

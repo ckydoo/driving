@@ -1,4 +1,3 @@
-// lib/services/school_config_service.dart
 import 'package:crypto/crypto.dart';
 import 'package:driving/controllers/settings_controller.dart';
 import 'package:get/get.dart';

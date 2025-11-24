@@ -1,4 +1,3 @@
-// lib/services/student_import_service.dart
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../controllers/user_controller.dart';
@@ -24,7 +23,6 @@ class StudentImportService {
     ImportResult result = ImportResult();
 
     try {
-      // Step 1: Validate all data
       onProgress?.call(ImportProgress(
         currentStep: 'Validating data...',
         currentIndex: 0,
@@ -42,8 +40,6 @@ class StudentImportService {
         result.warnings.addAll(validationResult.warnings);
         return result;
       }
-
-      // Step 2: Process valid students
       List<Map<String, dynamic>> studentsToProcess =
           validationResult.validStudents;
 
@@ -54,8 +50,6 @@ class StudentImportService {
       result.totalProcessed = studentsToProcess.length;
       result.duplicatesSkipped = validationResult.duplicateCount;
       result.warnings.addAll(validationResult.warnings);
-
-      // Step 3: Create users one by one
       for (int i = 0; i < studentsToProcess.length; i++) {
         Map<String, dynamic> studentData = studentsToProcess[i];
 
@@ -116,8 +110,6 @@ class StudentImportService {
         // Small delay to prevent overwhelming the database
         await Future.delayed(Duration(milliseconds: 50));
       }
-
-      // Step 4: Final validation and cleanup
       result.success = result.successCount > 0;
 
       // Refresh user list

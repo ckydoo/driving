@@ -1,4 +1,3 @@
-// lib/widgets/paynow_button.dart
 // SIMPLE PAYNOW BUTTON - Drop this anywhere you need a Paynow payment button
 
 import 'package:flutter/material.dart';

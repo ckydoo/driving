@@ -1,4 +1,3 @@
-// lib/controllers/subscription_controller.dart - FIXED VERSION
 import 'dart:io';
 
 import 'package:driving/models/subscription_package.dart';
@@ -30,7 +29,6 @@ class SubscriptionController extends GetxController {
   final SubscriptionService _subscriptionService = SubscriptionService();
   final Rx<DateTime?> subscriptionExpiresAt = Rx<DateTime?>(null);
 
-// Add computed properties for display
   String get displayPrice {
     if (currentPackage.value == null) return '\$0.00';
 
@@ -521,8 +519,6 @@ class SubscriptionController extends GetxController {
       errorMessage.value = '';
 
       print('\n🔄 === LOADING SUBSCRIPTION DATA ===');
-
-      // CRITICAL: Check internet connectivity first
       bool hasInternet = await _checkInternetConnection();
 
       if (!hasInternet) {
@@ -544,7 +540,6 @@ class SubscriptionController extends GetxController {
       try {
         print('🌐 Loading subscription data from server...');
 
-        // 🔥 CRITICAL FIX: Load packages FIRST
         print('📦 Loading available packages...');
         try {
           final packages = await _subscriptionService.getSubscriptionPackages();
@@ -564,12 +559,10 @@ class SubscriptionController extends GetxController {
               statusData['subscription_status'] as String? ?? 'trial';
           remainingTrialDays.value = statusData['remaining_trial_days'] ?? 0;
 
-          // ✅ ADD: Parse billing period from API response
           billingPeriod.value =
               statusData['billing_period'] as String? ?? 'monthly';
           print('💳 Billing period: ${billingPeriod.value}');
 
-          // ✅ ADD: Parse subscription expiry date
           if (statusData['subscription_expires_at'] != null) {
             try {
               subscriptionExpiresAt.value =
@@ -637,7 +630,6 @@ class SubscriptionController extends GetxController {
     }
   }
 
-  /// NEW: Check internet connectivity
   Future<bool> _checkInternetConnection() async {
     try {
       // Quick connectivity check
@@ -655,7 +647,6 @@ class SubscriptionController extends GetxController {
     }
   }
 
-  /// NEW: Load from cache with smart validation
   Future<void> _loadFromCacheWithValidation() async {
     try {
       print('📦 Loading subscription from cache...');
@@ -747,7 +738,6 @@ class SubscriptionController extends GetxController {
     }
   }
 
-  /// NEW: Verify we have a valid auth token
   Future<bool> _verifyAuthToken() async {
     try {
       // Check if AuthController is available and has a user
@@ -786,7 +776,6 @@ class SubscriptionController extends GetxController {
     }
   }
 
-  /// NEW: Get cache age in days
   Future<int?> _getCacheAge() async {
     try {
       final cachedData = await SubscriptionCache.getCachedSubscriptionData();

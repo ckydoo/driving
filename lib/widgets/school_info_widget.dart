@@ -1,4 +1,3 @@
-// lib/widgets/school_info_widget.dart
 import 'package:driving/services/school_config_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';

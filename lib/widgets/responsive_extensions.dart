@@ -1,4 +1,3 @@
-// lib/widgets/responsive_extensions.dart
 import 'package:driving/controllers/utils/responsive_utils.dart';
 import 'package:flutter/material.dart';
 

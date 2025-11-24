@@ -1,4 +1,3 @@
-// lib/models/sync_result.dart - Create this new file
 class SyncResult {
   final bool success;
   final String message;

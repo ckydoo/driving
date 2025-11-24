@@ -1,4 +1,3 @@
-// lib/widgets/schedule_migration_dialog.dart
 import 'package:driving/constant/schedule_status.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';

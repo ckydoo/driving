@@ -1,4 +1,3 @@
-// lib/widgets/sync_status_widget.dart - FIXED VERSION
 
 import 'package:driving/services/sync_service.dart';
 import 'package:flutter/material.dart';
@@ -53,7 +52,6 @@ class SyncStatusWidget extends StatelessWidget {
       builder: (syncController) => Container(
         color: Colors.grey[50],
         child: SingleChildScrollView(
-          // FIX: Make it scrollable to prevent overflow
           padding: EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

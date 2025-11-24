@@ -1,4 +1,3 @@
-// lib/screens/course/_course_details_screen.dart
 import 'package:driving/controllers/billing_controller.dart';
 import 'package:driving/controllers/schedule_controller.dart';
 import 'package:driving/controllers/user_controller.dart';

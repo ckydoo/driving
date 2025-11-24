@@ -1,4 +1,3 @@
-// lib/widgets/auto_attendance_settings.dart
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../services/auto_attendance_service.dart';

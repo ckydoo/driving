@@ -59,7 +59,6 @@ class SchoolSelectionController extends GetxController {
     }
 
     try {
-      // Step 1: Start loading
       isLoading(true);
       isAuthenticating(true);
 
@@ -68,11 +67,7 @@ class SchoolSelectionController extends GetxController {
 
       // Close the join dialog first
       Get.back();
-
-      // Step 2: Show loading dialog
       _showLoadingDialog();
-
-      // Step 3: Check connectivity
       loadingMessage.value = 'Checking connection...';
       final isOnline = await SchoolApiService.isOnline();
 
@@ -330,8 +325,6 @@ class SchoolSelectionController extends GetxController {
   }
 
   // Replace these methods in your school_selection_controller.dart
-
-  /// Save online authentication result locally - FIXED VERSION
   Future<void> _saveOnlineResultLocally(Map<String, dynamic> result) async {
     try {
       print('🔍 === SAVING ONLINE RESULT ===');
@@ -432,8 +425,6 @@ class SchoolSelectionController extends GetxController {
       // Don't throw - this is just for offline access
     }
   }
-
-  /// Enhanced online authentication - FIXED VERSION
   Future<void> _joinSchoolOnline(
       String schoolName, String email, String password) async {
     try {
@@ -447,8 +438,6 @@ class SchoolSelectionController extends GetxController {
       );
 
       print('🔍 API Result received: ${result.keys.toList()}');
-
-      // CRITICAL: Validate response structure
       if (result['school'] == null) {
         throw Exception('API response missing school data');
       }
@@ -628,8 +617,6 @@ class SchoolSelectionController extends GetxController {
       if (schoolIdString.isEmpty) {
         throw Exception('School ID is empty');
       }
-
-      // STEP 1: Verify school exists in schools table
       final schoolCheck = await db.query(
         'schools',
         where: 'id = ?',
@@ -651,8 +638,6 @@ class SchoolSelectionController extends GetxController {
           'updated_at': DateTime.now().toIso8601String(),
         });
       }
-
-      // STEP 2: Verify school_id exists in settings table
       final settingsCheck = await db.query(
         'settings',
         where: 'key = ?',
@@ -668,8 +653,6 @@ class SchoolSelectionController extends GetxController {
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
       }
-
-      // STEP 3: Verify business_name exists in settings
       final businessNameCheck = await db.query(
         'settings',
         where: 'key = ?',
@@ -684,15 +667,11 @@ class SchoolSelectionController extends GetxController {
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
       }
-
-      // STEP 4: Verify first_run_completed flag
       await db.insert(
         'settings',
         {'key': 'first_run_completed', 'value': '1'},
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
-
-      // STEP 5: Update SettingsController
       final settingsController = Get.find<SettingsController>();
       settingsController.schoolId(schoolIdString);
       settingsController.setBusinessName(school['name'] ?? '');
@@ -701,8 +680,6 @@ class SchoolSelectionController extends GetxController {
       settingsController.setBusinessEmail(school['email'] ?? '');
 
       print('✅ School data persistence verified');
-
-      // STEP 6: Verify the data was saved
       await _verifySchoolDataSaved(schoolIdString);
     } catch (e) {
       print('❌ Error ensuring school data persistence: $e');

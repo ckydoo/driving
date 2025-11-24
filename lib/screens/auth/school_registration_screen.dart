@@ -1,4 +1,3 @@
-// lib/screens/auth/school_registration_screen.dart - WITH INTERNET STATUS
 
 import 'package:driving/controllers/school_registration_controller.dart';
 import 'package:flutter/material.dart';

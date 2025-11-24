@@ -1,4 +1,3 @@
-// lib/services/app_bindings.dart - FIXED VERSION
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/controllers/subscription_controller.dart';
 import 'package:driving/controllers/sync_controller.dart';
@@ -15,31 +14,16 @@ import 'package:get/get.dart';
 class AppBindings extends Bindings {
   @override
   Future<void> dependencies() async {
-    print('🚀 === STARTING APP BINDINGS WITH FIXED SYNC ===');
+    print('🚀 === STARTING APP BINDINGS ===');
 
     try {
-      // STEP 1: Verify database is ready (already initialized in main.dart)
       await _verifyDatabase();
-
-      // STEP 2: Initialize PIN authentication
       await _initializePinAuthentication();
-
-      // STEP 3: Initialize settings and configuration
       await _initializeConfiguration();
-
-      // STEP 4: Initialize sync services
       await _initializeSyncServices();
-
-      // STEP 5: Initialize auth controller AFTER sync setup
       await _initializeAuthController();
-
-      // STEP 6: Initialize data controllers
       await _initializeDataControllers();
-
-      // STEP 7: Start background sync (single integration point)
       await _startBackgroundSync();
-
-      // STEP 8: Print summary
       _printInitializationSummary();
 
       print('✅ === APP BINDINGS COMPLETED SUCCESSFULLY ===');
@@ -50,7 +34,6 @@ class AppBindings extends Bindings {
     }
   }
 
-  /// STEP 1: Verify database is ready (don't initialize, just check)
   Future<void> _verifyDatabase() async {
     print('🗄️ Verifying database is ready...');
 
@@ -66,7 +49,6 @@ class AppBindings extends Bindings {
     }
   }
 
-  /// STEP 2: Initialize PIN authentication
   Future<void> _initializePinAuthentication() async {
     print('🔐 Initializing PIN authentication...');
 
@@ -84,7 +66,6 @@ class AppBindings extends Bindings {
     }
   }
 
-  /// STEP 3: Initialize settings and school configuration
   Future<void> _initializeConfiguration() async {
     print('⚙️ Initializing configuration...');
 
@@ -105,7 +86,6 @@ class AppBindings extends Bindings {
     }
   }
 
-  /// STEP 4: Initialize sync services
   Future<void> _initializeSyncServices() async {
     print('🔄 Initializing sync services...');
 
@@ -126,7 +106,6 @@ class AppBindings extends Bindings {
     }
   }
 
-  /// STEP 5: Initialize Auth Controller with sync integration
   Future<void> _initializeAuthController() async {
     print('👤 Initializing auth controller...');
 
@@ -135,7 +114,6 @@ class AppBindings extends Bindings {
         Get.put<AuthController>(AuthController(), permanent: true);
         print('✅ AuthController initialized');
 
-        // FIX: Single point of auth-sync integration
         _setupAuthSyncIntegration();
 
         print('✅ Auth-Sync integration configured');
@@ -148,25 +126,22 @@ class AppBindings extends Bindings {
     }
   }
 
-  /// FIX: Single auth-sync integration method
   void _setupAuthSyncIntegration() {
     try {
       final authController = Get.find<AuthController>();
       final syncController = Get.find<SyncController>();
 
-      // Listen to auth state changes for sync - SINGLE INTEGRATION POINT
       ever(authController.isLoggedIn, (bool isLoggedIn) {
         print('🔄 Auth state changed: isLoggedIn=$isLoggedIn');
         syncController.onAuthStateChanged(isLoggedIn);
       });
 
-      print('✅ Auth-Sync integration configured (single point)');
+      print('✅ Auth-Sync integration configured');
     } catch (e) {
       print('❌ Auth-Sync integration failed: $e');
     }
   }
 
-  /// STEP 6: Initialize data controllers
   Future<void> _initializeDataControllers() async {
     print('📊 Initializing data controllers...');
 
@@ -208,7 +183,6 @@ class AppBindings extends Bindings {
     }
   }
 
-  /// STEP 7: Start background sync (after everything is initialized)
   Future<void> _startBackgroundSync() async {
     print('🔄 Starting background sync...');
 
@@ -216,9 +190,7 @@ class AppBindings extends Bindings {
       final syncController = Get.find<SyncController>();
       final authController = Get.find<AuthController>();
 
-      // Only start sync if user is logged in
       if (authController.isLoggedIn.value) {
-        // FIX: Use the new onAuthStateChanged method instead of direct calls
         syncController.onAuthStateChanged(true);
         print('✅ Background sync started for logged-in user');
       } else {

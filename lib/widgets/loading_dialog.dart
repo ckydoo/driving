@@ -1,4 +1,3 @@
-// lib/widgets/loading_dialog.dart
 // Reusable loading dialog component
 
 import 'package:flutter/material.dart';

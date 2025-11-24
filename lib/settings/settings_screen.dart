@@ -40,7 +40,7 @@ class _SettingsScreenState extends State<SettingsScreen>
         'Billing',
         'Instructor',
         'Notifications',
-        'Printer' // ADD THIS
+        'Printer'
       ]);
     }
     tabs.add('Appearance');
@@ -213,8 +213,6 @@ class _SettingsScreenState extends State<SettingsScreen>
       ],
     );
   }
-
-// Add this as a new tab in your settings_screen.dart
   // Replace your _buildPrinterSettings() method in settings_screen.dart with this:
 
   Widget _buildPrinterSettings() {
@@ -484,8 +482,6 @@ class _SettingsScreenState extends State<SettingsScreen>
       ),
     );
   }
-
-// Add this reactive variable at the top of your _SettingsScreenState class
   final RxString _selectedPrinterType = ''.obs;
 
 // Build printer type selection card
@@ -1209,8 +1205,6 @@ class _SettingsScreenState extends State<SettingsScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildSectionHeader('Lesson Configuration'),
-
-          // ADD THIS LINE - Choose one of the two options:
           LessonDurationSettingTile(settingsController: settingsController),
           // OR use the compact version:
           // CompactLessonDurationSetting(settingsController: settingsController),

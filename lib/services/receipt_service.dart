@@ -1,4 +1,3 @@
-// lib/services/receipt_service.dart - Local-Only Receipt Generation
 import 'dart:io';
 import 'dart:math';
 import 'package:driving/models/course.dart';

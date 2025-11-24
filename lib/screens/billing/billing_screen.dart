@@ -859,7 +859,6 @@ class _BillingScreenState extends State<BillingScreen>
                 ),
               ),
               const SizedBox(height: 16),
-              // Fix button layout with proper constraints
               LayoutBuilder(
                 builder: (context, constraints) {
                   if (totalBalance > 0) {

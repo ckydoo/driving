@@ -1,4 +1,3 @@
-// lib/controllers/auth_controller.dart - Local-Only Authentication
 import 'package:crypto/crypto.dart';
 import 'package:driving/controllers/sync_controller.dart';
 import 'package:driving/models/user.dart';
@@ -275,8 +274,6 @@ class AuthController extends GetxController {
 
       if (success) {
         print('✅ PIN setup successful for $email');
-
-        // CRITICAL: Ensure API token is available
         await _ensureTokenIsAvailable(email);
       }
 
@@ -588,8 +585,6 @@ class AuthController extends GetxController {
       print('❌ Error refreshing user data: $e');
     }
   }
-
-  /// Safe method to check multiple roles - COMPLETELY FIXED VERSION
   bool hasAnyRole(List<String> roles) {
     try {
       // Check authentication first
@@ -621,8 +616,6 @@ class AuthController extends GetxController {
       return false;
     }
   }
-
-  /// Safe method to check specific role - COMPLETELY FIXED VERSION
   bool hasRole(String role) {
     try {
       if (!isLoggedIn.value || currentUser.value == null) {
@@ -650,8 +643,6 @@ class AuthController extends GetxController {
       return false;
     }
   }
-
-  /// Safe getter for user's full name - COMPLETELY FIXED VERSION
   String get userFullName {
     try {
       final user = currentUser.value;
@@ -670,8 +661,6 @@ class AuthController extends GetxController {
       return 'User';
     }
   }
-
-  /// Safe getter for user first name - COMPLETELY FIXED VERSION
   String get userFirstName {
     try {
       final user = currentUser.value;
@@ -687,8 +676,6 @@ class AuthController extends GetxController {
       return 'User';
     }
   }
-
-  /// Safe getter for user initials - COMPLETELY FIXED VERSION
   String get userInitials {
     try {
       final user = currentUser.value;
@@ -714,8 +701,6 @@ class AuthController extends GetxController {
       return 'U';
     }
   }
-
-  /// Safe getter for user role - COMPLETELY FIXED VERSION
   String get userRole {
     try {
       return currentUser.value?.role?.toLowerCase() ?? 'guest';
@@ -764,8 +749,6 @@ class AuthController extends GetxController {
       isLoading.value = false;
     }
   }
-
-  /// Safe getter for user ID - COMPLETELY FIXED VERSION
   String? get userId {
     try {
       return currentUser.value?.id?.toString();
@@ -853,8 +836,6 @@ class AuthController extends GetxController {
       }
 
       print('✅ Token received: ${token.substring(0, 10)}...');
-
-      // CRITICAL: Store token IMMEDIATELY after receiving it
       print('💾 Storing token...');
       await _storeApiToken(email, token);
       print('✅ Token storage complete');
@@ -953,8 +934,6 @@ class AuthController extends GetxController {
 
 // Helper function
   int min(int a, int b) => a < b ? a : b;
-
-  /// Restore API token after PIN login - FIXED VERSION
   Future<void> _restoreApiTokenForSync(String email) async {
     try {
       print('🔄 === RESTORING API TOKEN ===');
@@ -993,8 +972,6 @@ class AuthController extends GetxController {
       print('💡 Continuing anyway - user can work offline');
     }
   }
-
-  /// Test if the current API token works - FIXED VERSION
   Future<bool> _testApiConnection() async {
     try {
       print('🧪 Testing API connection...');
@@ -1086,8 +1063,6 @@ class AuthController extends GetxController {
         print('❌ User data not found in cache');
         return false;
       }
-
-      // CRITICAL: Set authentication state IMMEDIATELY
       isLoggedIn.value = true;
       userEmail.value = pinUserEmail;
       currentUser.value = User.fromJson(userData);
@@ -1095,8 +1070,6 @@ class AuthController extends GetxController {
       print(
           '✅ User loaded: ${currentUser.value!.fname} ${currentUser.value!.lname}');
       print('✅ Login status set to: ${isLoggedIn.value}');
-
-      // CRITICAL: Restore API token for sync operations
       print('🔑 Restoring API token...');
       await _restoreApiTokenForSync(pinUserEmail);
       await _triggerPostLoginSync();
@@ -1163,8 +1136,6 @@ class AuthController extends GetxController {
         final user = User.fromJson(userData);
         currentUser.value = user;
         userEmail.value = email;
-
-        // CRITICAL: Set isLoggedIn when user is loaded
         isLoggedIn.value = true;
 
         print('✅ User loaded from cache: ${user.email}');

@@ -1,4 +1,3 @@
-// lib/screens/auth/pin_setup_screen.dart
 import 'package:driving/routes/app_routes.dart';
 import 'package:driving/services/api_service.dart';
 import 'package:flutter/material.dart';

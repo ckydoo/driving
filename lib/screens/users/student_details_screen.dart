@@ -931,9 +931,9 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
   }
 
   final SettingsController settingsController =
-      Get.find<SettingsController>(); // ADD THIS
+      Get.find<SettingsController>();
   final LessonCountingService lessonService =
-      LessonCountingService.instance; // ADD THIS
+      LessonCountingService.instance;
 
   Widget _buildProgressOverviewCard() {
     final studentInvoices = billingController.invoices
@@ -2312,7 +2312,7 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
           : student == null
               ? _buildErrorState()
               : NestedScrollView(
-                  physics: ClampingScrollPhysics(), // Add this
+                  physics: ClampingScrollPhysics(),
                   headerSliverBuilder:
                       (BuildContext context, bool innerBoxIsScrolled) {
                     return <Widget>[

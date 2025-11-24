@@ -19,7 +19,6 @@ class FleetController extends GetxController {
   final RxInt _currentPage = 1.obs;
   int get currentPage => _currentPage.value;
   int get totalPages => (_fleet.length / _rowsPerPage).ceil();
-  // Add this ValueNotifier
   final ValueNotifier<bool> isMultiSelectionActive = ValueNotifier<bool>(false);
 
   @override

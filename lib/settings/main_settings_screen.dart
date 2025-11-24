@@ -1,4 +1,3 @@
-// lib/screens/settings/main_settings_screen.dart
 import 'package:driving/services/sync_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';

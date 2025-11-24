@@ -1,4 +1,3 @@
-// lib/services/lesson_counting_service.dart
 import 'package:get/get.dart';
 import '../controllers/settings_controller.dart';
 import '../controllers/billing_controller.dart';
