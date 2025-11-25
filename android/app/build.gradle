@@ -6,33 +6,47 @@ plugins {
 
 android {
     namespace = "com.codzlabzim.driving"
-    compileSdk = 35
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8
         targetCompatibility = JavaVersion.VERSION_1_8
-        coreLibraryDesugaringEnabled true  
+        coreLibraryDesugaringEnabled true
+    }
+
+    defaultConfig {
+        minSdk flutter.minSdkVersion
+        targetSdk flutter.targetSdkVersion
+        multiDexEnabled true
     }
 
     kotlinOptions {
         jvmTarget = JavaVersion.VERSION_1_8
     }
 
-    defaultConfig {
-        applicationId = "com.codzlabzim.driving"
-        minSdkVersion = flutter.minSdkVersion
-        targetSdk = 35
-        versionCode = flutter.versionCode
-        versionName = flutter.versionName
-        
-        multiDexEnabled true
+    signingConfigs {
+        release {
+            // Check if key.properties exists before reading it
+            def props = new Properties()
+            def propFile = new File("key.properties")
+
+            if (propFile.exists()) {
+                props.load(new FileInputStream(propFile))
+                storeFile file(props['storeFile'])
+                storePassword props['storePassword']
+                keyAlias props['keyAlias']
+                keyPassword props['keyPassword']
+            } else {
+            }
+        }
     }
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.release
-            
+            signingConfig signingConfigs.release
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
 }

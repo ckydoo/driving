@@ -68,8 +68,6 @@ class BillingController extends GetxController {
       where: 'id = ?',
       whereArgs: [billingRecordId],
     );
-    // Optionally refresh billing data if needed
-    // await fetchBillingData();
   }
 
   Future<int> insertBillingRecordHistory(BillingRecord billingRecord) async {
@@ -77,7 +75,6 @@ class BillingController extends GetxController {
     return await db.insert('billing_records_history', billingRecord.toJson());
   }
 
-// Enhanced getCourseName method with better error handling
   Future<String> getCourseName(int courseId) async {
     try {
       print('Getting course name for courseId: $courseId');
@@ -139,7 +136,6 @@ class BillingController extends GetxController {
         'used_lessons': usedLessons,
       });
 
-      // Update locally - you might need to add usedLessons field to your Invoice model
       // For now, we'll track it through the existing lessons field relationship
       final updatedInvoice = invoice.copyWith(
           // If you have a usedLessons field in Invoice model, update it here

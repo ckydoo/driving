@@ -1,6 +1,5 @@
 import 'package:driving/controllers/sync_controller.dart';
 import 'package:driving/services/print_service.dart';
-import 'package:driving/services/sync_service.dart';
 import 'package:driving/settings/subscription_settings_screen.dart';
 import 'package:driving/widgets/sync_status_widget.dart';
 import 'package:flutter/material.dart';
@@ -20,15 +19,13 @@ class _SettingsScreenState extends State<SettingsScreen>
   late TabController _tabController;
   final SettingsController settingsController = Get.find<SettingsController>();
   final AuthController authController = Get.find<AuthController>();
+  late ThemeData _theme;
+  late ColorScheme _colorScheme;
+  late TextTheme _textTheme;
+  bool get _isDarkMode => _colorScheme.brightness == Brightness.dark;
 
   // Add getter to calculate tab count dynamically
-  int get _tabCount {
-    int count = 1; // Appearance tab is always visible
-    if (authController.hasAnyRole(['admin', 'instructor'])) {
-      count += 6; // Changed from 8 to 5 (removed Advanced)
-    }
-    return count;
-  }
+  int get _tabCount => _availableTabs.length;
 
   // Add getter for tab indices
   List<String> get _availableTabs {
@@ -43,7 +40,9 @@ class _SettingsScreenState extends State<SettingsScreen>
         'Printer'
       ]);
     }
-    tabs.add('Appearance');
+    if (tabs.isEmpty) {
+      tabs.add('Overview');
+    }
 
     return tabs;
   }
@@ -62,16 +61,20 @@ class _SettingsScreenState extends State<SettingsScreen>
 
   @override
   Widget build(BuildContext context) {
+    _theme = Theme.of(context);
+    _colorScheme = _theme.colorScheme;
+    _textTheme = _theme.textTheme;
+
     return Scaffold(
       body: Column(
         children: [
           // Settings Header with Tabs
           Container(
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: _theme.cardColor,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.grey.withOpacity(0.2),
+                  color: Colors.black.withOpacity(_isDarkMode ? 0.4 : 0.08),
                   spreadRadius: 1,
                   blurRadius: 5,
                   offset: Offset(0, 2),
@@ -88,7 +91,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                       Row(
                         children: [
                           Icon(Icons.settings,
-                              size: 28, color: Colors.blue[700]),
+                              size: 28, color: _colorScheme.primary),
                           SizedBox(width: 12),
                           Expanded(
                             child: Text(
@@ -96,7 +99,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                               style: TextStyle(
                                 fontSize: 24,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.grey[800],
+                                color: _textTheme.titleLarge?.color,
                               ),
                               overflow: TextOverflow.ellipsis,
                               maxLines: 1,
@@ -128,9 +131,9 @@ class _SettingsScreenState extends State<SettingsScreen>
                 TabBar(
                   controller: _tabController,
                   isScrollable: true,
-                  indicatorColor: Colors.blue[700],
-                  labelColor: Colors.blue[700],
-                  unselectedLabelColor: Colors.grey[600],
+                  indicatorColor: _colorScheme.primary,
+                  labelColor: _colorScheme.primary,
+                  unselectedLabelColor: _colorScheme.onSurfaceVariant,
                   tabs: _availableTabs
                       .map((tabName) => Tab(text: tabName))
                       .toList(),
@@ -152,20 +155,24 @@ class _SettingsScreenState extends State<SettingsScreen>
 
   // Add method to build tab views dynamically
   List<Widget> _buildTabViews() {
-    List<Widget> views = [];
-    if (authController.hasAnyRole(['admin', 'instructor'])) {
-      views.addAll([
-        _buildBusinessSettings(),
-        _buildSchedulingSettings(),
-        _buildBillingSettings(),
-        _buildInstructorSettings(),
-        _buildNotificationSettings(),
-        _buildPrinterSettings(),
-      ]);
-    }
-    views.add(_buildAppearanceSettings());
-
-    return views;
+    return _availableTabs.map((tabName) {
+      switch (tabName) {
+        case 'Business':
+          return _buildBusinessSettings();
+        case 'Scheduling':
+          return _buildSchedulingSettings();
+        case 'Billing':
+          return _buildBillingSettings();
+        case 'Instructor':
+          return _buildInstructorSettings();
+        case 'Notifications':
+          return _buildNotificationSettings();
+        case 'Printer':
+          return _buildPrinterSettings();
+        default:
+          return _buildOverviewPlaceholder();
+      }
+    }).toList();
   }
 
   final syncController = Get.find<SyncController>();
@@ -182,6 +189,7 @@ class _SettingsScreenState extends State<SettingsScreen>
             onTap: () {
               Get.to(() => SyncStatusWidget());
             },
+            accentColor: _colorScheme.primary,
           ),
         if (authController.hasAnyRole(['admin', 'instructor']))
           _buildQuickActionButton(
@@ -190,25 +198,28 @@ class _SettingsScreenState extends State<SettingsScreen>
             onTap: () {
               Get.to(() => SubscriptionScreen());
             },
+            accentColor: _colorScheme.secondary,
           ),
         if (authController.hasAnyRole(['admin', 'instructor']))
           _buildQuickActionButton(
             icon: Icons.download,
             label: 'Export',
             onTap: _showExportDialog,
+            accentColor: _colorScheme.primary,
           ),
         if (authController.hasAnyRole(['admin', 'instructor']))
           _buildQuickActionButton(
             icon: Icons.upload,
             label: 'Import',
             onTap: _showImportDialog,
+            accentColor: _colorScheme.primary,
           ),
         if (authController.hasAnyRole(['admin', 'instructor']))
           _buildQuickActionButton(
             icon: Icons.refresh,
             label: 'Reset',
             onTap: _showResetConfirmation,
-            color: Colors.red[600],
+            accentColor: _colorScheme.error,
           ),
       ],
     );
@@ -482,6 +493,7 @@ class _SettingsScreenState extends State<SettingsScreen>
       ),
     );
   }
+
   final RxString _selectedPrinterType = ''.obs;
 
 // Build printer type selection card
@@ -917,195 +929,6 @@ class _SettingsScreenState extends State<SettingsScreen>
     }
   }
 
-// Add printer search method
-  void _searchForPrinters() async {
-    try {
-      // Show loading dialog
-      Get.dialog(
-        WillPopScope(
-          onWillPop: () async => false,
-          child: Center(
-            child: Card(
-              child: Padding(
-                padding: EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CircularProgressIndicator(),
-                    SizedBox(height: 16),
-                    Text('Searching for printers...'),
-                    SizedBox(height: 8),
-                    Text(
-                      'This includes Bluetooth, USB, and Network printers',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-        barrierDismissible: false,
-      );
-
-      // Call the printer discovery service
-      List<PrinterInfo> printers = [];
-
-      try {
-        printers = await PrintService.discoverAllPrinters();
-      } catch (e) {
-        // Close loading dialog
-        Get.back();
-
-        // Check if it's a permission error
-        if (e.toString().contains('PERMISSION_DENIED')) {
-          Get.dialog(
-            AlertDialog(
-              title: Row(
-                children: [
-                  Icon(Icons.bluetooth_disabled, color: Colors.orange),
-                  SizedBox(width: 8),
-                  Text('Bluetooth Permission Required'),
-                ],
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'To discover Bluetooth printers, we need permission to access Bluetooth.',
-                    style: TextStyle(fontSize: 14),
-                  ),
-                  SizedBox(height: 16),
-                  Text(
-                    'Please:',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  Text('1. Grant Bluetooth permission'),
-                  Text('2. Try searching again'),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Get.back(),
-                  child: Text('Cancel'),
-                ),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    Get.back();
-                    // Retry after user grants permission
-                    Future.delayed(Duration(seconds: 1), () {
-                      _searchForPrinters();
-                    });
-                  },
-                  icon: Icon(Icons.refresh),
-                  label: Text('Try Again'),
-                ),
-              ],
-            ),
-          );
-          return;
-        }
-
-        // Other errors
-        Get.snackbar(
-          'Error',
-          'Failed to search for printers: $e',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Colors.red,
-          colorText: Colors.white,
-        );
-        return;
-      }
-
-      // Close loading dialog
-      Get.back();
-
-      // Show results
-      if (printers.isEmpty) {
-        Get.dialog(
-          AlertDialog(
-            title: Row(
-              children: [
-                Icon(Icons.print_disabled, color: Colors.orange),
-                SizedBox(width: 8),
-                Text('No Printers Found'),
-              ],
-            ),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'No printers were found. Please ensure:',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  SizedBox(height: 12),
-                  _buildChecklistItem('Printer is powered on'),
-                  _buildChecklistItem('Bluetooth is enabled on your device'),
-                  _buildChecklistItem(
-                      'Bluetooth printer is paired in Settings'),
-                  _buildChecklistItem('USB printer is properly connected'),
-                  _buildChecklistItem('Network printer is on same WiFi'),
-                  SizedBox(height: 12),
-                  Container(
-                    padding: EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.blue[50],
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.blue[200]!),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.info_outline,
-                            color: Colors.blue[700], size: 20),
-                        SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'For Bluetooth printers: First pair them in your device Bluetooth settings',
-                            style: TextStyle(
-                                fontSize: 12, color: Colors.blue[900]),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Get.back(),
-                child: Text('Cancel'),
-              ),
-              ElevatedButton.icon(
-                onPressed: () {
-                  Get.back();
-                  _searchForPrinters(); // Try again
-                },
-                icon: Icon(Icons.refresh),
-                label: Text('Try Again'),
-              ),
-            ],
-          ),
-        );
-      } else {
-        _showPrinterSelectionDialog(printers, 'all');
-      }
-    } catch (e) {
-      Get.back(); // Close loading if open
-      Get.snackbar(
-        'Error',
-        'Failed to search for printers: $e',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-      );
-    }
-  }
-
 // Helper widget for checklist items
   Widget _buildChecklistItem(String text) {
     return Padding(
@@ -1168,26 +991,30 @@ class _SettingsScreenState extends State<SettingsScreen>
     required IconData icon,
     required String label,
     required VoidCallback onTap,
-    Color? color,
+    Color? accentColor,
   }) {
+    final color = accentColor ?? _colorScheme.primary;
+    final textColor = _isDarkMode ? colorSchemeDependentText(color) : color;
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
       child: Container(
         padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          border: Border.all(color: color ?? Colors.blue[300]!),
+          color: color.withOpacity(_isDarkMode ? 0.08 : 0.05),
+          border: Border.all(color: color.withOpacity(0.4)),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 16, color: color ?? Colors.blue[700]),
+            Icon(icon, size: 16, color: textColor),
             SizedBox(width: 4),
             Text(
               label,
               style: TextStyle(
-                color: color ?? Colors.blue[700],
+                color: textColor,
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
               ),
@@ -1196,6 +1023,12 @@ class _SettingsScreenState extends State<SettingsScreen>
         ),
       ),
     );
+  }
+
+  Color colorSchemeDependentText(Color baseColor) {
+    if (!_isDarkMode) return baseColor;
+    final luminance = baseColor.computeLuminance();
+    return luminance > 0.4 ? Colors.black87 : Colors.white;
   }
 
   Widget _buildSchedulingSettings() {
@@ -1242,32 +1075,31 @@ class _SettingsScreenState extends State<SettingsScreen>
     );
   }
 
-  Widget _buildAppearanceSettings() {
-    return SingleChildScrollView(
-      padding: EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildSectionHeader('Theme & Display'),
-          _buildSettingsCard([
-            _buildDropdownTile(
-              'Theme',
-              'Choose application theme',
-              settingsController.theme,
-              ['light', 'dark', 'system'],
-              settingsController.setTheme,
-              (value) => value.capitalize ?? '',
+  Widget _buildOverviewPlaceholder() {
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.lock_outline, size: 48, color: _colorScheme.primary),
+            SizedBox(height: 16),
+            Text(
+              'No settings available',
+              style: _textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
             ),
-            _buildDropdownTile(
-              'Date Format',
-              'Choose date display format',
-              settingsController.dateFormat,
-              ['MM/dd/yyyy', 'dd/MM/yyyy', 'yyyy-MM-dd'],
-              settingsController.setDateFormat,
-              (value) => value,
+            SizedBox(height: 8),
+            Text(
+              'Contact an administrator to manage application settings.',
+              style: _textTheme.bodyMedium?.copyWith(
+                color: _colorScheme.onSurfaceVariant,
+              ),
+              textAlign: TextAlign.center,
             ),
-          ]),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1281,7 +1113,7 @@ class _SettingsScreenState extends State<SettingsScreen>
         style: TextStyle(
           fontSize: 18,
           fontWeight: FontWeight.w600,
-          color: Colors.grey[800],
+          color: _textTheme.titleMedium?.color,
         ),
       ),
     );
@@ -1295,7 +1127,10 @@ class _SettingsScreenState extends State<SettingsScreen>
         children: children
             .map((child) => children.indexOf(child) == children.length - 1
                 ? child
-                : Column(children: [child, Divider(height: 1)]))
+                : Column(children: [
+                    child,
+                    Divider(height: 1, color: _colorScheme.outlineVariant)
+                  ]))
             .toList(),
       ),
     );
@@ -1312,7 +1147,7 @@ class _SettingsScreenState extends State<SettingsScreen>
           subtitle: Text(subtitle, style: TextStyle(fontSize: 12)),
           value: value.value,
           onChanged: onChanged,
-          activeColor: Colors.blue[700],
+          activeColor: _colorScheme.primary,
         ));
   }
 
@@ -1345,7 +1180,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                 subtitle,
                 style: TextStyle(
                   fontSize: 12,
-                  color: Colors.grey[600],
+                  color: _colorScheme.onSurfaceVariant,
                 ),
               ),
               SizedBox(height: 12),
@@ -1354,17 +1189,18 @@ class _SettingsScreenState extends State<SettingsScreen>
                   Expanded(
                     child: SliderTheme(
                       data: SliderTheme.of(context).copyWith(
-                        activeTrackColor: Colors.blue[700],
-                        inactiveTrackColor: Colors.blue[100],
-                        thumbColor: Colors.blue[700],
-                        overlayColor: Colors.blue[700]!.withAlpha(32),
+                        activeTrackColor: _colorScheme.primary,
+                        inactiveTrackColor:
+                            _colorScheme.primary.withOpacity(0.2),
+                        thumbColor: _colorScheme.primary,
+                        overlayColor: _colorScheme.primary.withOpacity(0.2),
                         thumbShape:
                             RoundSliderThumbShape(enabledThumbRadius: 12),
                         overlayShape:
                             RoundSliderOverlayShape(overlayRadius: 20),
                         trackHeight: 4,
                         valueIndicatorShape: PaddleSliderValueIndicatorShape(),
-                        valueIndicatorColor: Colors.blue[700],
+                        valueIndicatorColor: _colorScheme.primary,
                         valueIndicatorTextStyle: TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
@@ -1390,16 +1226,17 @@ class _SettingsScreenState extends State<SettingsScreen>
                     width: 80,
                     padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
-                      color: Colors.blue[50],
+                      color: _colorScheme.primary.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.blue[200]!),
+                      border: Border.all(
+                          color: _colorScheme.primary.withOpacity(0.3)),
                     ),
                     child: Text(
                       formatter(tempValue.value),
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
-                        color: Colors.blue[700],
+                        color: _colorScheme.primary,
                         fontSize: 14,
                       ),
                     ),
@@ -1412,21 +1249,22 @@ class _SettingsScreenState extends State<SettingsScreen>
                 Container(
                   padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: Colors.orange[50],
+                    color: _colorScheme.tertiary.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.orange[200]!),
+                    border: Border.all(
+                        color: _colorScheme.tertiary.withOpacity(0.4)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(Icons.info_outline,
-                          size: 14, color: Colors.orange[700]),
+                          size: 14, color: _colorScheme.tertiary),
                       SizedBox(width: 4),
                       Text(
                         'Changed from ${formatter(currentValue.value)}',
                         style: TextStyle(
                           fontSize: 11,
-                          color: Colors.orange[700],
+                          color: _colorScheme.tertiary,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -1503,11 +1341,11 @@ class _SettingsScreenState extends State<SettingsScreen>
                 timeValue.value,
                 style: TextStyle(
                   fontWeight: FontWeight.w600,
-                  color: Colors.blue[700],
+                  color: _colorScheme.primary,
                 ),
               ),
               SizedBox(width: 8),
-              Icon(Icons.access_time, color: Colors.grey[600]),
+              Icon(Icons.access_time, color: _colorScheme.onSurfaceVariant),
             ],
           ),
           onTap: () => _selectTime(context, timeValue, isStart),
@@ -1894,7 +1732,7 @@ class _SettingsScreenState extends State<SettingsScreen>
         children: [
           Row(
             children: [
-              Icon(icon, size: 20, color: Colors.blue[700]),
+              Icon(icon, size: 20, color: _colorScheme.primary),
               SizedBox(width: 8),
               Text(
                 title,
@@ -1914,7 +1752,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                             controller.text = value.value;
                             hasChanges.value = false;
                           },
-                          color: Colors.grey[600],
+                          color: _colorScheme.onSurfaceVariant,
                           tooltip: 'Cancel changes',
                         ),
                         IconButton(
@@ -1931,12 +1769,12 @@ class _SettingsScreenState extends State<SettingsScreen>
                               snackPosition: SnackPosition.BOTTOM,
                               'Saved',
                               '$title updated successfully',
-                              backgroundColor: Colors.green,
+                              backgroundColor: _colorScheme.secondary,
                               colorText: Colors.white,
                               duration: Duration(seconds: 2),
                             );
                           },
-                          color: Colors.green[600],
+                          color: _colorScheme.secondary,
                           tooltip: 'Save changes',
                         ),
                       ],
@@ -1949,15 +1787,6 @@ class _SettingsScreenState extends State<SettingsScreen>
             controller: controller,
             decoration: InputDecoration(
               hintText: hintText,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide(color: Colors.grey[300]!),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide(color: Colors.blue[700]!, width: 2),
-              ),
-              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             ),
             onChanged: (newValue) {
               hasChanges.value = newValue != value.value;
@@ -2060,8 +1889,6 @@ class _SettingsScreenState extends State<SettingsScreen>
               onPressed: () async {
                 print('Save button pressed');
 
-                bool dialogShown = false;
-
                 try {
                   await Future.delayed(Duration(milliseconds: 100));
 
@@ -2072,7 +1899,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                     snackPosition: SnackPosition.BOTTOM,
                     'Success',
                     'All business settings saved successfully',
-                    backgroundColor: Colors.green,
+                    backgroundColor: _colorScheme.secondary,
                     colorText: Colors.white,
                     icon: Icon(Icons.check_circle, color: Colors.white),
                     duration: Duration(seconds: 3),
@@ -2085,7 +1912,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                     snackPosition: SnackPosition.BOTTOM,
                     'Error',
                     'Failed to save settings: ${e.toString()}',
-                    backgroundColor: Colors.red,
+                    backgroundColor: _colorScheme.error,
                     colorText: Colors.white,
                     icon: Icon(Icons.error, color: Colors.white),
                     duration: Duration(seconds: 3),
@@ -2095,8 +1922,8 @@ class _SettingsScreenState extends State<SettingsScreen>
               icon: Icon(Icons.save_alt),
               label: Text('Save All Business Settings'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue[700],
-                foregroundColor: Colors.white,
+                backgroundColor: _colorScheme.primary,
+                foregroundColor: _colorScheme.onPrimary,
                 padding: EdgeInsets.symmetric(horizontal: 32, vertical: 12),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),

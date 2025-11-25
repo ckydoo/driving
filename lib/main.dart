@@ -16,6 +16,7 @@ import 'package:driving/services/database_migration.dart';
 import 'package:driving/services/app_initialization.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'dart:io' show Platform;
+import 'package:driving/theme/app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -152,46 +153,24 @@ class DrivingSchoolApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GetMaterialApp(
-      title: 'DriveSync Pro',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.blue,
-          brightness: Brightness.light,
-        ),
-        appBarTheme: AppBarTheme(
-          elevation: 0,
-          centerTitle: false,
-          backgroundColor: Colors.blue.shade800,
-          foregroundColor: Colors.white,
-        ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            elevation: 2,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
-        ),
-        inputDecorationTheme: InputDecorationTheme(
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 12,
-          ),
-        ),
-        listTileTheme: ListTileThemeData(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        ),
-      ),
-      initialRoute: AppRoutes.initial,
-      getPages: AppRoutes.routes,
-      debugShowCheckedModeBanner: false,
-      unknownRoute: GetPage(name: '/notfound', page: () => const LoginScreen()),
-      home: const AuthenticationWrapper(),
-    );
+    final settingsController = Get.find<SettingsController>();
+
+    return Obx(() {
+      final themeMode = AppTheme.mapTheme(settingsController.theme.value);
+
+      return GetMaterialApp(
+        title: 'DriveSync Pro',
+        theme: AppTheme.theme(isDark: false),
+        darkTheme: AppTheme.theme(isDark: true),
+        themeMode: themeMode,
+        initialRoute: AppRoutes.initial,
+        getPages: AppRoutes.routes,
+        debugShowCheckedModeBanner: false,
+        unknownRoute:
+            GetPage(name: '/notfound', page: () => const LoginScreen()),
+        home: const AuthenticationWrapper(),
+      );
+    });
   }
 }
 
@@ -335,25 +314,6 @@ class _AuthenticationWrapperState extends State<AuthenticationWrapper> {
       return isConfigured;
     } catch (e) {
       print('❌ Error checking school configuration: $e');
-      return false;
-    }
-  }
-
-  /// Check if user has stored authentication
-  Future<bool> _checkStoredAuthentication() async {
-    try {
-      final db = await DatabaseHelper.instance.database;
-      final users = await db.query('users', limit: 1);
-
-      if (users.isEmpty) {
-        print('👥 No users found in database');
-        return false;
-      }
-
-      final authController = Get.find<AuthController>();
-      return authController.isLoggedIn.value;
-    } catch (e) {
-      print('❌ Error checking stored authentication: $e');
       return false;
     }
   }

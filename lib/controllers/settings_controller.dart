@@ -264,6 +264,7 @@ class SettingsController extends GetxController {
       // App Preferences
       theme.value = prefs.getString('theme') ?? 'light';
       dateFormat.value = prefs.getString('date_format') ?? 'MM/dd/yyyy';
+      _applyTheme(theme.value); // ensure theme mode updates on load
 
       // Advanced Settings
       enableDataBackup.value = prefs.getBool('enable_data_backup') ?? true;
