@@ -9,10 +9,14 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:sqflite_common/sqlite_api.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AuthController extends GetxController {
+  // UI Controllers
+  final emailController = TextEditingController();
+  final passwordController = TextEditingController();
   // Core authentication state
   final RxBool isLoading = false.obs;
   final RxString error = ''.obs;
@@ -50,6 +54,193 @@ class AuthController extends GetxController {
     } catch (e) {
       print('❌ Error checking existing login: $e');
       isLoggedIn.value = false;
+    }
+  }
+
+  /// Login with email and password (used by LoginScreen)
+  Future<bool> loginWithEmail(String email, String password) async {
+    try {
+      isLoading.value = true;
+      error.value = '';
+
+      print('\n🔐 === EMAIL/PASSWORD LOGIN ===');
+      print('📧 Email: $email');
+
+      // Try API login first
+      final apiSuccess = await loginWithApi(email, password);
+
+      if (apiSuccess) {
+        return true;
+      }
+
+      // If API login fails, try local login
+      print('⚠️ API login failed, trying local login...');
+      final localSuccess = await login(email, password);
+
+      return localSuccess;
+    } catch (e) {
+      print('❌ Login error: $e');
+      error.value = 'Login failed: ${e.toString()}';
+      return false;
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  /// Validate email and password inputs
+  bool _validateInputs() {
+    if (emailController.text.trim().isEmpty) {
+      error.value = 'Email is required';
+      return false;
+    }
+
+    if (passwordController.text.isEmpty) {
+      error.value = 'Password is required';
+      return false;
+    }
+
+    return true;
+  }
+
+  /// Main login handler - decides online vs offline
+  Future<void> handleLogin() async {
+    try {
+      isLoading.value = true;
+      error.value = '';
+
+      // Validate inputs
+      if (!_validateInputs()) {
+        return;
+      }
+
+      final email = emailController.text.trim().toLowerCase();
+      final password = passwordController.text;
+
+      print('\n🔐 === LOGIN ATTEMPT ===');
+      print('📧 Email: $email');
+
+      // Check if user exists locally
+      final userExistsLocally = await _checkUserExistsLocally(email);
+
+      if (userExistsLocally) {
+        // User exists locally - try offline login first
+        print('📂 User found locally - attempting offline login');
+        final offlineSuccess = await _loginOffline(email, password);
+
+        if (offlineSuccess) {
+          // Offline login successful
+          await _handleSuccessfulLogin(email);
+
+          // Try online sync in background (don't wait for it)
+          _attemptBackgroundSync(email, password);
+          return;
+        } else {
+          // Offline login failed - try online
+          print('⚠️ Offline login failed - attempting online login');
+          final onlineSuccess = await _loginOnline(email, password);
+
+          if (onlineSuccess) {
+            await _handleSuccessfulLogin(email);
+            return;
+          }
+        }
+      } else {
+        // User doesn't exist locally - must login online
+        print('🌐 User not found locally - attempting online login');
+        final onlineSuccess = await _loginOnline(email, password);
+
+        if (onlineSuccess) {
+          await _handleSuccessfulLogin(email);
+          return;
+        }
+      }
+
+      // If we get here, both failed
+      error.value = 'Login failed. Please check your credentials.';
+    } catch (e) {
+      print('❌ Login error: $e');
+      error.value = 'Login failed: ${e.toString()}';
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  /// Check if user exists in local database
+  Future<bool> _checkUserExistsLocally(String email) async {
+    try {
+      final users = await DatabaseHelper.instance.getUsers();
+      final userData = users
+          .where((user) =>
+              user['email']?.toString().toLowerCase() == email.toLowerCase())
+          .firstOrNull;
+      return userData != null;
+    } catch (e) {
+      print('❌ Error checking local user: $e');
+      return false;
+    }
+  }
+
+  /// Attempt offline login with local credentials
+  Future<bool> _loginOffline(String email, String password) async {
+    try {
+      print('📂 Attempting offline login...');
+      return await login(email, password);
+    } catch (e) {
+      print('❌ Offline login error: $e');
+      return false;
+    }
+  }
+
+  /// Attempt online login via API
+  Future<bool> _loginOnline(String email, String password) async {
+    try {
+      print('🌐 Attempting online login...');
+      return await loginWithApi(email, password);
+    } catch (e) {
+      print('❌ Online login error: $e');
+      return false;
+    }
+  }
+
+  /// Handle successful login (common cleanup)
+  Future<void> _handleSuccessfulLogin(String email) async {
+    try {
+      print('✅ Login successful for: $email');
+
+      // Save email if remember me is enabled
+      if (rememberMe.value) {
+        userEmail.value = email;
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('remembered_email', email);
+      }
+
+      // Clear sync auth requirement
+      await _setSyncAuthenticationRequired(false);
+
+      print('✅ Post-login setup complete');
+    } catch (e) {
+      print('⚠️ Post-login setup error: $e');
+      // Don't fail the login if post-setup fails
+    }
+  }
+
+  /// Attempt background sync after login (non-blocking)
+  Future<void> _attemptBackgroundSync(String email, String password) async {
+    try {
+      print('🔄 Attempting background sync...');
+
+      // Try to sync with API in the background
+      Future.delayed(Duration(milliseconds: 500), () async {
+        try {
+          await loginWithApi(email, password);
+          print('✅ Background sync successful');
+        } catch (e) {
+          print('⚠️ Background sync failed: $e');
+          // Ignore sync failures - user is already logged in offline
+        }
+      });
+    } catch (e) {
+      print('⚠️ Background sync setup error: $e');
     }
   }
 
@@ -172,6 +363,20 @@ class AuthController extends GetxController {
       return false;
     } finally {
       isLoading.value = false;
+    }
+  }
+
+  /// Load remembered email if exists
+  Future<void> _loadRememberedEmail() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedEmail = prefs.getString('remembered_email');
+      if (savedEmail != null && savedEmail.isNotEmpty) {
+        emailController.text = savedEmail;
+        rememberMe.value = true;
+      }
+    } catch (e) {
+      print('Error loading remembered email: $e');
     }
   }
 
@@ -585,6 +790,7 @@ class AuthController extends GetxController {
       print('❌ Error refreshing user data: $e');
     }
   }
+
   bool hasAnyRole(List<String> roles) {
     try {
       // Check authentication first
@@ -616,6 +822,7 @@ class AuthController extends GetxController {
       return false;
     }
   }
+
   bool hasRole(String role) {
     try {
       if (!isLoggedIn.value || currentUser.value == null) {
@@ -643,6 +850,7 @@ class AuthController extends GetxController {
       return false;
     }
   }
+
   String get userFullName {
     try {
       final user = currentUser.value;
@@ -661,6 +869,7 @@ class AuthController extends GetxController {
       return 'User';
     }
   }
+
   String get userFirstName {
     try {
       final user = currentUser.value;
@@ -676,6 +885,7 @@ class AuthController extends GetxController {
       return 'User';
     }
   }
+
   String get userInitials {
     try {
       final user = currentUser.value;
@@ -701,6 +911,7 @@ class AuthController extends GetxController {
       return 'U';
     }
   }
+
   String get userRole {
     try {
       return currentUser.value?.role?.toLowerCase() ?? 'guest';
@@ -749,6 +960,7 @@ class AuthController extends GetxController {
       isLoading.value = false;
     }
   }
+
   String? get userId {
     try {
       return currentUser.value?.id?.toString();
@@ -806,7 +1018,8 @@ class AuthController extends GetxController {
     }
   }
 
-  /// Enhanced email/password login with EXTENSIVE DEBUGGING
+  /// Enhanced email/password login - SIMPLIFIED: Email/Password only
+  /// School data comes from API response automatically
   Future<bool> loginWithApi(String email, String password) async {
     try {
       isLoading.value = true;
@@ -856,6 +1069,15 @@ class AuthController extends GetxController {
 
       // Save to local database
       await _saveUserToLocal(userData);
+
+      // Save school data if available in response (for offline-first)
+      if (loginResponse['school'] != null) {
+        await _saveSchoolDataFromLogin(loginResponse['school']);
+      } else if (user.schoolId != null) {
+        // If school data not in response but we have school_id, fetch it
+        await _fetchAndSaveSchoolData(user.schoolId!);
+      }
+
       await _triggerPostLoginSync();
 
       // FINAL VERIFICATION
@@ -972,6 +1194,7 @@ class AuthController extends GetxController {
       print('💡 Continuing anyway - user can work offline');
     }
   }
+
   Future<bool> _testApiConnection() async {
     try {
       print('🧪 Testing API connection...');
@@ -1208,4 +1431,96 @@ class AuthController extends GetxController {
   bool get isStudent => hasRole('student');
   bool get canAccessAdminFeatures => hasRole('admin');
   bool get canAccessInstructorFeatures => hasAnyRole(['admin', 'instructor']);
+
+  /// Save school data from login response (for offline-first)
+  Future<void> _saveSchoolDataFromLogin(Map<String, dynamic> schoolData) async {
+    try {
+      print('🏫 Saving school data from login response...');
+      final db = await DatabaseHelper.instance.database;
+      final schoolId = schoolData['id']?.toString() ?? '';
+
+      if (schoolId.isEmpty) {
+        print('⚠️ School ID missing, skipping school save');
+        return;
+      }
+
+      // Check if school already exists
+      final existing = await db.query(
+        'schools',
+        where: 'id = ?',
+        whereArgs: [schoolId],
+      );
+
+      if (existing.isEmpty) {
+        // Insert new school
+        await db.insert('schools', {
+          'id': schoolId,
+          'name': schoolData['name']?.toString() ?? '',
+          'location': schoolData['location']?.toString() ?? '',
+          'phone': schoolData['phone']?.toString() ?? '',
+          'email': schoolData['email']?.toString() ?? '',
+          'address': schoolData['address']?.toString() ?? '',
+          'status': 'active',
+          'invitation_code': schoolData['invitation_code']?.toString() ?? '',
+          'created_at': DateTime.now().toIso8601String(),
+          'updated_at': DateTime.now().toIso8601String(),
+        });
+        print('✅ School saved to local database');
+      } else {
+        // Update existing school
+        await db.update(
+          'schools',
+          {
+            'name': schoolData['name']?.toString() ?? '',
+            'location': schoolData['location']?.toString() ?? '',
+            'phone': schoolData['phone']?.toString() ?? '',
+            'email': schoolData['email']?.toString() ?? '',
+            'address': schoolData['address']?.toString() ?? '',
+            'updated_at': DateTime.now().toIso8601String(),
+          },
+          where: 'id = ?',
+          whereArgs: [schoolId],
+        );
+        print('✅ School updated in local database');
+      }
+
+      // Also save to settings for quick access
+      if (schoolData['name'] != null) {
+        await db.insert(
+          'settings',
+          {'key': 'school_id', 'value': schoolId},
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+        await db.insert(
+          'settings',
+          {
+            'key': 'business_name',
+            'value': schoolData['name']?.toString() ?? ''
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    } catch (e) {
+      print('⚠️ Error saving school data: $e');
+      // Don't throw - school data save is not critical for login
+    }
+  }
+
+  /// Fetch and save school data using school_id (if not in login response)
+  Future<void> _fetchAndSaveSchoolData(String schoolId) async {
+    try {
+      print('🏫 Fetching school data for ID: $schoolId');
+      // This would call an API endpoint to get school details
+      // For now, we'll just ensure the school_id is saved in settings
+      final db = await DatabaseHelper.instance.database;
+      await db.insert(
+        'settings',
+        {'key': 'school_id', 'value': schoolId},
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      print('✅ School ID saved to settings');
+    } catch (e) {
+      print('⚠️ Error fetching school data: $e');
+    }
+  }
 }

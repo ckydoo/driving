@@ -1,11 +1,9 @@
-
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/models/user.dart';
 import 'package:driving/routes/app_routes.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'dart:math';
 import '../services/database_helper.dart';
 import '../services/school_api_service.dart';
 import '../controllers/settings_controller.dart';
@@ -20,7 +18,7 @@ class SchoolRegistrationController extends GetxController {
   final TextEditingController schoolNameController = TextEditingController();
   final TextEditingController schoolAddressController = TextEditingController();
   final TextEditingController cityController =
-      TextEditingController(text: 'Harare');
+      TextEditingController(text: 'Mutare');
   final TextEditingController countryController =
       TextEditingController(text: 'Zimbabwe');
   final TextEditingController phoneController = TextEditingController();
@@ -33,12 +31,15 @@ class SchoolRegistrationController extends GetxController {
   final TextEditingController adminLastNameController = TextEditingController();
   final TextEditingController adminEmailController = TextEditingController();
   final TextEditingController adminPasswordController = TextEditingController();
+  final TextEditingController confirmPasswordController =
+      TextEditingController();
   final TextEditingController adminPhoneController = TextEditingController();
 
   // Observable properties
   final RxBool isLoading = false.obs;
   final RxBool isOnline = false.obs;
-  final RxBool obscurePassword = true.obs;
+  final RxBool showPassword = false.obs;
+  final RxBool showConfirmPassword = false.obs;
   final Rx<TimeOfDay> startTime = TimeOfDay(hour: 9, minute: 0).obs;
   final Rx<TimeOfDay> endTime = TimeOfDay(hour: 17, minute: 0).obs;
   final RxList<String> operatingDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].obs;
@@ -50,6 +51,9 @@ class SchoolRegistrationController extends GetxController {
     super.onInit();
     _checkInternetAndSetMode();
   }
+
+  // Getter to maintain compatibility with UI
+  TextEditingController get passwordController => adminPasswordController;
 
   @override
   void onClose() {
@@ -65,6 +69,7 @@ class SchoolRegistrationController extends GetxController {
     adminEmailController.dispose();
     adminPasswordController.dispose();
     adminPhoneController.dispose();
+    confirmPasswordController.dispose();
     super.onClose();
   }
 
@@ -98,7 +103,18 @@ class SchoolRegistrationController extends GetxController {
 
   /// Toggle password visibility
   void togglePasswordVisibility() {
-    obscurePassword.value = !obscurePassword.value;
+    showPassword.value = !showPassword.value;
+  }
+
+  /// Toggle confirm password visibility
+  void toggleConfirmPasswordVisibility() {
+    showConfirmPassword.value = !showConfirmPassword.value;
+  }
+
+  /// Register method called from UI
+  Future<void> register() async {
+    // Delegate to the existing registerSchool method
+    await registerSchool();
   }
 
   /// Select start time
@@ -173,11 +189,29 @@ class SchoolRegistrationController extends GetxController {
     print('📡 Step 1: Registering school online...');
 
     try {
+      // Use school email as admin email
+      final email = emailController.text.trim();
+      final password = adminPasswordController.text.trim();
+
+      // Extract first/last name from school name or use defaults
+      final schoolName = schoolNameController.text.trim();
+      final nameParts = schoolName.split(' ');
+      final firstName = nameParts.isNotEmpty ? nameParts.first : 'Admin';
+      final lastName =
+          nameParts.length > 1 ? nameParts.sublist(1).join(' ') : 'User';
+
+      // Generate unique placeholder phone if not provided
+      final phoneText = phoneController.text.trim();
+      final phone = phoneText.isEmpty
+          ? 'TEMP_${DateTime.now().millisecondsSinceEpoch}'
+          : phoneText;
+
       final result = await SchoolApiService.registerSchool(
-        schoolName: schoolNameController.text.trim(),
-        schoolEmail: emailController.text.trim(),
-        schoolPhone: phoneController.text.trim(),
-        schoolAddress: schoolAddressController.text.trim(),
+        schoolName: schoolName,
+        schoolEmail: email,
+        schoolAddress: schoolAddressController.text.trim().isEmpty
+            ? 'N/A'
+            : schoolAddressController.text.trim(),
         schoolCity: cityController.text.trim(),
         schoolCountry: countryController.text.trim(),
         schoolWebsite: websiteController.text.trim().isEmpty
@@ -186,11 +220,11 @@ class SchoolRegistrationController extends GetxController {
         startTime: _timeOfDayToString(startTime.value),
         endTime: _timeOfDayToString(endTime.value),
         operatingDays: operatingDays.toList(),
-        adminFirstName: adminFirstNameController.text.trim(),
-        adminLastName: adminLastNameController.text.trim(),
-        adminEmail: adminEmailController.text.trim(),
-        adminPassword: adminPasswordController.text.trim(),
-        adminPhone: adminPhoneController.text.trim(),
+        adminFirstName: firstName,
+        adminLastName: lastName,
+        adminEmail: email, // Same as school email
+        adminPassword: password,
+        adminPhone: phone, // Use same phone as school
       );
 
       print('✅ Step 1 Complete: School registered online');
@@ -265,67 +299,71 @@ class SchoolRegistrationController extends GetxController {
   }
 
   /// Step 3: Setup local authentication
+  /// Step 3: Setup local authentication
   Future<void> _setupLocalAuthentication(Map<String, dynamic> result) async {
     print('🔐 Step 3: Setting up local authentication...');
 
     try {
       final db = await _dbHelper.database;
-      final adminUser =
-          result['admin_user']; // ✅ Changed from 'admin' to 'admin_user'
+
+      // ✅ FIXED: Use 'user' instead of 'admin_user'
+      final adminUser = result['user']; // Changed from 'admin_user'
       final school = result['school'];
 
       // Create users table if it doesn't exist
       await db.execute('''
-      CREATE TABLE IF NOT EXISTS users (
-        id TEXT PRIMARY KEY,
-        school_id TEXT NOT NULL,
-        email TEXT NOT NULL UNIQUE,
-        password TEXT NOT NULL,
-        role TEXT DEFAULT 'staff',
-        fname TEXT,
-        lname TEXT,
-        phone TEXT,
-        date_of_birth TEXT,
-        gender TEXT DEFAULT 'other',
-        status TEXT DEFAULT 'active',
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (school_id) REFERENCES schools (id)
-      )
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      school_id TEXT NOT NULL,
+      email TEXT NOT NULL UNIQUE,
+      password TEXT NOT NULL,
+      role TEXT DEFAULT 'staff',
+      fname TEXT,
+      lname TEXT,
+      phone TEXT,
+      date_of_birth TEXT,
+      gender TEXT DEFAULT 'other',
+      status TEXT DEFAULT 'active',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (school_id) REFERENCES schools (id)
+    )
     ''');
 
       // ✅ Parse the admin user name from the API response
       final fullName = adminUser['name']?.toString() ?? '';
       final nameParts = fullName.split(' ');
-      final firstName = nameParts.isNotEmpty
-          ? nameParts.first
-          : adminFirstNameController.text.trim();
+      final firstName = nameParts.isNotEmpty ? nameParts.first : 'Admin';
       final lastName = nameParts.length > 1
           ? nameParts.sublist(1).join(' ')
-          : adminLastNameController.text.trim();
+          : nameParts.isNotEmpty && nameParts.first.length > 1
+              ? nameParts.first.substring(0, 1)
+              : 'User';
 
       // Save admin user for local authentication
       await db.insert(
-          'users',
-          {
-            'id': adminUser['id'].toString(),
-            'school_id': school['id'].toString(),
-            'email': adminUser['email'],
-            'password':
-                adminPasswordController.text, // Store the password from form
-            'role': 'admin', // Default to admin role
-            'fname': firstName,
-            'lname': lastName,
-            'phone': adminPhoneController.text.trim(),
-            'status': 'active',
-            'date_of_birth': DateTime.now()
-                .subtract(Duration(days: 365 * 30))
-                .toIso8601String()
-                .split('T')[0], // Just date part
-            'gender': 'other', // Default value
-            'created_at': DateTime.now().toIso8601String(),
-          },
-          conflictAlgorithm: ConflictAlgorithm.replace);
+        'users',
+        {
+          'id': adminUser['id'].toString(),
+          'school_id': school['id'].toString(),
+          'email': adminUser['email'],
+          'password': adminPasswordController.text,
+          'role': adminUser['role'] ?? 'admin',
+          'fname': firstName,
+          'lname': lastName,
+          'phone': phoneController.text.trim().isEmpty
+              ? 'N/A'
+              : phoneController.text.trim(),
+          'status': 'active',
+          'date_of_birth': DateTime.now()
+              .subtract(Duration(days: 365 * 30))
+              .toIso8601String()
+              .split('T')[0],
+          'gender': 'other',
+          'created_at': DateTime.now().toIso8601String(),
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
 
       print('✅ Step 3 Complete: Local authentication setup');
     } catch (e) {
@@ -545,23 +583,34 @@ class SchoolRegistrationController extends GetxController {
       // Get AuthController and login the user
       final authController = Get.find<AuthController>();
 
-      // Create user object from registration data
+      // ✅ FIXED: Use 'user' instead of 'admin_user'
+      final fullName = adminUser['name']?.toString() ?? '';
+      final nameParts = fullName.split(' ');
+      final firstName = nameParts.isNotEmpty ? nameParts.first : 'Admin';
+      final lastName = nameParts.length > 1
+          ? nameParts.sublist(1).join(' ')
+          : nameParts.isNotEmpty && nameParts.first.length > 1
+              ? nameParts.first.substring(0, 1)
+              : 'User';
+
       final user = User(
-          id: adminUser['id'],
-          schoolId: school['id'].toString(),
-          email: adminUser['email'],
-          role: 'admin',
-          fname: _extractFirstName(adminUser['name'] ?? ''),
-          lname: _extractLastName(adminUser['name'] ?? ''),
-          phone: adminPhoneController.text.trim(),
-          status: 'active',
-          date_of_birth: DateTime.now().subtract(Duration(days: 365 * 30)),
-          gender: 'other',
-          password: '',
-          address: '',
-          idnumber: '',
-          created_at: DateTime.now() // Not needed for authenticated user
-          );
+        id: adminUser['id'],
+        schoolId: school['id'].toString(),
+        email: adminUser['email'],
+        role: adminUser['role'] ?? 'admin',
+        fname: firstName,
+        lname: lastName,
+        phone: phoneController.text.trim().isEmpty
+            ? 'N/A'
+            : phoneController.text.trim(),
+        status: 'active',
+        date_of_birth: DateTime.now().subtract(Duration(days: 365 * 30)),
+        gender: 'other',
+        password: '',
+        address: '',
+        idnumber: '',
+        created_at: DateTime.now(),
+      );
 
       // Set the user as authenticated
       authController.currentUser(user);
@@ -575,21 +624,6 @@ class SchoolRegistrationController extends GetxController {
       print('❌ Auto-login failed: $e');
       // Don't throw - let the navigation continue
     }
-  }
-
-  /// Extract first name from full name
-  String _extractFirstName(String fullName) {
-    if (fullName.isEmpty) return adminFirstNameController.text.trim();
-    return fullName.split(' ').first;
-  }
-
-  /// Extract last name from full name
-  String _extractLastName(String fullName) {
-    if (fullName.isEmpty) return adminLastNameController.text.trim();
-    final parts = fullName.split(' ');
-    return parts.length > 1
-        ? parts.sublist(1).join(' ')
-        : adminLastNameController.text.trim();
   }
 
   /// Show no internet dialog
@@ -640,29 +674,15 @@ class SchoolRegistrationController extends GetxController {
 
   /// Validate admin user information
   bool _validateAdminInfo() {
-    if (adminFirstNameController.text.trim().isEmpty) {
-      Get.snackbar('Error', 'Admin first name is required',
-          snackPosition: SnackPosition.BOTTOM);
-      return false;
-    }
-    if (adminLastNameController.text.trim().isEmpty) {
-      Get.snackbar('Error', 'Admin last name is required',
-          snackPosition: SnackPosition.BOTTOM);
-      return false;
-    }
-    if (adminEmailController.text.trim().isEmpty ||
-        !GetUtils.isEmail(adminEmailController.text.trim())) {
-      Get.snackbar('Error', 'Valid admin email is required',
-          snackPosition: SnackPosition.BOTTOM);
-      return false;
-    }
+    // Email and password are already validated in the form
+    // Just check if they match what we expect
     if (adminPasswordController.text.length < 8) {
-      Get.snackbar('Error', 'Admin password must be at least 8 characters',
+      Get.snackbar('Error', 'Password must be at least 8 characters',
           snackPosition: SnackPosition.BOTTOM);
       return false;
     }
-    if (adminPhoneController.text.trim().isEmpty) {
-      Get.snackbar('Error', 'Admin phone number is required',
+    if (adminPasswordController.text != confirmPasswordController.text) {
+      Get.snackbar('Error', 'Passwords do not match',
           snackPosition: SnackPosition.BOTTOM);
       return false;
     }
@@ -671,6 +691,12 @@ class SchoolRegistrationController extends GetxController {
 
   /// Show registration error
   void _showRegistrationError(String message) {
+    // Clean up the error message
+    String cleanMessage = message
+        .replaceAll('Exception: ', '')
+        .replaceAll('Failed to register school online: ', '')
+        .replaceAll('Failed to register school: ', '');
+
     Get.dialog(
       AlertDialog(
         title: Row(
@@ -682,10 +708,12 @@ class SchoolRegistrationController extends GetxController {
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(message),
-            const SizedBox(height: 16),
-            const Text('Please check your internet connection and try again.'),
+            Text(
+              cleanMessage,
+              style: const TextStyle(fontSize: 14),
+            ),
           ],
         ),
         actions: [

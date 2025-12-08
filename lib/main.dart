@@ -139,7 +139,7 @@ Future<void> _initializeDatabaseAndMigrations() async {
 void _configureApiService() {
   // Configure your API base URL here
   // You should replace this with your actual Laravel API URL
-  const String apiBaseUrl = 'https://driving.fonpos.co.zw/api';
+  const String apiBaseUrl = 'https://drivesyncpro.co.zw/api';
 
   // Set up API configuration
   ApiService.configure(baseUrl: apiBaseUrl);
@@ -207,16 +207,11 @@ class _AuthenticationWrapperState extends State<AuthenticationWrapper> {
 
       String initialRoute;
 
-      final isSchoolSetupComplete = await _checkSchoolConfigurationFixed();
-
-      print('🏫 School setup complete: $isSchoolSetupComplete');
-      print(
-          '📊 Settings state: ${settingsController.getBusinessInfoSummary()}');
-
-      if (!isSchoolSetupComplete) {
-        print('🏫 School setup needed - redirect to school selection');
-        initialRoute = '/school-selection';
-      } else if (pinController.isPinSet.value &&
+      // SIMPLIFIED ROUTING: No school setup check needed
+      // School data comes from API login response automatically
+      
+      // Check if PIN is set and enabled (for offline login)
+      if (pinController.isPinSet.value &&
           pinController.isPinEnabled.value &&
           await pinController.isUserVerified()) {
         print('🔐 PIN authentication available');
@@ -225,18 +220,25 @@ class _AuthenticationWrapperState extends State<AuthenticationWrapper> {
           print('🔒 PIN is locked - redirect to login');
           initialRoute = '/login';
         } else {
-          print('📱 Redirecting to PIN login');
+          print('📱 Redirecting to PIN login (offline-capable)');
           initialRoute = '/pin-login';
         }
-      } else if (authController.isLoggedIn.value &&
+      } 
+      // Check if user is logged in but PIN not set (optional setup)
+      else if (authController.isLoggedIn.value &&
           !pinController.isPinSet.value) {
-        print('👤 User logged in, setting up PIN');
-        initialRoute = '/pin-setup';
-      } else if (await _checkIfUsersExist()) {
+        print('👤 User logged in, PIN setup available (optional)');
+        // Go to main app - PIN setup is optional
+        initialRoute = '/main';
+      } 
+      // Check if any users exist locally (for offline fallback)
+      else if (await _checkIfUsersExist()) {
         print('👥 Users exist - redirect to login');
         initialRoute = '/login';
-      } else {
-        print('🔑 Fallback to login');
+      } 
+      // First time - show login (email/password only)
+      else {
+        print('🔑 First time - redirect to login');
         initialRoute = '/login';
       }
 

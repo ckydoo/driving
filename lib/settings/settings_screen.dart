@@ -1931,6 +1931,18 @@ class _SettingsScreenState extends State<SettingsScreen>
               ),
             ),
           ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Text(
+                'Developed at CodzlabZim',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: _colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );

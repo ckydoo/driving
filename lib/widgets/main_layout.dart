@@ -306,7 +306,6 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
                       )),
                 ),
               ),
-
               // Logout button
               Padding(
                 padding: const EdgeInsets.all(16.0),
@@ -314,8 +313,8 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
                   width: double.infinity,
                   child: ElevatedButton.icon(
                     onPressed: () {
-                      Navigator.of(context).pop(); // Close drawer first
-                      _performSafeLogout(); // USE SAFE LOGOUT METHOD
+                      Navigator.of(context).pop();
+                      _performSafeLogout();
                     },
                     icon: const Icon(Icons.logout, color: Colors.red),
                     label: const Text(

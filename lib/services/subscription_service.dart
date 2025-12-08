@@ -13,7 +13,7 @@ class SubscriptionService {
 
     switch (environment) {
       case 'development':
-        return 'https://driving.fonpos.co.zw/api';
+        return 'https://drivesyncpro.co.zw/api';
       case 'production':
         return 'https://your-production-domain.com/api'; // REPLACE WITH YOUR DOMAIN
       default:

@@ -1,16 +1,73 @@
-
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'api_service.dart';
 
 class SchoolApiService {
-  static const String baseUrl = 'https://driving.fonpos.co.zw/api';
+  static const String baseUrl = 'https://drivesyncpro.co.zw/api';
+
+  /// Convert technical error messages to user-friendly messages
+  static String _getUserFriendlyError(String errorMessage) {
+    // Duplicate entry errors
+    if (errorMessage.contains('Duplicate entry') &&
+        errorMessage.contains('email')) {
+      return 'This email address is already registered. Please use a different email or try logging in.';
+    }
+    if (errorMessage.contains('Duplicate entry') &&
+        errorMessage.contains('phone')) {
+      return 'This phone number is already registered. Please use a different phone number or leave it blank.';
+    }
+    if (errorMessage.contains('users_phone_unique')) {
+      return 'This phone number is already in use. Please use a different phone number or leave it blank.';
+    }
+    if (errorMessage.contains('Duplicate entry') &&
+        errorMessage.contains('name')) {
+      return 'A school with this name already exists. Please use a different name.';
+    }
+
+    // Validation errors
+    if (errorMessage.contains('validation') ||
+        errorMessage.contains('Validation')) {
+      return 'Please check your information and try again. Make sure all required fields are filled correctly.';
+    }
+
+    // Password errors
+    if (errorMessage.contains('password')) {
+      return 'Invalid password. Password must be at least 8 characters long.';
+    }
+
+    // Authentication errors
+    if (errorMessage.contains('Unauthorized') || errorMessage.contains('401')) {
+      return 'Invalid email or password. Please try again.';
+    }
+
+    // Network errors
+    if (errorMessage.contains('SocketException') ||
+        errorMessage.contains('Failed host lookup')) {
+      return 'No internet connection. Please check your network and try again.';
+    }
+    if (errorMessage.contains('TimeoutException') ||
+        errorMessage.contains('timeout')) {
+      return 'Connection timeout. Please check your internet connection and try again.';
+    }
+
+    // Server errors
+    if (errorMessage.contains('500') ||
+        errorMessage.contains('Internal Server Error')) {
+      return 'Server error. Please try again later or contact support.';
+    }
+    if (errorMessage.contains('503') ||
+        errorMessage.contains('Service Unavailable')) {
+      return 'Service temporarily unavailable. Please try again later.';
+    }
+
+    // Default fallback
+    return 'Registration failed. Please try again or contact support if the problem persists.';
+  }
 
   /// Register a new school online with enhanced error handling
   static Future<Map<String, dynamic>> registerSchool({
     required String schoolName,
     required String schoolEmail,
-    required String schoolPhone,
     required String schoolAddress,
     required String schoolCity,
     required String schoolCountry,
@@ -34,7 +91,8 @@ class SchoolApiService {
       final requestData = {
         'name': schoolName,
         'email': schoolEmail,
-        'phone': schoolPhone,
+        'password': adminPassword, // Use admin password as school password
+        'password_confirmation': adminPassword,
         'address': schoolAddress,
         'city': schoolCity,
         'country': schoolCountry,
@@ -47,7 +105,8 @@ class SchoolApiService {
         'admin_email': adminEmail,
         'admin_password': adminPassword,
         'admin_password_confirmation': adminPassword,
-        'admin_phone': adminPhone,
+        'admin_phone':
+            (adminPhone.isEmpty || adminPhone == 'N/A') ? null : adminPhone,
       };
 
       print('📤 Request Data: ${json.encode(requestData)}');
@@ -115,11 +174,14 @@ class SchoolApiService {
           errorMessage = 'Server returned status ${response.statusCode}';
         }
 
-        throw Exception(errorMessage);
+        // Convert to user-friendly error
+        throw Exception(_getUserFriendlyError(errorMessage));
       }
     } catch (e) {
       print('❌ School registration error: $e');
-      throw Exception('Failed to register school: $e');
+      // Return user-friendly error message
+      final errorMessage = e.toString();
+      throw Exception(_getUserFriendlyError(errorMessage));
     }
   }
 
