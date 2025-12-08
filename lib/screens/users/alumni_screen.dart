@@ -1034,6 +1034,8 @@ class _AlumniScreenState extends State<AlumniScreen> {
 
       final reactivatedStudent = User(
         id: alumni.id,
+        schoolId: alumni.schoolId, // ✅ Preserve school_id
+        firebaseUserId: alumni.firebaseUserId, // ✅ Preserve firebase_user_id
         fname: alumni.fname,
         lname: alumni.lname,
         email: alumni.email,

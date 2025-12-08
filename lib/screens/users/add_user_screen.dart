@@ -151,8 +151,8 @@ class _AddUserScreenState extends State<AddUserScreen> {
         text: DateFormat('yyyy-MM-dd').format(widget.user!.date_of_birth),
       );
       _selectedDate = widget.user!.date_of_birth;
-      _status = widget.user!.status;
-      _gender = widget.user!.gender;
+      _status = widget.user!.status.capitalize;
+      _gender = widget.user!.gender.capitalize;
     } else {
       _dateOfBirthController = TextEditingController();
       _status = 'Active';
@@ -1647,6 +1647,8 @@ class _AddUserScreenState extends State<AddUserScreen> {
 
       final user = User(
         id: widget.user?.id, // Keep existing ID for updates, null for new users
+        schoolId: widget.user?.schoolId, // ✅ Preserve school_id for updates
+        firebaseUserId: widget.user?.firebaseUserId, // ✅ Preserve firebase_user_id
         fname: _fnameController.text.trim(),
         lname: _lnameController.text.trim(),
         email: _emailController.text.trim(),
@@ -1664,6 +1666,7 @@ class _AddUserScreenState extends State<AddUserScreen> {
 
       print(
           '📝 Submitting ${widget.user == null ? 'new' : 'updated'} user: ${user.email}');
+      print('🏫 School ID: ${user.schoolId}');
 
       if (widget.user == null) {
         // Adding new user

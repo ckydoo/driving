@@ -150,6 +150,8 @@ class _GraduationScreenState extends State<GraduationScreen> {
       // Update student status to 'Graduated' or move to alumni
       final updatedStudent = User(
         id: widget.student.id,
+        schoolId: widget.student.schoolId, // ✅ Preserve school_id
+        firebaseUserId: widget.student.firebaseUserId, // ✅ Preserve firebase_user_id
         fname: widget.student.fname,
         lname: widget.student.lname,
         email: widget.student.email,

@@ -1,8 +1,11 @@
 import 'package:driving/controllers/auth_controller.dart';
+import 'package:driving/controllers/sync_controller.dart';
 import 'package:driving/models/user.dart';
 import 'package:driving/routes/app_routes.dart';
+import 'package:driving/services/api_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../services/database_helper.dart';
 import '../services/school_api_service.dart';
@@ -638,6 +641,23 @@ class SchoolRegistrationController extends GetxController {
       print('   currentUser: ${authController.currentUser.value?.email}');
       print('   role: ${authController.currentUser.value?.role}');
 
+      // ✅ CRITICAL FIX: Save API token to SharedPreferences
+      // The token was already set in ApiService during registration,
+      // but we need to persist it to SharedPreferences for future sessions
+      if (ApiService.hasToken && ApiService.currentToken != null) {
+        final prefs = await SharedPreferences.getInstance();
+        final tokenKey = 'api_token_${user.email}';
+        await prefs.setString(tokenKey, ApiService.currentToken!);
+        print('✅ API token saved to SharedPreferences: $tokenKey');
+        print('   Token: ${ApiService.currentToken!.substring(0, 10)}...');
+      } else {
+        print('⚠️ No API token available to save - user may have limited functionality');
+      }
+
+      // ✅ CRITICAL FIX: Trigger sync after auto-login
+      print('🔄 Triggering initial sync after registration...');
+      await _triggerPostRegistrationSync();
+
       // Mark first run as completed
       await SchoolSelectionController.markFirstRunCompleted();
 
@@ -646,6 +666,43 @@ class SchoolRegistrationController extends GetxController {
       print('❌ Auto-login failed: $e');
       print('Stack trace: $stackTrace');
       // Don't throw - let the navigation continue
+    }
+  }
+
+  /// Trigger sync after registration (similar to AuthController._triggerPostLoginSync)
+  Future<void> _triggerPostRegistrationSync() async {
+    try {
+      print('🔄 === POST-REGISTRATION AUTO-SYNC ===');
+
+      if (!Get.isRegistered<SyncController>()) {
+        print('⚠️ SyncController not registered yet');
+        return;
+      }
+
+      final syncController = Get.find<SyncController>();
+
+      if (!syncController.isOnline.value) {
+        print('⚠️ Offline - skipping auto-sync');
+        return;
+      }
+
+      if (syncController.isSyncing.value) {
+        print('⚠️ Sync already in progress - skipping');
+        return;
+      }
+
+      print('✅ Triggering auto-sync after registration...');
+
+      // Delay to ensure everything is initialized
+      Future.delayed(Duration(milliseconds: 1000), () {
+        if (Get.isRegistered<SyncController>()) {
+          Get.find<SyncController>().performFullSync();
+          print('✅ Auto-sync triggered after registration');
+        }
+      });
+    } catch (e) {
+      print('❌ Failed to trigger post-registration sync: $e');
+      // Don't throw - sync will happen on next login or manual trigger
     }
   }
 

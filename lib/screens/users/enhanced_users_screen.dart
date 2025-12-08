@@ -635,6 +635,8 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
     // Same graduation logic as in GraduationScreen
     final updatedStudent = User(
       id: student.id,
+      schoolId: student.schoolId, // ✅ Preserve school_id
+      firebaseUserId: student.firebaseUserId, // ✅ Preserve firebase_user_id
       fname: student.fname,
       lname: student.lname,
       email: student.email,
