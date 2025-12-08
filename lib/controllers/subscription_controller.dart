@@ -563,17 +563,30 @@ class SubscriptionController extends GetxController {
               statusData['billing_period'] as String? ?? 'monthly';
           print('💳 Billing period: ${billingPeriod.value}');
 
-          if (statusData['subscription_expires_at'] != null) {
+          // ✅ FIXED: Check both subscription_expires_at and trial_ends_at
+          String? expiryDateString;
+
+          if (subscriptionStatus.value == 'trial' && statusData['trial_ends_at'] != null) {
+            // For trial users, use trial_ends_at
+            expiryDateString = statusData['trial_ends_at'];
+            print('📅 Using trial_ends_at for trial user');
+          } else if (statusData['subscription_expires_at'] != null) {
+            // For paid users, use subscription_expires_at
+            expiryDateString = statusData['subscription_expires_at'];
+            print('📅 Using subscription_expires_at for paid user');
+          }
+
+          if (expiryDateString != null) {
             try {
-              subscriptionExpiresAt.value =
-                  DateTime.parse(statusData['subscription_expires_at']);
-              print('📅 Expires at: ${subscriptionExpiresAt.value}');
+              subscriptionExpiresAt.value = DateTime.parse(expiryDateString);
+              print('✅ Expires at: ${subscriptionExpiresAt.value}');
             } catch (e) {
               print('⚠️ Failed to parse expiry date: $e');
               subscriptionExpiresAt.value = null;
             }
           } else {
             subscriptionExpiresAt.value = null;
+            print('⚠️ No expiry date found in response');
           }
 
           // Load trial eligibility
@@ -604,7 +617,7 @@ class SubscriptionController extends GetxController {
           await SubscriptionCache.saveSubscriptionData(
             status: subscriptionStatus.value,
             trialDays: remainingTrialDays.value,
-            expiresAt: statusData['subscription_expires_at'],
+            expiresAt: expiryDateString, // ✅ FIXED: Use the correct expiry date (trial_ends_at for trials, subscription_expires_at for paid)
             packageId: currentPackage.value?.id,
             packageName: currentPackage.value?.name,
             billingPeriod: billingPeriod.value, // ✅ ADD: Cache billing period
