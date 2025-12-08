@@ -17,34 +17,43 @@ class SchoolRegistrationScreen extends StatelessWidget {
             padding: const EdgeInsets.all(24.0),
             child: ConstrainedBox(
               constraints: BoxConstraints(
-                maxWidth: 400,
+                maxWidth: 500,
                 minHeight: MediaQuery.of(context).size.height * 0.8,
               ),
-              child: Form(
-                key: controller.formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // Header
-                    _buildHeader(),
-                    const SizedBox(height: 24),
+              child: Card(
+                elevation: 4,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Container(
+                  padding: const EdgeInsets.all(32.0),
+                  child: Form(
+                    key: controller.formKey,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        // Header
+                        _buildHeader(),
+                        const SizedBox(height: 24),
 
-                    // Trial Badge
-                    _buildTrialBadge(),
-                    const SizedBox(height: 24),
+                        // Trial Badge
+                        _buildTrialBadge(),
+                        const SizedBox(height: 24),
 
-                    // Registration Form
-                    _buildRegistrationForm(controller),
-                    const SizedBox(height: 28),
+                        // Registration Form
+                        _buildRegistrationForm(controller),
+                        const SizedBox(height: 28),
 
-                    // Submit Button
-                    _buildSubmitButton(controller),
-                    const SizedBox(height: 16),
+                        // Submit Button
+                        _buildSubmitButton(controller),
+                        const SizedBox(height: 16),
 
-                    // Login Link
-                    _buildLoginLink(),
-                  ],
+                        // Login Link
+                        _buildLoginLink(),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),

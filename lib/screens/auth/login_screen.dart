@@ -20,57 +20,66 @@ class LoginScreen extends StatelessWidget {
             padding: const EdgeInsets.all(24.0),
             child: ConstrainedBox(
               constraints: BoxConstraints(
-                maxWidth: 400,
+                maxWidth: 500,
                 minHeight: MediaQuery.of(context).size.height * 0.8,
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // Logo/Header
-                  _buildHeader(),
-                  const SizedBox(height: 32),
+              child: Card(
+                elevation: 4,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(30.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // Logo/Header
+                      _buildHeader(),
+                      const SizedBox(height: 32),
 
-                  // Welcome Message
-                  _buildWelcomeMessage(),
-                  const SizedBox(height: 32),
+                      // Welcome Message
+                      _buildWelcomeMessage(),
+                      const SizedBox(height: 32),
 
-                  // Email Field
-                  _buildEmailField(emailController),
-                  const SizedBox(height: 20),
+                      // Email Field
+                      _buildEmailField(emailController),
+                      const SizedBox(height: 20),
 
-                  // Password Field
-                  Obx(() => _buildPasswordField(
-                        passwordController,
-                        showPassword,
-                      )),
-                  const SizedBox(height: 12),
+                      // Password Field
+                      Obx(() => _buildPasswordField(
+                            passwordController,
+                            showPassword,
+                          )),
+                      const SizedBox(height: 12),
 
-                  // Remember Me / Forgot Password
-                  _buildRememberForgotRow(controller),
-                  const SizedBox(height: 28),
+                      // Remember Me / Forgot Password
+                      _buildRememberForgotRow(controller),
+                      const SizedBox(height: 28),
 
-                  // Login Button
-                  Obx(() => _buildLoginButton(
-                        controller,
-                        emailController,
-                        passwordController,
-                      )),
-                  const SizedBox(height: 16),
+                      // Login Button
+                      Obx(() => _buildLoginButton(
+                            controller,
+                            emailController,
+                            passwordController,
+                          )),
+                      const SizedBox(height: 16),
 
-                  // Error Message
-                  Obx(() => _buildErrorMessage(controller)),
+                      // Error Message
+                      Obx(() => _buildErrorMessage(controller)),
 
-                  const SizedBox(height: 32),
+                      const SizedBox(height: 32),
 
-                  // Register Link
-                  _buildRegisterLink(),
+                      // Register Link
+                      _buildRegisterLink(),
 
-                  const SizedBox(height: 24),
+                      const SizedBox(height: 24),
 
-                  // Offline Mode Info
-                  _buildOfflineInfo(),
-                ],
+                      // Offline Mode Info
+                      _buildOfflineInfo(),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
