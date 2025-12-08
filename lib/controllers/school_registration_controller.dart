@@ -425,11 +425,23 @@ class SchoolRegistrationController extends GetxController {
 
     try {
       final school = result['school'];
-      final adminUser = result['admin_user'];
+      final adminUser = result['user']; // ✅ FIXED: Use 'user' not 'admin_user'
+
+      // ✅ DEBUG: Log the data structure
+      print('📊 Registration result keys: ${result.keys.toList()}');
+      print('👤 User data: $adminUser');
+      print('🏫 School data: $school');
+
       final trialDays = 30; // Default trial days
 
       // ✅ CRITICAL: Auto-login the user after registration
-      await _autoLoginUser(adminUser, school);
+      if (adminUser != null && school != null) {
+        await _autoLoginUser(adminUser, school);
+      } else {
+        print('⚠️ Warning: User or school data is null');
+        print('   adminUser: $adminUser');
+        print('   school: $school');
+      }
 
       // Show success dialog with corrected navigation
       Get.dialog(
@@ -593,6 +605,11 @@ class SchoolRegistrationController extends GetxController {
               ? nameParts.first.substring(0, 1)
               : 'User';
 
+      // Ensure we have required fields
+      if (adminUser['id'] == null || adminUser['email'] == null) {
+        throw Exception('Missing required user fields: id=${adminUser['id']}, email=${adminUser['email']}');
+      }
+
       final user = User(
         id: adminUser['id'],
         schoolId: school['id'].toString(),
@@ -616,12 +633,18 @@ class SchoolRegistrationController extends GetxController {
       authController.currentUser(user);
       authController.isLoggedIn(true);
 
+      print('✅ User set in AuthController:');
+      print('   isLoggedIn: ${authController.isLoggedIn.value}');
+      print('   currentUser: ${authController.currentUser.value?.email}');
+      print('   role: ${authController.currentUser.value?.role}');
+
       // Mark first run as completed
       await SchoolSelectionController.markFirstRunCompleted();
 
       print('✅ User auto-logged in successfully');
-    } catch (e) {
+    } catch (e, stackTrace) {
       print('❌ Auto-login failed: $e');
+      print('Stack trace: $stackTrace');
       // Don't throw - let the navigation continue
     }
   }

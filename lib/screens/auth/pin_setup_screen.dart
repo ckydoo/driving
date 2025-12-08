@@ -208,7 +208,21 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
             TextButton(
               onPressed: () {
                 Get.back();
-                Get.offAllNamed('/main');
+                // ✅ FIXED: Check if user is logged in before navigating
+                final authController = Get.find<AuthController>();
+                if (authController.isLoggedIn.value && authController.currentUser.value != null) {
+                  AppRoutes.toMain(); // Use proper navigation method
+                } else {
+                  // User not logged in - show error
+                  Get.snackbar(
+                    'Error',
+                    'User not logged in. Please login first.',
+                    snackPosition: SnackPosition.BOTTOM,
+                    backgroundColor: Colors.red.shade100,
+                  );
+                  // Navigate to login instead
+                  Get.offAllNamed('/login');
+                }
               },
               child: const Text('Skip'),
             ),
