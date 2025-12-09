@@ -106,32 +106,69 @@ class ProductionSyncEngine {
   }
 
   static Future<DeviceSyncState> _loadSyncState(String schoolId) async {
-    final prefs = await SharedPreferences.getInstance();
-    final deviceId = await _getOrCreateDeviceId();
-    final stateJson = prefs.getString(_syncStateKey);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final stateJson = prefs.getString('production_sync_state_$schoolId');
 
-    if (stateJson != null) {
-      try {
-        final state = DeviceSyncState.fromJson(json.decode(stateJson));
-        if (state.schoolId == schoolId) {
-          return state;
-        }
-      } catch (e) {
-        print('⚠️ Error loading sync state: $e');
+      if (stateJson != null) {
+        final Map<String, dynamic> data = json.decode(stateJson);
+
+        // ✅ FIXED: Parse and ensure UTC
+        final lastFull = data['lastFullSync'] != null
+            ? DateTime.parse(data['lastFullSync']).toUtc()
+            : null;
+
+        final lastIncremental = data['lastIncrementalSync'] != null
+            ? DateTime.parse(data['lastIncrementalSync']).toUtc()
+            : null;
+
+        return DeviceSyncState(
+          schoolId: schoolId,
+          deviceId: data['deviceId'] ?? await _getOrCreateDeviceId(),
+          lastFullSync: lastFull,
+          lastIncrementalSync: lastIncremental,
+          syncVersion:
+              data['syncVersion'] ?? 1, // Provide a default sync version
+          tableVersions: Map<String, String>.from(
+              data['tableVersions'] ?? {}), // Provide default table versions
+        );
       }
+    } catch (e) {
+      print('⚠️ Error loading sync state: $e');
     }
 
     return DeviceSyncState(
-      deviceId: deviceId,
       schoolId: schoolId,
-      syncVersion: 1,
-      tableVersions: {},
+      deviceId: await _getOrCreateDeviceId(),
+      lastFullSync: null,
+      lastIncrementalSync: null,
+      syncVersion: 1, // Provide a default sync version
+      tableVersions: {}, // Provide an empty map as default table versions
     );
   }
 
   static Future<void> _saveSyncState(DeviceSyncState state) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_syncStateKey, json.encode(state.toJson()));
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      final stateData = {
+        'schoolId': state.schoolId,
+        'deviceId': state.deviceId,
+        // ✅ FIXED: Convert to UTC before saving
+        'lastFullSync': state.lastFullSync?.toUtc().toIso8601String(),
+        'lastIncrementalSync':
+            state.lastIncrementalSync?.toUtc().toIso8601String(),
+      };
+
+      await prefs.setString(
+        'production_sync_state_${state.schoolId}',
+        json.encode(stateData),
+      );
+
+      print('💾 Sync state saved with UTC timestamps');
+    } catch (e) {
+      print('❌ Failed to save sync state: $e');
+    }
   }
 
   // ===================================================================
@@ -199,11 +236,9 @@ class ProductionSyncEngine {
       print('⬇️ Executing full sync...');
 
       print('📥 Downloading all school data...');
-      // Ensure ApiService handles the response wrapping
       final response =
           await ApiService.downloadAllSchoolData(schoolId: state.schoolId);
 
-      // Handle response wrapping (Laravel usually wraps in 'data' key)
       final serverData = response.containsKey('data') && response['data'] is Map
           ? response['data']
           : response;
@@ -223,7 +258,9 @@ class ProductionSyncEngine {
           'strategy': 'full_sync',
           'downloaded_records': downloadedCount,
           'uploaded_changes': uploadResult['uploaded'],
-          'sync_time': DateTime.now().toIso8601String(),
+          'sync_time': DateTime.now()
+              .toUtc()
+              .toIso8601String(), // ✅ FIXED: Added .toUtc()
         },
       );
     } catch (e) {
@@ -249,7 +286,6 @@ class ProductionSyncEngine {
         since: lastSyncTime,
       );
 
-      // Handle response wrapping
       final serverData = response.containsKey('data') && response['data'] is Map
           ? response['data']
           : response;
@@ -257,7 +293,6 @@ class ProductionSyncEngine {
       final downloadedCount = _countRecords(serverData);
       print('📊 Received $downloadedCount records');
 
-      // Smart Fallback Logic
       if (downloadedCount == 0) {
         if (await _shouldForceFullSync(lastSyncTime)) {
           print('🔄 Smart Fallback: Switching to full sync...');
@@ -275,7 +310,8 @@ class ProductionSyncEngine {
         'strategy': 'incrementalSync',
         'downloaded_records': downloadedCount,
         'uploaded_changes': uploadResult['uploaded'] ?? 0,
-        'sync_time': DateTime.now().toIso8601String(),
+        'sync_time':
+            DateTime.now().toUtc().toIso8601String(), // ✅ FIXED: Added .toUtc()
       });
     } catch (e) {
       print('❌ Incremental sync failed: $e');
@@ -514,15 +550,15 @@ class ProductionSyncEngine {
   }
 
   static DeviceSyncState _updateSyncState(
-      DeviceSyncState current, SyncResult result, SyncStrategy strategy) {
-    final now = DateTime.now();
-    return current.copyWith(
-        lastFullSync: strategy == SyncStrategy.firstTimeSetup ||
-                strategy == SyncStrategy.fullReset
-            ? now
-            : current.lastFullSync,
-        lastIncrementalSync: now,
-        requiresFullSync: false);
+      DeviceSyncState currentState, SyncResult result, SyncStrategy strategy) {
+    return currentState.copyWith(
+      lastFullSync: strategy == SyncStrategy.fullReset ||
+              strategy == SyncStrategy.firstTimeSetup
+          ? DateTime.now().toUtc() // ✅ FIXED: Added .toUtc()
+          : currentState.lastFullSync,
+      lastIncrementalSync: DateTime.now().toUtc(), // ✅ FIXED: Added .toUtc()
+      requiresFullSync: false,
+    );
   }
 
   // Database Update helper

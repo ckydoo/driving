@@ -502,20 +502,20 @@ class ApiService {
     }
   }
 
-  // Add these to your ApiService class
-
 // 1. Download All (Points to ProductionSyncController@downloadAllSchoolData)
   static Future<Map<String, dynamic>> downloadAllSchoolData(
       {required String schoolId}) async {
-    // Ensure this URL matches your api.php route
+    // FIXED: Remove 'production' from URL
     final response = await http.get(
-      Uri.parse('$baseUrl/production/sync/download-all?school_id=$schoolId'),
+      Uri.parse('$baseUrl/sync/download-all?school_id=$schoolId'),
       headers: _headers,
     );
 
     if (response.statusCode == 200) {
       return json.decode(response.body);
     } else {
+      print('❌ Download failed: ${response.statusCode}');
+      print('Response body: ${response.body}');
       throw Exception('Failed to download school data: ${response.statusCode}');
     }
   }
@@ -523,8 +523,8 @@ class ApiService {
 // 2. Incremental (Points to ProductionSyncController@downloadIncrementalChanges)
   static Future<Map<String, dynamic>> downloadIncrementalChanges(
       {required String schoolId, DateTime? since}) async {
-    String url =
-        '$baseUrl/production/sync/download-incremental?school_id=$schoolId';
+    // FIXED: Remove 'production' from URL
+    String url = '$baseUrl/sync/download-incremental?school_id=$schoolId';
     if (since != null) {
       url += '&since=${since.toIso8601String()}';
     }
@@ -534,16 +534,18 @@ class ApiService {
     if (response.statusCode == 200) {
       return json.decode(response.body);
     } else {
+      print('❌ Incremental download failed: ${response.statusCode}');
+      print('Response body: ${response.body}');
       throw Exception('Failed to download changes');
     }
   }
 
 // 3. Upload Changes (Points to ProductionSyncController@uploadChanges)
-// NOTE: This is different from the legacy syncUpload
   static Future<Map<String, dynamic>> uploadChanges(
       List<Map<String, dynamic>> groupedChanges) async {
+    // FIXED: Remove 'production' from URL
     final response = await http.post(
-      Uri.parse('$baseUrl/production/sync/upload-changes'), // Check your route!
+      Uri.parse('$baseUrl/sync/upload-changes'),
       headers: _headers,
       body: json.encode({'changes': groupedChanges}),
     );
@@ -551,6 +553,8 @@ class ApiService {
     if (response.statusCode == 200) {
       return json.decode(response.body);
     } else {
+      print('❌ Upload failed: ${response.statusCode}');
+      print('Response body: ${response.body}');
       throw Exception('Upload failed: ${response.body}');
     }
   }
@@ -558,8 +562,9 @@ class ApiService {
 // 4. Register Device
   static Future<void> registerDevice(
       {required String schoolId, required String deviceId}) async {
+    // FIXED: Remove 'production' from URL
     await http.post(
-      Uri.parse('$baseUrl/production/sync/register-device'),
+      Uri.parse('$baseUrl/sync/register-device'),
       headers: _headers,
       body: json.encode({
         'school_id': schoolId,
