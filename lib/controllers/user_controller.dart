@@ -10,7 +10,6 @@ class UserController extends GetxController {
   final RxBool isLoading = false.obs;
   final RxString error = ''.obs;
 
-  // ignore: unused_field
   String? _lastFetchedRole;
 
   List<User> get users => _users;
@@ -91,8 +90,8 @@ class UserController extends GetxController {
       print('UserController: Error fetching users - ${e.toString()}');
       Get.snackbar(
         snackPosition: SnackPosition.BOTTOM,
-        'Error',
-        'Failed to load users: ${e.toString()}',
+        'Unable to Load Users',
+        'Could not load the user list. Please check your connection and try again.',
         backgroundColor: Colors.red,
         colorText: Colors.white,
         duration: const Duration(seconds: 4),
@@ -157,20 +156,19 @@ class UserController extends GetxController {
     }
   }
 
-  /// Parse database errors to provide user-friendly messages
   String _parseError(String error) {
     if (error.contains('UNIQUE constraint failed: users.email')) {
-      return 'Email address already registered';
+      return 'This email address is already registered. Please use a different email.';
     } else if (error.contains('UNIQUE constraint failed: users.phone')) {
-      return 'Phone number already registered';
+      return 'This phone number is already registered. Please use a different phone number.';
     } else if (error.contains('UNIQUE constraint failed: users.idnumber')) {
-      return 'ID number already registered';
+      return 'This ID number is already registered. Please use a different ID number.';
     } else if (error.toLowerCase().contains('null')) {
-      return 'Missing required information. Please fill in all required fields.';
+      return 'Some required information is missing. Please fill in all required fields.';
     } else if (error.contains('Failed to save user')) {
-      return 'Failed to save student. Please try again.';
+      return 'Could not save the user. Please check your information and try again.';
     } else {
-      return 'Failed to save student. Please check your information and try again.';
+      return 'Something went wrong while saving. Please check your information and try again.';
     }
   }
 
@@ -277,27 +275,19 @@ class UserController extends GetxController {
     }
   }
 
-// 1. In _handleUserUpdate method - track user updates
-// Fixed _handleUserUpdate method in UserController
-
   Future<void> _handleUserUpdate(User user) async {
-    // Check for duplicates first (excluding the current user)
     final duplicateErrors = await checkForDuplicates(user, isUpdate: true);
     if (duplicateErrors.isNotEmpty) {
       final errorMessage = duplicateErrors.values.first;
       throw Exception(errorMessage);
     }
 
-    // 🔧 FIX: Ensure the user has a school_id before updating
     User userToUpdate = user;
 
-    // If the user doesn't have a schoolId, get it from current context or existing user
     if (user.schoolId == null || user.schoolId!.isEmpty) {
-      // Option 1: Get from AuthController
       final authController = Get.find<AuthController>();
       final currentSchoolId = authController.currentUser.value?.schoolId ?? '1';
 
-      // Option 2: Get from existing user in database (safer approach)
       try {
         final existingUsers = await DatabaseHelper.instance.getUsers();
         final existingUser = existingUsers.firstWhere(
@@ -317,28 +307,23 @@ class UserController extends GetxController {
       }
     }
 
-    // Convert User to Map for database operation
     final userMap = userToUpdate.toJson();
 
-    // 🔧 ADDITIONAL SAFETY: Ensure school_id is not null in the map
     if (userMap['school_id'] == null) {
-      userMap['school_id'] = '1'; // Default fallback
+      userMap['school_id'] = '1';
       print('⚠️ Applied fallback school_id: 1');
     }
 
     print('📝 Updating user with school_id: ${userMap['school_id']}');
 
-    // Update in local database
     await DatabaseHelper.instance.updateUser(userMap);
 
-    // 🔄 TRACK THE USER UPDATE FOR SYNC
     await SyncService.trackChange('users', userMap, 'update');
     print('📝 Tracked user update for sync');
 
-    // Update the user in the local observable list
     final index = _users.indexWhere((u) => u.id == user.id);
     if (index != -1) {
-      _users[index] = userToUpdate; // Use the updated user with school_id
+      _users[index] = userToUpdate;
     }
 
     print('✅ User updated locally successfully');
@@ -353,14 +338,13 @@ class UserController extends GetxController {
     );
   }
 
-// 2. In _handleNewUserCreation method - track user creation
   Future<void> _handleNewUserCreation(User user) async {
     final duplicateErrors = await checkForDuplicates(user, isUpdate: false);
     if (duplicateErrors.isNotEmpty) {
       final errorMessages = duplicateErrors.values.join('\n');
       Get.snackbar(
         snackPosition: SnackPosition.BOTTOM,
-        'Duplicate Found',
+        'Duplicate Information',
         errorMessages,
         backgroundColor: Colors.orange,
         colorText: Colors.white,
@@ -369,22 +353,18 @@ class UserController extends GetxController {
       throw Exception(duplicateErrors.values.first);
     }
     final authController = Get.find<AuthController>();
-    final currentSchoolId = authController.currentUser.value?.schoolId ??
-        '1'; // Default to 1 for local
+    final currentSchoolId = authController.currentUser.value?.schoolId ?? '1';
     final userWithSchool = user.copyWith(schoolId: currentSchoolId);
     print('💾 Saving to local database...');
 
-    // Convert User to Map for database operation
     final userMap = userWithSchool.toJson();
     final newUserId = await DatabaseHelper.instance.insertUser(userMap);
 
     final createdUser = userWithSchool.copyWith(id: newUserId);
 
-    // 🔄 TRACK THE USER CREATION FOR SYNC
     await SyncService.trackChange('users', createdUser.toJson(), 'create');
     print('📝 Tracked user creation for sync');
 
-    // Add to local observable list for immediate UI update
     _users.add(createdUser);
     print('✅ User saved locally with ID: $newUserId');
     Get.snackbar(
@@ -399,7 +379,6 @@ class UserController extends GetxController {
     print('✅ User creation completed');
   }
 
-// 3. In deleteUser method - track user deletion
   Future<void> deleteUser(int userId) async {
     try {
       isLoading(true);
@@ -452,8 +431,8 @@ class UserController extends GetxController {
       error(e.toString());
       Get.snackbar(
         snackPosition: SnackPosition.BOTTOM,
-        'Error',
-        'Failed to delete user: ${e.toString()}',
+        'Unable to Delete',
+        'Could not delete the user. Please try again.',
         backgroundColor: Colors.red,
         colorText: Colors.white,
       );
@@ -462,7 +441,6 @@ class UserController extends GetxController {
     }
   }
 
-// 4. In deleteMultipleUsers method - track multiple user deletions
   Future<void> deleteMultipleUsers(List<int> userIds) async {
     try {
       isLoading(true);
@@ -471,7 +449,6 @@ class UserController extends GetxController {
       print('UserController: Deleting ${userIds.length} users');
 
       for (int id in userIds) {
-        // 🔄 TRACK EACH USER DELETION FOR SYNC
         await SyncService.trackChange('users', {'id': id}, 'delete');
         print('📝 Tracked user deletion for sync: $id');
 
@@ -479,7 +456,6 @@ class UserController extends GetxController {
         _users.removeWhere((user) => user.id == id);
       }
 
-      // Clear selections
       selectedUser.clear();
       isMultiSelectionActive.value = false;
       isAllSelected(false);
@@ -499,8 +475,8 @@ class UserController extends GetxController {
       print('UserController: Error deleting multiple users - ${e.toString()}');
       Get.snackbar(
         snackPosition: SnackPosition.BOTTOM,
-        'Error',
-        'Failed to delete users: ${e.toString()}',
+        'Unable to Delete Users',
+        'Could not delete the selected users. Please try again.',
         backgroundColor: Colors.red,
         colorText: Colors.white,
         duration: const Duration(seconds: 4),
@@ -511,10 +487,6 @@ class UserController extends GetxController {
     }
   }
 
-// Don't forget to import SyncService at the top of your file:
-// import 'package:driving/services/sync_service.dart';
-
-  // Clear all data (useful for logout)
   void clearData() {
     _users.clear();
     searchedUser.clear();

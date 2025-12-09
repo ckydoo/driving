@@ -1,4 +1,5 @@
 import 'package:crypto/crypto.dart';
+import 'package:driving/controllers/settings_controller.dart';
 import 'package:driving/controllers/sync_controller.dart';
 import 'package:driving/models/user.dart';
 import 'package:driving/services/api_service.dart';
@@ -924,16 +925,86 @@ class AuthController extends GetxController {
   /// Save user to local database for offline access
   Future<void> _saveUserToLocal(Map<String, dynamic> userData) async {
     try {
-      print('📝 Inserting user data: ${userData['email']}');
+      print('📝 Preparing user data for local storage: ${userData['email']}');
 
-      // Add password placeholder for API users
-      userData['password'] = 'admin123'; // Or any placeholder
-      userData['updated_at'] = DateTime.now().toIso8601String();
+      // CRITICAL FIX: Transform API user data to match local schema
+      // API sends 'name' field, but local DB expects 'fname' and 'lname'
 
-      await DatabaseHelper.instance.insertUser(userData);
+      String firstName = '';
+      String lastName = '';
+
+      if (userData['fname'] != null && userData['lname'] != null) {
+        // If API provides separate fname/lname (shouldn't happen but handle it)
+        firstName = userData['fname'].toString();
+        lastName = userData['lname'].toString();
+      } else if (userData['name'] != null) {
+        // API provides combined name (like "Admin User")
+        final nameParts = userData['name'].toString().split(' ');
+        firstName = nameParts.first;
+        lastName = nameParts.length > 1 ? nameParts.sublist(1).join(' ') : '';
+      } else {
+        // Fallback to email username
+        firstName = userData['email']?.toString().split('@').first ?? 'User';
+        lastName = '';
+      }
+
+      // Create a clean user data map for local storage
+      final localUserData = {
+        'id': userData['id'],
+        'school_id': userData['school_id'],
+        'email': userData['email'],
+        'fname': firstName,
+        'lname': lastName,
+        'role': userData['role'] ?? 'student',
+        'phone': userData['phone'] ?? '',
+        'date_of_birth': userData['date_of_birth'] ?? '2000-01-01',
+        'gender': userData['gender'] ?? 'other',
+        'status': userData['status'] ?? 'active',
+        'address': userData['address'] ?? '',
+        'idnumber': userData['idnumber'] ?? '',
+        'password': 'online_authenticated', // Placeholder for online users
+        'created_at':
+            userData['created_at'] ?? DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+
+      // Remove the 'name' field if it exists (not in local schema)
+      localUserData.remove('name');
+
+      print('📝 Transformed user data: fname=$firstName, lname=$lastName');
+      print('📝 Inserting user data into local database...');
+
+      await DatabaseHelper.instance.insertUser(localUserData);
       print('✅ User saved to local database successfully');
+
+      // CRITICAL: Save school_id to settings for sync operations
+      if (userData['school_id'] != null &&
+          userData['school_id'].toString().isNotEmpty) {
+        final schoolId = userData['school_id'].toString();
+        print('🏫 Saving school ID to settings: $schoolId');
+
+        final db = await DatabaseHelper.instance.database;
+        await db.insert(
+          'settings',
+          {'key': 'school_id', 'value': schoolId},
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+        print('✅ School ID saved to settings for sync operations');
+
+        // Also update SettingsController
+        try {
+          if (Get.isRegistered<SettingsController>()) {
+            final settingsController = Get.find<SettingsController>();
+            settingsController.schoolId.value = schoolId;
+            print('✅ SettingsController updated with school ID');
+          }
+        } catch (e) {
+          print('⚠️ Could not update SettingsController: $e');
+        }
+      }
     } catch (e) {
       print('! Failed to save user locally: $e');
+      print('! User data keys: ${userData.keys.toList()}');
       // Don't throw error - local save is optional for API users
     }
   }

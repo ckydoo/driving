@@ -15,7 +15,7 @@ import '../../widgets/responsive_text.dart';
 
 class AddUserScreen extends StatefulWidget {
   final String role;
-  final User? user; // For editing existing user
+  final User? user;
 
   const AddUserScreen({
     Key? key,
@@ -48,34 +48,27 @@ class _AddUserScreenState extends State<AddUserScreen> {
   DateTime? _selectedDate;
   Course? _selectedCourse;
   final TextEditingController _lessonsController =
-      TextEditingController(text: '1'); // Default 10 lessons
-  DateTime? _invoiceDueDate =
-      DateTime.now().add(Duration(days: 5)); // Default 30 days
+      TextEditingController(text: '1');
+  DateTime? _invoiceDueDate = DateTime.now().add(Duration(days: 5));
 
   void _updateBillingPreview() {
     if (!mounted) return;
 
-    // Use the safe lessons value method - this won't throw exceptions
     final lessons = safeLessonsValue;
 
-    // Update any calculations that depend on lessons
     if (_selectedCourse != null) {
       final totalCost = lessons * _selectedCourse!.price;
       print(
           'Preview updated: $lessons lessons, total: \$${totalCost.toStringAsFixed(2)}');
     }
 
-    // Update UI if needed
-    setState(() {
-      // Update any state variables for the preview display
-    });
+    setState(() {});
   }
 
   int get safeLessonsValue {
     try {
       if (_lessonsController.text.isEmpty) return 1;
 
-      // Remove all non-digit characters and trim
       final cleanText =
           _lessonsController.text.replaceAll(RegExp(r'[^\d]'), '').trim();
       if (cleanText.isEmpty) return 1;
@@ -83,24 +76,21 @@ class _AddUserScreenState extends State<AddUserScreen> {
       final parsed = int.tryParse(cleanText);
       return parsed != null && parsed > 0 ? parsed : 1;
     } catch (e) {
-      print('Error parsing lessons value: $e');
       return 1;
     }
   }
 
-// Use this when creating invoices:
   Future<void> _createInvoiceForStudent(User user) async {
     try {
       if (_selectedCourse == null) return;
 
-      // Use the safe lessons value
       final lessons = safeLessonsValue;
 
       final billingController = Get.find<BillingController>();
       await billingController.createInvoiceWithCourse(
         user.id!,
         _selectedCourse!,
-        lessons, // Safe parsed value
+        lessons,
         _invoiceDueDate ?? DateTime.now().add(Duration(days: 30)),
       );
 
@@ -109,8 +99,8 @@ class _AddUserScreenState extends State<AddUserScreen> {
       print('❌ Error creating invoice: $e');
       Get.snackbar(
         snackPosition: SnackPosition.BOTTOM,
-        'Error',
-        'Failed to create invoice: $e',
+        'Unable to Create Invoice',
+        'Could not create the invoice for this student. Please try adding it manually from the Billing section.',
         backgroundColor: Colors.red,
         colorText: Colors.white,
       );
@@ -122,6 +112,7 @@ class _AddUserScreenState extends State<AddUserScreen> {
     super.initState();
     _initializeControllers();
   }
+
   String _generateRandomPassword() {
     final random = Random();
     String password = '';
@@ -136,7 +127,6 @@ class _AddUserScreenState extends State<AddUserScreen> {
     _lnameController = TextEditingController(text: widget.user?.lname ?? '');
     _emailController = TextEditingController(text: widget.user?.email ?? '');
 
-    // Auto-generate password for new users, keep existing for edits
     _passwordController = TextEditingController(
         text: widget.user?.password ?? _generateRandomPassword());
 
@@ -160,12 +150,10 @@ class _AddUserScreenState extends State<AddUserScreen> {
     }
   }
 
-  // Check if we should show mobile layout
   bool _isMobile(BuildContext context) {
     return MediaQuery.of(context).size.width < 768;
   }
 
-  // Check if we should show tablet layout
   bool _isTablet(BuildContext context) {
     return MediaQuery.of(context).size.width >= 768 &&
         MediaQuery.of(context).size.width < 1024;
@@ -554,7 +542,7 @@ class _AddUserScreenState extends State<AddUserScreen> {
                       ),
                       SizedBox(height: 8),
                       Text(
-                        '• Use a valid email address\n• Phone number should be 10 Numbers\n• ID number must be unique',
+                        '• Use a valid email address\n• Phone number should be 10-15 digits\n• ID number must be unique',
                         style: TextStyle(
                           color: Colors.white70,
                           fontSize: 12,
@@ -683,9 +671,7 @@ class _AddUserScreenState extends State<AddUserScreen> {
         child: Container(
           constraints: BoxConstraints(
             maxHeight: MediaQuery.of(context).size.height -
-                (isSmallScreen
-                    ? 200
-                    : 140), // Account for app bar and bottom bar
+                (isSmallScreen ? 200 : 140),
           ),
           child: Padding(
             padding: EdgeInsets.all(isSmallScreen ? 16 : 24),
@@ -735,8 +721,6 @@ class _AddUserScreenState extends State<AddUserScreen> {
           style: TextStyle(color: Colors.grey[600]),
         ),
         SizedBox(height: isSmallScreen ? 24 : 32),
-
-        // Responsive layout for name fields
         if (isSmallScreen)
           Column(
             children: [
@@ -763,7 +747,8 @@ class _AddUserScreenState extends State<AddUserScreen> {
                   controller: _fnameController,
                   label: 'First Name',
                   icon: Icons.person,
-                  validator: (value) => value!.isEmpty ? 'Required' : null,
+                  validator: (value) =>
+                      value!.isEmpty ? 'Please enter first name' : null,
                 ),
               ),
               SizedBox(width: 16),
@@ -772,12 +757,12 @@ class _AddUserScreenState extends State<AddUserScreen> {
                   controller: _lnameController,
                   label: 'Last Name',
                   icon: Icons.person,
-                  validator: (value) => value!.isEmpty ? 'Required' : null,
+                  validator: (value) =>
+                      value!.isEmpty ? 'Please enter last name' : null,
                 ),
               ),
             ],
           ),
-
         SizedBox(height: 16),
         _buildTextField(
           controller: _idNumberController,
@@ -786,8 +771,6 @@ class _AddUserScreenState extends State<AddUserScreen> {
           validator: (value) => value!.isEmpty ? 'Required' : null,
         ),
         SizedBox(height: 16),
-
-        // Responsive layout for gender and date
         if (isSmallScreen)
           Column(
             children: [
@@ -849,8 +832,9 @@ class _AddUserScreenState extends State<AddUserScreen> {
           icon: Icons.email,
           keyboardType: TextInputType.emailAddress,
           validator: (value) {
-            if (value!.isEmpty) return 'Required';
-            if (!GetUtils.isEmail(value)) return 'Invalid Email';
+            if (value!.isEmpty) return 'Please enter an email address';
+            if (!GetUtils.isEmail(value))
+              return 'Please enter a valid email address';
             return null;
           },
         ),
@@ -861,14 +845,13 @@ class _AddUserScreenState extends State<AddUserScreen> {
           icon: Icons.phone,
           keyboardType: TextInputType.phone,
           validator: (value) {
-            if (value!.isEmpty) return 'Required';
-            // Remove any non-digit characters for validation
+            if (value!.isEmpty) return 'Please enter a phone number';
             String digitsOnly = value.replaceAll(RegExp(r'[^\d]'), '');
             if (digitsOnly.length > 15) {
-              return 'Phone number cannot exceed 15 digits';
+              return 'Phone number is too long (maximum 15 digits)';
             }
             if (digitsOnly.length < 10) {
-              return 'Phone number must be at least 10 digits';
+              return 'Phone number is too short (minimum 10 digits)';
             }
             return null;
           },
@@ -879,7 +862,8 @@ class _AddUserScreenState extends State<AddUserScreen> {
           label: 'Address',
           icon: Icons.location_on,
           maxLines: 3,
-          validator: (value) => value!.isEmpty ? 'Required' : null,
+          validator: (value) =>
+              value!.isEmpty ? 'Please enter an address' : null,
         ),
       ],
     );
@@ -904,23 +888,21 @@ class _AddUserScreenState extends State<AddUserScreen> {
           style: TextStyle(color: Colors.grey[600]),
         ),
         SizedBox(height: isSmallScreen ? 24 : 32),
-
         _buildTextField(
           controller: _passwordController,
           label: 'Password',
           icon: Icons.lock,
           obscureText: true,
           validator: (value) {
-            if (value!.isEmpty) return 'Required';
+            if (value!.isEmpty) return 'Please enter a password';
             if (value.length != 8) return 'Password must be exactly 8 digits';
             if (!RegExp(r'^\d{8}$').hasMatch(value)) {
-              return 'Password must contain only 8 digits';
+              return 'Password can only contain numbers (8 digits)';
             }
             return null;
           },
         ),
         SizedBox(height: 16),
-
         _buildDropdownField(
           value: _status,
           items: ['Active', 'Inactive'],
@@ -929,18 +911,16 @@ class _AddUserScreenState extends State<AddUserScreen> {
           onChanged: (value) => setState(() => _status = value),
         ),
         SizedBox(height: 24),
-
-        // Role-specific fields - only show billing for NEW students
         if (widget.role == 'student' && widget.user == null)
           _buildStudentSpecificFields(),
         if (widget.role == 'student' && widget.user != null)
           _buildEditingStudentNote(),
         if (widget.role == 'instructor') _buildInstructorSpecificFields(),
-
         SizedBox(height: 20),
       ],
     );
   }
+
   Widget _buildEditingStudentNote() {
     return Container(
       padding: EdgeInsets.all(16),
@@ -1295,13 +1275,12 @@ class _AddUserScreenState extends State<AddUserScreen> {
 
           SizedBox(height: 16),
 
-          // Lessons field
           TextFormField(
             controller: _lessonsController,
             keyboardType: TextInputType.number,
             inputFormatters: [
-              FilteringTextInputFormatter.digitsOnly, // Only allow digits
-              LengthLimitingTextInputFormatter(3), // Limit to 3 digits max
+              FilteringTextInputFormatter.digitsOnly,
+              LengthLimitingTextInputFormatter(3),
             ],
             decoration: InputDecoration(
               labelText: 'Number of Lessons',
@@ -1313,24 +1292,22 @@ class _AddUserScreenState extends State<AddUserScreen> {
             ),
             validator: (value) {
               if (value == null || value.isEmpty) {
-                return 'Required';
+                return 'Please enter number of lessons';
               }
 
-              // Use the safe parsing method
               final lessons = safeLessonsValue;
 
               if (lessons <= 0) {
-                return 'Enter a valid number greater than 0';
+                return 'Please enter a number greater than 0';
               }
 
               if (lessons > 999) {
-                return 'Maximum 999 lessons';
+                return 'Maximum number of lessons is 999';
               }
 
               return null;
             },
             onChanged: (value) {
-              // Add a small delay to avoid rapid updates during typing
               Future.delayed(Duration(milliseconds: 100), () {
                 if (mounted) {
                   _updateBillingPreview();
@@ -1340,7 +1317,6 @@ class _AddUserScreenState extends State<AddUserScreen> {
           ),
           SizedBox(height: 16),
 
-          // Due date picker
           TextFormField(
             readOnly: true,
             onTap: () async {
@@ -1499,12 +1475,11 @@ class _AddUserScreenState extends State<AddUserScreen> {
   bool _validateCurrentStep() {
     switch (_currentStep) {
       case 0:
-        // Basic Info validation
         if (_fnameController.text.isEmpty) {
           Get.snackbar(
             snackPosition: SnackPosition.BOTTOM,
-            'Validation Error',
-            'First name is required',
+            'Missing Information',
+            'Please enter a first name',
             backgroundColor: Colors.red[100],
             colorText: Colors.red[800],
             icon: Icon(Icons.error, color: Colors.red),
@@ -1514,8 +1489,8 @@ class _AddUserScreenState extends State<AddUserScreen> {
         if (_lnameController.text.isEmpty) {
           Get.snackbar(
             snackPosition: SnackPosition.BOTTOM,
-            'Validation Error',
-            'Last name is required',
+            'Missing Information',
+            'Please enter a last name',
             backgroundColor: Colors.red[100],
             colorText: Colors.red[800],
             icon: Icon(Icons.error, color: Colors.red),
@@ -1525,8 +1500,8 @@ class _AddUserScreenState extends State<AddUserScreen> {
         if (_idNumberController.text.isEmpty) {
           Get.snackbar(
             snackPosition: SnackPosition.BOTTOM,
-            'Validation Error',
-            'ID number is required',
+            'Missing Information',
+            'Please enter an ID number',
             backgroundColor: Colors.red[100],
             colorText: Colors.red[800],
             icon: Icon(Icons.error, color: Colors.red),
@@ -1536,8 +1511,8 @@ class _AddUserScreenState extends State<AddUserScreen> {
         if (_selectedDate == null) {
           Get.snackbar(
             snackPosition: SnackPosition.BOTTOM,
-            'Validation Error',
-            'Date of birth is required',
+            'Missing Information',
+            'Please select a date of birth',
             backgroundColor: Colors.red[100],
             colorText: Colors.red[800],
             icon: Icon(Icons.error, color: Colors.red),
@@ -1547,12 +1522,11 @@ class _AddUserScreenState extends State<AddUserScreen> {
         return true;
 
       case 1:
-        // Contact Info validation
         if (_emailController.text.isEmpty) {
           Get.snackbar(
             snackPosition: SnackPosition.BOTTOM,
-            'Validation Error',
-            'Email is required',
+            'Missing Information',
+            'Please enter an email address',
             backgroundColor: Colors.red[100],
             colorText: Colors.red[800],
             icon: Icon(Icons.error, color: Colors.red),
@@ -1562,8 +1536,8 @@ class _AddUserScreenState extends State<AddUserScreen> {
         if (!GetUtils.isEmail(_emailController.text)) {
           Get.snackbar(
             snackPosition: SnackPosition.BOTTOM,
-            'Validation Error',
-            'Please enter a valid email address',
+            'Invalid Email',
+            'Please enter a valid email address (e.g., name@example.com)',
             backgroundColor: Colors.red[100],
             colorText: Colors.red[800],
             icon: Icon(Icons.error, color: Colors.red),
@@ -1573,8 +1547,8 @@ class _AddUserScreenState extends State<AddUserScreen> {
         if (_phoneController.text.isEmpty) {
           Get.snackbar(
             snackPosition: SnackPosition.BOTTOM,
-            'Validation Error',
-            'Phone number is required',
+            'Missing Information',
+            'Please enter a phone number',
             backgroundColor: Colors.red[100],
             colorText: Colors.red[800],
             icon: Icon(Icons.error, color: Colors.red),
@@ -1584,8 +1558,8 @@ class _AddUserScreenState extends State<AddUserScreen> {
         if (_addressController.text.isEmpty) {
           Get.snackbar(
             snackPosition: SnackPosition.BOTTOM,
-            'Validation Error',
-            'Address is required',
+            'Missing Information',
+            'Please enter an address',
             backgroundColor: Colors.red[100],
             colorText: Colors.red[800],
             icon: Icon(Icons.error, color: Colors.red),
@@ -1595,12 +1569,11 @@ class _AddUserScreenState extends State<AddUserScreen> {
         return true;
 
       case 2:
-        // Additional Info validation
         if (_passwordController.text.isEmpty) {
           Get.snackbar(
             snackPosition: SnackPosition.BOTTOM,
-            'Validation Error',
-            'Password is required',
+            'Missing Information',
+            'Please enter a password',
             backgroundColor: Colors.red[100],
             colorText: Colors.red[800],
             icon: Icon(Icons.error, color: Colors.red),
@@ -1610,7 +1583,7 @@ class _AddUserScreenState extends State<AddUserScreen> {
         if (_passwordController.text.length != 8) {
           Get.snackbar(
             snackPosition: SnackPosition.BOTTOM,
-            'Validation Error',
+            'Invalid Password',
             'Password must be exactly 8 digits',
             backgroundColor: Colors.red[100],
             colorText: Colors.red[800],
@@ -1632,7 +1605,6 @@ class _AddUserScreenState extends State<AddUserScreen> {
     Get.back();
   }
 
-
   Future<void> _submitForm() async {
     if (!_formKey.currentState!.validate()) {
       return;
@@ -1646,9 +1618,9 @@ class _AddUserScreenState extends State<AddUserScreen> {
       final userController = Get.find<UserController>();
 
       final user = User(
-        id: widget.user?.id, // Keep existing ID for updates, null for new users
-        schoolId: widget.user?.schoolId, // ✅ Preserve school_id for updates
-        firebaseUserId: widget.user?.firebaseUserId, // ✅ Preserve firebase_user_id
+        id: widget.user?.id,
+        schoolId: widget.user?.schoolId,
+        firebaseUserId: widget.user?.firebaseUserId,
         fname: _fnameController.text.trim(),
         lname: _lnameController.text.trim(),
         email: _emailController.text.trim(),
@@ -1669,43 +1641,33 @@ class _AddUserScreenState extends State<AddUserScreen> {
       print('🏫 School ID: ${user.schoolId}');
 
       if (widget.user == null) {
-        // Adding new user
         await userController.handleUser(user);
         print('✅ New user creation completed');
 
-        // If student with course, create invoice
         if (widget.role == 'student' && _selectedCourse != null) {
           await _createStudentInvoice(user);
         }
       } else {
-        // Updating existing user
         await userController.handleUser(user, isUpdate: true);
         print('✅ User update completed');
       }
 
-      // If we get here, the operation was successful
       _showSuccessDialog();
     } catch (e) {
       print('❌ Form submission failed: $e');
 
-      // The error snackbar is already shown by the controller,
-      // so we just need to handle the UI state
       setState(() {
         _isLoading = false;
       });
-
-      // Don't show additional error messages since controller already shows them
     }
   }
 
-// Separate method for creating student invoice
   Future<void> _createStudentInvoice(User user) async {
     try {
       print('🧾 Creating invoice for new student...');
 
-      // Parse lessons safely
       final lessonsText = _lessonsController.text.trim();
-      int lessons = 1; // Default value
+      int lessons = 1;
 
       if (lessonsText.isNotEmpty) {
         final cleanText = lessonsText.replaceAll(RegExp(r'[^0-9]'), '');
@@ -1715,7 +1677,6 @@ class _AddUserScreenState extends State<AddUserScreen> {
         }
       }
 
-      // Create invoice
       final pricePerLesson = _selectedCourse!.price.toDouble();
       final totalAmount = lessons * pricePerLesson;
 
@@ -1737,11 +1698,10 @@ class _AddUserScreenState extends State<AddUserScreen> {
       print('✅ Invoice created successfully');
     } catch (e) {
       print('⚠️ Invoice creation failed: $e');
-      // Show warning but don't prevent success dialog
       Get.snackbar(
         snackPosition: SnackPosition.BOTTOM,
-        'Warning',
-        'Student created but invoice creation failed: ${e.toString()}',
+        'Invoice Not Created',
+        'Student was created successfully, but the invoice could not be generated. You can add it manually from the Billing section.',
         backgroundColor: Colors.orange,
         colorText: Colors.white,
         duration: Duration(seconds: 4),
@@ -1753,19 +1713,18 @@ class _AddUserScreenState extends State<AddUserScreen> {
     try {
       final users = await DatabaseHelper.instance.getUsers();
       if (users.isNotEmpty) {
-        // Get the most recently created user by email
         final recentUser = users.firstWhere(
           (u) =>
               u['email']?.toString().toLowerCase() ==
               _emailController.text.trim().toLowerCase(),
-          orElse: () => {'id': 1}, // fallback
+          orElse: () => {'id': 1},
         );
         return recentUser['id'] ?? 1;
       }
-      return 1; // fallback ID
+      return 1;
     } catch (e) {
       print('Error getting last inserted user ID: $e');
-      return 1; // fallback ID
+      return 1;
     }
   }
 
@@ -1785,10 +1744,9 @@ class _AddUserScreenState extends State<AddUserScreen> {
         actions: [
           TextButton(
             onPressed: () {
-              Get.back(); // Close dialog
-              Get.back(); // Return to users list
+              Get.back();
+              Get.back();
 
-              // Navigate to the users screen to show the updated list
               Get.offNamed('/users',
                   arguments: widget.role == 'student'
                       ? 'students'

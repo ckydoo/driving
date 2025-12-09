@@ -207,11 +207,15 @@ class _AuthenticationWrapperState extends State<AuthenticationWrapper> {
 
       String initialRoute;
 
-      // SIMPLIFIED ROUTING: No school setup check needed
-      // School data comes from API login response automatically
-      
-      // Check if PIN is set and enabled (for offline login)
-      if (pinController.isPinSet.value &&
+      // CRITICAL FIX: Check if users exist FIRST
+      final usersExist = await _checkIfUsersExist();
+
+      // Only use PIN login if:
+      // 1. Users exist in database (not first run)
+      // 2. PIN is set and enabled
+      // 3. User was previously verified
+      if (usersExist &&
+          pinController.isPinSet.value &&
           pinController.isPinEnabled.value &&
           await pinController.isUserVerified()) {
         print('🔐 PIN authentication available');
@@ -223,20 +227,19 @@ class _AuthenticationWrapperState extends State<AuthenticationWrapper> {
           print('📱 Redirecting to PIN login (offline-capable)');
           initialRoute = '/pin-login';
         }
-      } 
-      // Check if user is logged in but PIN not set (optional setup)
+      }
+      // User logged in but PIN not set (optional setup)
       else if (authController.isLoggedIn.value &&
           !pinController.isPinSet.value) {
         print('👤 User logged in, PIN setup available (optional)');
-        // Go to main app - PIN setup is optional
         initialRoute = '/main';
-      } 
-      // Check if any users exist locally (for offline fallback)
-      else if (await _checkIfUsersExist()) {
+      }
+      // Users exist locally - show login
+      else if (usersExist) {
         print('👥 Users exist - redirect to login');
         initialRoute = '/login';
-      } 
-      // First time - show login (email/password only)
+      }
+      // First time - show login
       else {
         print('🔑 First time - redirect to login');
         initialRoute = '/login';
