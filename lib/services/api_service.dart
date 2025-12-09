@@ -78,39 +78,6 @@ class ApiService {
     });
   }
 
-  /// Download incremental changes since last sync
-  static Future<Map<String, dynamic>> downloadIncrementalChanges({
-    required String schoolId,
-    DateTime? since,
-  }) async {
-    return _withRetry(() async {
-      print('⚡ Downloading incremental changes for school: $schoolId');
-      if (since != null) {
-        print('📅 Since: ${since.toIso8601String()}');
-      }
-
-      final queryParams = {'school_id': schoolId};
-      if (since != null) {
-        queryParams['since'] = since.toIso8601String();
-      }
-
-      final response = await _makeRequest(
-        'GET',
-        '/sync/download-incremental',
-        queryParams: queryParams,
-        timeout: receiveTimeout,
-      );
-
-      final data = _handleResponse(response);
-      final result = data['data'] ?? {};
-
-      print('✅ Downloaded incremental changes:');
-      _logDataCounts(result);
-
-      return result;
-    });
-  }
-
   /// Download specific table data
   static Future<List<dynamic>> downloadTableData({
     required String schoolId,
@@ -133,37 +100,6 @@ class ApiService {
       final result = data['data'] ?? [];
 
       print('✅ Downloaded $table: ${result.length} records');
-      return result;
-    });
-  }
-
-  /// Upload changes to server
-  static Future<Map<String, dynamic>> uploadChanges({
-    required String schoolId,
-    required Map<String, dynamic> changes,
-  }) async {
-    return _withRetry(() async {
-      print('📤 Uploading changes for school: $schoolId');
-
-      final response = await _makeRequest(
-        'POST',
-        '/sync/upload',
-        body: {
-          'school_id': schoolId,
-          'changes': changes,
-        },
-        timeout: sendTimeout,
-      );
-
-      final data = _handleResponse(response);
-      final result = data['data'] ?? {};
-
-      print('✅ Upload result: ${result['uploaded'] ?? 0} items uploaded');
-      if (result['errors'] != null && (result['errors'] as List).isNotEmpty) {
-        print(
-            '⚠️ Upload warnings: ${(result['errors'] as List).length} errors');
-      }
-
       return result;
     });
   }
@@ -486,64 +422,6 @@ class ApiService {
     });
   }
 
-  /// Enhanced device registration with better error handling
-  static Future<Map<String, dynamic>> registerDevice({
-    required String deviceId,
-    required String schoolId,
-  }) async {
-    print('📱 Registering device: $deviceId for school: $schoolId');
-
-    // Check if we have a token
-    if (!hasToken) {
-      throw Exception(
-          'No authentication token available. Please sign in with password first.');
-    }
-
-    return _withRetry(() async {
-      final response = await _makeRequest(
-        'POST',
-        '/sync/register-device',
-        body: {
-          'device_id': deviceId,
-          'school_id': schoolId,
-        },
-        timeout: connectTimeout,
-      );
-
-      final data = _handleResponse(response);
-      print('✅ Device registration successful');
-      return data['data'] ?? data;
-    });
-  }
-
-  /// Enhanced download all data with better error handling
-  static Future<Map<String, dynamic>> downloadAllSchoolData({
-    required String schoolId,
-  }) async {
-    print('⬇️ Downloading all data for school: $schoolId');
-
-    // Check if we have a token
-    if (!hasToken) {
-      throw Exception(
-          'No authentication token available. Please sign in with password first.');
-    }
-
-    return _withRetry(() async {
-      final response = await _makeRequest(
-        'GET',
-        '/sync/download-all',
-        queryParams: {
-          'school_id': schoolId,
-        },
-        timeout: receiveTimeout, // Longer timeout for large downloads
-      );
-
-      final data = _handleResponse(response);
-      print('✅ All school data downloaded successfully');
-      return data['data'] ?? data;
-    });
-  }
-
   /// Enhanced error handling for responses
   static Map<String, dynamic> _handleResponse(http.Response response) {
     print('🔍 Response Status: ${response.statusCode}');
@@ -622,6 +500,73 @@ class ApiService {
     } finally {
       clearToken();
     }
+  }
+
+  // Add these to your ApiService class
+
+// 1. Download All (Points to ProductionSyncController@downloadAllSchoolData)
+  static Future<Map<String, dynamic>> downloadAllSchoolData(
+      {required String schoolId}) async {
+    // Ensure this URL matches your api.php route
+    final response = await http.get(
+      Uri.parse('$baseUrl/production/sync/download-all?school_id=$schoolId'),
+      headers: _headers,
+    );
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    } else {
+      throw Exception('Failed to download school data: ${response.statusCode}');
+    }
+  }
+
+// 2. Incremental (Points to ProductionSyncController@downloadIncrementalChanges)
+  static Future<Map<String, dynamic>> downloadIncrementalChanges(
+      {required String schoolId, DateTime? since}) async {
+    String url =
+        '$baseUrl/production/sync/download-incremental?school_id=$schoolId';
+    if (since != null) {
+      url += '&since=${since.toIso8601String()}';
+    }
+
+    final response = await http.get(Uri.parse(url), headers: _headers);
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    } else {
+      throw Exception('Failed to download changes');
+    }
+  }
+
+// 3. Upload Changes (Points to ProductionSyncController@uploadChanges)
+// NOTE: This is different from the legacy syncUpload
+  static Future<Map<String, dynamic>> uploadChanges(
+      List<Map<String, dynamic>> groupedChanges) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/production/sync/upload-changes'), // Check your route!
+      headers: _headers,
+      body: json.encode({'changes': groupedChanges}),
+    );
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    } else {
+      throw Exception('Upload failed: ${response.body}');
+    }
+  }
+
+// 4. Register Device
+  static Future<void> registerDevice(
+      {required String schoolId, required String deviceId}) async {
+    await http.post(
+      Uri.parse('$baseUrl/production/sync/register-device'),
+      headers: _headers,
+      body: json.encode({
+        'school_id': schoolId,
+        'device_id': deviceId,
+        'platform': Platform.isAndroid ? 'android' : 'ios',
+      }),
+    );
   }
 }
 
