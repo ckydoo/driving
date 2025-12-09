@@ -847,6 +847,97 @@ class SyncService {
     }
   }
 
+  // Upsert methods for individual records
+  static Future<void> upsertUser(Map<String, dynamic> userData) async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final localUserData = _convertUserApiToLocalFixed(userData);
+      await db.insert(
+        'users',
+        localUserData,
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } catch (e) {
+      print('❌ Failed to upsert user: $e');
+      rethrow;
+    }
+  }
+
+  static Future<void> upsertCourse(Map<String, dynamic> courseData) async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final localCourseData = _convertCourseApiToLocal(courseData);
+      await db.insert(
+        'courses',
+        localCourseData,
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } catch (e) {
+      print('❌ Failed to upsert course: $e');
+      rethrow;
+    }
+  }
+
+  static Future<void> upsertFleet(Map<String, dynamic> fleetData) async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final localFleetData = _convertFleetApiToLocal(fleetData);
+      await db.insert(
+        'fleet',
+        localFleetData,
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } catch (e) {
+      print('❌ Failed to upsert fleet: $e');
+      rethrow;
+    }
+  }
+
+  static Future<void> upsertSchedule(Map<String, dynamic> scheduleData) async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final localScheduleData = _convertScheduleApiToLocal(scheduleData);
+      await db.insert(
+        'schedules',
+        localScheduleData,
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } catch (e) {
+      print('❌ Failed to upsert schedule: $e');
+      rethrow;
+    }
+  }
+
+  static Future<void> upsertInvoice(Map<String, dynamic> invoiceData) async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final localInvoiceData = _convertInvoiceApiToLocal(invoiceData);
+      await db.insert(
+        'invoices',
+        localInvoiceData,
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } catch (e) {
+      print('❌ Failed to upsert invoice: $e');
+      rethrow;
+    }
+  }
+
+  static Future<void> upsertPayment(Map<String, dynamic> paymentData) async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final localPaymentData = _convertPaymentApiToLocal(paymentData);
+      await db.insert(
+        'payments',
+        localPaymentData,
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } catch (e) {
+      print('❌ Failed to upsert payment: $e');
+      rethrow;
+    }
+  }
+
   /// Get pending changes info (for debugging)
   static Future<Map<String, dynamic>> getPendingChangesInfo() async {
     try {
