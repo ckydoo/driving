@@ -564,11 +564,35 @@ class SchoolRegistrationController extends GetxController {
   }
 
   /// Navigate to PIN setup (NEW METHOD)
-  void _navigateToPinSetup() {
+  void _navigateToPinSetup() async {
     print('🔐 Navigating to PIN setup...');
     try {
-      // Navigate to PIN setup screen
-      Get.offAllNamed('/pin-setup');
+      // CRITICAL FIX: Wait for GetX reactive state to fully propagate
+      // before attempting navigation. This ensures AuthenticatedMiddleware
+      // sees the updated auth state.
+      await Future.delayed(const Duration(milliseconds: 300));
+
+      // Verify auth state before navigation
+      final authController = Get.find<AuthController>();
+      print('🔍 Pre-navigation auth check:');
+      print('   isLoggedIn: ${authController.isLoggedIn.value}');
+      print('   currentUser: ${authController.currentUser.value?.email}');
+
+      if (!authController.isLoggedIn.value ||
+          authController.currentUser.value == null) {
+        print('⚠️ Auth state not ready - waiting longer...');
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
+
+      // Final check
+      if (authController.isLoggedIn.value &&
+          authController.currentUser.value != null) {
+        print('✅ Auth state confirmed - navigating to PIN setup');
+        Get.offAllNamed('/pin-setup');
+      } else {
+        print('❌ Auth state not properly set - falling back to main');
+        _navigateToMain();
+      }
     } catch (e) {
       print('❌ Navigation to PIN setup failed: $e');
       // Fallback: go to main app
@@ -610,7 +634,8 @@ class SchoolRegistrationController extends GetxController {
 
       // Ensure we have required fields
       if (adminUser['id'] == null || adminUser['email'] == null) {
-        throw Exception('Missing required user fields: id=${adminUser['id']}, email=${adminUser['email']}');
+        throw Exception(
+            'Missing required user fields: id=${adminUser['id']}, email=${adminUser['email']}');
       }
 
       final user = User(
@@ -651,7 +676,8 @@ class SchoolRegistrationController extends GetxController {
         print('✅ API token saved to SharedPreferences: $tokenKey');
         print('   Token: ${ApiService.currentToken!.substring(0, 10)}...');
       } else {
-        print('⚠️ No API token available to save - user may have limited functionality');
+        print(
+            '⚠️ No API token available to save - user may have limited functionality');
       }
 
       // ✅ CRITICAL FIX: Trigger sync after auto-login
