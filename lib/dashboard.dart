@@ -42,7 +42,7 @@ class FixedDashboardContent extends StatelessWidget {
 
             final activeInstructors = userController.users
                 .where((user) =>
-                    user.role == 'instructor' && user.status == 'Active')
+                    user.role == 'instructor' && user.status.toLowerCase() == 'active')
                 .length;
 
             return SingleChildScrollView(
@@ -736,7 +736,7 @@ class FixedDashboardContent extends StatelessWidget {
       {
         'label': 'Active Instructors',
         'value':
-            '${userController.users.where((u) => u.role == 'instructor' && u.status == 'Active').length}',
+            '${userController.users.where((u) => u.role == 'instructor' && u.status.toLowerCase() == 'active').length}',
         'color': Colors.purple
       },
     ];

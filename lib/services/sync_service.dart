@@ -487,6 +487,17 @@ class SyncService {
     }
   }
 
+  // Clear all pending changes (useful for debugging or after successful sync)
+  static Future<void> clearPendingChanges() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_pendingChangesKey);
+      print('🧹 Cleared all pending changes');
+    } catch (e) {
+      print('❌ Failed to clear pending changes: $e');
+    }
+  }
+
   // Update local database with server data
   static Future<void> _updateLocalDatabase(
       Map<String, dynamic> serverData) async {
@@ -739,23 +750,30 @@ class SyncService {
       Map<String, dynamic> scheduleData) {
     return {
       'id': scheduleData['id'],
-      'student_id': scheduleData['student'],
-      'instructor_id': scheduleData['instructor'],
-      'course_id': scheduleData['course'],
-      'vehicle_id': scheduleData['vehicle'],
+      'student': scheduleData['student'],
+      'instructor': scheduleData['instructor'],
+      'course': scheduleData['course'],
+      'car': scheduleData['vehicle'],
       'start': scheduleData['start'],
       'end': scheduleData['end'],
-      'is_recurring': scheduleData['is_recurring'] ?? 0,
+      'is_recurring': _convertBoolToInt(scheduleData['is_recurring']),
       'recurrence_pattern': scheduleData['recurring_pattern'] ?? '',
       'recurrence_end_date': scheduleData['recurring_end_date'] ?? '',
-      'attended': scheduleData['attended'] ?? 0,
-      'lessons_completed': scheduleData['lessons_completed'] ?? 0,
-      'lessons_deducted': scheduleData['lessons_deducted'] ?? 0,
+      'attended': _convertBoolToInt(scheduleData['attended']),
+      'lessonsCompleted': scheduleData['lessons_completed'] ?? 0,
+      'lessonsDeducted': scheduleData['lessons_deducted'] ?? 0,
       'status': scheduleData['status'] ?? 'scheduled',
       'class_type': scheduleData['class_type'] ?? 'Practical',
-      'notes': scheduleData['notes'] ?? '',
-      'school_id': scheduleData['school_id'],
     };
+  }
+
+  // Helper method to convert boolean values to integers for SQLite
+  static int _convertBoolToInt(dynamic value) {
+    if (value == null) return 0;
+    if (value is bool) return value ? 1 : 0;
+    if (value is int) return value;
+    if (value is String) return (value.toLowerCase() == 'true' || value == '1') ? 1 : 0;
+    return 0;
   }
 
   static Map<String, dynamic> _convertInvoiceApiToLocal(

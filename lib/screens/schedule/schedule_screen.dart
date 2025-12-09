@@ -4,6 +4,7 @@ import 'package:driving/models/schedule.dart';
 import 'package:driving/models/user.dart';
 import 'package:driving/screens/schedule/create_schedule_screen.dart';
 import 'package:driving/screens/schedule/recurring_schedule_screen.dart';
+import 'package:driving/screens/simplified_schedule_booking_screen.dart';
 import 'package:driving/widgets/responsive_extensions.dart';
 import 'package:driving/widgets/responsive_text.dart';
 import 'package:driving/widgets/schedule_details_dialog.dart';
@@ -776,7 +777,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     if (isRecurring) {
       Get.to(() => RecurringScheduleScreen());
     } else {
-      Get.to(() => SingleScheduleScreen());
+      Get.to(() => SimplifiedScheduleBookingScreen());
     }
   }
 

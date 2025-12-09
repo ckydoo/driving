@@ -381,8 +381,7 @@ class SyncController extends GetxController {
 
     try {
       isSyncing.value = true;
-      syncStatus.value =
-          forceFullSync ? 'Force syncing...' : 'Starting production sync...';
+      syncStatus.value = forceFullSync ? 'Force syncing...' : 'Syncing...';
 
       // Get school ID from settings controller
       final settingsController = Get.find<SettingsController>();

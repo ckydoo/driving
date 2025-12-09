@@ -1111,7 +1111,7 @@ class _POSScreenState extends State<POSScreen> {
             child: GridView.builder(
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: _isMobile ? 1 : 2,
-                childAspectRatio: _isMobile ? 4.5 : 3.5,
+                childAspectRatio: _isMobile ? 4.2 : 3.5,
                 crossAxisSpacing: 12,
                 mainAxisSpacing: 12,
               ),
@@ -1135,39 +1135,41 @@ class _POSScreenState extends State<POSScreen> {
         onTap: () => _addToCart(course),
         borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: EdgeInsets.all(12),
+          padding: EdgeInsets.all(_isMobile ? 10 : 12),
           child: Row(
             children: [
               Container(
-                padding: EdgeInsets.all(8),
+                padding: EdgeInsets.all(_isMobile ? 6 : 8),
                 decoration: BoxDecoration(
                   color: Colors.blue.shade100,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child:
-                    Icon(Icons.school, color: Colors.blue.shade700, size: 20),
+                child: Icon(Icons.school,
+                    color: Colors.blue.shade700, size: _isMobile ? 18 : 20),
               ),
-              SizedBox(width: 12),
+              SizedBox(width: _isMobile ? 10 : 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
                       course.name,
                       style: TextStyle(
+                        
                         fontWeight: FontWeight.bold,
                         fontSize: _responsiveFontSize,
                       ),
-                      maxLines: 2,
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    SizedBox(height: 4),
+                    SizedBox(height: 2),
                     Text(
                       '\$${course.price.toStringAsFixed(2)}',
                       style: TextStyle(
                         color: Colors.green.shade700,
-                        fontSize: _responsiveFontSize + 2,
+                        fontSize: _responsiveFontSize,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -1175,12 +1177,13 @@ class _POSScreenState extends State<POSScreen> {
                 ),
               ),
               Container(
-                padding: EdgeInsets.all(8),
+                padding: EdgeInsets.all(_isMobile ? 6 : 8),
                 decoration: BoxDecoration(
                   color: Colors.green.shade100,
                   shape: BoxShape.circle,
                 ),
-                child: Icon(Icons.add, color: Colors.green.shade700, size: 20),
+                child: Icon(Icons.add,
+                    color: Colors.green.shade700, size: _isMobile ? 18 : 20),
               ),
             ],
           ),
@@ -1876,6 +1879,7 @@ class _POSScreenState extends State<POSScreen> {
       ),
     );
   }
+
   Widget _buildReactiveCartItem(
       CartItem item, int index, StateSetter setModalState) {
     return Container(
@@ -1886,6 +1890,7 @@ class _POSScreenState extends State<POSScreen> {
       child: Row(
         children: [
           Expanded(
+            flex: 3,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1893,34 +1898,36 @@ class _POSScreenState extends State<POSScreen> {
                   item.course.name,
                   style: TextStyle(
                     fontWeight: FontWeight.w500,
-                    fontSize: _isMobile ? 16 : 14,
+                    fontSize: _isMobile ? 14 : 14,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 Text(
                   '\$${item.pricePerUnit.toStringAsFixed(2)} each',
                   style: TextStyle(
                     color: Colors.grey.shade600,
-                    fontSize: _isMobile ? 14 : 12,
+                    fontSize: _isMobile ? 12 : 12,
                   ),
                 ),
               ],
             ),
           ),
-          SizedBox(width: _isMobile ? 12 : 8),
+          SizedBox(width: _isMobile ? 8 : 8),
 
           // Reactive quantity controls
           _buildReactiveQuantityControls(item, index, setModalState),
 
-          SizedBox(width: _isMobile ? 12 : 8),
+          SizedBox(width: _isMobile ? 6 : 8),
 
           // Total price
-          Container(
-            width: _isMobile ? 80 : 60,
+          SizedBox(
+            width: _isMobile ? 70 : 60,
             child: Text(
               '\$${item.totalPrice.toStringAsFixed(2)}',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
-                fontSize: _isMobile ? 16 : 14,
+                fontSize: _isMobile ? 14 : 14,
               ),
               textAlign: TextAlign.right,
             ),
@@ -1932,6 +1939,7 @@ class _POSScreenState extends State<POSScreen> {
       ),
     );
   }
+
   Widget _buildReactiveQuantityControls(
       CartItem item, int index, StateSetter setModalState) {
     return Row(
@@ -1957,9 +1965,9 @@ class _POSScreenState extends State<POSScreen> {
 
         // Quantity Display
         Container(
-          width: _isMobile ? 60 : 50,
-          height: _isMobile ? 44 : 32,
-          margin: EdgeInsets.symmetric(horizontal: _isMobile ? 8 : 4),
+          width: _isMobile ? 50 : 50,
+          height: _isMobile ? 36 : 32,
+          margin: EdgeInsets.symmetric(horizontal: _isMobile ? 6 : 4),
           decoration: BoxDecoration(
             border: Border.all(color: Colors.grey.shade300),
             borderRadius: BorderRadius.circular(8),
@@ -1969,7 +1977,7 @@ class _POSScreenState extends State<POSScreen> {
             child: Text(
               item.quantity.toString(),
               style: TextStyle(
-                fontSize: _isMobile ? 16 : 14,
+                fontSize: _isMobile ? 14 : 14,
                 fontWeight: FontWeight.w600,
                 color: Colors.grey.shade800,
               ),
@@ -1992,6 +2000,7 @@ class _POSScreenState extends State<POSScreen> {
       ],
     );
   }
+
   Widget _buildReactiveDeleteButton(int index, StateSetter setModalState) {
     return Container(
       width: _isMobile ? 44 : 32,

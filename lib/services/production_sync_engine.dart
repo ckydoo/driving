@@ -387,6 +387,10 @@ class ProductionSyncEngine {
                   data['student_id'] = data['student'];
                 if (data.containsKey('course'))
                   data['course_id'] = data['course'];
+
+                // Remove fields that don't exist on server
+                data.remove('notes');
+                data.remove('courseName');
               }
               if (tableName == 'schedules') {
                 if (data.containsKey('student'))

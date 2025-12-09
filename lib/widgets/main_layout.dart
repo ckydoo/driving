@@ -32,10 +32,27 @@ class ResponsiveMainLayout extends StatefulWidget {
   State<ResponsiveMainLayout> createState() => _ResponsiveMainLayoutState();
 }
 
-class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
+class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout>
+    with SingleTickerProviderStateMixin {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   DateTime? _lastBackPressed;
   static const Duration _exitTimeLimit = Duration(seconds: 2);
+  late AnimationController _syncAnimationController;
+
+  @override
+  void initState() {
+    super.initState();
+    _syncAnimationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    );
+  }
+
+  @override
+  void dispose() {
+    _syncAnimationController.dispose();
+    super.dispose();
+  }
 
   // Check if we should show mobile layout
   bool _isMobile(BuildContext context) {
@@ -445,20 +462,33 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
                 width: 56,
                 height: 56,
                 child: GetX<SyncController>(
-                  builder: (syncController) => IconButton(
-                    icon: Icon(
-                      syncController.getSyncStatusIcon(),
-                      size: 25,
-                      color: syncController.getSyncStatusColor(),
-                    ),
-                    tooltip: syncController.isSyncing.value
-                        ? 'Syncing...'
-                        : 'Tap to sync',
-                    onPressed: syncController.isSyncing.value
-                        ? null
-                        : () => syncController.performSmartSync(),
-                    splashRadius: 24,
-                  ),
+                  builder: (syncController) {
+                    // Start or stop animation based on sync state
+                    if (syncController.isSyncing.value) {
+                      _syncAnimationController.repeat();
+                    } else {
+                      _syncAnimationController.stop();
+                      _syncAnimationController.reset();
+                    }
+
+                    return IconButton(
+                      icon: RotationTransition(
+                        turns: _syncAnimationController,
+                        child: Icon(
+                          syncController.getSyncStatusIcon(),
+                          size: 25,
+                          color: syncController.getSyncStatusColor(),
+                        ),
+                      ),
+                      tooltip: syncController.isSyncing.value
+                          ? 'Syncing...'
+                          : 'Tap to sync',
+                      onPressed: syncController.isSyncing.value
+                          ? null
+                          : () => syncController.performSmartSync(),
+                      splashRadius: 24,
+                    );
+                  },
                 ),
               ),
               Container(
@@ -514,44 +544,60 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
           ),
 
           GetX<SyncController>(
-            builder: (syncController) => Container(
-              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: syncController.getSyncStatusColor().withOpacity(0.1),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: syncController.getSyncStatusColor().withOpacity(0.3),
+            builder: (syncController) {
+              // Start or stop animation based on sync state
+              if (syncController.isSyncing.value) {
+                _syncAnimationController.repeat();
+              } else {
+                _syncAnimationController.stop();
+                _syncAnimationController.reset();
+              }
+
+              return Container(
+                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: syncController.getSyncStatusColor().withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: syncController.getSyncStatusColor().withOpacity(0.3),
+                  ),
                 ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    syncController.getSyncStatusIcon(),
-                    color: syncController.getSyncStatusColor(),
-                    size: 16,
-                  ),
-                  SizedBox(width: 6),
-                  Text(
-                    syncController.syncStatus.value,
-                    style: TextStyle(
-                      color: syncController.getSyncStatusColor(),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    RotationTransition(
+                      turns: _syncAnimationController,
+                      child: Icon(
+                        syncController.getSyncStatusIcon(),
+                        color: syncController.getSyncStatusColor(),
+                        size: 16,
+                      ),
                     ),
-                  ),
-                  SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: () => syncController.performSmartSync(),
-                    child: Icon(
-                      Icons.refresh,
-                      color: syncController.getSyncStatusColor(),
-                      size: 16,
+                    SizedBox(width: 6),
+                    Text(
+                      syncController.syncStatus.value,
+                      style: TextStyle(
+                        color: syncController.getSyncStatusColor(),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ),
+                    SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () => syncController.performSmartSync(),
+                      child: RotationTransition(
+                        turns: _syncAnimationController,
+                        child: Icon(
+                          Icons.refresh,
+                          color: syncController.getSyncStatusColor(),
+                          size: 16,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
           ),
 
           SizedBox(width: 8),
@@ -690,17 +736,6 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
         navController.currentPage.value,
         () {
           navController.navigateToPage('instructors');
-          if (autoClose) Navigator.of(context).pop();
-        },
-      ));
-
-      widgets.add(_buildSidebarItem(
-        Icons.people,
-        'All Users',
-        'users',
-        navController.currentPage.value,
-        () {
-          navController.navigateToPage('users');
           if (autoClose) Navigator.of(context).pop();
         },
       ));

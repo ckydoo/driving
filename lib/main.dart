@@ -166,8 +166,10 @@ class DrivingSchoolApp extends StatelessWidget {
         initialRoute: AppRoutes.initial,
         getPages: AppRoutes.routes,
         debugShowCheckedModeBanner: false,
-        unknownRoute:
-            GetPage(name: '/notfound', page: () => const LoginScreen()),
+        unknownRoute: GetPage(
+          name: '/notfound',
+          page: () => const LoginScreen(),
+        ),
         home: const AuthenticationWrapper(),
       );
     });
@@ -273,15 +275,19 @@ class _AuthenticationWrapperState extends State<AuthenticationWrapper> {
         whereArgs: ['business_name', 'school_id', 'enable_multi_tenant'],
       );
 
-      bool hasBusinessName = settingsResult.any((row) =>
-          row['key'] == 'business_name' &&
-          row['value'] != null &&
-          row['value'].toString().trim().isNotEmpty);
+      bool hasBusinessName = settingsResult.any(
+        (row) =>
+            row['key'] == 'business_name' &&
+            row['value'] != null &&
+            row['value'].toString().trim().isNotEmpty,
+      );
 
-      bool hasSchoolId = settingsResult.any((row) =>
-          row['key'] == 'school_id' &&
-          row['value'] != null &&
-          row['value'].toString().trim().isNotEmpty);
+      bool hasSchoolId = settingsResult.any(
+        (row) =>
+            row['key'] == 'school_id' &&
+            row['value'] != null &&
+            row['value'].toString().trim().isNotEmpty,
+      );
 
       bool isConfigured = (hasSchoolInTable && hasSchoolId) || hasBusinessName;
 
@@ -297,18 +303,16 @@ class _AuthenticationWrapperState extends State<AuthenticationWrapper> {
         final schoolId = schoolData['id']?.toString();
 
         if (schoolId != null && schoolId.isNotEmpty) {
-          await db.insert(
-            'settings',
-            {'key': 'school_id', 'value': schoolId},
-            conflictAlgorithm: ConflictAlgorithm.replace,
-          );
+          await db.insert('settings', {
+            'key': 'school_id',
+            'value': schoolId,
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
 
           if (!hasBusinessName && schoolData['name'] != null) {
-            await db.insert(
-              'settings',
-              {'key': 'business_name', 'value': schoolData['name']},
-              conflictAlgorithm: ConflictAlgorithm.replace,
-            );
+            await db.insert('settings', {
+              'key': 'business_name',
+              'value': schoolData['name'],
+            }, conflictAlgorithm: ConflictAlgorithm.replace);
           }
 
           print('✅ Auto-fix complete - school data synced to settings');
@@ -337,11 +341,7 @@ class _AuthenticationWrapperState extends State<AuthenticationWrapper> {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(
-        child: CircularProgressIndicator(),
-      ),
-    );
+    return const Scaffold(body: Center(child: CircularProgressIndicator()));
   }
 }
 
