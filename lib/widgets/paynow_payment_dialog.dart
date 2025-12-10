@@ -113,15 +113,10 @@ class _PaynowPaymentDialogState extends State<PaynowPaymentDialog> {
             _buildPaymentMethodOption(
                 'web',
                 'Web Payment',
-                'Pay using Visa, Mastercard, EcoCash, or OneMoney',
+                'Pay using Visa, Mastercard, EcoCash etc via Paynow web portal',
                 Icons.language),
             _buildPaymentMethodOption('ecocash', 'EcoCash Direct',
                 'Pay directly from your EcoCash wallet', Icons.phone_android),
-            _buildPaymentMethodOption(
-                'onemoney',
-                'OneMoney Direct',
-                'Pay directly from your OneMoney wallet',
-                Icons.account_balance_wallet),
             if (_selectedMethod != 'web') ...[
               SizedBox(height: 16),
               _buildPhoneInput(),

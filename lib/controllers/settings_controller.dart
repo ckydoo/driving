@@ -15,7 +15,7 @@ class SettingsController extends GetxController {
   final RxBool checkInstructorAvailability = true.obs;
   final RxBool enforceWorkingHours = true.obs;
   final RxBool autoAssignVehicles = true.obs;
-  final RxDouble defaultLessonDuration = 1.5.obs; // hours
+  final RxDouble defaultLessonDuration = 0.5.obs; // hours
 
   // Billing Settings
   final RxBool showLowLessonWarning = true.obs;
@@ -27,7 +27,7 @@ class SettingsController extends GetxController {
   // Instructor Settings
   final RxString workingHoursStart = '09:00'.obs;
   final RxString workingHoursEnd = '18:00'.obs;
-  final RxInt breakBetweenLessons = 15.obs; // minutes
+  final RxInt breakBetweenLessons = 10.obs; // minutes
   final RxBool allowBackToBackLessons = false.obs;
 
   // Notification Settings
@@ -60,7 +60,7 @@ class SettingsController extends GetxController {
 
   // Operating Schedule
   final RxList<String> operatingDays = <String>[].obs;
-  final RxString businessStartTime = '09:00'.obs;
+  final RxString businessStartTime = '08:00'.obs;
   final RxString businessEndTime = '17:00'.obs;
 
   String get businessNameValue => businessName.value;
@@ -74,13 +74,13 @@ class SettingsController extends GetxController {
   String get businessPhoneValue => businessPhone.value;
   set businessPhoneValue(String value) => businessPhone.value = value;
 
-  final RxInt _tempBreakBetweenLessons = 15.obs;
+  final RxInt _tempBreakBetweenLessons = 10.obs;
   final RxInt _tempLessonStartReminder = 15.obs;
   final RxInt _tempLowLessonThreshold = 3.obs;
   final RxInt _tempAutoSaveInterval = 5.obs;
 
   var printerName = ''.obs;
-  var printerPaperSize = '80mm'.obs;
+  var printerPaperSize = '58mm'.obs;
   var autoPrintReceipt = false.obs;
   var receiptCopies = '1'.obs;
   var receiptHeader = 'Thank You!'.obs;
@@ -522,7 +522,7 @@ class SettingsController extends GetxController {
       checkInstructorAvailability.value = true;
       enforceWorkingHours.value = true;
       autoAssignVehicles.value = true;
-      defaultLessonDuration.value = 1.5;
+      defaultLessonDuration.value = 0.5;
 
       showLowLessonWarning.value = true;
       lowLessonThreshold.value = 3;
@@ -530,9 +530,9 @@ class SettingsController extends GetxController {
       autoCreateBillingRecords.value = true;
       countScheduledLessons.value = true;
 
-      workingHoursStart.value = '09:00';
+      workingHoursStart.value = '08:00';
       workingHoursEnd.value = '18:00';
-      breakBetweenLessons.value = 15;
+      breakBetweenLessons.value = 10;
       allowBackToBackLessons.value = false;
 
       autoAttendanceNotifications.value = true;
