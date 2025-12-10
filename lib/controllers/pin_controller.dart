@@ -63,9 +63,11 @@ class PinController extends GetxController {
       await _secureStorage.delete(key: _userVerifiedKey);
     }
   }
+
   Future<String?> getPinUserEmail() async {
     return await _secureStorage.read(key: _pinUserEmailKey);
   }
+
   Future<void> setPinUserEmail(String email) async {
     await _secureStorage.write(key: _pinUserEmailKey, value: email);
   }
@@ -393,6 +395,7 @@ class PinController extends GetxController {
       debugPrint('❌ Error clearing verification: $e');
     }
   }
+
   Future<Map<String, dynamic>> getPinInfo() async {
     return {
       'isPinSet': isPinSet.value,

@@ -237,7 +237,7 @@ class SubscriptionScreen extends StatelessWidget {
                             method: 'paynow',
                             icon: Icons.mobile_friendly,
                             title: 'Paynow',
-                            isAvailable: true, // Changed to true
+                            isAvailable: true,
                             width: responsiveCardWidth,
                           ),
                           SizedBox(width: 12),

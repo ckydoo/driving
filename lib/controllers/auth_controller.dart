@@ -1359,6 +1359,33 @@ class AuthController extends GetxController {
         print('✅ PIN verified successfully');
         await _pinController.setUserVerified(true);
 
+        // CRITICAL FIX: Load user data from database
+        final pinUserEmail = await _pinController.getPinUserEmail();
+
+        if (pinUserEmail == null || pinUserEmail.isEmpty) {
+          print('❌ No user email associated with PIN');
+          error.value = 'PIN configuration error. Please login with password.';
+          return false;
+        }
+
+        print('📧 Loading user data for: $pinUserEmail');
+
+        // Load user from database and set authentication state
+        await _loadUserFromCache(pinUserEmail);
+
+        // Verify user was loaded successfully
+        if (!isLoggedIn.value || currentUser.value == null) {
+          print('❌ Failed to load user data');
+          error.value = 'Unable to load user data. Please login with password.';
+          return false;
+        }
+
+        print('✅ User loaded: ${currentUser.value!.email}');
+        print('✅ Authentication state set - isLoggedIn: ${isLoggedIn.value}');
+
+        // Restore API token if available for sync
+        await _restoreApiTokenForSync(pinUserEmail);
+
         // NEW: Check if sync needed
         final prefs = await SharedPreferences.getInstance();
         final lastSyncStr = prefs.getString('last_full_sync');

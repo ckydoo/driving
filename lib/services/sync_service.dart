@@ -658,13 +658,13 @@ class SyncService {
       final prefs = await SharedPreferences.getInstance();
       return {
         'autoSync': prefs.getBool('auto_sync') ?? true,
-        'interval': prefs.getInt('sync_interval') ?? 30,
+        'interval': prefs.getInt('sync_interval') ?? 5,
         'lastSync': prefs.getString(_lastSyncKey) ?? 'Never',
       };
     } catch (e) {
       return {
         'autoSync': true,
-        'interval': 30,
+        'interval': 5,
         'lastSync': 'Never',
       };
     }
