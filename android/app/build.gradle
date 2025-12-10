@@ -16,10 +16,12 @@ android {
     }
 
     defaultConfig {
-        minSdk flutter.minSdkVersion
-        targetSdk flutter.targetSdkVersion
-        multiDexEnabled true
-    }
+    applicationId = "com.codzlabzim.driving"
+    minSdkVersion = flutter.minSdkVersion
+    targetSdk = 34
+    versionCode = 1
+    versionName = "1.0.0"
+}
 
     kotlinOptions {
         jvmTarget = JavaVersion.VERSION_1_8

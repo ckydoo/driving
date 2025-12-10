@@ -422,4 +422,181 @@ class PrinterInfo {
       address: map['address'],
     );
   }
+
+  static const platform = MethodChannel('com.codzlabzim.driving/printing');
+
+  static Future<bool> requestBluetoothPermissions() async {
+    try {
+      print('📱 Requesting Bluetooth permissions from Flutter...');
+      final bool result =
+          await platform.invokeMethod('requestBluetoothPermissions');
+      print('✅ Permission request result: $result');
+      return result;
+    } on PlatformException catch (e) {
+      print('❌ Failed to request permissions: ${e.message}');
+      return false;
+    }
+  }
+
+  /// Check if Bluetooth permissions are already granted
+  static Future<bool> checkBluetoothPermissions() async {
+    try {
+      final bool result =
+          await platform.invokeMethod('checkBluetoothPermissions');
+      return result;
+    } on PlatformException catch (e) {
+      print('❌ Failed to check permissions: ${e.message}');
+      return false;
+    }
+  }
+
+  /// Discover available printers by type
+  /// Type can be: 'bluetooth', 'usb', 'network', or 'all'
+  static Future<List<Map<String, dynamic>>> discoverPrinters({
+    String type = 'all',
+  }) async {
+    try {
+      print('🔍 Starting printer discovery for type: $type');
+
+      // Check permissions first (on app side)
+      final hasPermissions = await checkBluetoothPermissions();
+      if (!hasPermissions && type.toLowerCase() == 'bluetooth') {
+        print('⚠️ No Bluetooth permissions, requesting...');
+        final granted = await requestBluetoothPermissions();
+        if (!granted) {
+          print('❌ Permissions denied by user');
+          Get.snackbar(
+            'Permission Required',
+            'Bluetooth permission is needed to discover printers',
+            snackPosition: SnackPosition.BOTTOM,
+            duration: Duration(seconds: 3),
+          );
+          return [];
+        }
+      }
+
+      // Now discover printers (native side will also check)
+      final result = await platform.invokeMethod('discoverPrinters', {
+        'type': type,
+      });
+
+      print('📱 Discovery result: $result');
+
+      if (result == null) {
+        print('⚠️ No printers found');
+        return [];
+      }
+
+      // Convert to List<Map<String, dynamic>>
+      final List<Map<String, dynamic>> printers = (result as List)
+          .map((item) => Map<String, dynamic>.from(item as Map))
+          .toList();
+
+      print('✅ Found ${printers.length} printers');
+      return printers;
+    } on PlatformException catch (e) {
+      print('❌ Error discovering printers: ${e.message}');
+
+      if (e.code == 'PERMISSION_ERROR') {
+        Get.snackbar(
+          'Permission Required',
+          'Please grant Bluetooth permissions to discover printers',
+          snackPosition: SnackPosition.BOTTOM,
+          duration: Duration(seconds: 4),
+        );
+      } else {
+        Get.snackbar(
+          'Discovery Error',
+          'Failed to discover printers: ${e.message}',
+          snackPosition: SnackPosition.BOTTOM,
+          duration: Duration(seconds: 3),
+        );
+      }
+
+      return [];
+    } catch (e) {
+      print('❌ Unexpected error: $e');
+      return [];
+    }
+  }
+
+  /// Verify if a specific printer is available
+  static Future<bool> verifyPrinter(String printerName) async {
+    try {
+      print('🔍 Verifying printer: $printerName');
+
+      final result = await platform.invokeMethod('verifyPrinter', {
+        'printerName': printerName,
+      });
+
+      print('✅ Printer verification result: $result');
+      return result as bool;
+    } on PlatformException catch (e) {
+      print('❌ Error verifying printer: ${e.message}');
+      return false;
+    }
+  }
+
+  /// Print a receipt
+  static Future<bool> printReceipt({
+    required String content,
+    required String printerName,
+    String paperSize = '80mm',
+  }) async {
+    try {
+      print('🖨️ Printing receipt...');
+      print('   Printer: $printerName');
+      print('   Paper size: $paperSize');
+
+      final result = await platform.invokeMethod('printReceipt', {
+        'content': content,
+        'printerName': printerName,
+        'paperSize': paperSize,
+      });
+
+      print('✅ Print result: $result');
+      return result as bool;
+    } on PlatformException catch (e) {
+      print('❌ Error printing receipt: ${e.message}');
+
+      if (e.code == 'PERMISSION_ERROR') {
+        Get.snackbar(
+          'Permission Required',
+          'Please grant Bluetooth permissions to print',
+          snackPosition: SnackPosition.BOTTOM,
+          duration: Duration(seconds: 4),
+        );
+      } else {
+        Get.snackbar(
+          'Print Error',
+          e.message ?? 'Failed to print receipt',
+          snackPosition: SnackPosition.BOTTOM,
+          duration: Duration(seconds: 3),
+        );
+      }
+
+      return false;
+    }
+  }
+
+  /// Format a simple text receipt
+  static String formatSimpleReceipt({
+    required String schoolName,
+    required String date,
+    required String items,
+    required String total,
+  }) {
+    return '''
+[C]<b>${schoolName}</b>
+[C]================================
+[L]Date: $date
+[L]
+$items
+[L]--------------------------------
+[R]TOTAL: $total
+[L]
+[C]Thank you for your payment!
+[C]
+''';
+  }
 }

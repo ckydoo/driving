@@ -21,26 +21,44 @@ import kotlinx.coroutines.withContext
 
 class MainActivity: FlutterActivity() {
     private val CHANNEL = "com.codzlabzim.driving/printing"
+    private val BLUETOOTH_PERMISSION_REQUEST_CODE = 1001
+    private var pendingResult: MethodChannel.Result? = null
+    private var pendingDiscoverType: String? = null
     
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
+                "requestBluetoothPermissions" -> {
+                    if (checkBluetoothPermissions()) {
+                        result.success(true)
+                    } else {
+                        pendingResult = result
+                        requestBluetoothPermissions()
+                    }
+                }
+                
+                "checkBluetoothPermissions" -> {
+                    result.success(checkBluetoothPermissions())
+                }
+                
                 "printReceipt" -> {
-                    // Run printing in background thread to avoid UI freeze
                     CoroutineScope(Dispatchers.Main).launch {
                         try {
                             val content = call.argument<String>("content") ?: ""
                             val printerName = call.argument<String>("printerName") ?: ""
                             val paperSize = call.argument<String>("paperSize") ?: "80mm"
                             
-                            // Execute print operation on IO thread
+                            if (!checkBluetoothPermissions()) {
+                                result.error("PERMISSION_ERROR", "Bluetooth permissions not granted", null)
+                                return@launch
+                            }
+                            
                             withContext(Dispatchers.IO) {
                                 printReceipt(content, printerName, paperSize)
                             }
                             
-                            // Return success on main thread
                             result.success(true)
                         } catch (e: Exception) {
                             result.error("PRINT_ERROR", e.message, null)
@@ -53,11 +71,38 @@ class MainActivity: FlutterActivity() {
                         try {
                             val type = call.argument<String>("type") ?: "all"
                             
+                            if (!checkBluetoothPermissions()) {
+                                pendingResult = result
+                                pendingDiscoverType = type
+                                requestBluetoothPermissions()
+                                return@launch
+                            }
+                            
                             val printers = withContext(Dispatchers.IO) {
                                 discoverPrinters(type)
                             }
                             
                             result.success(printers)
+                        } catch (e: Exception) {
+                            result.error("DISCOVER_ERROR", e.message, null)
+                        }
+                    }
+                }
+                
+                "getAllBluetoothDevices" -> {
+                    CoroutineScope(Dispatchers.Main).launch {
+                        try {
+                            if (!checkBluetoothPermissions()) {
+                                pendingResult = result
+                                requestBluetoothPermissions()
+                                return@launch
+                            }
+                            
+                            val devices = withContext(Dispatchers.IO) {
+                                getAllBluetoothDevices()
+                            }
+                            
+                            result.success(devices)
                         } catch (e: Exception) {
                             result.error("DISCOVER_ERROR", e.message, null)
                         }
@@ -85,18 +130,51 @@ class MainActivity: FlutterActivity() {
         }
     }
 
-    // Print receipt (runs on background thread)
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        
+        if (requestCode == BLUETOOTH_PERMISSION_REQUEST_CODE) {
+            val allGranted = grantResults.isNotEmpty() && 
+                           grantResults.all { it == PackageManager.PERMISSION_GRANTED }
+            
+            println("🔐 Permission result: ${if (allGranted) "GRANTED" else "DENIED"}")
+            
+            if (pendingResult != null) {
+                if (pendingDiscoverType != null && allGranted) {
+                    CoroutineScope(Dispatchers.Main).launch {
+                        try {
+                            val printers = withContext(Dispatchers.IO) {
+                                discoverPrinters(pendingDiscoverType!!)
+                            }
+                            pendingResult?.success(printers)
+                        } catch (e: Exception) {
+                            pendingResult?.error("DISCOVER_ERROR", e.message, null)
+                        } finally {
+                            pendingResult = null
+                            pendingDiscoverType = null
+                        }
+                    }
+                } else {
+                    pendingResult?.success(allGranted)
+                    pendingResult = null
+                }
+            }
+        }
+    }
+
     private fun printReceipt(content: String, printerName: String, paperSize: String) {
         try {
             println("🖨️ Starting print operation...")
             
-            // Check Bluetooth permissions
             if (!checkBluetoothPermissions()) {
                 println("⚠️ Bluetooth permissions not granted")
                 throw Exception("Bluetooth permissions required. Please grant permissions in settings.")
             }
 
-            // Get Bluetooth connection
             val bluetoothConnection = BluetoothPrintersConnections.selectFirstPaired()
             
             if (bluetoothConnection == null) {
@@ -105,7 +183,6 @@ class MainActivity: FlutterActivity() {
 
             println("📱 Found Bluetooth printer")
 
-            // Determine paper width (in characters)
             val paperWidth = when (paperSize) {
                 "58mm" -> 32
                 "80mm" -> 48
@@ -114,15 +191,13 @@ class MainActivity: FlutterActivity() {
 
             println("📄 Paper size: $paperSize ($paperWidth chars)")
 
-            // Create ESC/POS printer instance
             val printer = EscPosPrinter(
                 bluetoothConnection,
-                203, // DPI for most thermal printers
+                203,
                 paperWidth.toFloat(),
-                paperWidth // Characters per line
+                paperWidth
             )
 
-            // Format and print the receipt
             println("📝 Formatting receipt...")
             val formattedContent = formatReceiptForEscPos(content)
             
@@ -138,7 +213,6 @@ class MainActivity: FlutterActivity() {
         }
     }
 
-    // Discover printers by type (runs on background thread)
     private fun discoverPrinters(type: String): List<Map<String, String>> {
         val printers = mutableListOf<Map<String, String>>()
         
@@ -151,14 +225,11 @@ class MainActivity: FlutterActivity() {
                 }
                 "usb" -> {
                     // USB printer discovery would go here
-                    // For now, return empty list
                 }
                 "network" -> {
                     // Network printer discovery would go here
-                    // For now, return empty list
                 }
                 else -> {
-                    // Discover all types
                     if (checkBluetoothPermissions()) {
                         printers.addAll(getBluetoothPrinters())
                     }
@@ -171,68 +242,136 @@ class MainActivity: FlutterActivity() {
         return printers
     }
 
-    // Get Bluetooth printers
+    private fun getAllBluetoothDevices(): List<Map<String, String>> {
+        val devices = mutableListOf<Map<String, String>>()
+        
+        try {
+            println("🔍 Getting ALL Bluetooth devices...")
+            
+            if (!checkBluetoothPermissions()) {
+                println("❌ Bluetooth permissions NOT granted")
+                return devices
+            }
+
+            val bluetoothManager = getSystemService(BLUETOOTH_SERVICE) as BluetoothManager
+            val bluetoothAdapter = bluetoothManager.adapter
+            
+            if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled) {
+                println("❌ Bluetooth not available")
+                return devices
+            }
+
+            val pairedDevices: Set<BluetoothDevice> = try {
+                bluetoothAdapter.bondedDevices
+            } catch (e: SecurityException) {
+                println("❌ SecurityException: ${e.message}")
+                return devices
+            }
+            
+            println("📱 Found ${pairedDevices.size} paired devices")
+            
+            for (device in pairedDevices) {
+                try {
+                    val deviceName = device.name ?: "Unknown Device"
+                    val deviceAddress = device.address ?: "No Address"
+                    val deviceClass = device.bluetoothClass?.deviceClass ?: 0
+                    
+                    println("📱 Device: $deviceName ($deviceAddress)")
+                    
+                    val isProbablyPrinter = isPrinterDevice(deviceName) || isPrinterByClass(deviceClass)
+                    
+                    devices.add(mapOf(
+                        "name" to deviceName,
+                        "type" to "Bluetooth",
+                        "description" to deviceAddress,
+                        "isPrinter" to isProbablyPrinter.toString(),
+                        "deviceClass" to deviceClass.toString()
+                    ))
+                } catch (e: SecurityException) {
+                    println("❌ SecurityException: ${e.message}")
+                }
+            }
+            
+            println("✅ Total devices found: ${devices.size}")
+            
+        } catch (e: Exception) {
+            println("❌ Error: ${e.message}")
+            e.printStackTrace()
+        }
+        
+        return devices
+    }
+
     private fun getBluetoothPrinters(): List<Map<String, String>> {
         val printers = mutableListOf<Map<String, String>>()
         
         try {
             println("🔍 Starting Bluetooth printer search...")
             
-            // Check permissions again
             if (!checkBluetoothPermissions()) {
                 println("❌ Bluetooth permissions NOT granted")
-                println("   Please grant Bluetooth permissions in app settings")
                 return printers
             }
-            println("✅ Bluetooth permissions granted")
 
-            // Get Bluetooth adapter
             val bluetoothManager = getSystemService(BLUETOOTH_SERVICE) as BluetoothManager
             val bluetoothAdapter = bluetoothManager.adapter
             
             if (bluetoothAdapter == null) {
-                println("❌ Bluetooth adapter is NULL - device may not support Bluetooth")
+                println("❌ Bluetooth adapter is NULL")
                 return printers
             }
-            println("✅ Bluetooth adapter obtained")
             
             if (!bluetoothAdapter.isEnabled) {
-                println("❌ Bluetooth is NOT enabled - please turn on Bluetooth")
+                println("❌ Bluetooth is NOT enabled")
                 return printers
             }
-            println("✅ Bluetooth is enabled")
 
-            // Get paired devices - THIS REQUIRES BLUETOOTH_CONNECT PERMISSION
             val pairedDevices: Set<BluetoothDevice> = try {
                 bluetoothAdapter.bondedDevices
             } catch (e: SecurityException) {
-                println("❌ SecurityException getting bonded devices: ${e.message}")
-                println("   This usually means BLUETOOTH_CONNECT permission is not granted")
+                println("❌ SecurityException: ${e.message}")
                 return printers
             }
             
-            println("📱 Found ${pairedDevices.size} paired Bluetooth devices total")
+            println("📱 Found ${pairedDevices.size} paired Bluetooth devices")
             
             if (pairedDevices.isEmpty()) {
                 println("⚠️ No paired Bluetooth devices found")
-                println("   Please pair your printer in device Bluetooth settings first")
                 return printers
             }
             
-            // List all paired devices
             for (device in pairedDevices) {
                 try {
                     val deviceName = device.name ?: "Unknown Device"
                     val deviceAddress = device.address ?: "No Address"
+                    val deviceClass = device.bluetoothClass?.deviceClass ?: 0
                     
                     println("📱 Device: $deviceName")
                     println("   Address: $deviceAddress")
+                    println("   Class: $deviceClass")
                     println("   Type: ${device.type}")
                     println("   Bond State: ${device.bondState}")
                     
-                    // Check if it's a printer
-                    if (isPrinterDevice(deviceName)) {
-                        println("   ✅ Adding as printer")
+                    // Check for specific printer model (CY-BX58D)
+                    if (deviceName.contains("CY-BX", ignoreCase = true) || 
+                        deviceName.contains("58D", ignoreCase = true) ||
+                        deviceName.contains("CY", ignoreCase = true)) {
+                        println("   ✅ Matched CY-BX58D printer model")
+                        printers.add(mapOf(
+                            "name" to deviceName,
+                            "type" to "Bluetooth",
+                            "description" to deviceAddress
+                        ))
+                        continue
+                    }
+                    
+                    // Check general printer detection
+                    val isPrinterByName = isPrinterDevice(deviceName)
+                    val isPrinterByDeviceClass = isPrinterByClass(deviceClass)
+                    val isPrinter = isPrinterByName || isPrinterByDeviceClass
+                    
+                    if (isPrinter) {
+                        println("   ✅ Adding device (detected as printer)")
                         printers.add(mapOf(
                             "name" to deviceName,
                             "type" to "Bluetooth",
@@ -242,39 +381,64 @@ class MainActivity: FlutterActivity() {
                         println("   ⏭️ Skipping (not identified as printer)")
                     }
                 } catch (e: SecurityException) {
-                    println("❌ SecurityException accessing device: ${e.message}")
+                    println("❌ SecurityException: ${e.message}")
                 }
             }
             
             println("✅ Total printers found: ${printers.size}")
             
-        } catch (e: SecurityException) {
-            println("❌ Security exception getting Bluetooth devices: ${e.message}")
-            println("   Stack trace:")
-            e.printStackTrace()
         } catch (e: Exception) {
-            println("❌ Error getting Bluetooth printers: ${e.message}")
-            println("   Stack trace:")
+            println("❌ Error: ${e.message}")
             e.printStackTrace()
         }
         
         return printers
     }
 
-    // Check if device name suggests it's a printer
     private fun isPrinterDevice(deviceName: String): Boolean {
-    val printerKeywords = listOf(
-        "printer", "print", "pos", "receipt", 
-        "thermal", "bluetooth", "rpp", "mpt",
-        "escpos", "zjiang", "goojprt", "xprinter",
-        "bt", "wireless"
-    )
-    
-    val lowerName = deviceName.lowercase()
-    return printerKeywords.any { lowerName.contains(it) }
-}
+        val printerKeywords = listOf(
+            // Common printer terms
+            "printer", "print", "pos", "receipt", 
+            "thermal", "escpos", "esc/pos",
+            
+            // Printer brands and models
+            "zjiang", "goojprt", "xprinter", "epson",
+            "star", "bixolon", "citizen", "custom",
+            "sam4s", "snbc", "sewoo", "posbank",
+            "hp", "canon", "brother",
+            
+            // Model prefixes
+            "rpp", "mpt", "bt", "tmp", "tsp",
+            "ct", "crp", "mrp", "lk", "zj",
+            "cy", "bx",
+            
+            // Descriptor terms
+            "mobile", "portable", "wireless",
+            "58mm", "80mm", "label", "58d" 
+        )
+        
+        val lowerName = deviceName.lowercase()
+        val matches = printerKeywords.filter { lowerName.contains(it) }
+        
+        if (matches.isNotEmpty()) {
+            println("   🎯 Matched keywords: $matches")
+            return true
+        }
+        
+        return false
+    }
 
-    // Verify printer connection (runs on background thread)
+    private fun isPrinterByClass(deviceClass: Int): Boolean {
+        val majorClass = (deviceClass and 0x1F00) shr 8
+        
+        if (majorClass == 0x06) {
+            println("   🎯 Device class indicates imaging device (likely printer)")
+            return true
+        }
+        
+        return false
+    }
+
     private fun verifyPrinter(printerName: String): Boolean {
         return try {
             if (!checkBluetoothPermissions()) {
@@ -289,30 +453,22 @@ class MainActivity: FlutterActivity() {
         }
     }
 
-    // Format receipt content for ESC/POS
     private fun formatReceiptForEscPos(content: String): String {
-        // ESC/POS formatting commands:
-        // [C] = Center align
-        // [L] = Left align
-        // [R] = Right align
         return "[L]$content"
     }
 
-    // Check Bluetooth permissions
     private fun checkBluetoothPermissions(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            // Android 12+
             ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED &&
             ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED
         } else {
-            // Android 11 and below
             ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH) == PackageManager.PERMISSION_GRANTED &&
             ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_ADMIN) == PackageManager.PERMISSION_GRANTED
         }
     }
 
-    // Request Bluetooth permissions
     private fun requestBluetoothPermissions() {
+        println("🔐 Requesting Bluetooth permissions...")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             ActivityCompat.requestPermissions(
                 this,
@@ -320,7 +476,7 @@ class MainActivity: FlutterActivity() {
                     Manifest.permission.BLUETOOTH_CONNECT,
                     Manifest.permission.BLUETOOTH_SCAN
                 ),
-                1
+                BLUETOOTH_PERMISSION_REQUEST_CODE
             )
         } else {
             ActivityCompat.requestPermissions(
@@ -329,7 +485,7 @@ class MainActivity: FlutterActivity() {
                     Manifest.permission.BLUETOOTH,
                     Manifest.permission.BLUETOOTH_ADMIN
                 ),
-                1
+                BLUETOOTH_PERMISSION_REQUEST_CODE
             )
         }
     }

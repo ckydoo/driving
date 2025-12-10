@@ -15,7 +15,7 @@ class SettingsController extends GetxController {
   final RxBool checkInstructorAvailability = true.obs;
   final RxBool enforceWorkingHours = true.obs;
   final RxBool autoAssignVehicles = true.obs;
-  final RxDouble defaultLessonDuration = 0.5.obs; // hours
+  final RxDouble defaultLessonDuration = 0.5.obs; // hours - 30 minutes default
 
   // Billing Settings
   final RxBool showLowLessonWarning = true.obs;
@@ -231,7 +231,7 @@ class SettingsController extends GetxController {
           prefs.getBool('enforce_working_hours') ?? true;
       autoAssignVehicles.value = prefs.getBool('auto_assign_vehicles') ?? true;
       defaultLessonDuration.value =
-          prefs.getDouble('default_lesson_duration') ?? 1.5;
+          prefs.getDouble('default_lesson_duration') ?? 0.5;
 
       // Billing Settings
       showLowLessonWarning.value =
@@ -321,7 +321,7 @@ class SettingsController extends GetxController {
       await prefs.setBool('check_instructor_availability', true);
       await prefs.setBool('enforce_working_hours', true);
       await prefs.setBool('auto_assign_vehicles', true);
-      await prefs.setDouble('default_lesson_duration', 1.5);
+      await prefs.setDouble('default_lesson_duration', 0.5);
 
       // Save billing defaults (all TRUE)
       await prefs.setBool('show_low_lesson_warning', true);
@@ -1050,7 +1050,7 @@ class SettingsController extends GetxController {
     checkInstructorAvailability.value = true;
     enforceWorkingHours.value = true;
     autoAssignVehicles.value = true;
-    defaultLessonDuration.value = 1.5;
+    defaultLessonDuration.value = 0.5;
 
     // Set all billing defaults to true
     showLowLessonWarning.value = true;
@@ -1511,7 +1511,7 @@ class SettingsController extends GetxController {
       await prefs.setBool('check_instructor_availability', true);
       await prefs.setBool('enforce_working_hours', true);
       await prefs.setBool('auto_assign_vehicles', true);
-      await prefs.setDouble('default_lesson_duration', 1.5);
+      await prefs.setDouble('default_lesson_duration', 0.5);
 
       // Save billing settings (EXPLICITLY TRUE)
       await prefs.setBool('show_low_lesson_warning', true);
