@@ -263,24 +263,16 @@ class MainActivity: FlutterActivity() {
 
     // Check if device name suggests it's a printer
     private fun isPrinterDevice(deviceName: String): Boolean {
-        val printerKeywords = listOf(
-            "printer", "print", "pos", "receipt", 
-            "thermal", "bluetooth", "rpp", "mpt",
-            "escpos", "zjiang", "goojprt", "xprinter",
-            "bt", "wireless"
-        )
-        
-        val lowerName = deviceName.lowercase()
-        
-        // DEBUG: Always return true to show ALL paired devices
-        // This helps identify your printer's name
-        println("🔍 Checking device: $deviceName (lowercase: $lowerName)")
-        val matches = printerKeywords.any { lowerName.contains(it) }
-        println("   Matches printer keywords: $matches")
-        
-        // Return true for ALL devices to debug
-        return true
-    }
+    val printerKeywords = listOf(
+        "printer", "print", "pos", "receipt", 
+        "thermal", "bluetooth", "rpp", "mpt",
+        "escpos", "zjiang", "goojprt", "xprinter",
+        "bt", "wireless"
+    )
+    
+    val lowerName = deviceName.lowercase()
+    return printerKeywords.any { lowerName.contains(it) }
+}
 
     // Verify printer connection (runs on background thread)
     private fun verifyPrinter(printerName: String): Boolean {

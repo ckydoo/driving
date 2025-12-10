@@ -8,6 +8,7 @@ import 'package:get/get.dart';
 import '../controllers/settings_controller.dart';
 import '../controllers/auth_controller.dart';
 import '../widgets/lesson_duration_setting_tile.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class SettingsScreen extends StatefulWidget {
   @override
@@ -957,8 +958,31 @@ class _SettingsScreenState extends State<SettingsScreen>
   }
 
 // 5. Add the test print method
+
   void _printTestReceipt() async {
     try {
+      // ✅ ADD VALIDATION CHECK FIRST
+      final settingsController = Get.find<SettingsController>();
+      final printerName = settingsController.printerNameValue;
+
+      // Validate printer before showing "sending" message
+      Get.snackbar(
+        'Validating Printer',
+        'Checking printer connection...',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.blue,
+        colorText: Colors.white,
+        showProgressIndicator: true,
+        duration: Duration(seconds: 2),
+      );
+
+      final isReady = await PrintService.validatePrinterReady(printerName);
+
+      if (!isReady) {
+        // Error already shown by validatePrinterReady
+        return;
+      }
+
       Get.snackbar(
         'Test Print',
         'Sending test receipt to printer...',
@@ -971,10 +995,11 @@ class _SettingsScreenState extends State<SettingsScreen>
 
       Get.snackbar(
         'Success',
-        'Test receipt sent to printer!',
+        'Test receipt printed successfully!',
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Colors.green,
         colorText: Colors.white,
+        icon: Icon(Icons.check_circle, color: Colors.white),
       );
     } catch (e) {
       Get.snackbar(
@@ -983,6 +1008,7 @@ class _SettingsScreenState extends State<SettingsScreen>
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Colors.red,
         colorText: Colors.white,
+        duration: Duration(seconds: 4),
       );
     }
   }
@@ -1920,10 +1946,10 @@ class _SettingsScreenState extends State<SettingsScreen>
                 }
               },
               icon: Icon(Icons.save_alt),
-              label: Text('Save All Business Settings'),
+              label: Text('Save All Settings'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: _colorScheme.primary,
-                foregroundColor: _colorScheme.onPrimary,
+                backgroundColor: Colors.blue,
+                foregroundColor: Colors.white,
                 padding: EdgeInsets.symmetric(horizontal: 32, vertical: 12),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
@@ -1931,17 +1957,137 @@ class _SettingsScreenState extends State<SettingsScreen>
               ),
             ),
           ),
+          SizedBox(height: 32),
+          _buildSectionHeader('Developer Information'),
+          _buildSettingsCard([
+            _buildDeveloperInfo(),
+          ]),
+          SizedBox(height: 16),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDeveloperInfo() {
+    return Padding(
+      padding: EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.end,
             children: [
+              Icon(Icons.code, size: 20, color: Colors.blue[700]),
+              SizedBox(width: 8),
               Text(
-                'Developed at CodzlabZim',
+                'Developed by CodzLabZim',
                 style: TextStyle(
-                  fontSize: 14,
-                  color: _colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 16,
+                  color: Colors.blue[700],
                 ),
               ),
             ],
+          ),
+          SizedBox(height: 16),
+          // Email
+          InkWell(
+            onTap: () async {
+              final Uri emailUri = Uri(
+                scheme: 'mailto',
+                path: 'codzlabzim53@gmail.com',
+              );
+              if (await canLaunchUrl(emailUri)) {
+                await launchUrl(emailUri);
+              } else {
+                Get.snackbar(
+                  'Error',
+                  'Could not open email app',
+                  snackPosition: SnackPosition.BOTTOM,
+                  backgroundColor: Colors.red,
+                  colorText: Colors.white,
+                );
+              }
+            },
+            child: Container(
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey[50],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey[300]!),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.email, color: Colors.blue[600], size: 20),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'codzlabzim53@gmail.com',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.blue[700],
+                      ),
+                    ),
+                  ),
+                  Icon(Icons.open_in_new, size: 16, color: Colors.grey[600]),
+                ],
+              ),
+            ),
+          ),
+          SizedBox(height: 12),
+          // WhatsApp
+          InkWell(
+            onTap: () async {
+              final Uri whatsappUri = Uri.parse('https://wa.me/2630784666891');
+              if (await canLaunchUrl(whatsappUri)) {
+                await launchUrl(whatsappUri,
+                    mode: LaunchMode.externalApplication);
+              } else {
+                Get.snackbar(
+                  'Error',
+                  'Could not open WhatsApp',
+                  snackPosition: SnackPosition.BOTTOM,
+                  backgroundColor: Colors.red,
+                  colorText: Colors.white,
+                );
+              }
+            },
+            child: Container(
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.green[50],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.green[300]!),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.chat, color: Colors.green[700], size: 20),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Contact on WhatsApp',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.green[700],
+                          ),
+                        ),
+                        Text(
+                          '+263 78 466 6891',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.green[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(Icons.open_in_new, size: 16, color: Colors.grey[600]),
+                ],
+              ),
+            ),
           ),
         ],
       ),

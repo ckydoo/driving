@@ -129,7 +129,7 @@ class SettingsController extends GetxController {
     super.onInit();
 
     print('🚀 SettingsController onInit started');
-
+    loadPrinterSettings();
     // Initialize temp values first
     _tempBreakBetweenLessons.value = breakBetweenLessons.value;
     _tempLessonStartReminder.value = lessonStartReminder.value;

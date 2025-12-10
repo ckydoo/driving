@@ -14,13 +14,14 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/api_service.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class SubscriptionScreen extends StatelessWidget {
   final SubscriptionController controller = Get.find<SubscriptionController>();
   final Rx<SubscriptionPackage?> _selectedPackage =
       Rx<SubscriptionPackage?>(null);
   final RxString _selectedBillingPeriod = 'monthly'.obs;
-  final RxString _selectedPaymentMethod = 'stripe'.obs; // Keep this
+  final RxString _selectedPaymentMethod = 'paynow'.obs; // Keep this
 
   @override
   Widget build(BuildContext context) {
@@ -240,19 +241,31 @@ class SubscriptionScreen extends StatelessWidget {
                             isAvailable: true,
                             width: responsiveCardWidth,
                           ),
-                          SizedBox(width: 12),
-                          _buildPaymentMethodCard(
-                            method: 'stripe',
-                            icon: Icons.credit_card,
-                            title: 'Stripe',
-                            isAvailable: true,
-                            width: responsiveCardWidth,
-                          ),
                         ],
                       ),
                     );
                   },
                 ),
+              ),
+
+              SizedBox(height: 32),
+
+              // Developer Information Section
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20),
+                child: Text(
+                  'Developer Information',
+                  style: TextStyle(
+                    color: Color(0xFF0F172A),
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              SizedBox(height: 12),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20),
+                child: _buildDeveloperInfo(),
               ),
 
               SizedBox(height: 100), // Space for bottom button
@@ -377,7 +390,7 @@ class SubscriptionScreen extends StatelessWidget {
             SizedBox(height: 20),
 
             // ========================================================================
-            // ✅ PAYMENT OPTIONS: Stripe AND Paynow (Zimbabwe)
+            // ✅ PAYMENT OPTIONS:  Paynow (Zimbabwe)
             // ========================================================================
             Text(
               'Choose Payment Method:',
@@ -418,23 +431,6 @@ class SubscriptionScreen extends StatelessWidget {
                   ),
                 ),
                 SizedBox(width: 12),
-
-                // Stripe Button
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () => _payWithStripe(pendingInvoice),
-                    icon: Icon(Icons.credit_card, size: 18),
-                    label: Text('Stripe'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue[700],
-                      foregroundColor: Colors.white,
-                      padding: EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                ),
               ],
             ),
 
@@ -460,26 +456,6 @@ class SubscriptionScreen extends StatelessWidget {
         ),
       );
     });
-  }
-
-  // ========================================================================
-  // ✅ NEW: Helper method to pay with Stripe
-  // ========================================================================
-  void _payWithStripe(pendingInvoice) async {
-    try {
-      // Use your existing Stripe payment logic
-      await controller.upgradeToPackage(
-        controller.currentPackage.value!,
-      );
-    } catch (e) {
-      Get.snackbar(
-        'Payment Error',
-        e.toString(),
-        backgroundColor: Colors.red[100],
-        colorText: Colors.red[900],
-        icon: Icon(Icons.error_outline, color: Colors.red[900]),
-      );
-    }
   }
 
   // Your existing methods continue below...
@@ -1392,19 +1368,7 @@ class SubscriptionScreen extends StatelessWidget {
       return;
     }
 
-    if (_selectedPaymentMethod.value != 'stripe') {
-      Get.snackbar(
-        'Coming Soon',
-        'This payment method will be available soon. Please use Stripe or Paynow.',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.orange[100],
-        colorText: Colors.orange[900],
-        icon: Icon(Icons.info_outline, color: Colors.orange[700]),
-      );
-      return;
-    }
-
-    // Process Stripe payment/upgrade (controller handles confirmation)
+    // Process paynow payment/upgrade (controller handles confirmation)
     await controller.upgradeToPackage(_selectedPackage.value!);
   }
 
@@ -1580,5 +1544,144 @@ class SubscriptionScreen extends StatelessWidget {
       print('❌ Error creating invoice: $e');
       rethrow;
     }
+  }
+
+  // Developer Information Widget
+  Widget _buildDeveloperInfo() {
+    return Container(
+      padding: EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey[300]!),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.code, size: 20, color: Colors.blue[700]),
+              SizedBox(width: 8),
+              Text(
+                'Developed by CodzLabZim',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 16,
+                  color: Colors.blue[700],
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 16),
+          // Email
+          InkWell(
+            onTap: () async {
+              final Uri emailUri = Uri(
+                scheme: 'mailto',
+                path: 'codzlabzim53@gmail.com',
+              );
+              if (await canLaunchUrl(emailUri)) {
+                await launchUrl(emailUri);
+              } else {
+                Get.snackbar(
+                  'Error',
+                  'Could not open email app',
+                  snackPosition: SnackPosition.BOTTOM,
+                  backgroundColor: Colors.red,
+                  colorText: Colors.white,
+                );
+              }
+            },
+            child: Container(
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey[50],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey[300]!),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.email, color: Colors.blue[600], size: 20),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'codzlabzim53@gmail.com',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.blue[700],
+                      ),
+                    ),
+                  ),
+                  Icon(Icons.open_in_new, size: 16, color: Colors.grey[600]),
+                ],
+              ),
+            ),
+          ),
+          SizedBox(height: 12),
+          // WhatsApp
+          InkWell(
+            onTap: () async {
+              final Uri whatsappUri = Uri.parse('https://wa.me/2630784666891');
+              if (await canLaunchUrl(whatsappUri)) {
+                await launchUrl(whatsappUri,
+                    mode: LaunchMode.externalApplication);
+              } else {
+                Get.snackbar(
+                  'Error',
+                  'Could not open WhatsApp',
+                  snackPosition: SnackPosition.BOTTOM,
+                  backgroundColor: Colors.red,
+                  colorText: Colors.white,
+                );
+              }
+            },
+            child: Container(
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.green[50],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.green[300]!),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.chat, color: Colors.green[700], size: 20),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Contact on WhatsApp',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.green[700],
+                          ),
+                        ),
+                        Text(
+                          '+263 78 466 6891',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.green[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(Icons.open_in_new, size: 16, color: Colors.grey[600]),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

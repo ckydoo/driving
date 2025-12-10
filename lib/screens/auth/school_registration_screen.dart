@@ -37,10 +37,6 @@ class SchoolRegistrationScreen extends StatelessWidget {
                         _buildHeader(),
                         const SizedBox(height: 24),
 
-                        // Trial Badge
-                        _buildTrialBadge(),
-                        const SizedBox(height: 24),
-
                         // Registration Form
                         _buildRegistrationForm(controller),
                         const SizedBox(height: 28),
@@ -90,43 +86,6 @@ class SchoolRegistrationScreen extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildTrialBadge() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Colors.green.shade500,
-            Colors.green.shade600,
-          ],
-        ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.green.shade200,
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: const [
-          Icon(Icons.stars_rounded, color: Colors.white, size: 20),
-          SizedBox(width: 8),
-          Text(
-            '30-Day Free Trial',
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w600,
-              fontSize: 14,
-            ),
-          ),
-        ],
-      ),
     );
   }
 

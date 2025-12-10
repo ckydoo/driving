@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
@@ -8,6 +9,52 @@ import '../models/course.dart';
 
 class PrintService {
   static const platform = MethodChannel('com.codzlabzim.driving/printing');
+  static Future<bool> validatePrinterReady(String printerName) async {
+    try {
+      // Check if printer name is set
+      if (printerName.isEmpty) {
+        Get.snackbar(
+          'No Printer Selected',
+          'Please select a printer in Settings',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Colors.orange,
+          colorText: Colors.white,
+          icon: Icon(Icons.print_disabled, color: Colors.white),
+        );
+        return false;
+      }
+
+      // Verify printer connection
+      final isConnected = await verifyPrinter(printerName);
+      if (!isConnected) {
+        Get.snackbar(
+          'Printer Not Connected',
+          'Please ensure $printerName is powered on and paired',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+          icon: Icon(Icons.bluetooth_disabled, color: Colors.white),
+          duration: Duration(seconds: 4),
+        );
+        return false;
+      }
+
+      print('✅ Printer validation passed: $printerName');
+      return true;
+    } catch (e) {
+      print('❌ Printer validation failed: $e');
+      Get.snackbar(
+        'Printer Error',
+        'Unable to connect to printer: ${e.toString()}',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+        icon: Icon(Icons.error_outline, color: Colors.white),
+      );
+      return false;
+    }
+  }
+
   // Discover printers by specific type
   static Future<List<PrinterInfo>> discoverPrintersByType(String type) async {
     try {
@@ -79,6 +126,14 @@ class PrintService {
     final settingsController = Get.find<SettingsController>();
 
     try {
+      // ✅ ADD VALIDATION HERE - before attempting to print
+      final printerName = settingsController.printerNameValue;
+      final isReady = await validatePrinterReady(printerName);
+
+      if (!isReady) {
+        throw Exception('Printer not ready');
+      }
+
       // Get number of copies
       final copies = settingsController.receiptCopiesValue;
 
@@ -134,15 +189,21 @@ class PrintService {
     );
 
     try {
-      // Send to native platform for printing
       await platform.invokeMethod('printReceipt', {
         'content': receiptContent,
         'printerName': settingsController.printerNameValue,
         'paperSize': settingsController.printerPaperSizeValue,
       });
     } catch (e) {
-      // If native printing fails, try ESC/POS commands directly
-      await _printWithEscPos(receiptContent);
+      print('❌ Native printing failed: $e');
+      Get.snackbar(
+        'Print Error',
+        'Failed to print: ${e.toString()}',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+      rethrow;
     }
   }
 
@@ -161,9 +222,11 @@ class PrintService {
     final dateFormat = DateFormat('MM/dd/yyyy hh:mm a');
 
     // Get paper width (58mm = 32 chars, 80mm = 48 chars)
-    final paperWidth =
-        settingsController.printerPaperSizeValue == '58mm' ? 32 : 48;
-
+    final paperWidth = settingsController.printerPaperSizeValue == '58mm'
+        ? 32
+        : settingsController.printerPaperSizeValue == '80mm'
+            ? 48
+            : 32;
     StringBuffer receipt = StringBuffer();
 
     // Header
