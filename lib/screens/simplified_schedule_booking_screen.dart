@@ -291,7 +291,7 @@ class _SimplifiedScheduleBookingScreenState
     return Scaffold(
       appBar: AppBar(
         title: Text('Book a Lesson'),
-        backgroundColor: Colors.purple,
+        backgroundColor: Colors.blue,
       ),
       body: _isLoading
           ? Center(child: CircularProgressIndicator())
@@ -332,7 +332,7 @@ class _SimplifiedScheduleBookingScreenState
               ? [Colors.red.shade400, Colors.red.shade600]
               : hasLowCredits
                   ? [Colors.orange.shade400, Colors.orange.shade600]
-                  : [Colors.purple.shade400, Colors.purple.shade600],
+                  : [Colors.blue.shade400, Colors.blue.shade600],
         ),
       ),
       child: Row(
@@ -409,7 +409,7 @@ class _SimplifiedScheduleBookingScreenState
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color:
-                isCompleted || isActive ? Colors.purple : Colors.grey.shade300,
+                isCompleted || isActive ? Colors.blue : Colors.grey.shade300,
           ),
           child: Center(
             child: isCompleted
@@ -430,7 +430,7 @@ class _SimplifiedScheduleBookingScreenState
           label,
           style: TextStyle(
             fontSize: 11,
-            color: isActive ? Colors.purple : Colors.grey,
+            color: isActive ? Colors.blue : Colors.grey,
             fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
           ),
         ),
@@ -443,7 +443,7 @@ class _SimplifiedScheduleBookingScreenState
     return Container(
       width: 30,
       height: 2,
-      color: isCompleted ? Colors.purple : Colors.grey.shade300,
+      color: isCompleted ? Colors.blue : Colors.grey.shade300,
       margin: EdgeInsets.only(bottom: 20),
     );
   }
@@ -564,11 +564,11 @@ class _SimplifiedScheduleBookingScreenState
 
               return Card(
                 margin: EdgeInsets.only(bottom: 12),
-                color: isSelected ? Colors.purple.shade50 : null,
+                color: isSelected ? Colors.blue.shade50 : null,
                 child: ListTile(
                   leading: CircleAvatar(
                     backgroundColor:
-                        isSelected ? Colors.purple : Colors.blue.shade400,
+                        isSelected ? Colors.blue : Colors.blue.shade400,
                     child: Text(
                       '${student.fname.isNotEmpty ? student.fname[0] : ""}${student.lname.isNotEmpty ? student.lname[0] : ""}',
                       style: TextStyle(
@@ -616,7 +616,7 @@ class _SimplifiedScheduleBookingScreenState
                     ],
                   ),
                   trailing: isSelected
-                      ? Icon(Icons.check_circle, color: Colors.purple)
+                      ? Icon(Icons.check_circle, color: Colors.blue)
                       : Icon(Icons.arrow_forward_ios, size: 16),
                   onTap: () {
                     setState(() {
@@ -702,7 +702,7 @@ class _SimplifiedScheduleBookingScreenState
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w600,
-              color: Colors.purple,
+              color: Colors.blue,
             ),
           ),
           SizedBox(height: 4),
@@ -766,11 +766,11 @@ class _SimplifiedScheduleBookingScreenState
 
               return Card(
                 margin: EdgeInsets.only(bottom: 12),
-                color: isSelected ? Colors.purple.shade50 : null,
+                color: isSelected ? Colors.blue.shade50 : null,
                 child: ListTile(
                   leading: CircleAvatar(
                     backgroundColor:
-                        isSelected ? Colors.purple : Colors.green.shade400,
+                        isSelected ? Colors.blue : Colors.green.shade400,
                     child: Text(
                       '${instructor.fname.isNotEmpty ? instructor.fname[0] : ""}${instructor.lname.isNotEmpty ? instructor.lname[0] : ""}',
                       style: TextStyle(
@@ -805,7 +805,7 @@ class _SimplifiedScheduleBookingScreenState
                     ],
                   ),
                   trailing: isSelected
-                      ? Icon(Icons.check_circle, color: Colors.purple)
+                      ? Icon(Icons.check_circle, color: Colors.blue)
                       : Icon(Icons.arrow_forward_ios, size: 16),
                   onTap: () {
                     setState(() {
@@ -893,16 +893,16 @@ class _SimplifiedScheduleBookingScreenState
 
               return Card(
                 margin: EdgeInsets.only(bottom: 12),
-                color: isSelected ? Colors.purple.shade50 : null,
+                color: isSelected ? Colors.blue.shade50 : null,
                 child: ListTile(
                   leading: Icon(
                     Icons.book,
-                    color: isSelected ? Colors.purple : null,
+                    color: isSelected ? Colors.blue : null,
                   ),
                   title: Text(course.name),
                   subtitle: Text('$remaining lessons remaining'),
                   trailing: isSelected
-                      ? Icon(Icons.check_circle, color: Colors.purple)
+                      ? Icon(Icons.check_circle, color: Colors.blue)
                       : null,
                   onTap: () {
                     setState(() {
@@ -966,11 +966,11 @@ class _SimplifiedScheduleBookingScreenState
                 ),
                 calendarStyle: CalendarStyle(
                   selectedDecoration: BoxDecoration(
-                    color: Colors.purple,
+                    color: Colors.blue,
                     shape: BoxShape.circle,
                   ),
                   todayDecoration: BoxDecoration(
-                    color: Colors.purple.shade200,
+                    color: Colors.blue.shade200,
                     shape: BoxShape.circle,
                   ),
                   disabledDecoration: BoxDecoration(
@@ -1106,7 +1106,7 @@ class _SimplifiedScheduleBookingScreenState
             style: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,
-              color: Colors.purple,
+              color: Colors.blue,
             ),
           ),
           SizedBox(height: 8),
@@ -1290,14 +1290,14 @@ class _SimplifiedScheduleBookingScreenState
         padding: EdgeInsets.symmetric(vertical: 12, horizontal: 16),
         decoration: BoxDecoration(
           color: isSelected
-              ? Colors.purple
+              ? Colors.blue
               : isAvailable
                   ? Colors.white
                   : Colors.grey.shade200,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isSelected
-                ? Colors.purple
+                ? Colors.blue
                 : isAvailable
                     ? (availableInstructorCount == totalInstructors
                         ? Colors.green // All instructors free
@@ -1394,7 +1394,7 @@ class _SimplifiedScheduleBookingScreenState
             padding: EdgeInsets.all(20),
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [Colors.purple.shade400, Colors.purple.shade600],
+                colors: [Colors.blue.shade400, Colors.blue.shade600],
               ),
               borderRadius: BorderRadius.circular(16),
             ),
@@ -1567,7 +1567,7 @@ class _SimplifiedScheduleBookingScreenState
                 },
                 style: OutlinedButton.styleFrom(
                   padding: EdgeInsets.symmetric(vertical: 16),
-                  side: BorderSide(color: Colors.purple, width: 2),
+                  side: BorderSide(color: Colors.blue, width: 2),
                 ),
                 child: Text('Back'),
               ),
@@ -1579,7 +1579,7 @@ class _SimplifiedScheduleBookingScreenState
             child: ElevatedButton(
               onPressed: _canProceed() ? _handleNext : null,
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.purple,
+                backgroundColor: Colors.blue,
                 padding: EdgeInsets.symmetric(vertical: 16),
                 disabledBackgroundColor: Colors.grey.shade300,
               ),
@@ -1874,7 +1874,7 @@ class _SimplifiedScheduleBookingScreenState
                 Get.back(); // Go back to previous screen
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.purple,
+                backgroundColor: Colors.blue,
               ),
               child: Text('Done'),
             ),

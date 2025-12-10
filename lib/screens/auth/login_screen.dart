@@ -91,31 +91,16 @@ class LoginScreen extends StatelessWidget {
   Widget _buildHeader() {
     return Column(
       children: [
-        Container(
+        Image.asset(
+          'assets/images/logo.png',
           width: 80,
           height: 80,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                Colors.blue.shade700,
-                Colors.purple.shade700,
-              ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            shape: BoxShape.circle,
-          ),
-          child: const Icon(
-            Icons.school,
-            size: 40,
-            color: Colors.white,
-          ),
         ),
         const SizedBox(height: 16),
         Text(
           'DriveSync Pro',
           style: TextStyle(
-            fontSize: 28,
+            fontSize: 25,
             fontWeight: FontWeight.w700,
             color: Colors.grey[900],
             letterSpacing: -0.5,
@@ -131,17 +116,17 @@ class LoginScreen extends StatelessWidget {
         Text(
           'Welcome!',
           style: TextStyle(
-            fontSize: 30,
+            fontSize: 25,
             fontWeight: FontWeight.w700,
             color: Colors.grey[900],
             height: 1.1,
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         Text(
           'Sign in to your account to continue',
           style: TextStyle(
-            fontSize: 14,
+            fontSize: 12,
             color: Colors.grey[600],
           ),
         ),
