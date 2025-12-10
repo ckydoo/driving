@@ -1,4 +1,3 @@
-
 import 'dart:convert';
 import 'dart:io';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -772,7 +771,8 @@ class SyncService {
     if (value == null) return 0;
     if (value is bool) return value ? 1 : 0;
     if (value is int) return value;
-    if (value is String) return (value.toLowerCase() == 'true' || value == '1') ? 1 : 0;
+    if (value is String)
+      return (value.toLowerCase() == 'true' || value == '1') ? 1 : 0;
     return 0;
   }
 
@@ -795,18 +795,29 @@ class SyncService {
   }
 
   static Map<String, dynamic> _convertPaymentApiToLocal(
-      Map<String, dynamic> paymentData) {
+      Map<String, dynamic> apiData) {
     return {
-      'id': paymentData['id'],
-      'invoiceId': paymentData['invoiceId'],
-      'amount': paymentData['amount'],
-      'method': paymentData['method'] ?? 'cash',
-      'reference': paymentData['reference'] ?? '',
-      'receipt_path': paymentData['receipt_path'] ?? '',
-      'receipt_generated': paymentData['receipt_generated'] ?? 0,
-      'userId': paymentData['userId'] ?? 0,
-      'paymentDate': paymentData['paymentDate'],
-      'status': paymentData['status'] ?? 'completed',
+      'id': apiData['id'],
+      'invoiceId': apiData['invoiceId'] ?? apiData['invoice_id'],
+      'amount': apiData['amount'],
+      'method': apiData['method'] ?? 'cash',
+      'paymentDate': apiData['paymentDate'] ??
+          apiData['payment_date'] ??
+          DateTime.now().toIso8601String(),
+      'status': apiData['status'] ?? 'completed',
+      'notes': apiData['notes'] ?? '',
+      'reference': apiData['reference'],
+      'receipt_path': apiData['receipt_path'],
+      // ✅ FIX: Convert boolean to integer (0 or 1)
+      'receipt_generated': (apiData['receipt_generated'] == true ||
+              apiData['receipt_generated'] == 1)
+          ? 1
+          : 0,
+      'receipt_generated_at': apiData['receipt_generated_at'],
+      'cloud_storage_path': apiData['cloud_storage_path'],
+      'receipt_file_size': apiData['receipt_file_size'],
+      'receipt_type': apiData['receipt_type'],
+      'userId': apiData['userId'] ?? apiData['user_id'],
     };
   }
 

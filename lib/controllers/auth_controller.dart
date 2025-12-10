@@ -2,6 +2,7 @@ import 'package:crypto/crypto.dart';
 import 'package:driving/controllers/settings_controller.dart';
 import 'package:driving/controllers/sync_controller.dart';
 import 'package:driving/models/user.dart';
+import 'package:driving/screens/auth/initial_sync_screen.dart';
 import 'package:driving/services/api_service.dart';
 import 'package:driving/services/database_helper.dart';
 import 'package:driving/controllers/pin_controller.dart';
@@ -58,7 +59,6 @@ class AuthController extends GetxController {
     }
   }
 
-  /// Login with email and password (used by LoginScreen)
   Future<bool> loginWithEmail(String email, String password) async {
     try {
       isLoading.value = true;
@@ -71,12 +71,45 @@ class AuthController extends GetxController {
       final apiSuccess = await loginWithApi(email, password);
 
       if (apiSuccess) {
+        // ✅ FIRST: Check if PIN is setup
+        final pinController = Get.find<PinController>();
+        final hasPinSetup = await pinController.isPinSet();
+
+        if (!hasPinSetup) {
+          // No PIN - go to PIN setup first
+          Get.offAllNamed('/pin-setup');
+          return true;
+        }
+
+        // ✅ SECOND: PIN exists, now check sync
+        final prefs = await SharedPreferences.getInstance();
+        final hasCompletedSync =
+            prefs.getBool('initial_sync_complete') ?? false;
+
+        if (!hasCompletedSync) {
+          Get.offAll(() => InitialSyncScreen());
+        } else {
+          _triggerPostLoginSync();
+        }
+
         return true;
       }
-
       // If API login fails, try local login
       print('⚠️ API login failed, trying local login...');
       final localSuccess = await login(email, password);
+
+      if (localSuccess) {
+        // Same logic for local login
+        final prefs = await SharedPreferences.getInstance();
+        final hasCompletedSync =
+            prefs.getBool('initial_sync_complete') ?? false;
+
+        if (!hasCompletedSync) {
+          Get.offAll(() => InitialSyncScreen());
+        } else {
+          _triggerPostLoginSync();
+        }
+      }
 
       return localSuccess;
     } catch (e) {
@@ -1316,78 +1349,41 @@ class AuthController extends GetxController {
     }
   }
 
-  /// ALSO ADD: Better PIN authentication that ensures token is loaded
   Future<bool> authenticateWithPin(String pin) async {
     try {
-      print('\n🔐 === PIN AUTHENTICATION ===');
-      print('📌 Entered PIN length: ${pin.length}');
-      isLoading.value = true;
-      error.value = '';
+      print('🔐 === PIN AUTHENTICATION ===');
 
-      // Verify PIN first
-      final pinController = Get.find<PinController>();
-      final isValid = await pinController.verifyPin(pin);
+      final success = await _pinController.verifyPin(pin);
 
-      if (!isValid) {
-        print('❌ Invalid PIN');
-        error.value = 'Invalid PIN. Please try again.';
-        return false;
+      if (success) {
+        print('✅ PIN verified successfully');
+        await _pinController.setUserVerified(true);
+
+        // NEW: Check if sync needed
+        final prefs = await SharedPreferences.getInstance();
+        final lastSyncStr = prefs.getString('last_full_sync');
+
+        if (lastSyncStr != null) {
+          final lastSync = DateTime.parse(lastSyncStr);
+          final hoursSinceSync = DateTime.now().difference(lastSync).inHours;
+
+          if (hoursSinceSync > 24) {
+            // Need sync - show sync screen
+            Get.offAll(() => InitialSyncScreen());
+            return true;
+          }
+        }
+
+        // Don't need sync - trigger background sync
+        _triggerPostLoginSync();
+        return true;
       }
 
-      print('✅ PIN is valid');
-
-      // Get the email associated with this PIN
-      final pinUserEmail = await pinController.getPinUserEmail();
-
-      if (pinUserEmail == null || pinUserEmail.isEmpty) {
-        print('❌ No user email found for this PIN');
-        error.value =
-            'PIN setup is incomplete. Please sign in with email and password.';
-        return false;
-      }
-
-      print('📧 PIN user email: $pinUserEmail');
-
-      // Load user from local database
-      final userData = await _getUserFromLocal(pinUserEmail);
-
-      if (userData == null) {
-        error.value =
-            'User data not found. Please sign in with email and password.';
-        print('❌ User data not found in cache');
-        return false;
-      }
-      isLoggedIn.value = true;
-      userEmail.value = pinUserEmail;
-      currentUser.value = User.fromJson(userData);
-
-      print(
-          '✅ User loaded: ${currentUser.value!.fname} ${currentUser.value!.lname}');
-      print('✅ Login status set to: ${isLoggedIn.value}');
-      print('🔑 Restoring API token...');
-      await _restoreApiTokenForSync(pinUserEmail);
-      await _triggerPostLoginSync();
-      print('✅ Sync triggered if online');
-      // IMPORTANT: Verify token was restored
-      final tokenRestored =
-          ApiService.hasToken && ApiService.currentToken != null;
-      print('🔑 Token restored: $tokenRestored');
-
-      if (tokenRestored) {
-        print('✅ Token available for subscription check');
-      } else {
-        print('⚠️ No token available - subscription check will use cache');
-      }
-
-      print('✅ === PIN AUTHENTICATION COMPLETE ===');
-      return true;
+      return false;
     } catch (e) {
       print('❌ PIN authentication error: $e');
       error.value = 'PIN authentication failed: ${e.toString()}';
-      isLoggedIn.value = false;
       return false;
-    } finally {
-      isLoading.value = false;
     }
   }
 
