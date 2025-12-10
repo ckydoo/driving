@@ -26,9 +26,6 @@ class _FleetScreenState extends State<FleetScreen>
   List<int> _selectedVehicles = [];
   bool _isMultiSelectionActive = false;
   bool _isAllSelected = false;
-  String _sortBy = 'make';
-  bool _sortAscending = true;
-  String _filterStatus = 'all';
   bool _isLoading = true;
 
   // Pagination variables
@@ -69,8 +66,6 @@ class _FleetScreenState extends State<FleetScreen>
       setState(() {
         _vehicles = fleetController.fleet;
         _searchResults = List.from(_vehicles);
-        _sortVehicles();
-        _filterVehicles();
         _generateQuickStats();
         _generateRecommendations();
         _isLoading = false;
@@ -104,53 +99,7 @@ class _FleetScreenState extends State<FleetScreen>
                     .contains(query.toLowerCase()))
             .toList();
       }
-      _filterVehicles();
-      _sortVehicles();
       _currentPage = 1;
-    });
-  }
-
-  void _sortVehicles() {
-    setState(() {
-      _searchResults.sort((a, b) {
-        dynamic aValue, bValue;
-        switch (_sortBy) {
-          case 'make':
-            aValue = '${a.make} ${a.model}'.toLowerCase();
-            bValue = '${b.make} ${b.model}'.toLowerCase();
-            break;
-          case 'year':
-            aValue = int.parse(a.modelYear);
-            bValue = int.parse(b.modelYear);
-            break;
-          case 'plate':
-            aValue = a.carPlate.toLowerCase();
-            bValue = b.carPlate.toLowerCase();
-            break;
-          case 'instructor':
-            aValue = _getInstructorName(a.instructor).toLowerCase();
-            bValue = _getInstructorName(b.instructor).toLowerCase();
-            break;
-          default:
-            aValue = '${a.make} ${a.model}'.toLowerCase();
-            bValue = '${b.make} ${b.model}'.toLowerCase();
-        }
-        return _sortAscending
-            ? aValue.compareTo(bValue)
-            : bValue.compareTo(aValue);
-      });
-    });
-  }
-
-  void _filterVehicles() {
-    setState(() {
-      if (_filterStatus == 'assigned') {
-        _searchResults =
-            _searchResults.where((vehicle) => vehicle.instructor != 0).toList();
-      } else if (_filterStatus == 'unassigned') {
-        _searchResults =
-            _searchResults.where((vehicle) => vehicle.instructor == 0).toList();
-      }
     });
   }
 
@@ -467,21 +416,6 @@ class _FleetScreenState extends State<FleetScreen>
             onChanged: _searchVehicles,
           ),
         ),
-        SizedBox(width: 16),
-        _buildFilterDropdown(),
-        SizedBox(width: 16),
-        _buildSortDropdown(),
-        SizedBox(width: 8),
-        IconButton(
-          icon:
-              Icon(_sortAscending ? Icons.arrow_upward : Icons.arrow_downward),
-          onPressed: () {
-            setState(() {
-              _sortAscending = !_sortAscending;
-              _sortVehicles();
-            });
-          },
-        ),
         Spacer(),
         Flexible(
           child: Text(
@@ -495,51 +429,26 @@ class _FleetScreenState extends State<FleetScreen>
 
   // Medium screen filters (tablet)
   Widget _buildMediumScreenFilters() {
-    return Column(
+    return Row(
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _searchController,
-                decoration: InputDecoration(
-                  hintText: 'Search vehicles, plates, instructors...',
-                  prefixIcon: Icon(Icons.search),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  contentPadding: EdgeInsets.symmetric(vertical: 12),
-                ),
-                onChanged: _searchVehicles,
+        Expanded(
+          child: TextField(
+            controller: _searchController,
+            decoration: InputDecoration(
+              hintText: 'Search vehicles, plates, instructors...',
+              prefixIcon: Icon(Icons.search),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
               ),
+              contentPadding: EdgeInsets.symmetric(vertical: 12),
             ),
-          ],
+            onChanged: _searchVehicles,
+          ),
         ),
-        SizedBox(height: 12),
-        Row(
-          children: [
-            _buildFilterDropdown(),
-            SizedBox(width: 16),
-            _buildSortDropdown(),
-            SizedBox(width: 8),
-            IconButton(
-              icon: Icon(
-                  _sortAscending ? Icons.arrow_upward : Icons.arrow_downward),
-              onPressed: () {
-                setState(() {
-                  _sortAscending = !_sortAscending;
-                  _sortVehicles();
-                });
-              },
-            ),
-            Spacer(),
-            Flexible(
-              child: Text(
-                '${_searchResults.length} found',
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
+        SizedBox(width: 16),
+        Text(
+          '${_searchResults.length} found',
+          overflow: TextOverflow.ellipsis,
         ),
       ],
     );
@@ -561,95 +470,7 @@ class _FleetScreenState extends State<FleetScreen>
           ),
           onChanged: _searchVehicles,
         ),
-        SizedBox(height: 12),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              _buildFilterDropdown(),
-              SizedBox(width: 16),
-              _buildSortDropdown(),
-              SizedBox(width: 8),
-              IconButton(
-                icon: Icon(
-                    _sortAscending ? Icons.arrow_upward : Icons.arrow_downward),
-                onPressed: () {
-                  setState(() {
-                    _sortAscending = !_sortAscending;
-                    _sortVehicles();
-                  });
-                },
-              ),
-              SizedBox(width: 16),
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                child: Text('${_searchResults.length} found'),
-              ),
-            ],
-          ),
-        ),
       ],
-    );
-  }
-
-  Widget _buildFilterDropdown() {
-    return SizedBox(
-      width: 150, // Fixed width to prevent overflow
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 12),
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey[300]!),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: DropdownButton<String>(
-          value: _filterStatus,
-          underline: Container(),
-          isExpanded: true,
-          items: [
-            DropdownMenuItem(value: 'all', child: Text('All Vehicles')),
-            DropdownMenuItem(value: 'assigned', child: Text('Assigned')),
-            DropdownMenuItem(value: 'unassigned', child: Text('Available')),
-          ],
-          onChanged: (value) {
-            setState(() {
-              _filterStatus = value!;
-              _filterVehicles();
-              _currentPage = 1;
-            });
-          },
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSortDropdown() {
-    return SizedBox(
-      width: 160, // Fixed width to prevent overflow
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 12),
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey[300]!),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: DropdownButton<String>(
-          value: _sortBy,
-          underline: Container(),
-          isExpanded: true,
-          items: [
-            DropdownMenuItem(value: 'make', child: Text('Sort by Make')),
-            DropdownMenuItem(value: 'year', child: Text('Sort by Year')),
-            DropdownMenuItem(value: 'plate', child: Text('Sort by Plate')),
-            DropdownMenuItem(
-                value: 'instructor', child: Text('Sort by Instructor')),
-          ],
-          onChanged: (value) {
-            setState(() {
-              _sortBy = value!;
-              _sortVehicles();
-            });
-          },
-        ),
-      ),
     );
   }
 

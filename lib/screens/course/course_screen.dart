@@ -391,21 +391,6 @@ class _CourseScreenState extends State<CourseScreen>
             ),
             onChanged: _searchCourses,
           ),
-          SizedBox(height: 12),
-
-          // Filters in a scrollable row
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                _buildStatusFilter(),
-                SizedBox(width: 12),
-                _buildSortFilter(),
-                SizedBox(width: 12),
-                _buildResultsCount(),
-              ],
-            ),
-          ),
         ],
       );
     } else {
@@ -427,23 +412,6 @@ class _CourseScreenState extends State<CourseScreen>
               onChanged: _searchCourses,
             ),
           ),
-          SizedBox(width: 16),
-          _buildStatusFilter(),
-          SizedBox(width: 16),
-          _buildSortFilter(),
-          SizedBox(width: 8),
-          IconButton(
-            icon: Icon(
-                _sortAscending ? Icons.arrow_upward : Icons.arrow_downward),
-            onPressed: () {
-              setState(() {
-                _sortAscending = !_sortAscending;
-                _sortCourses();
-              });
-            },
-          ),
-          Spacer(),
-          _buildResultsCount(),
         ],
       );
     }

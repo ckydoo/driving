@@ -18,6 +18,7 @@ import '../../controllers/user_controller.dart';
 import '../../models/user.dart';
 import 'package:driving/screens/users/instructor_details_screen.dart';
 import 'package:driving/screens/users/bulk_student_upload_screen.dart';
+import 'package:driving/screens/users/widgets/eligibility_dialog.dart';
 
 class EnhancedUsersScreen extends StatefulWidget {
   final String role;
@@ -91,9 +92,12 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
       });
     } catch (e) {
       Get.snackbar(
-          snackPosition: SnackPosition.BOTTOM,
-          'Error',
-          'Failed to load ${widget.role}s: $e');
+        'Error',
+        'Failed to load ${widget.role}s',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red[100],
+        colorText: Colors.red[800],
+      );
     }
   }
 
@@ -250,18 +254,18 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
 
       if (failedDeletions.isEmpty) {
         Get.snackbar(
-          snackPosition: SnackPosition.BOTTOM,
           'Success',
-          'Successfully deleted $selectedCount ${widget.role}${selectedCount > 1 ? 's' : ''}',
+          'Deleted $selectedCount ${widget.role}${selectedCount > 1 ? 's' : ''}',
+          snackPosition: SnackPosition.BOTTOM,
           backgroundColor: Colors.green[100],
           colorText: Colors.green[800],
           duration: Duration(seconds: 3),
         );
       } else {
         Get.snackbar(
-          snackPosition: SnackPosition.BOTTOM,
           'Partial Success',
-          'Deleted ${selectedCount - failedDeletions.length} users. Failed: ${failedDeletions.join(', ')}',
+          'Deleted ${selectedCount - failedDeletions.length} users',
+          snackPosition: SnackPosition.BOTTOM,
           backgroundColor: Colors.orange[100],
           colorText: Colors.orange[800],
           duration: Duration(seconds: 5),
@@ -271,9 +275,9 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
       _exitMultiSelectionMode();
     } catch (e) {
       Get.snackbar(
-        snackPosition: SnackPosition.BOTTOM,
         'Error',
-        'Failed to delete selected ${widget.role}s: $e',
+        'Failed to delete selected ${widget.role}s',
+        snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Colors.red[100],
         colorText: Colors.red[800],
         duration: Duration(seconds: 3),
@@ -322,29 +326,27 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
       await _loadUsers();
       if (failedGraduations.isEmpty && successCount > 0) {
         Get.snackbar(
-          snackPosition: SnackPosition.BOTTOM,
           'Success',
-          'Successfully graduated $successCount student${successCount > 1 ? 's' : ''}${ineligibleStudents.isNotEmpty ? ' (${ineligibleStudents.length} skipped due to incomplete requirements)' : ''}',
+          'Graduated $successCount student${successCount > 1 ? 's' : ''}',
+          snackPosition: SnackPosition.BOTTOM,
           backgroundColor: Colors.green[100],
           colorText: Colors.green[800],
           duration: Duration(seconds: 4),
         );
       } else if (successCount > 0) {
         Get.snackbar(
-          snackPosition: SnackPosition.BOTTOM,
           'Partial Success',
-          'Graduated $successCount students. Failed: ${failedGraduations.join(', ')}${ineligibleStudents.isNotEmpty ? '. ${ineligibleStudents.length} skipped due to incomplete requirements.' : ''}',
+          'Graduated $successCount students',
+          snackPosition: SnackPosition.BOTTOM,
           backgroundColor: Colors.orange[100],
           colorText: Colors.orange[800],
           duration: Duration(seconds: 5),
         );
       } else {
         Get.snackbar(
-          snackPosition: SnackPosition.BOTTOM,
           'No Graduations',
-          ineligibleStudents.isNotEmpty
-              ? 'All ${ineligibleStudents.length} selected students are ineligible for graduation.'
-              : 'No students could be graduated.',
+          'No students could be graduated',
+          snackPosition: SnackPosition.BOTTOM,
           backgroundColor: Colors.red[100],
           colorText: Colors.red[800],
           duration: Duration(seconds: 4),
@@ -354,9 +356,9 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
       _exitMultiSelectionMode();
     } catch (e) {
       Get.snackbar(
-        snackPosition: SnackPosition.BOTTOM,
         'Error',
-        'Failed to graduate students: $e',
+        'Failed to graduate students',
+        snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Colors.red[100],
         colorText: Colors.red[800],
         duration: Duration(seconds: 3),
@@ -367,6 +369,7 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
       });
     }
   }
+
   Future<List<Map<String, dynamic>>> _checkBulkEligibility(
       List<User> students) async {
     List<Map<String, dynamic>> results = [];
@@ -429,7 +432,7 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
       }
       if (totalOutstandingBalance > 0) {
         missingRequirements
-            .add('\${totalOutstandingBalance.toStringAsFixed(2)} outstanding');
+            .add('\$${totalOutstandingBalance.toStringAsFixed(2)} outstanding');
       }
 
       results.add({
@@ -445,190 +448,10 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
 
     return results;
   }
+
   Future<bool> _showEligibilityDialog(List<Map<String, dynamic>> eligible,
       List<Map<String, dynamic>> ineligible) async {
-    if (eligible.isEmpty && ineligible.isEmpty) return false;
-
-    return await showDialog<bool>(
-          context: context,
-          barrierDismissible: false,
-          builder: (BuildContext dialogContext) {
-            return WillPopScope(
-              onWillPop: () async => false,
-              child: AlertDialog(
-                title: Row(
-                  children: [
-                    Icon(Icons.school, color: Colors.blue),
-                    SizedBox(width: 8),
-                    Expanded(child: Text('Graduation Eligibility Check')),
-                  ],
-                ),
-                content: Container(
-                  width: MediaQuery.of(context).size.width * 0.8,
-                  constraints: BoxConstraints(maxHeight: 400),
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (eligible.isNotEmpty) ...[
-                          Text(
-                            '✅ Eligible Students (${eligible.length})',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.green[700],
-                              fontSize: 16,
-                            ),
-                          ),
-                          SizedBox(height: 8),
-                          ...eligible.map((result) {
-                            final student = result['student'] as User;
-                            return Padding(
-                              padding: EdgeInsets.only(bottom: 4),
-                              child: Row(
-                                children: [
-                                  Icon(Icons.check_circle,
-                                      color: Colors.green, size: 16),
-                                  SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      '${student.fname} ${student.lname} (${result['completedLessons']} lessons, ${result['completedCourses'].length} courses)',
-                                      style: TextStyle(fontSize: 14),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }).toList(),
-                        ],
-                        if (eligible.isNotEmpty && ineligible.isNotEmpty)
-                          SizedBox(height: 16),
-                        if (ineligible.isNotEmpty) ...[
-                          Text(
-                            '❌ Ineligible Students (${ineligible.length})',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.red[700],
-                              fontSize: 16,
-                            ),
-                          ),
-                          SizedBox(height: 8),
-                          ...ineligible.map((result) {
-                            final student = result['student'] as User;
-                            final missing =
-                                result['missingRequirements'] as List<String>;
-                            return Padding(
-                              padding: EdgeInsets.only(bottom: 8),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Icon(Icons.cancel,
-                                          color: Colors.red, size: 16),
-                                      SizedBox(width: 8),
-                                      Expanded(
-                                        child: Text(
-                                          '${student.fname} ${student.lname}',
-                                          style: TextStyle(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  Padding(
-                                    padding: EdgeInsets.only(left: 24),
-                                    child: Text(
-                                      'Missing: ${missing.join(', ')}',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.red[600],
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }).toList(),
-                        ],
-                        if (eligible.isNotEmpty) ...[
-                          SizedBox(height: 16),
-                          Container(
-                            padding: EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.green[50],
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.green[200]!),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(Icons.info, color: Colors.green[600]),
-                                SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    'Only eligible students will be graduated. Ineligible students will be skipped.',
-                                    style: TextStyle(
-                                      color: Colors.green[800],
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ] else ...[
-                          SizedBox(height: 16),
-                          Container(
-                            padding: EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.red[50],
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.red[200]!),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(Icons.warning, color: Colors.red[600]),
-                                SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    'No students meet graduation requirements. Please ensure students complete their training before graduation.',
-                                    style: TextStyle(
-                                      color: Colors.red[800],
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.of(dialogContext).pop(false),
-                    child: Text('Cancel'),
-                  ),
-                  if (eligible.isNotEmpty)
-                    ElevatedButton(
-                      onPressed: () => Navigator.of(dialogContext).pop(true),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        foregroundColor: Colors.white,
-                      ),
-                      child: Text(
-                          'Graduate ${eligible.length} Student${eligible.length > 1 ? 's' : ''}'),
-                    ),
-                ],
-              ),
-            );
-          },
-        ) ??
-        false;
+    return await EligibilityDialog.show(context, eligible, ineligible);
   }
 
   Future<void> _graduateStudent(User student) async {
@@ -665,42 +488,12 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
                 children: [
                   Icon(Icons.warning, color: Colors.red),
                   SizedBox(width: 8),
-                  Text('Bulk Delete Confirmation'),
+                  Text('Delete ${widget.role}s'),
                 ],
               ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Are you sure you want to delete $count selected ${widget.role}${count > 1 ? 's' : ''}?',
-                    style: TextStyle(fontSize: 16),
-                  ),
-                  SizedBox(height: 16),
-                  Container(
-                    padding: EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.red[50],
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.red[200]!),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.warning_amber, color: Colors.red[600]),
-                        SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'This action cannot be undone.',
-                            style: TextStyle(
-                              color: Colors.red[800],
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+              content: Text(
+                'Delete $count selected ${widget.role}${count > 1 ? 's' : ''}? This action cannot be undone.',
+                style: TextStyle(fontSize: 16),
               ),
               actions: [
                 TextButton(
@@ -711,9 +504,8 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
                   onPressed: () => Navigator.of(context).pop(true),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.red,
-                    foregroundColor: Colors.white,
                   ),
-                  child: Text('Delete All'),
+                  child: Text('Delete', style: TextStyle(color: Colors.white)),
                 ),
               ],
             );
@@ -732,10 +524,7 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
                 children: [
                   Icon(Icons.school, color: Colors.blue),
                   SizedBox(width: 8),
-                  ResponsiveText(
-                    'Confirm Bulk Graduate ',
-                    style: TextStyle(fontSize: 12),
-                  ),
+                  Text('Graduate Students'),
                 ],
               ),
               content: Column(
@@ -743,41 +532,13 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Are you sure you want to graduate $count selected student${count > 1 ? 's' : ''}?',
+                    'Graduate $count selected student${count > 1 ? 's' : ''}?',
                     style: TextStyle(fontSize: 16),
                   ),
-                  SizedBox(height: 16),
-                  Text(
-                    'This action will:',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
                   SizedBox(height: 8),
-                  _buildActionItem('• Move students to alumni status'),
-                  _buildActionItem('• Mark students as graduated'),
-                  _buildActionItem('• Add graduation records to timeline'),
-                  SizedBox(height: 16),
-                  Container(
-                    padding: EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.orange[50],
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.orange[200]!),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.info, color: Colors.orange[600]),
-                        SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Students with outstanding balances or pending schedules may require individual review.',
-                            style: TextStyle(
-                              color: Colors.orange[800],
-                              fontSize: 13,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                  Text(
+                    'This will move students to alumni status.',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 14),
                   ),
                 ],
               ),
@@ -790,9 +551,9 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
                   onPressed: () => Navigator.of(context).pop(true),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blue,
-                    foregroundColor: Colors.white,
                   ),
-                  child: Text('Graduate All'),
+                  child:
+                      Text('Graduate', style: TextStyle(color: Colors.white)),
                 ),
               ],
             );
@@ -801,379 +562,161 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
         false;
   }
 
-  Widget _buildActionItem(String text) {
-    return Padding(
-      padding: EdgeInsets.symmetric(vertical: 2),
-      child: Text(
-        text,
-        style: TextStyle(fontSize: 13),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final isMobile = _isMobile(context);
-    final isTablet = _isTablet(context);
 
-    return ResponsiveWrapper(
-      child: Scaffold(
-        backgroundColor: Colors.grey[50],
-        appBar: AppBar(
-          title: ResponsiveText(
-            '${widget.role.capitalize}s Management',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
+    return Scaffold(
+      backgroundColor: Colors.grey[50],
+      appBar: AppBar(
+        title: Text(
+          '${widget.role.capitalize}s',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        actions: [
+          if (!_isMultiSelectionActive && widget.role == 'student')
+            IconButton(
+              icon: Icon(Icons.upload_file),
+              onPressed: () => Get.to(() => BulkStudentUploadScreen()),
+              tooltip: 'Import Students',
+            ),
+          if (!_isMultiSelectionActive)
+            IconButton(
+              icon: Icon(Icons.checklist),
+              onPressed: _enterMultiSelectionMode,
+              tooltip: 'Select Multiple',
+            ),
+          if (_isMultiSelectionActive)
+            IconButton(
+              icon: Icon(Icons.close),
+              onPressed: _exitMultiSelectionMode,
+              tooltip: 'Cancel Selection',
+            ),
+          IconButton(
+            icon: Icon(Icons.refresh),
+            onPressed: _loadUsers,
+            tooltip: 'Refresh',
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          // Multi-selection action bar
+          if (_isMultiSelectionActive) _buildMultiSelectionBar(isMobile),
+
+          // Search and filters
+          _buildSearchAndFilters(isMobile),
+
+          // Tab bar for different views
+          Container(
+            decoration: BoxDecoration(
               color: Colors.white,
+              border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
+            ),
+            child: TabBar(
+              controller: _tabController,
+              labelColor: Colors.blue[600],
+              unselectedLabelColor: Colors.grey[600],
+              indicatorColor: Colors.blue[600],
+              tabs: [
+                Tab(
+                  icon: Icon(Icons.list, size: 20),
+                  text: 'List',
+                ),
+                Tab(
+                  icon: Icon(Icons.bolt, size: 20),
+                  text: 'Quick Actions',
+                ),
+              ],
             ),
           ),
-          backgroundColor: Colors.blue[700],
-          elevation: 0,
-          actions: [
-            if (!_isMultiSelectionActive && widget.role == 'student')
-              IconButton(
-                icon: Icon(Icons.upload_file, color: Colors.white),
-                onPressed: () => Get.to(() => BulkStudentUploadScreen()),
-                tooltip: 'Import Students',
-              ),
-            if (!_isMultiSelectionActive)
-              IconButton(
-                icon: Icon(Icons.checklist, color: Colors.white),
-                onPressed: _enterMultiSelectionMode,
-                tooltip: 'Multi-select mode',
-              ),
-            if (_isMultiSelectionActive)
-              IconButton(
-                icon: Icon(Icons.close, color: Colors.white),
-                onPressed: _exitMultiSelectionMode,
-                tooltip: 'Exit multi-select',
-              ),
-            IconButton(
-              icon: Icon(Icons.refresh, color: Colors.white),
-              onPressed: _loadUsers,
-              tooltip: 'Refresh',
+
+          // Main content
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildUsersList(isMobile),
+                EnhancedRecommendationsScreen(
+                  role: widget.role,
+                ),
+              ],
             ),
-          ],
-        ),
-        body: Column(
-          children: [
-            // Multi-selection action bar
-            if (_isMultiSelectionActive) _buildMultiSelectionBar(isMobile),
-
-            // Search and filters
-            _buildSearchAndFilters(isMobile),
-
-            // Tab bar for different views
-            _buildTabBar(),
-
-            // Main content
-            Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildUsersList(isMobile),
-                  EnhancedRecommendationsScreen(
-                    role: widget.role,
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        floatingActionButton: FloatingActionButton(
-          onPressed: () => Get.to(() => AddUserScreen(role: widget.role)),
-          backgroundColor: Colors.blue[700],
-          child: Icon(Icons.add, color: Colors.white),
-          tooltip: 'Add New ${widget.role.capitalize}',
-        ),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => Get.to(() => AddUserScreen(role: widget.role)),
+        backgroundColor: Colors.blue[600],
+        child: Icon(Icons.add, color: Colors.white),
+        tooltip: 'Add ${widget.role.capitalize}',
       ),
     );
   }
 
   Widget _buildMultiSelectionBar(bool isMobile) {
-    return AnimatedContainer(
-      duration: Duration(milliseconds: 300),
-      padding: EdgeInsets.symmetric(
-        horizontal: isMobile ? 12 : 16,
-        vertical: 12,
-      ),
-      decoration: BoxDecoration(
-        color: Colors.blue[50],
-        border: Border(
-          bottom: BorderSide(color: Colors.blue[200]!, width: 1),
-        ),
-      ),
-      child:
-          isMobile ? _buildMobileSelectionBar() : _buildDesktopSelectionBar(),
-    );
-  }
-
-  Widget _buildMobileSelectionBar() {
-    return Column(
-      children: [
-        Row(
-          children: [
-            Checkbox(
-              value: _isAllSelected,
-              onChanged: (_) => _toggleSelectAll(),
-              activeColor: Colors.blue[700],
-            ),
-            Expanded(
-              child: Text(
-                '${_selectedUsers.length} selected',
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  color: Colors.blue[800],
-                ),
-              ),
-            ),
-            if (_isProcessing)
-              SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.blue[700]!),
-                ),
-              ),
-          ],
-        ),
-        SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: ElevatedButton.icon(
-                icon: Icon(Icons.delete, size: 18),
-                label: Text('Delete'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red,
-                  foregroundColor: Colors.white,
-                  padding: EdgeInsets.symmetric(vertical: 8),
-                ),
-                onPressed: _selectedUsers.isNotEmpty && !_isProcessing
-                    ? _bulkDelete
-                    : null,
-              ),
-            ),
-            if (widget.role == 'student') ...[
-              SizedBox(width: 8),
-              Expanded(
-                child: ElevatedButton.icon(
-                  icon: Icon(Icons.school, size: 18),
-                  label: Text('Graduate'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    foregroundColor: Colors.white,
-                    padding: EdgeInsets.symmetric(vertical: 8),
-                  ),
-                  onPressed: _selectedUsers.isNotEmpty && !_isProcessing
-                      ? _bulkGraduate
-                      : null,
-                ),
-              ),
-            ],
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildDesktopSelectionBar() {
-    return Row(
-      children: [
-        Checkbox(
-          value: _isAllSelected,
-          onChanged: (_) => _toggleSelectAll(),
-          activeColor: Colors.blue[700],
-        ),
-        Text(
-          '${_selectedUsers.length} selected',
-          style: TextStyle(
-            fontWeight: FontWeight.w600,
-            color: Colors.blue[800],
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      color: Colors.blue[50],
+      child: Row(
+        children: [
+          Checkbox(
+            value: _isAllSelected,
+            onChanged: (value) => _toggleSelectAll(),
           ),
-        ),
-        Spacer(),
-        if (_isProcessing) ...[
-          SizedBox(
-            width: 20,
-            height: 20,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              valueColor: AlwaysStoppedAnimation<Color>(Colors.blue[700]!),
-            ),
+          SizedBox(width: 8),
+          Text(
+            '${_selectedUsers.length} selected',
+            style: TextStyle(fontWeight: FontWeight.w500),
           ),
-          SizedBox(width: 16),
-        ],
-        TextButton.icon(
-          icon: Icon(Icons.delete, color: Colors.red, size: 18),
-          label: Text('Delete', style: TextStyle(color: Colors.red)),
-          onPressed:
-              _selectedUsers.isNotEmpty && !_isProcessing ? _bulkDelete : null,
-        ),
-        if (widget.role == 'student') ...[
+          Spacer(),
+          if (widget.role == 'student')
+            TextButton.icon(
+              onPressed: _isProcessing ? null : _bulkGraduate,
+              icon: Icon(Icons.school, size: 18),
+              label: Text('Graduate'),
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.green[700],
+              ),
+            ),
           SizedBox(width: 8),
           TextButton.icon(
-            icon: Icon(Icons.school, color: Colors.green, size: 18),
-            label: Text('Graduate', style: TextStyle(color: Colors.green)),
-            onPressed: _selectedUsers.isNotEmpty && !_isProcessing
-                ? _bulkGraduate
-                : null,
+            onPressed: _isProcessing ? null : _bulkDelete,
+            icon: Icon(Icons.delete, size: 18),
+            label: Text('Delete'),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.red[700],
+            ),
+          ),
+          SizedBox(width: 8),
+          TextButton(
+            onPressed: _exitMultiSelectionMode,
+            child: Text('Cancel'),
           ),
         ],
-      ],
+      ),
     );
   }
 
   Widget _buildSearchAndFilters(bool isMobile) {
     return Container(
       padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            spreadRadius: 1,
-            blurRadius: 3,
-            offset: Offset(0, 1),
-          ),
-        ],
-      ),
+      color: Colors.white,
       child: Column(
         children: [
           // Search bar
           TextField(
             controller: _searchController,
             decoration: InputDecoration(
-              hintText: 'Search ${widget.role}s by name, email...',
-              prefixIcon: Icon(Icons.search, color: Colors.grey[600]),
+              hintText: 'Search ${widget.role}s...',
+              prefixIcon: Icon(Icons.search),
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: Colors.grey[300]!),
+                borderRadius: BorderRadius.circular(8),
               ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: Colors.grey[300]!),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: Colors.blue[400]!, width: 2),
-              ),
-              filled: true,
-              fillColor: Colors.grey[50],
               contentPadding:
                   EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             ),
             onChanged: (value) => _applyFiltersAndSort(),
-          ),
-          SizedBox(height: 12),
-
-          // Filters and sort
-          if (isMobile)
-            Column(
-              children: [
-                _buildStatusFilter(),
-                SizedBox(height: 8),
-                _buildSortOptions(),
-              ],
-            )
-          else
-            Row(
-              children: [
-                Expanded(child: _buildStatusFilter()),
-                SizedBox(width: 16),
-                Expanded(child: _buildSortOptions()),
-              ],
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatusFilter() {
-    return DropdownButtonFormField<String>(
-      value: _filterStatus,
-      decoration: InputDecoration(
-        labelText: 'Filter by Status',
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      ),
-      items: [
-        DropdownMenuItem(value: 'all', child: Text('All Statuses')),
-        DropdownMenuItem(value: 'active', child: Text('Active')),
-        DropdownMenuItem(value: 'inactive', child: Text('Inactive')),
-        DropdownMenuItem(value: 'suspended', child: Text('Suspended')),
-      ],
-      onChanged: (value) {
-        setState(() {
-          _filterStatus = value!;
-          _applyFiltersAndSort();
-        });
-      },
-    );
-  }
-
-  Widget _buildSortOptions() {
-    return Row(
-      children: [
-        Expanded(
-          child: DropdownButtonFormField<String>(
-            value: _sortBy,
-            decoration: InputDecoration(
-              labelText: 'Sort by',
-              border:
-                  OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            ),
-            items: [
-              DropdownMenuItem(value: 'name', child: Text('Name')),
-              DropdownMenuItem(value: 'email', child: Text('Email')),
-              DropdownMenuItem(value: 'date', child: Text('Date Added')),
-              DropdownMenuItem(value: 'status', child: Text('Status')),
-            ],
-            onChanged: (value) {
-              setState(() {
-                _sortBy = value!;
-                _applyFiltersAndSort();
-              });
-            },
-          ),
-        ),
-        SizedBox(width: 8),
-        IconButton(
-          icon: Icon(
-            _sortAscending ? Icons.arrow_upward : Icons.arrow_downward,
-            color: Colors.blue[700],
-          ),
-          onPressed: () {
-            setState(() {
-              _sortAscending = !_sortAscending;
-              _applyFiltersAndSort();
-            });
-          },
-          tooltip: _sortAscending ? 'Sort Descending' : 'Sort Ascending',
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTabBar() {
-    return Container(
-      color: Colors.white,
-      child: TabBar(
-        controller: _tabController,
-        labelColor: Colors.blue[700],
-        unselectedLabelColor: Colors.grey[600],
-        indicatorColor: Colors.blue[700],
-        indicatorWeight: 3,
-        tabs: [
-          Tab(
-            icon: Icon(Icons.list),
-            text: '${widget.role.capitalize}s List',
-          ),
-          Tab(
-            icon: Icon(Icons.recommend),
-            text: 'Quick Actions',
           ),
         ],
       ),
@@ -1188,7 +731,7 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
           children: [
             Icon(
               Icons.people_outline,
-              size: 80,
+              size: 64,
               color: Colors.grey[400],
             ),
             SizedBox(height: 16),
@@ -1197,7 +740,6 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
               style: TextStyle(
                 fontSize: 18,
                 color: Colors.grey[600],
-                fontWeight: FontWeight.w500,
               ),
             ),
             SizedBox(height: 8),
@@ -1217,15 +759,15 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
       children: [
         // Results summary
         Container(
-          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           color: Colors.grey[50],
           child: Row(
             children: [
               Text(
-                'Showing ${_getPaginatedResults().length} of ${_searchResults.length} ${widget.role}s',
+                '${_searchResults.length} ${widget.role}s',
                 style: TextStyle(
-                  color: Colors.grey[600],
-                  fontSize: 14,
+                  color: Colors.grey[700],
+                  fontWeight: FontWeight.w500,
                 ),
               ),
               Spacer(),
@@ -1243,9 +785,10 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
 
         // Users list
         Expanded(
-          child: ListView.builder(
-            padding: EdgeInsets.symmetric(vertical: 8),
+          child: ListView.separated(
+            padding: EdgeInsets.all(16),
             itemCount: _getPaginatedResults().length,
+            separatorBuilder: (context, index) => SizedBox(height: 12),
             itemBuilder: (context, index) {
               final user = _getPaginatedResults()[index];
               return _buildUserCard(user, isMobile);
@@ -1261,276 +804,169 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
 
   Widget _buildUserCard(User user, bool isMobile) {
     final isSelected = _selectedUsers.contains(user.id);
+    final statusColor = user.status.toLowerCase() == 'active'
+        ? Colors.green
+        : user.status.toLowerCase() == 'inactive'
+            ? Colors.red
+            : Colors.orange;
 
-    return Container(
-      margin: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      decoration: BoxDecoration(
-        color: isSelected ? Colors.blue[50] : Colors.white,
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isSelected ? Colors.blue[200]! : Colors.grey[200]!,
-          width: isSelected ? 2 : 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.05),
-            spreadRadius: 1,
-            blurRadius: 3,
-            offset: Offset(0, 1),
-          ),
-        ],
+        side: isSelected
+            ? BorderSide(color: Colors.blue[600]!, width: 2)
+            : BorderSide.none,
       ),
-      child: Material(
-        color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          if (_isMultiSelectionActive) {
+            _toggleUserSelection(user.id!);
+          } else {
+            _navigateToUserDetails(user);
+          }
+        },
+        onLongPress: () {
+          if (!_isMultiSelectionActive) {
+            _enterMultiSelectionMode();
+            _toggleUserSelection(user.id!);
+          }
+        },
         borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: () {
-            if (_isMultiSelectionActive) {
-              _toggleUserSelection(user.id!);
-            } else {
-              _navigateToUserDetails(user);
-            }
-          },
-          onLongPress: () {
-            if (!_isMultiSelectionActive) {
-              _enterMultiSelectionMode();
-              _toggleUserSelection(user.id!);
-            }
-          },
-          child: Padding(
-            padding: EdgeInsets.all(16),
-            child: isMobile
-                ? _buildMobileUserCard(user, isSelected)
-                : _buildDesktopUserCard(user, isSelected),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMobileUserCard(User user, bool isSelected) {
-    return Column(
-      children: [
-        Row(
-          children: [
-            if (_isMultiSelectionActive)
-              Padding(
-                padding: EdgeInsets.only(right: 12),
-                child: Checkbox(
-                  value: isSelected,
-                  onChanged: (bool? value) => _toggleUserSelection(user.id!),
-                  activeColor: Colors.blue[700],
-                ),
-              ),
-            CircleAvatar(
-              radius: 24,
-              backgroundColor: Colors.blue[100],
-              child: Text(
-                '${user.fname[0]}${user.lname[0]}',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.blue[800],
-                  fontSize: 16,
-                ),
-              ),
-            ),
-            SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '${user.fname} ${user.lname}',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 16,
-                      color: Colors.grey[800],
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  SizedBox(height: 4),
-                  Text(
-                    user.email,
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 14,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-            _buildStatusChip(user.status),
-          ],
-        ),
-        SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                'Phone: ${user.phone}',
-                style: TextStyle(
-                  color: Colors.grey[600],
-                  fontSize: 13,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            if (!_isMultiSelectionActive)
-              PopupMenuButton<String>(
-                icon: Icon(Icons.more_vert, color: Colors.grey[600]),
-                onSelected: (value) => _handleMenuAction(value, user),
-                itemBuilder: (context) => _buildMenuItems(user),
-              ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildDesktopUserCard(User user, bool isSelected) {
-    return Row(
-      children: [
-        if (_isMultiSelectionActive)
-          Padding(
-            padding: EdgeInsets.only(right: 16),
-            child: Checkbox(
-              value: isSelected,
-              onChanged: (bool? value) => _toggleUserSelection(user.id!),
-              activeColor: Colors.blue[700],
-            ),
-          ),
-        CircleAvatar(
-          radius: 24,
-          backgroundColor: Colors.blue[100],
-          child: Text(
-            '${user.fname[0]}${user.lname[0]}',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: Colors.blue[800],
-              fontSize: 16,
-            ),
-          ),
-        ),
-        SizedBox(width: 16),
-        Expanded(
-          flex: 3,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: Row(
             children: [
-              Text(
-                '${user.fname} ${user.lname}',
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 16,
-                  color: Colors.grey[800],
+              // Selection checkbox
+              if (_isMultiSelectionActive)
+                Padding(
+                  padding: EdgeInsets.only(right: 12),
+                  child: Checkbox(
+                    value: isSelected,
+                    onChanged: (value) => _toggleUserSelection(user.id!),
+                  ),
                 ),
-                overflow: TextOverflow.ellipsis,
-              ),
-              SizedBox(height: 4),
-              Text(
-                user.email,
-                style: TextStyle(
-                  color: Colors.grey[600],
-                  fontSize: 14,
+
+              // Avatar
+              Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  color: Colors.blue[100],
+                  shape: BoxShape.circle,
                 ),
-                overflow: TextOverflow.ellipsis,
+                child: Center(
+                  child: Text(
+                    user.fname[0].toUpperCase(),
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue[700],
+                    ),
+                  ),
+                ),
               ),
+              SizedBox(width: 16),
+
+              // User info
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          '${user.fname} ${user.lname}',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        SizedBox(width: 8),
+                        Container(
+                          padding:
+                              EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: statusColor.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            user.status,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: statusColor,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      user.email,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[600],
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    SizedBox(height: 4),
+                    if (user.phone.isNotEmpty)
+                      Text(
+                        user.phone,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+
+              // Action menu
+              if (!_isMultiSelectionActive)
+                PopupMenuButton<String>(
+                  onSelected: (value) => _handleMenuAction(value, user),
+                  itemBuilder: (context) => [
+                    PopupMenuItem(
+                      value: 'edit',
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit, size: 18, color: Colors.blue),
+                          SizedBox(width: 8),
+                          Text('Edit'),
+                        ],
+                      ),
+                    ),
+                    if (widget.role == 'student')
+                      PopupMenuItem(
+                        value: 'graduate',
+                        child: Row(
+                          children: [
+                            Icon(Icons.school, size: 18, color: Colors.green),
+                            SizedBox(width: 8),
+                            Text('Graduate'),
+                          ],
+                        ),
+                      ),
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete, size: 18, color: Colors.red),
+                          SizedBox(width: 8),
+                          Text('Delete'),
+                        ],
+                      ),
+                    ),
+                  ],
+                  icon: Icon(Icons.more_vert, color: Colors.grey[600]),
+                ),
             ],
           ),
         ),
-        Expanded(
-          flex: 2,
-          child: Text(
-            user.phone,
-            style: TextStyle(
-              color: Colors.grey[600],
-              fontSize: 14,
-            ),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        SizedBox(width: 16),
-        _buildStatusChip(user.status),
-        SizedBox(width: 16),
-        if (!_isMultiSelectionActive)
-          PopupMenuButton<String>(
-            icon: Icon(Icons.more_vert, color: Colors.grey[600]),
-            onSelected: (value) => _handleMenuAction(value, user),
-            itemBuilder: (context) => _buildMenuItems(user),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildStatusChip(String status) {
-    Color backgroundColor;
-    Color textColor;
-
-    switch (status.toLowerCase()) {
-      case 'active':
-        backgroundColor = Colors.green[100]!;
-        textColor = Colors.green[800]!;
-        break;
-      case 'inactive':
-        backgroundColor = Colors.orange[100]!;
-        textColor = Colors.orange[800]!;
-        break;
-      case 'suspended':
-        backgroundColor = Colors.red[100]!;
-        textColor = Colors.red[800]!;
-        break;
-      default:
-        backgroundColor = Colors.grey[100]!;
-        textColor = Colors.grey[800]!;
-    }
-
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: backgroundColor,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        status.capitalize!,
-        style: TextStyle(
-          color: textColor,
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-        ),
       ),
     );
-  }
-
-  List<PopupMenuEntry<String>> _buildMenuItems(User user) {
-    return [
-      PopupMenuItem<String>(
-        value: 'edit',
-        child: ListTile(
-          leading: Icon(Icons.edit, color: Colors.blue),
-          title: Text('Edit'),
-          contentPadding: EdgeInsets.zero,
-        ),
-      ),
-      if (widget.role == 'student')
-        PopupMenuItem<String>(
-          value: 'graduate',
-          child: ListTile(
-            leading: Icon(Icons.school, color: Colors.green),
-            title: Text('Graduate'),
-            contentPadding: EdgeInsets.zero,
-          ),
-        ),
-      PopupMenuItem<String>(
-        value: 'delete',
-        child: ListTile(
-          leading: Icon(Icons.delete, color: Colors.red),
-          title: Text('Delete', style: TextStyle(color: Colors.red)),
-          contentPadding: EdgeInsets.zero,
-        ),
-      ),
-    ];
   }
 
   void _handleMenuAction(String action, User user) {
@@ -1575,162 +1011,77 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
       padding: EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        border: Border(
-          top: BorderSide(color: Colors.grey[200]!),
-        ),
+        border: Border(top: BorderSide(color: Colors.grey[200]!)),
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Rows per page selector
-          Row(
-            children: [
-              Text(
-                'Rows per page:',
-                style: TextStyle(color: Colors.grey[600]),
-              ),
-              SizedBox(width: 8),
-              DropdownButton<int>(
-                value: _rowsPerPage,
-                items: [5, 10, 20, 50].map((int value) {
-                  return DropdownMenuItem<int>(
-                    value: value,
-                    child: Text('$value'),
-                  );
-                }).toList(),
-                onChanged: (int? value) {
-                  setState(() {
-                    _rowsPerPage = value!;
-                    _currentPage = 1;
-                  });
-                },
-                underline: SizedBox(),
-              ),
-            ],
+          // Rows per page
+          DropdownButton<int>(
+            value: _rowsPerPage,
+            items: [10, 25, 50]
+                .map((value) => DropdownMenuItem(
+                      value: value,
+                      child: Text('$value per page'),
+                    ))
+                .toList(),
+            onChanged: (value) {
+              setState(() {
+                _rowsPerPage = value!;
+                _currentPage = 1;
+              });
+            },
           ),
+          Spacer(),
 
-          // Pagination controls
-          Row(
-            children: [
-              IconButton(
-                icon: Icon(Icons.first_page),
-                onPressed: _currentPage > 1
-                    ? () => setState(() => _currentPage = 1)
-                    : null,
-              ),
-              IconButton(
-                icon: Icon(Icons.chevron_left),
-                onPressed: _currentPage > 1
-                    ? () => setState(() => _currentPage--)
-                    : null,
-              ),
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.blue[50],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  '$_currentPage',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: Colors.blue[700],
-                  ),
-                ),
-              ),
-              IconButton(
-                icon: Icon(Icons.chevron_right),
-                onPressed: _currentPage < _totalPages
-                    ? () => setState(() => _currentPage++)
-                    : null,
-              ),
-              IconButton(
-                icon: Icon(Icons.last_page),
-                onPressed: _currentPage < _totalPages
-                    ? () => setState(() => _currentPage = _totalPages)
-                    : null,
-              ),
-            ],
+          // Navigation buttons
+          IconButton(
+            onPressed:
+                _currentPage == 1 ? null : () => setState(() => _currentPage--),
+            icon: Icon(Icons.chevron_left),
+          ),
+          Text('Page $_currentPage of $_totalPages'),
+          IconButton(
+            onPressed: _currentPage == _totalPages
+                ? null
+                : () => setState(() => _currentPage++),
+            icon: Icon(Icons.chevron_right),
           ),
         ],
       ),
-    );
-  }
-
-  // Existing methods from original implementation
-  void _showImportDialog() {
-    Get.dialog(
-      AlertDialog(
-        title: Text('Import ${widget.role.capitalize}s'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Select a CSV file to import multiple ${widget.role}s.'),
-            SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: () async {
-                final result = await FilePicker.platform.pickFiles(
-                  type: FileType.custom,
-                  allowedExtensions: ['csv'],
-                );
-                if (result != null) {
-                  _handleFileImport(result.files.first);
-                }
-              },
-              icon: Icon(Icons.file_upload),
-              label: Text('Choose File'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Get.back(),
-            child: Text('Cancel'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _handleFileImport(PlatformFile file) {
-    Get.snackbar(
-      snackPosition: SnackPosition.BOTTOM,
-      'Import Started',
-      'Processing file: ${file.name}',
-      backgroundColor: Colors.blue[100],
-      colorText: Colors.blue[800],
     );
   }
 
   void _showDeleteDialog(User user) {
-    Get.dialog(
-      AlertDialog(
-        title: Text('Delete ${widget.role.capitalize}'),
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete ${widget.role}'),
         content: Text(
-            'Are you sure you want to delete ${user.fname} ${user.lname}?'),
+            'Delete ${user.fname} ${user.lname}? This action cannot be undone.'),
         actions: [
           TextButton(
-            onPressed: () => Get.back(),
+            onPressed: () => Navigator.of(context).pop(),
             child: Text('Cancel'),
           ),
           ElevatedButton(
             onPressed: () async {
-              Get.back();
+              Navigator.of(context).pop();
               try {
                 await controller.deleteUser(user.id!);
                 _loadUsers();
                 Get.snackbar(
-                  snackPosition: SnackPosition.BOTTOM,
                   'Success',
-                  '${widget.role.capitalize} deleted successfully',
+                  '${widget.role.capitalize} deleted',
+                  snackPosition: SnackPosition.BOTTOM,
                   backgroundColor: Colors.green[100],
                   colorText: Colors.green[800],
                 );
               } catch (e) {
                 Get.snackbar(
-                  snackPosition: SnackPosition.BOTTOM,
                   'Error',
-                  'Failed to delete ${widget.role}: $e',
+                  'Failed to delete ${widget.role}',
+                  snackPosition: SnackPosition.BOTTOM,
                   backgroundColor: Colors.red[100],
                   colorText: Colors.red[800],
                 );
