@@ -566,7 +566,8 @@ class SubscriptionController extends GetxController {
           // ✅ FIXED: Check both subscription_expires_at and trial_ends_at
           String? expiryDateString;
 
-          if (subscriptionStatus.value == 'trial' && statusData['trial_ends_at'] != null) {
+          if (subscriptionStatus.value == 'trial' &&
+              statusData['trial_ends_at'] != null) {
             // For trial users, use trial_ends_at
             expiryDateString = statusData['trial_ends_at'];
             print('📅 Using trial_ends_at for trial user');
@@ -602,26 +603,25 @@ class SubscriptionController extends GetxController {
           }
 
           if (statusData['current_package'] != null) {
-            currentPackage.value = availablePackages.firstWhereOrNull(
-                (pkg) => pkg.id == statusData['current_package']['id']);
+            final packageData = statusData['current_package'];
+            currentPackage.value = SubscriptionPackage(
+              id: packageData['id'],
+              name: packageData['name'],
+              slug: packageData['slug'],
+              monthlyPrice: _parsePrice(packageData['monthly_price']), // ✅ Safe
+              yearlyPrice: _parsePrice(packageData['yearly_price']), // ✅ Safe
+              yearlyDiscount: packageData['yearly_discount'] ?? 0,
+              features: List<String>.from(packageData['features'] ?? []),
+              limits: Map<String, dynamic>.from(
+                  packageData['limits'] ?? <String, dynamic>{}),
+              trialDays: packageData['trial_days'] ?? 0,
+              isPopular: packageData['is_popular'] ?? false,
+            );
+            print('✅ Current package: ${currentPackage.value!.name}');
+          } else {
+            currentPackage.value = null;
+            print('ℹ️ No current package found');
           }
-
-          print('✅ Subscription data loaded from server:');
-          print('   - Status: ${subscriptionStatus.value}');
-          print('   - Trial days: ${remainingTrialDays.value}');
-          print('   - Billing period: ${billingPeriod.value}');
-          print('   - Expires at: ${subscriptionExpiresAt.value}');
-          print('   - Available packages: ${availablePackages.length}');
-
-          // IMPORTANT: Cache this data for offline use
-          await SubscriptionCache.saveSubscriptionData(
-            status: subscriptionStatus.value,
-            trialDays: remainingTrialDays.value,
-            expiresAt: expiryDateString, // ✅ FIXED: Use the correct expiry date (trial_ends_at for trials, subscription_expires_at for paid)
-            packageId: currentPackage.value?.id,
-            packageName: currentPackage.value?.name,
-            billingPeriod: billingPeriod.value, // ✅ ADD: Cache billing period
-          );
 
           print('✅ Subscription data cached successfully');
         }
@@ -641,6 +641,14 @@ class SubscriptionController extends GetxController {
     } finally {
       isLoading(false);
     }
+  }
+
+// Add at the top of SubscriptionController class
+  double _parsePrice(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? 0.0;
+    return 0.0;
   }
 
   Future<bool> _checkInternetConnection() async {

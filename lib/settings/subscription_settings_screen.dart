@@ -234,19 +234,18 @@ class SubscriptionScreen extends StatelessWidget {
                       child: Row(
                         children: [
                           _buildPaymentMethodCard(
-                            method: 'stripe',
-                            icon: Icons.credit_card,
-                            title: 'Stripe',
-                            isAvailable: true,
-                            width: responsiveCardWidth,
-                          ),
-                          SizedBox(width: 12),
-                          // ✅ NEW: Paynow option
-                          _buildPaymentMethodCard(
                             method: 'paynow',
                             icon: Icons.mobile_friendly,
                             title: 'Paynow',
                             isAvailable: true, // Changed to true
+                            width: responsiveCardWidth,
+                          ),
+                          SizedBox(width: 12),
+                          _buildPaymentMethodCard(
+                            method: 'stripe',
+                            icon: Icons.credit_card,
+                            title: 'Stripe',
+                            isAvailable: true,
                             width: responsiveCardWidth,
                           ),
                         ],
@@ -393,25 +392,6 @@ class SubscriptionScreen extends StatelessWidget {
             // Payment Method Buttons
             Row(
               children: [
-                // Stripe Button
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () => _payWithStripe(pendingInvoice),
-                    icon: Icon(Icons.credit_card, size: 18),
-                    label: Text('Stripe'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue[700],
-                      foregroundColor: Colors.white,
-                      padding: EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                ),
-
-                SizedBox(width: 12),
-
                 // ✅ PAYNOW BUTTON - For Zimbabwe schools
                 Expanded(
                   child: PaynowButton(
@@ -435,6 +415,24 @@ class SubscriptionScreen extends StatelessWidget {
                         duration: Duration(seconds: 4),
                       );
                     },
+                  ),
+                ),
+                SizedBox(width: 12),
+
+                // Stripe Button
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _payWithStripe(pendingInvoice),
+                    icon: Icon(Icons.credit_card, size: 18),
+                    label: Text('Stripe'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue[700],
+                      foregroundColor: Colors.white,
+                      padding: EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -1406,11 +1404,7 @@ class SubscriptionScreen extends StatelessWidget {
       return;
     }
 
-    // Show confirmation dialog for Stripe
-    final confirmed = await _showPaymentConfirmation();
-    if (!confirmed) return;
-
-    // Process Stripe payment/upgrade
+    // Process Stripe payment/upgrade (controller handles confirmation)
     await controller.upgradeToPackage(_selectedPackage.value!);
   }
 
@@ -1586,124 +1580,5 @@ class SubscriptionScreen extends StatelessWidget {
       print('❌ Error creating invoice: $e');
       rethrow;
     }
-  }
-
-  Future<bool> _showPaymentConfirmation() async {
-    final selectedPrice = _getSelectedPrice();
-    final period = _selectedBillingPeriod.value == 'yearly' ? 'year' : 'month';
-    final isTrialUser = controller.subscriptionStatus.value == 'trial';
-    final isCurrentPackage =
-        _selectedPackage.value?.id == controller.currentPackage.value?.id;
-
-    String dialogTitle;
-    String dialogMessage;
-
-    if (isTrialUser && !isCurrentPackage) {
-      dialogTitle = 'Confirm Upgrade';
-      dialogMessage =
-          'You\'re upgrading from trial to ${_selectedPackage.value!.name}.';
-    } else if (isCurrentPackage) {
-      dialogTitle = 'Confirm Payment';
-      dialogMessage =
-          'Process payment for your ${_selectedPackage.value!.name} plan.';
-    } else {
-      dialogTitle = 'Confirm Payment';
-      dialogMessage = 'Process payment for ${_selectedPackage.value!.name}.';
-    }
-
-    return await Get.dialog<bool>(
-          AlertDialog(
-            title: Text(dialogTitle),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(dialogMessage),
-                SizedBox(height: 16),
-                Container(
-                  padding: EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.blue[50],
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text('Plan:', style: TextStyle(fontSize: 14)),
-                          Text(
-                            _selectedPackage.value!.name,
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: 8),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text('Amount:', style: TextStyle(fontSize: 14)),
-                          Text(
-                            '\$${selectedPrice.toStringAsFixed(2)}',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.blue[700],
-                            ),
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: 4),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text('Billing:', style: TextStyle(fontSize: 14)),
-                          Text(
-                            'Every $period',
-                            style: TextStyle(
-                                fontSize: 14, fontWeight: FontWeight.w500),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                SizedBox(height: 16),
-                Row(
-                  children: [
-                    Icon(Icons.info_outline,
-                        size: 16, color: Color(0xFF2563EB)),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'You will be redirected to Stripe secure payment.',
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Get.back(result: false),
-                child: Text('Cancel'),
-              ),
-              ElevatedButton(
-                onPressed: () => Get.back(result: true),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Color(0xFF2563EB),
-                  padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                ),
-                child: Text(isTrialUser && !isCurrentPackage
-                    ? 'Upgrade Now'
-                    : 'Proceed to Payment'),
-              ),
-            ],
-          ),
-        ) ??
-        false;
   }
 }
