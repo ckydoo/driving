@@ -1,3 +1,4 @@
+import 'package:driving/screens/payments/pos.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
@@ -12,11 +13,10 @@ import '../../controllers/course_controller.dart';
 import '../../controllers/fleet_controller.dart';
 import '../../controllers/billing_controller.dart';
 import '../../controllers/settings_controller.dart';
+import '../../services/print_service.dart';
 
-/// SIMPLIFIED SCHEDULE BOOKING SCREEN - UNIVERSAL VERSION (FIXED)
-/// Properly checks instructor conflicts when displaying time slot availability
 class SimplifiedScheduleBookingScreen extends StatefulWidget {
-  final User? student; // Optional - if provided, skips student selection
+  final User? student;
 
   const SimplifiedScheduleBookingScreen({
     Key? key,
@@ -62,7 +62,7 @@ class _SimplifiedScheduleBookingScreenState
     // If student was provided, use it and skip to step 1
     if (widget.student != null) {
       _selectedStudent = widget.student;
-      _currentStep = 1; // Skip student selection
+      _currentStep = 1;
       _loadStudentData();
     } else {
       // Start at student selection (step 0)
@@ -186,8 +186,8 @@ class _SimplifiedScheduleBookingScreenState
 
   // Check if a time slot is in the future (for today's date)
   bool _isTimeSlotInFuture(TimeOfDay timeSlot, DateTime now) {
-    // Add 1 hour buffer to prevent booking too close to current time
-    final currentTimeWithBuffer = now.add(Duration(hours: 1));
+    // Add 30 minutes buffer to prevent booking too close to current time
+    final currentTimeWithBuffer = now.add(Duration(minutes: 30));
     final slotDateTime = DateTime(
       now.year,
       now.month,
@@ -236,12 +236,17 @@ class _SimplifiedScheduleBookingScreenState
             },
             child: Text('Select Different Student'),
           ),
-          TextButton(
+          ElevatedButton.icon(
             onPressed: () {
               Get.back(); // Close dialog
-              Get.back(); // Exit booking screen
+              // Replace current screen with POS screen
+              Get.off(() => POSScreen());
             },
-            child: Text('Cancel'),
+            icon: Icon(Icons.point_of_sale),
+            label: Text('Go to POS'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+            ),
           ),
         ],
       ),
@@ -273,12 +278,17 @@ class _SimplifiedScheduleBookingScreenState
             },
             child: Text('Select Different Student'),
           ),
-          TextButton(
+          ElevatedButton.icon(
             onPressed: () {
               Get.back(); // Close dialog
-              Get.back(); // Exit booking screen
+              // Replace current screen with POS screen
+              Get.off(() => POSScreen());
             },
-            child: Text('Cancel'),
+            icon: Icon(Icons.point_of_sale),
+            label: Text('Go to POS'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+            ),
           ),
         ],
       ),
@@ -408,8 +418,7 @@ class _SimplifiedScheduleBookingScreenState
           height: isActive ? 32 : 24,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color:
-                isCompleted || isActive ? Colors.blue : Colors.grey.shade300,
+            color: isCompleted || isActive ? Colors.blue : Colors.grey.shade300,
           ),
           child: Center(
             child: isCompleted
@@ -935,7 +944,8 @@ class _SimplifiedScheduleBookingScreenState
                 selectedDayPredicate: (day) => isSameDay(_selectedDate, day),
                 onDaySelected: (selectedDay, focusedDay) {
                   // Prevent selecting past dates
-                  if (selectedDay.isBefore(DateTime.now().subtract(Duration(days: 1)))) {
+                  if (selectedDay
+                      .isBefore(DateTime.now().subtract(Duration(days: 1)))) {
                     Get.snackbar(
                       'Invalid Date',
                       'Cannot schedule lessons in the past',
@@ -954,7 +964,8 @@ class _SimplifiedScheduleBookingScreenState
                 startingDayOfWeek: StartingDayOfWeek.monday,
                 enabledDayPredicate: (day) {
                   // Only enable today and future dates
-                  return day.isAfter(DateTime.now().subtract(Duration(days: 1)));
+                  return day
+                      .isAfter(DateTime.now().subtract(Duration(days: 1)));
                 },
                 headerStyle: HeaderStyle(
                   formatButtonVisible: false,
@@ -1003,7 +1014,8 @@ class _SimplifiedScheduleBookingScreenState
                     return Positioned(
                       bottom: 1,
                       child: Container(
-                        padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding:
+                            EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
                           color: Colors.orange,
                           borderRadius: BorderRadius.circular(10),
@@ -1058,7 +1070,7 @@ class _SimplifiedScheduleBookingScreenState
     final workingHours = _settingsController.businessStartTime.value;
 
     // Parse working hours with fallback to default (9 AM - 5 PM)
-    int startHour = 9;
+    int startHour = 8;
     int endHour = 17;
 
     try {
@@ -1071,7 +1083,7 @@ class _SimplifiedScheduleBookingScreenState
       }
     } catch (e) {
       // Use default hours if parsing fails (9 AM - 5 PM)
-      startHour = 9;
+      startHour = 8;
       endHour = 17;
     }
 
@@ -1130,11 +1142,12 @@ class _SimplifiedScheduleBookingScreenState
               ),
               child: Row(
                 children: [
-                  Icon(Icons.access_time, color: Colors.orange.shade700, size: 20),
+                  Icon(Icons.access_time,
+                      color: Colors.orange.shade700, size: 20),
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Booking for today - only showing time slots at least 1 hour from now',
+                      'Booking for today - only showing time slots at least 30 minutes from now',
                       style: TextStyle(
                         fontSize: 12,
                         color: Colors.orange.shade900,
@@ -1498,12 +1511,6 @@ class _SimplifiedScheduleBookingScreenState
                 Icon(Icons.notifications,
                     color: Colors.blue.shade700, size: 20),
                 SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'SMS reminder will be sent 1 hour before the lesson',
-                    style: TextStyle(fontSize: 12, color: Colors.blue.shade900),
-                  ),
-                ),
               ],
             ),
           ),
@@ -1656,7 +1663,8 @@ class _SimplifiedScheduleBookingScreenState
           });
         }
         // If no courses, dialog was shown, don't proceed
-      } else if (_currentStep == 2 || (_currentStep == 1 && widget.student != null)) {
+      } else if (_currentStep == 2 ||
+          (_currentStep == 1 && widget.student != null)) {
         // Validate lesson credits before moving from time selection to instructor selection
         final requiredCredits = _calculateLessonCredits();
         if (_remainingLessons < requiredCredits) {
@@ -1781,6 +1789,10 @@ class _SimplifiedScheduleBookingScreenState
 
       await _scheduleController.createSchedule(schedule);
 
+      // Calculate remaining lessons after booking
+      final remainingAfterBooking =
+          _remainingLessons - _calculateLessonCredits();
+
       // Show success dialog
       Get.dialog(
         AlertDialog(
@@ -1856,7 +1868,7 @@ class _SimplifiedScheduleBookingScreenState
                         Text('Lessons Remaining:',
                             style: TextStyle(color: Colors.grey.shade600)),
                         Text(
-                          '${_remainingLessons - _calculateLessonCredits()}',
+                          '$remainingAfterBooking',
                           style: TextStyle(
                               fontWeight: FontWeight.w600, color: Colors.green),
                         ),
@@ -1868,6 +1880,30 @@ class _SimplifiedScheduleBookingScreenState
             ],
           ),
           actions: [
+            OutlinedButton.icon(
+              onPressed: () async {
+                try {
+                  // Print booking confirmation
+                  await PrintService.printBookingConfirmation(
+                    student: _selectedStudent!,
+                    instructor: _selectedInstructor!,
+                    course: _selectedCourse!,
+                    startDateTime: startDateTime,
+                    endDateTime: endDateTime,
+                    vehicle: _selectedVehicle,
+                    remainingLessons: remainingAfterBooking,
+                  );
+                } catch (e) {
+                  // Error already shown by PrintService
+                  print('Print error: $e');
+                }
+              },
+              icon: Icon(Icons.print),
+              label: Text('Print'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.blue,
+              ),
+            ),
             ElevatedButton(
               onPressed: () {
                 Get.back(); // Close dialog

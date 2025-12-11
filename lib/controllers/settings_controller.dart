@@ -15,7 +15,7 @@ class SettingsController extends GetxController {
   final RxBool checkInstructorAvailability = true.obs;
   final RxBool enforceWorkingHours = true.obs;
   final RxBool autoAssignVehicles = true.obs;
-  final RxDouble defaultLessonDuration = 0.5.obs; // hours - 30 minutes default
+  final RxDouble defaultLessonDuration = 0.5.obs;
 
   // Billing Settings
   final RxBool showLowLessonWarning = true.obs;
@@ -27,7 +27,7 @@ class SettingsController extends GetxController {
   // Instructor Settings
   final RxString workingHoursStart = '09:00'.obs;
   final RxString workingHoursEnd = '18:00'.obs;
-  final RxInt breakBetweenLessons = 10.obs; // minutes
+  final RxInt breakBetweenLessons = 10.obs;
   final RxBool allowBackToBackLessons = false.obs;
 
   // Notification Settings

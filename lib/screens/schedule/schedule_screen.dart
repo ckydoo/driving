@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:driving/controllers/utils/responsive_utils.dart';
 import 'package:driving/models/schedule.dart';
 import 'package:driving/models/user.dart';
-import 'package:driving/screens/schedule/create_schedule_screen.dart';
 import 'package:driving/screens/schedule/recurring_schedule_screen.dart';
 import 'package:driving/screens/simplified_schedule_booking_screen.dart';
 import 'package:driving/widgets/responsive_extensions.dart';

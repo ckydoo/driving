@@ -1,4 +1,4 @@
-import 'package:driving/screens/schedule/create_schedule_screen.dart';
+import 'package:driving/screens/simplified_schedule_booking_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
@@ -715,6 +715,7 @@ class _ScheduleDetailsDialogState extends State<ScheduleDetailsDialog> {
       ),
     );
   }
+
   String _calculateDuration() {
     final duration = currentSchedule.end.difference(currentSchedule.start);
     final hours = duration.inHours;
@@ -837,18 +838,24 @@ class _ScheduleDetailsDialogState extends State<ScheduleDetailsDialog> {
 
   void _editSchedule() {
     Get.back(); // Close dialog
-    Get.to(() => SingleScheduleScreen(existingSchedule: currentSchedule));
+    final userController = Get.find<UserController>();
+    final student = userController.users.firstWhereOrNull(
+      (user) =>
+          user.id == currentSchedule.studentId &&
+          user.role.toLowerCase() == 'student',
+    );
+    Get.to(() => SimplifiedScheduleBookingScreen(student: student));
   }
 
   void _rescheduleLesson() {
     Get.back(); // Close dialog
-    // Create a copy of the schedule for rescheduling
-    final rescheduleSchedule = currentSchedule.copyWith(
-      id: null, // New schedule
-      status: 'Scheduled',
-      attended: false,
+    final userController = Get.find<UserController>();
+    final student = userController.users.firstWhereOrNull(
+      (user) =>
+          user.id == currentSchedule.studentId &&
+          user.role.toLowerCase() == 'student',
     );
-    Get.to(() => SingleScheduleScreen(existingSchedule: rescheduleSchedule));
+    Get.to(() => SimplifiedScheduleBookingScreen(student: student));
   }
 
   Future<void> _cancelLesson(ScheduleController controller) async {

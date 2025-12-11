@@ -1,6 +1,8 @@
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/controllers/settings_controller.dart';
+import 'package:driving/screens/schedule/schedule_screen.dart';
 import 'package:driving/screens/users/graduation_screen.dart';
+import 'package:driving/screens/simplified_schedule_booking_screen.dart';
 import 'package:driving/services/lesson_counting_service.dart';
 import 'package:flutter/material.dart';
 import 'package:driving/controllers/billing_controller.dart';
@@ -326,9 +328,8 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
               ),
             ),
 
-            // Quick Stats Row (Fixed height)
             SizedBox(
-              height: 80, // Fixed height for stats row
+              height: 80,
               child: Padding(
                 padding: EdgeInsets.symmetric(
                     horizontal: 8, vertical: 4), // Reduced padding
@@ -845,7 +846,7 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: () => _showScheduleDetails(schedule),
+        onTap: () => (),
         child: Padding(
           padding: EdgeInsets.all(16),
           child: Column(
@@ -930,10 +931,8 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
     );
   }
 
-  final SettingsController settingsController =
-      Get.find<SettingsController>();
-  final LessonCountingService lessonService =
-      LessonCountingService.instance;
+  final SettingsController settingsController = Get.find<SettingsController>();
+  final LessonCountingService lessonService = LessonCountingService.instance;
 
   Widget _buildProgressOverviewCard() {
     final studentInvoices = billingController.invoices
@@ -2252,12 +2251,6 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
     // Delete student logic
     Get.snackbar(
         snackPosition: SnackPosition.BOTTOM, 'Info', 'Student deleted');
-  }
-
-  void _showScheduleDetails(schedule) {
-    // Show schedule details dialog
-    Get.snackbar(
-        snackPosition: SnackPosition.BOTTOM, 'Info', 'Show schedule details');
   }
 
   void _uploadFile() async {
