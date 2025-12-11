@@ -84,7 +84,7 @@ class SettingsController extends GetxController {
   var autoPrintReceipt = false.obs;
   var receiptCopies = '1'.obs;
   var receiptHeader = 'Thank You!'.obs;
-  var receiptFooter = 'Visit us again'.obs;
+  var receiptFooter = 'Come again'.obs;
 
 // ============ PRINTER GETTERS ============
 

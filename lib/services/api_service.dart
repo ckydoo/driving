@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'dart:developer' as developer;
 
 class ApiService {
   static String? _token;
@@ -424,37 +425,56 @@ class ApiService {
 
   /// Enhanced error handling for responses
   static Map<String, dynamic> _handleResponse(http.Response response) {
-    print('🔍 Response Status: ${response.statusCode}');
-    print('🔍 Response Body: ${response.body}');
+    developer.log('Response received: ${response.statusCode}', name: 'ApiService');
 
     if (response.statusCode == 401) {
       // Token is invalid/expired
-      print('❌ Authentication failed - token may be expired');
+      developer.log('Authentication failed', name: 'ApiService', level: 1000);
       clearToken(); // Clear the invalid token
-      throw ApiException(401, 'Authentication failed. Please sign in again.');
+      throw ApiException(401, 'Your session has expired. Please sign in again.');
     }
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
       try {
         return json.decode(response.body);
       } catch (e) {
-        print('❌ JSON decode error: $e');
-        throw ApiException(response.statusCode, 'Invalid server response');
+        developer.log('JSON decode error', error: e, name: 'ApiService', level: 1000);
+        throw ApiException(response.statusCode, 'Received invalid data from server');
       }
     }
 
     // Handle other HTTP errors
-    String errorMessage = 'Server error ${response.statusCode}';
+    String errorMessage = _getDefaultErrorMessage(response.statusCode);
 
     try {
       final errorData = json.decode(response.body);
       errorMessage = errorData['message'] ?? errorMessage;
     } catch (e) {
-      print('⚠️ Could not parse error response: $e');
+      developer.log('Could not parse error response', error: e, name: 'ApiService');
     }
 
-    print('❌ Server error ${response.statusCode}: $errorMessage');
+    developer.log('Server error: $errorMessage', name: 'ApiService', level: 1000);
     throw ApiException(response.statusCode, errorMessage);
+  }
+
+  /// Get user-friendly error message based on status code
+  static String _getDefaultErrorMessage(int statusCode) {
+    switch (statusCode) {
+      case 400:
+        return 'Invalid request. Please check your input.';
+      case 403:
+        return 'You do not have permission to perform this action.';
+      case 404:
+        return 'The requested resource was not found.';
+      case 422:
+        return 'Validation failed. Please check your input.';
+      case 500:
+        return 'A server error occurred. Please try again later.';
+      case 503:
+        return 'Service temporarily unavailable. Please try again later.';
+      default:
+        return 'An error occurred. Please try again.';
+    }
   }
 
   /// Enhanced retry mechanism with better error handling
@@ -465,25 +485,31 @@ class ApiService {
       attempts++;
 
       try {
-        print('🔄 Attempt $attempts/$maxRetries');
+        developer.log('Request attempt $attempts/$maxRetries', name: 'ApiService');
         return await operation();
       } catch (e) {
-        print('❌ Request error (attempt $attempts): $e');
+        developer.log('Request failed (attempt $attempts)', error: e, name: 'ApiService');
 
         // Don't retry on authentication errors
         if (e is ApiException && e.statusCode == 401) {
-          print('🚫 Not retrying authentication error');
+          developer.log('Not retrying authentication error', name: 'ApiService');
+          rethrow;
+        }
+
+        // Don't retry client errors (4xx except 401)
+        if (e is ApiException && e.statusCode >= 400 && e.statusCode < 500) {
+          developer.log('Not retrying client error', name: 'ApiService');
           rethrow;
         }
 
         // Don't retry on the last attempt
         if (attempts >= maxRetries) {
-          print('💥 All $maxRetries attempts failed');
+          developer.log('All retry attempts exhausted', name: 'ApiService', level: 1000);
           rethrow;
         }
 
         // Wait before retrying
-        print('⏳ Retrying in ${retryDelay.inSeconds}s...');
+        developer.log('Retrying in ${retryDelay.inSeconds}s...', name: 'ApiService');
         await Future.delayed(retryDelay);
       }
     }

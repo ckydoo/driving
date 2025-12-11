@@ -278,7 +278,7 @@ class _SettingsScreenState extends State<SettingsScreen>
             ),
             _buildTextFieldTile(
               'Receipt Footer',
-              'Bottom text on receipt (e.g., Visit us again)',
+              'Bottom text on receipt (e.g., Come again)',
               settingsController.receiptFooter,
               Icons.text_fields,
             ),

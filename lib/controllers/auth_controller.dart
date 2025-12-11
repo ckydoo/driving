@@ -7,11 +7,13 @@ import 'package:driving/services/api_service.dart';
 import 'package:driving/services/database_helper.dart';
 import 'package:driving/controllers/pin_controller.dart';
 import 'package:driving/services/school_config_service.dart';
+import 'package:driving/services/error_handler.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:sqflite_common/sqlite_api.dart';
+import 'dart:developer' as developer;
 
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -112,9 +114,9 @@ class AuthController extends GetxController {
       }
 
       return localSuccess;
-    } catch (e) {
-      print('❌ Login error: $e');
-      error.value = 'Login failed: ${e.toString()}';
+    } catch (e, stackTrace) {
+      developer.log('Login error', error: e, stackTrace: stackTrace, name: 'AuthController');
+      error.value = ErrorHandler.getFriendlyMessage(e);
       return false;
     } finally {
       isLoading.value = false;
@@ -190,10 +192,10 @@ class AuthController extends GetxController {
       }
 
       // If we get here, both failed
-      error.value = 'Login failed. Please check your credentials.';
-    } catch (e) {
-      print('❌ Login error: $e');
-      error.value = 'Login failed: ${e.toString()}';
+      error.value = 'Invalid email or password. Please try again.';
+    } catch (e, stackTrace) {
+      developer.log('Login error', error: e, stackTrace: stackTrace, name: 'AuthController');
+      error.value = ErrorHandler.getFriendlyMessage(e);
     } finally {
       isLoading.value = false;
     }
@@ -336,9 +338,9 @@ class AuthController extends GetxController {
       print('✅ User: ${user.fname} ${user.lname} (${user.role})');
 
       return true;
-    } catch (e) {
-      print('❌ Login error: $e');
-      error.value = 'Login failed: ${e.toString()}';
+    } catch (e, stackTrace) {
+      developer.log('Local login error', error: e, stackTrace: stackTrace, name: 'AuthController');
+      error.value = ErrorHandler.getFriendlyMessage(e);
       return false;
     } finally {
       isLoading.value = false;
@@ -391,9 +393,9 @@ class AuthController extends GetxController {
       print('✅ User: ${user.fname} ${user.lname} (${user.role})');
 
       return true;
-    } catch (e) {
-      print('❌ Registration error: $e');
-      error.value = 'Registration failed: ${e.toString()}';
+    } catch (e, stackTrace) {
+      developer.log('Registration error', error: e, stackTrace: stackTrace, name: 'AuthController');
+      error.value = ErrorHandler.getFriendlyMessage(e);
       return false;
     } finally {
       isLoading.value = false;
@@ -517,9 +519,9 @@ class AuthController extends GetxController {
       }
 
       return success;
-    } catch (e) {
-      print('❌ PIN setup error: $e');
-      error.value = 'PIN setup failed: ${e.toString()}';
+    } catch (e, stackTrace) {
+      developer.log('PIN setup error', error: e, stackTrace: stackTrace, name: 'AuthController');
+      error.value = 'Failed to set up PIN. Please try again.';
       return false;
     }
   }
@@ -593,9 +595,9 @@ class AuthController extends GetxController {
 
       print('✅ User profile updated');
       return true;
-    } catch (e) {
-      print('❌ Profile update error: $e');
-      error.value = 'Profile update failed: ${e.toString()}';
+    } catch (e, stackTrace) {
+      developer.log('Profile update error', error: e, stackTrace: stackTrace, name: 'AuthController');
+      error.value = 'Failed to update profile. Please try again.';
       return false;
     } finally {
       isLoading.value = false;
@@ -651,9 +653,9 @@ class AuthController extends GetxController {
 
       print('✅ Password changed successfully');
       return true;
-    } catch (e) {
-      print('❌ Password change error: $e');
-      error.value = 'Password change failed: ${e.toString()}';
+    } catch (e, stackTrace) {
+      developer.log('Password change error', error: e, stackTrace: stackTrace, name: 'AuthController');
+      error.value = 'Failed to change password. Please try again.';
       return false;
     } finally {
       isLoading.value = false;
@@ -732,9 +734,9 @@ class AuthController extends GetxController {
 
       print('✅ User account deleted successfully');
       return true;
-    } catch (e) {
-      print('❌ Account deletion error: $e');
-      error.value = 'Account deletion failed: ${e.toString()}';
+    } catch (e, stackTrace) {
+      developer.log('Account deletion error', error: e, stackTrace: stackTrace, name: 'AuthController');
+      error.value = 'Failed to delete account. Please try again.';
       return false;
     } finally {
       isLoading.value = false;
@@ -1202,8 +1204,8 @@ class AuthController extends GetxController {
 
       return true;
     } catch (e, stackTrace) {
-      print('❌ API LOGIN ERROR: $e');
-      error.value = 'Login failed: ${e.toString()}';
+      developer.log('API login error', error: e, stackTrace: stackTrace, name: 'AuthController');
+      error.value = ErrorHandler.getFriendlyMessage(e);
 
       // Fallback to local login
       return await login(email, password);
@@ -1407,9 +1409,9 @@ class AuthController extends GetxController {
       }
 
       return false;
-    } catch (e) {
-      print('❌ PIN authentication error: $e');
-      error.value = 'PIN authentication failed: ${e.toString()}';
+    } catch (e, stackTrace) {
+      developer.log('PIN authentication error', error: e, stackTrace: stackTrace, name: 'AuthController');
+      error.value = 'PIN authentication failed. Please try again.';
       return false;
     }
   }

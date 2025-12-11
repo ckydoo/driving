@@ -3,10 +3,12 @@ import 'dart:io';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:get/get.dart';
+import 'dart:developer' as developer;
 
 // Import your existing files (adjust paths as needed)
 import '../services/api_service.dart';
 import '../services/database_helper.dart';
+import '../services/error_handler.dart';
 import '../controllers/auth_controller.dart';
 import '../models/sync_result.dart';
 import '../models/user.dart';

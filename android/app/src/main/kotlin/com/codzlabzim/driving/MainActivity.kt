@@ -166,52 +166,7 @@ class MainActivity: FlutterActivity() {
         }
     }
 
-    private fun printReceipt(content: String, printerName: String, paperSize: String) {
-        try {
-            println("🖨️ Starting print operation...")
-            
-            if (!checkBluetoothPermissions()) {
-                println("⚠️ Bluetooth permissions not granted")
-                throw Exception("Bluetooth permissions required. Please grant permissions in settings.")
-            }
 
-            val bluetoothConnection = BluetoothPrintersConnections.selectFirstPaired()
-            
-            if (bluetoothConnection == null) {
-                throw Exception("No paired Bluetooth printer found. Please pair your printer in Bluetooth settings.")
-            }
-
-            println("📱 Found Bluetooth printer")
-
-            val paperWidth = when (paperSize) {
-                "58mm" -> 32
-                "80mm" -> 48
-                else -> 32
-            }
-
-            println("📄 Paper size: $paperSize ($paperWidth chars)")
-
-            val printer = EscPosPrinter(
-                bluetoothConnection,
-                203,
-                paperWidth.toFloat(),
-                paperWidth
-            )
-
-            println("📝 Formatting receipt...")
-            val formattedContent = formatReceiptForEscPos(content)
-            
-            println("🖨️ Sending to printer...")
-            printer.printFormattedTextAndCut(formattedContent)
-
-            println("✅ Receipt printed successfully!")
-            
-        } catch (e: Exception) {
-            println("❌ Error printing receipt: ${e.message}")
-            e.printStackTrace()
-            throw e
-        }
-    }
 
     private fun discoverPrinters(type: String): List<Map<String, String>> {
         val printers = mutableListOf<Map<String, String>>()
@@ -439,20 +394,172 @@ class MainActivity: FlutterActivity() {
         return false
     }
 
-    private fun verifyPrinter(printerName: String): Boolean {
-        return try {
-            if (!checkBluetoothPermissions()) {
+private fun verifyPrinter(printerName: String): Boolean {
+    var connection: BluetoothConnection? = null
+    return try {
+        if (!checkBluetoothPermissions()) {
+            println("❌ Bluetooth permissions not granted")
+            false
+        } else {
+            println("🔍 Verifying printer: $printerName")
+            
+            // Find the specific device by name
+            val device = findBluetoothDeviceByName(printerName)
+            
+            if (device == null) {
+                println("❌ Printer not found: $printerName")
                 false
             } else {
-                val connection = BluetoothPrintersConnections.selectFirstPaired()
-                connection != null
+                println("📱 Found printer device: ${device.name} (${device.address})")
+                
+                // Create connection to specific device
+                connection = BluetoothConnection(device)
+                
+                println("🔗 Attempting connection...")
+                connection.connect()
+                val isConnected = connection.isConnected
+                
+                if (isConnected) {
+                    println("✅ Printer verified and connected")
+                } else {
+                    println("❌ Printer found but couldn't connect")
+                }
+                
+                connection.disconnect()
+                isConnected
             }
+        }
+    } catch (e: Exception) {
+        println("❌ Error verifying printer: ${e.message}")
+        e.printStackTrace()
+        false
+    } finally {
+        try {
+            connection?.disconnect()
         } catch (e: Exception) {
-            println("❌ Error verifying printer: ${e.message}")
-            false
+            // Ignore disconnect errors
         }
     }
+}
 
+private fun printReceipt(content: String, printerName: String, paperSize: String) {
+    var bluetoothConnection: BluetoothConnection? = null
+    
+    try {
+        println("🖨️ Starting print operation...")
+        println("   Content length: ${content.length}")
+        println("   Printer: $printerName")
+        println("   Paper: $paperSize")
+        
+        if (!checkBluetoothPermissions()) {
+            println("⚠️ Bluetooth permissions not granted")
+            throw Exception("Bluetooth permissions required. Please grant permissions in settings.")
+        }
+        println("✅ Bluetooth permissions OK")
+
+        val device = findBluetoothDeviceByName(printerName)
+        
+        if (device == null) {
+            println("❌ Printer not found: $printerName")
+            throw Exception("Printer '$printerName' not found. Please check Bluetooth settings.")
+        }
+        
+        println("📱 Found printer: ${device.name} (${device.address})")
+        
+        bluetoothConnection = BluetoothConnection(device)
+        
+        println("🔗 Connecting to printer...")
+        bluetoothConnection.connect()
+        
+        if (!bluetoothConnection.isConnected) {
+            println("❌ Failed to establish connection")
+            throw Exception("Printer not ready. Please ensure:\n• Printer is ON\n• Printer has paper\n• Bluetooth is enabled")
+        }
+        println("✅ Connected successfully")
+
+        val paperWidth = when (paperSize) {
+            "58mm" -> 32
+            "80mm" -> 48
+            else -> 32
+        }
+        println("📄 Paper size: $paperSize ($paperWidth chars)")
+
+        val printer = EscPosPrinter(
+            bluetoothConnection,
+            203,
+            paperWidth.toFloat(),
+            paperWidth
+        )
+        println("🖨️ Printer instance created")
+
+        println("📝 Formatting receipt...")
+        val formattedContent = formatReceiptForEscPos(content)
+        
+        // ⭐ Simple: Just print with feed lines, no cut
+        println("🖨️ Sending to printer...")
+        printer.printFormattedText(formattedContent + "\n\n\n\n\n")
+        
+        // Short delay to ensure data is sent
+        Thread.sleep(200)
+
+        println("✅ Receipt printed successfully!")
+        
+    } catch (e: Exception) {
+        println("❌ Error printing receipt: ${e.message}")
+        e.printStackTrace()
+        throw Exception(e.message ?: "Print failed")
+        
+    } finally {
+        try {
+            bluetoothConnection?.disconnect()
+            println("🔌 Disconnected from printer")
+        } catch (e: Exception) {
+            println("⚠️ Error disconnecting: ${e.message}")
+        }
+    }
+}
+
+private fun findBluetoothDeviceByName(deviceName: String): BluetoothDevice? {
+    return try {
+        if (!checkBluetoothPermissions()) {
+            println("❌ No Bluetooth permissions")
+            return null
+        }
+
+        val bluetoothManager = getSystemService(BLUETOOTH_SERVICE) as BluetoothManager
+        val bluetoothAdapter = bluetoothManager.adapter
+        
+        if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled) {
+            println("❌ Bluetooth not available")
+            return null
+        }
+
+        val pairedDevices = bluetoothAdapter.bondedDevices
+        
+        // Find exact match first
+        var device = pairedDevices.find { it.name == deviceName }
+        
+        // If no exact match, try partial match
+        if (device == null) {
+            device = pairedDevices.find { 
+                it.name?.contains(deviceName, ignoreCase = true) == true 
+            }
+        }
+        
+        if (device != null) {
+            println("✅ Found device: ${device.name} (${device.address})")
+        } else {
+            println("❌ Device not found: $deviceName")
+            println("   Available devices: ${pairedDevices.map { it.name }.joinToString()}")
+        }
+        
+        device
+        
+    } catch (e: Exception) {
+        println("❌ Error finding device: ${e.message}")
+        null
+    }
+}
     private fun formatReceiptForEscPos(content: String): String {
         return "[L]$content"
     }

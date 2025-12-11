@@ -235,7 +235,7 @@ class PrintService {
         .writeln(_center(settingsController.businessAddressValue, paperWidth));
     receipt.writeln(_center(settingsController.businessCityValue, paperWidth));
     receipt.writeln(
-        _center('Tel: ${settingsController.businessPhoneValue}', paperWidth));
+        _center('Phone: ${settingsController.businessPhoneValue}', paperWidth));
     receipt.writeln(_divider(paperWidth));
     receipt.writeln();
 

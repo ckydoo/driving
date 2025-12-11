@@ -1412,11 +1412,11 @@ class DatabaseHelper {
         // Insert default printer settings
         final defaultSettings = [
           {'key': 'printer_name', 'value': ''},
-          {'key': 'printer_paper_size', 'value': '80mm'},
+          {'key': 'printer_paper_size', 'value': '58mm'},
           {'key': 'auto_print_receipt', 'value': '0'},
           {'key': 'receipt_copies', 'value': '1'},
           {'key': 'receipt_header', 'value': 'Thank You!'},
-          {'key': 'receipt_footer', 'value': 'Visit us again'},
+          {'key': 'receipt_footer', 'value': 'Come again'},
         ];
 
         for (var setting in defaultSettings) {
