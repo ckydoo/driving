@@ -477,8 +477,7 @@ class PrintService {
     slip.writeln('Date: ${dateFormat.format(startDateTime)}');
     slip.writeln(
         'Time: ${timeFormat.format(startDateTime)} - ${timeFormat.format(endDateTime)}');
-    slip.writeln(
-        'Duration: ${durationHours}h ${durationMinutes}m');
+    slip.writeln('Duration: ${durationHours}h ${durationMinutes}m');
     slip.writeln();
     slip.writeln(_divider(paperWidth));
     slip.writeln();
@@ -514,7 +513,219 @@ class PrintService {
     // Important Notes
     slip.writeln('IMPORTANT NOTES:');
     slip.writeln('* Please arrive 10 minutes early');
-    slip.writeln('* Bring your learner\'s permit');
+    slip.writeln('* Bring your Provisional ');
+    slip.writeln('* Wear comfortable clothing');
+    slip.writeln('* Call to reschedule if needed');
+    slip.writeln();
+    slip.writeln(_divider(paperWidth));
+    slip.writeln();
+
+    // Footer
+    slip.writeln(_center('Thank you for choosing', paperWidth));
+    slip.writeln(_center(settingsController.businessNameValue, paperWidth));
+    slip.writeln(_center('Drive Safe!', paperWidth));
+    slip.writeln();
+    slip.writeln();
+    slip.writeln();
+
+    return slip.toString();
+  }
+
+  // Print Recurring Schedule Confirmation
+  static Future<void> printRecurringScheduleConfirmation({
+    required User student,
+    required User instructor,
+    required Course course,
+    required DateTime startDate,
+    required TimeOfDay startTime,
+    required TimeOfDay endTime,
+    required String recurrencePattern,
+    required int totalSchedules,
+    Fleet? vehicle,
+    int? remainingLessons,
+  }) async {
+    final settingsController = Get.find<SettingsController>();
+
+    try {
+      // Validate printer
+      final printerName = settingsController.printerNameValue;
+      final isReady = await validatePrinterReady(printerName);
+
+      if (!isReady) {
+        throw Exception('Printer not ready');
+      }
+
+      // Build recurring schedule confirmation content
+      final confirmationContent = _buildRecurringScheduleConfirmationContent(
+        student: student,
+        instructor: instructor,
+        course: course,
+        startDate: startDate,
+        startTime: startTime,
+        endTime: endTime,
+        recurrencePattern: recurrencePattern,
+        totalSchedules: totalSchedules,
+        vehicle: vehicle,
+        remainingLessons: remainingLessons,
+      );
+
+      // Print the confirmation
+      await platform.invokeMethod('printReceipt', {
+        'content': confirmationContent,
+        'printerName': settingsController.printerNameValue,
+        'paperSize': settingsController.printerPaperSizeValue,
+      });
+
+      print('✅ Recurring schedule confirmation printed successfully');
+
+      // Show success message
+      Get.snackbar(
+        'Print Success',
+        'Recurring schedule confirmation printed',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+        icon: Icon(Icons.check_circle, color: Colors.white),
+        duration: Duration(seconds: 2),
+      );
+    } catch (e) {
+      print('❌ Error printing recurring schedule confirmation: $e');
+      Get.snackbar(
+        'Print Error',
+        'Failed to print confirmation: ${e.toString()}',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+        icon: Icon(Icons.error_outline, color: Colors.white),
+      );
+      rethrow;
+    }
+  }
+
+  static String _buildRecurringScheduleConfirmationContent({
+    required User student,
+    required User instructor,
+    required Course course,
+    required DateTime startDate,
+    required TimeOfDay startTime,
+    required TimeOfDay endTime,
+    required String recurrencePattern,
+    required int totalSchedules,
+    Fleet? vehicle,
+    int? remainingLessons,
+  }) {
+    final settingsController = Get.find<SettingsController>();
+    final now = DateTime.now();
+    final dateFormat = DateFormat('MM/dd/yyyy');
+    final timeFormat = DateFormat('hh:mm a');
+    final dateTimeFormat = DateFormat('MM/dd/yyyy hh:mm a');
+
+    // Get paper width (58mm = 32 chars, 80mm = 48 chars)
+    final paperWidth = settingsController.printerPaperSizeValue == '58mm'
+        ? 32
+        : settingsController.printerPaperSizeValue == '80mm'
+            ? 48
+            : 32;
+
+    // Format times
+    final startDateTime = DateTime(
+      startDate.year,
+      startDate.month,
+      startDate.day,
+      startTime.hour,
+      startTime.minute,
+    );
+    final endDateTime = DateTime(
+      startDate.year,
+      startDate.month,
+      startDate.day,
+      endTime.hour,
+      endTime.minute,
+    );
+
+    // Calculate duration
+    final duration = endDateTime.difference(startDateTime);
+    final durationHours = duration.inHours;
+    final durationMinutes = duration.inMinutes.remainder(60);
+
+    StringBuffer slip = StringBuffer();
+
+    // Header
+    slip.writeln(_center(settingsController.businessNameValue, paperWidth));
+    slip.writeln(_center(settingsController.businessAddressValue, paperWidth));
+    slip.writeln(_center(settingsController.businessCityValue, paperWidth));
+    slip.writeln(
+        _center('Phone: ${settingsController.businessPhoneValue}', paperWidth));
+    slip.writeln(_divider(paperWidth));
+    slip.writeln();
+
+    // Title
+    slip.writeln(_center('RECURRING SCHEDULE', paperWidth));
+    slip.writeln(_center('CONFIRMATION', paperWidth));
+    slip.writeln();
+    slip.writeln(_divider(paperWidth));
+    slip.writeln();
+
+    // Booking Date/Time
+    slip.writeln('Created: ${dateTimeFormat.format(now)}');
+    slip.writeln(_divider(paperWidth));
+    slip.writeln();
+
+    // Student Information
+    slip.writeln('STUDENT DETAILS');
+    slip.writeln('Name: ${student.fname} ${student.lname}');
+    slip.writeln('Phone: ${student.phone}');
+    if (student.email.isNotEmpty) {
+      slip.writeln('Email: ${student.email}');
+    }
+    slip.writeln();
+    slip.writeln(_divider(paperWidth));
+    slip.writeln();
+
+    // Schedule Details
+    slip.writeln('SCHEDULE DETAILS');
+    slip.writeln('Course: ${course.name}');
+    slip.writeln('Pattern: ${recurrencePattern.toUpperCase()}');
+    slip.writeln('Start Date: ${dateFormat.format(startDate)}');
+    slip.writeln('Time: ${timeFormat.format(startDateTime)} - ${timeFormat.format(endDateTime)}');
+    slip.writeln('Duration: ${durationHours}h ${durationMinutes}m');
+    slip.writeln('Total Sessions: $totalSchedules');
+    slip.writeln();
+    slip.writeln(_divider(paperWidth));
+    slip.writeln();
+
+    // Instructor Information
+    slip.writeln('INSTRUCTOR');
+    slip.writeln('${instructor.fname} ${instructor.lname}');
+    if (instructor.phone.isNotEmpty) {
+      slip.writeln('Phone: ${instructor.phone}');
+    }
+    slip.writeln();
+
+    // Vehicle Information
+    if (vehicle != null) {
+      slip.writeln('VEHICLE');
+      slip.writeln('${vehicle.make} ${vehicle.model}');
+      slip.writeln('Plate: ${vehicle.carPlate}');
+      slip.writeln();
+    }
+
+    slip.writeln(_divider(paperWidth));
+    slip.writeln();
+
+    // Remaining Lessons
+    if (remainingLessons != null) {
+      slip.writeln(_center('REMAINING BALANCE', paperWidth));
+      slip.writeln(_center('$remainingLessons lesson(s)', paperWidth));
+      slip.writeln();
+      slip.writeln(_divider(paperWidth));
+      slip.writeln();
+    }
+
+    // Important Notes
+    slip.writeln('IMPORTANT NOTES:');
+    slip.writeln('* Please arrive 10 minutes early');
+    slip.writeln('* Bring your Provisional ');
     slip.writeln('* Wear comfortable clothing');
     slip.writeln('* Call to reschedule if needed');
     slip.writeln();

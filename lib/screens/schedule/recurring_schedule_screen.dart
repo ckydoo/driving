@@ -1,7 +1,5 @@
 import 'package:driving/controllers/navigation_controller.dart';
 import 'package:driving/controllers/settings_controller.dart';
-import 'package:driving/widgets/recuring_progress.dart';
-import 'package:driving/widgets/responsive_text.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
@@ -14,6 +12,7 @@ import '../../controllers/user_controller.dart';
 import '../../controllers/course_controller.dart';
 import '../../controllers/fleet_controller.dart';
 import '../../controllers/billing_controller.dart';
+import '../../services/print_service.dart';
 
 class RecurringScheduleScreen extends StatefulWidget {
   const RecurringScheduleScreen({Key? key}) : super(key: key);
@@ -63,6 +62,12 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
   int _remainingLessons = 0;
   int _maxPossibleLessons = 0;
 
+  // Search controllers for searchable dropdowns
+  final TextEditingController _studentSearchController = TextEditingController();
+  final TextEditingController _instructorSearchController = TextEditingController();
+  List<User> _filteredStudents = [];
+  List<User> _filteredInstructors = [];
+
   final List<String> _recurrencePatterns = [
     'daily',
     'weekly',
@@ -90,6 +95,70 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
     _vehicleAvailable = true;
     _showAvailabilityStatus = false;
     _conflictDetails = [];
+    // Initialize filtered lists
+    _loadAllStudents();
+    _loadAllInstructors();
+  }
+
+  @override
+  void dispose() {
+    _studentSearchController.dispose();
+    _instructorSearchController.dispose();
+    super.dispose();
+  }
+
+  void _loadAllStudents() {
+    setState(() {
+      _filteredStudents = _userController.users
+          .where((user) => user.role.toLowerCase() == 'student')
+          .toList();
+    });
+  }
+
+  void _loadAllInstructors() {
+    setState(() {
+      _filteredInstructors = _userController.users
+          .where((user) => user.role.toLowerCase() == 'instructor')
+          .toList();
+    });
+  }
+
+  void _filterStudents(String query) {
+    setState(() {
+      if (query.isEmpty) {
+        _filteredStudents = _userController.users
+            .where((user) => user.role.toLowerCase() == 'student')
+            .toList();
+      } else {
+        _filteredStudents = _userController.users
+            .where((user) => user.role.toLowerCase() == 'student')
+            .where((user) {
+          final fullName = '${user.fname} ${user.lname}'.toLowerCase();
+          final email = user.email.toLowerCase();
+          final searchLower = query.toLowerCase();
+          return fullName.contains(searchLower) || email.contains(searchLower);
+        }).toList();
+      }
+    });
+  }
+
+  void _filterInstructors(String query) {
+    setState(() {
+      if (query.isEmpty) {
+        _filteredInstructors = _userController.users
+            .where((user) => user.role.toLowerCase() == 'instructor')
+            .toList();
+      } else {
+        _filteredInstructors = _userController.users
+            .where((user) => user.role.toLowerCase() == 'instructor')
+            .where((user) {
+          final fullName = '${user.fname} ${user.lname}'.toLowerCase();
+          final email = user.email.toLowerCase();
+          final searchLower = query.toLowerCase();
+          return fullName.contains(searchLower) || email.contains(searchLower);
+        }).toList();
+      }
+    });
   }
 
   @override
@@ -146,35 +215,99 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
               ],
             ),
             SizedBox(height: 16),
-            DropdownButtonFormField<User>(
-              value: _selectedStudent,
+            // Search field
+            TextField(
+              controller: _studentSearchController,
               decoration: InputDecoration(
-                labelText: 'Select Student',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.school),
+                hintText: 'Search students by name or email...',
+                prefixIcon: Icon(Icons.search),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                filled: true,
+                fillColor: Colors.grey.shade50,
               ),
-              validator: (value) =>
-                  value == null ? 'Please select a student' : null,
-              items: _userController.users
-                  .where((user) => user.role.toLowerCase() == 'student')
-                  .map((user) => DropdownMenuItem(
-                        value: user,
-                        child: Text('${user.fname} ${user.lname}'),
-                      ))
-                  .toList(),
-              onChanged: (User? value) {
-                setState(() {
-                  _selectedStudent = value;
-
-                  _selectedCourse = null;
-                  _remainingLessons = 0;
-                  _availableCourses = [];
-                });
-                if (value != null) {
-                  _loadStudentCourses(value);
-                }
-              },
+              onChanged: _filterStudents,
             ),
+            SizedBox(height: 12),
+            // Student list container
+            Container(
+              height: 200,
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey.shade300),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: _filteredStudents.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.person_off, size: 48, color: Colors.grey),
+                          SizedBox(height: 8),
+                          Text(
+                            'No students found',
+                            style: TextStyle(color: Colors.grey.shade600),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      itemCount: _filteredStudents.length,
+                      itemBuilder: (context, index) {
+                        final student = _filteredStudents[index];
+                        final isSelected = _selectedStudent?.id == student.id;
+                        return ListTile(
+                          dense: true,
+                          selected: isSelected,
+                          selectedTileColor: Colors.blue.shade50,
+                          leading: CircleAvatar(
+                            radius: 16,
+                            backgroundColor: isSelected ? Colors.blue : Colors.blue.shade300,
+                            child: Text(
+                              '${student.fname.isNotEmpty ? student.fname[0] : ""}${student.lname.isNotEmpty ? student.lname[0] : ""}',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          title: Text(
+                            '${student.fname} ${student.lname}',
+                            style: TextStyle(
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                            ),
+                          ),
+                          subtitle: Text(
+                            student.email,
+                            style: TextStyle(fontSize: 12),
+                          ),
+                          trailing: isSelected
+                              ? Icon(Icons.check_circle, color: Colors.blue)
+                              : null,
+                          onTap: () {
+                            setState(() {
+                              _selectedStudent = student;
+                              _selectedCourse = null;
+                              _remainingLessons = 0;
+                              _availableCourses = [];
+                            });
+                            _loadStudentCourses(student);
+                          },
+                        );
+                      },
+                    ),
+            ),
+            if (_selectedStudent != null) ...[
+              SizedBox(height: 8),
+              Text(
+                'Selected: ${_selectedStudent!.fname} ${_selectedStudent!.lname}',
+                style: TextStyle(
+                  color: Colors.blue,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -1171,6 +1304,36 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
               SizedBox(height: 24),
 
               // FIXED: Action buttons with proper navigation
+              if (savedCount > 0) ...[
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    try {
+                      // Print booking confirmation for the recurring schedule
+                      await PrintService.printRecurringScheduleConfirmation(
+                        student: _selectedStudent!,
+                        instructor: _selectedInstructor!,
+                        course: _selectedCourse!,
+                        vehicle: _selectedVehicle,
+                        startDate: _selectedStartDate,
+                        startTime: _startTime,
+                        endTime: _endTime,
+                        recurrencePattern: _recurrencePattern,
+                        totalSchedules: savedCount,
+                        remainingLessons: _remainingLessons - savedCount,
+                      );
+                    } catch (e) {
+                      // Error already shown by PrintService
+                      print('Print error: $e');
+                    }
+                  },
+                  icon: Icon(Icons.print),
+                  label: Text('Print'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.blue,
+                  ),
+                ),
+                SizedBox(height: 12),
+              ],
               Row(
                 children: [
                   if (savedCount > 0) ...[
@@ -2216,51 +2379,124 @@ class _RecurringScheduleScreenState extends State<RecurringScheduleScreen> {
               ],
             ),
             SizedBox(height: 16),
-            DropdownButtonFormField<User>(
-              value: _selectedInstructor,
+            // Search field
+            TextField(
+              controller: _instructorSearchController,
               decoration: InputDecoration(
-                labelText: 'Select Instructor',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.supervisor_account),
+                hintText: 'Search instructors by name or email...',
+                prefixIcon: Icon(Icons.search),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                filled: true,
+                fillColor: Colors.grey.shade50,
               ),
-              validator: (value) {
-                if (value == null) return 'Please select an instructor';
-
-                // Show availability status in validation
-                if (_showAvailabilityStatus && !_instructorAvailable) {
-                  return 'Instructor has scheduling conflicts';
-                }
-
-                return null;
-              },
-              items: _userController.users
-                  .where((user) => user.role.toLowerCase() == 'instructor')
-                  .where((instructor) {
-                    // For practical lessons, only show instructors with assigned vehicles
-                    if (_selectedClassType == 'Practical') {
-                      return _fleetController.fleet.any(
-                        (vehicle) => vehicle.instructor == instructor.id,
-                      );
-                    }
-                    // For theory lessons, show all instructors
-                    return true;
-                  })
-                  .map((user) => DropdownMenuItem(
-                        value: user,
-                        child: Text('${user.fname} ${user.lname}'),
-                      ))
-                  .toList(),
-              onChanged: (User? value) {
-                setState(() {
-                  _selectedInstructor = value;
-                });
-                if (value != null) {
-                  _assignInstructorVehicle(value);
-                  _updatePreviewCount();
-                  _checkInstructorAndVehicleAvailability();
-                }
-              },
+              onChanged: _filterInstructors,
             ),
+            SizedBox(height: 12),
+            // Instructor list container
+            Container(
+              height: 200,
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey.shade300),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: _filteredInstructors.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.person_off, size: 48, color: Colors.grey),
+                          SizedBox(height: 8),
+                          Text(
+                            'No instructors found',
+                            style: TextStyle(color: Colors.grey.shade600),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      itemCount: _filteredInstructors.length,
+                      itemBuilder: (context, index) {
+                        final instructor = _filteredInstructors[index];
+                        final isSelected = _selectedInstructor?.id == instructor.id;
+
+                        // Check if instructor has vehicle for practical lessons
+                        final hasVehicle = _fleetController.fleet.any(
+                          (vehicle) => vehicle.instructor == instructor.id,
+                        );
+                        final canSelect = _selectedClassType != 'Practical' || hasVehicle;
+
+                        // Get instructor's vehicle
+                        final vehicle = _fleetController.fleet.firstWhereOrNull(
+                          (v) => v.instructor == instructor.id,
+                        );
+
+                        return ListTile(
+                          dense: true,
+                          selected: isSelected,
+                          selectedTileColor: Colors.purple.shade50,
+                          enabled: canSelect,
+                          leading: CircleAvatar(
+                            radius: 16,
+                            backgroundColor: !canSelect
+                                ? Colors.grey
+                                : isSelected
+                                    ? Colors.purple
+                                    : Colors.purple.shade300,
+                            child: Text(
+                              '${instructor.fname.isNotEmpty ? instructor.fname[0] : ""}${instructor.lname.isNotEmpty ? instructor.lname[0] : ""}',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          title: Text(
+                            '${instructor.fname} ${instructor.lname}',
+                            style: TextStyle(
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                              color: !canSelect ? Colors.grey : null,
+                            ),
+                          ),
+                          subtitle: Text(
+                            vehicle != null
+                                ? '${vehicle.make} ${vehicle.model} (${vehicle.carPlate})'
+                                : 'No vehicle assigned',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: !canSelect ? Colors.grey : null,
+                            ),
+                          ),
+                          trailing: isSelected
+                              ? Icon(Icons.check_circle, color: Colors.purple)
+                              : null,
+                          onTap: canSelect
+                              ? () {
+                                  setState(() {
+                                    _selectedInstructor = instructor;
+                                  });
+                                  _assignInstructorVehicle(instructor);
+                                  _updatePreviewCount();
+                                  _checkInstructorAndVehicleAvailability();
+                                }
+                              : null,
+                        );
+                      },
+                    ),
+            ),
+            if (_selectedInstructor != null) ...[
+              SizedBox(height: 8),
+              Text(
+                'Selected: ${_selectedInstructor!.fname} ${_selectedInstructor!.lname}',
+                style: TextStyle(
+                  color: Colors.purple,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+            SizedBox(height: 12),
             _buildAvailabilityStatus(),
 
             SizedBox(height: 16),
