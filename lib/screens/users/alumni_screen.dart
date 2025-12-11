@@ -103,7 +103,8 @@ class _AlumniScreenState extends State<AlumniScreen> {
           .toList();
 
       final completedSchedules = allSchedules
-          .where((s) => s.status == 'Completed' && s.attended)
+          .where((s) =>
+              (s.status.toLowerCase() == 'completed' || s.attended))
           .toList();
 
       // Get instructor breakdown

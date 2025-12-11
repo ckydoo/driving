@@ -103,8 +103,6 @@ class _POSScreenState extends State<POSScreen> {
       return;
     }
 
-    print('🔍 Searching for: "$query"');
-
     final allUsers = userController.users;
     if (allUsers.isEmpty) {
       _loadUsers();
@@ -116,8 +114,6 @@ class _POSScreenState extends State<POSScreen> {
       final role = user.role?.toLowerCase()?.trim() ?? '';
       return role == 'student' || role.contains('student');
     }).toList();
-
-    print('🎓 Found ${allStudents.length} students total');
 
     // Filter by search query
     final queryLower = query.toLowerCase();
@@ -136,25 +132,10 @@ class _POSScreenState extends State<POSScreen> {
         .take(5)
         .toList();
 
-    print('🎯 Final matching students: ${matchingStudents.length}');
-
-    // CRITICAL FIX: Force UI update even if no changes detected
+    // Update UI with search results
     setState(() {
       _studentSearchResults = matchingStudents;
       _showStudentResults = matchingStudents.isNotEmpty;
-    });
-
-    // DEBUG: Log UI state
-    print(
-        '📱 UI State: _showStudentResults = $_showStudentResults, results count = ${_studentSearchResults.length}');
-
-    // FORCE UI REBUILD: Add small delay to ensure setState completes
-    Future.microtask(() {
-      if (mounted && matchingStudents.isNotEmpty) {
-        setState(() {
-          // Force refresh
-        });
-      }
     });
   }
 
@@ -457,7 +438,7 @@ class _POSScreenState extends State<POSScreen> {
     }
   }
 
-// ENHANCED: Invoice creation with better error handling
+// ENHANCED: Invoice creation with better error handling and printing
   Future<void> _createInvoiceOnly() async {
     // Validate student before processing
     if (_selectedStudent?.id == null) {
@@ -471,10 +452,12 @@ class _POSScreenState extends State<POSScreen> {
           throw Exception('Invalid course data for ${item.course.name}');
         }
 
+        final invoiceNumber = 'INV-${DateTime.now().toUtc().millisecondsSinceEpoch}';
+
         final invoice = Invoice(
           studentId: _selectedStudent!.id!,
           courseId: item.course.id!,
-          invoiceNumber: 'INV-${DateTime.now().toUtc().millisecondsSinceEpoch}',
+          invoiceNumber: invoiceNumber,
           totalAmount: item.totalPrice,
           pricePerLesson: item.course.price.toDouble(),
           amountPaid: 0.0,
@@ -486,7 +469,43 @@ class _POSScreenState extends State<POSScreen> {
 
         await billingController.createInvoice(invoice);
 
-        print('Invoice created successfully: ${invoice.invoiceNumber}');
+        print('Invoice created successfully: $invoiceNumber');
+
+        // Print invoice with balance
+        final settingsController = Get.find<SettingsController>();
+        final shouldAutoPrint = settingsController.autoPrintReceiptValue;
+
+        if (shouldAutoPrint) {
+          try {
+            final invoiceItems = [
+              ReceiptItem(
+                itemName: item.course.name,
+                quantity: item.quantity,
+                unitPrice: item.course.price.toDouble(),
+                totalPrice: item.totalPrice,
+              )
+            ];
+
+            await PrintService.printInvoice(
+              invoiceNumber: invoiceNumber,
+              student: _selectedStudent!,
+              items: invoiceItems,
+              total: item.totalPrice,
+              amountPaid: 0.0,
+              notes: _notesController.text.trim().isEmpty
+                  ? 'Invoice Only - Payment Pending'
+                  : _notesController.text.trim(),
+            );
+
+            print('✅ Invoice printed successfully');
+          } catch (e) {
+            print('⚠️ Invoice created but print failed: $e');
+            // Don't throw - invoice was created successfully
+          }
+        } else {
+          // Show option to print invoice
+          _showInvoicePrintDialog(invoiceNumber, item);
+        }
       } catch (e) {
         print('❌ Error creating invoice for ${item.course.name}: $e');
         throw Exception('Failed to create invoice for ${item.course.name}: $e');
@@ -578,6 +597,7 @@ class _POSScreenState extends State<POSScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: true, // Allow keyboard to resize layout
       appBar: AppBar(
         title: Text('POS System'),
         backgroundColor: Colors.blue.shade700,
@@ -598,16 +618,8 @@ class _POSScreenState extends State<POSScreen> {
   Widget _buildMobileLayout() {
     return Column(
       children: [
-        // Student Selection Card - Fixed height with internal scrolling
-        Container(
-          constraints: BoxConstraints(
-            maxHeight:
-                MediaQuery.of(context).size.height * 0.4, // Max 40% of screen
-          ),
-          child: SingleChildScrollView(
-            child: _buildStudentSelectionCard(),
-          ),
-        ),
+        // Student Selection Card - Shrink-wrapped
+        _buildStudentSelectionCard(),
 
         // Cart Summary (Compact) - Fixed size
         if (_cartItems.isNotEmpty) _buildMobileCartSummary(),
@@ -667,8 +679,7 @@ class _POSScreenState extends State<POSScreen> {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize:
-            MainAxisSize.min, // IMPORTANT: Don't take more space than needed
+        mainAxisSize: MainAxisSize.min,
         children: [
           Text(
             'Select Student',
@@ -710,7 +721,7 @@ class _POSScreenState extends State<POSScreen> {
             Container(
               // CRITICAL FIX: Constrain maximum height to prevent overflow
               constraints: BoxConstraints(
-                maxHeight: _isMobile ? 200 : 160, // Limit height
+                maxHeight: 160, // Fixed height regardless of mobile/desktop
               ),
               decoration: BoxDecoration(
                 border: Border.all(color: Colors.blue.shade200),
@@ -744,6 +755,7 @@ class _POSScreenState extends State<POSScreen> {
                     child: ListView.separated(
                       shrinkWrap: true,
                       padding: EdgeInsets.zero,
+                      physics: ClampingScrollPhysics(),
                       itemCount: _studentSearchResults.length,
                       separatorBuilder: (context, index) => Divider(
                         height: 1,
@@ -1036,6 +1048,63 @@ class _POSScreenState extends State<POSScreen> {
                 _showSuccess('Receipt printed successfully!');
               } catch (e) {
                 _showError('Failed to print receipt: $e');
+              }
+            },
+            icon: Icon(Icons.print),
+            label: Text('Print'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue[700],
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Show invoice print dialog if auto-print is disabled
+  void _showInvoicePrintDialog(String invoiceNumber, CartItem item) {
+    Get.dialog(
+      AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.print, color: Colors.blue[700]),
+            SizedBox(width: 8),
+            Text('Print Invoice?'),
+          ],
+        ),
+        content: Text('Would you like to print the invoice for this transaction?'),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back(),
+            child: Text('No'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () async {
+              Get.back();
+              try {
+                final invoiceItems = [
+                  ReceiptItem(
+                    itemName: item.course.name,
+                    quantity: item.quantity,
+                    unitPrice: item.course.price.toDouble(),
+                    totalPrice: item.totalPrice,
+                  )
+                ];
+
+                await PrintService.printInvoice(
+                  invoiceNumber: invoiceNumber,
+                  student: _selectedStudent!,
+                  items: invoiceItems,
+                  total: item.totalPrice,
+                  amountPaid: 0.0,
+                  notes: _notesController.text.trim().isEmpty
+                      ? 'Invoice Only - Payment Pending'
+                      : _notesController.text.trim(),
+                );
+                _showSuccess('Invoice printed successfully!');
+              } catch (e) {
+                _showError('Failed to print invoice: $e');
               }
             },
             icon: Icon(Icons.print),

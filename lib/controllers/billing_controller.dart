@@ -11,6 +11,7 @@ import 'package:driving/models/payment.dart';
 import 'package:driving/models/user.dart';
 import 'package:driving/services/receipt_service.dart';
 import 'package:driving/services/sync_service.dart';
+import 'package:driving/services/lazy_loading_service.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -19,19 +20,185 @@ import 'package:path_provider/path_provider.dart';
 import '../services/database_helper.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:intl/intl.dart';
+import 'package:driving/controllers/auth_controller.dart';
 
 class BillingController extends GetxController {
-  final RxList<Invoice> invoices = <Invoice>[].obs;
-  final RxList<Payment> payments = <Payment>[].obs;
+  // ============================================================
+  // LAZY LOADING: Paginated lists instead of loading everything
+  // ============================================================
+  final RxList<Invoice> visibleInvoices = <Invoice>[].obs;
+  final RxList<Payment> visiblePayments = <Payment>[].obs;
+
+  // Pagination state
+  final RxBool hasMoreInvoices = true.obs;
+  final RxBool hasMorePayments = true.obs;
+  final RxBool isLoadingMore = false.obs;
   final RxBool isLoading = false.obs;
+
+  int _invoicesOffset = 0;
+  int _paymentsOffset = 0;
+
+  // School ID for multi-tenant support
+  String? get _schoolId {
+    try {
+      if (Get.isRegistered<AuthController>()) {
+        final auth = Get.find<AuthController>();
+        return auth.currentUser.value?.schoolId;
+      }
+    } catch (e) {
+      print('Error getting school ID: $e');
+    }
+    return null;
+  }
+
+  // Backward compatibility - keep these for existing code
+  List<Invoice> get invoices => visibleInvoices;
+  List<Payment> get payments => visiblePayments;
+
   var courses = <Course>[].obs;
   final DatabaseHelper _dbHelper = Get.find();
 
   @override
   void onInit() {
     super.onInit();
-    // Fetch all billing data initially
-    fetchBillingData();
+    // LAZY LOADING: Load only initial data instead of everything
+    _loadInitialData();
+  }
+
+  // ============================================================
+  // LAZY LOADING METHODS
+  // ============================================================
+
+  /// Load initial invoices and payments (50 each)
+  Future<void> _loadInitialData() async {
+    isLoading(true);
+
+    try {
+      // Load invoices and payments in parallel for better performance
+      await Future.wait([
+        _loadInitialInvoices(),
+        _loadInitialPayments(),
+      ]);
+    } catch (e) {
+      print('Error loading initial billing data: $e');
+      Get.snackbar(
+        'Error',
+        'Failed to load billing data: ${e.toString()}',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    } finally {
+      isLoading(false);
+    }
+  }
+
+  /// Load initial invoices (first 50)
+  Future<void> _loadInitialInvoices() async {
+    try {
+      final result = await LazyLoadingService.loadInitialInvoices(
+        schoolId: _schoolId,
+      );
+
+      visibleInvoices.value = result['invoices'];
+      hasMoreInvoices.value = result['hasMore'];
+      _invoicesOffset = result['offset'];
+
+      print('✅ Loaded ${visibleInvoices.length} invoices (hasMore: ${hasMoreInvoices.value})');
+    } catch (e) {
+      print('Error loading initial invoices: $e');
+      rethrow;
+    }
+  }
+
+  /// Load initial payments (first 50)
+  Future<void> _loadInitialPayments() async {
+    try {
+      final result = await LazyLoadingService.loadInitialPayments(
+        schoolId: _schoolId,
+      );
+
+      visiblePayments.value = result['payments'];
+      hasMorePayments.value = result['hasMore'];
+      _paymentsOffset = result['offset'];
+
+      print('✅ Loaded ${visiblePayments.length} payments (hasMore: ${hasMorePayments.value})');
+    } catch (e) {
+      print('Error loading initial payments: $e');
+      rethrow;
+    }
+  }
+
+  /// Load more invoices (next 25)
+  Future<void> loadMoreInvoices() async {
+    if (!hasMoreInvoices.value || isLoadingMore.value) return;
+
+    isLoadingMore(true);
+
+    try {
+      final result = await LazyLoadingService.loadMoreInvoices(
+        schoolId: _schoolId,
+        offset: _invoicesOffset,
+      );
+
+      visibleInvoices.addAll(result['invoices']);
+      hasMoreInvoices.value = result['hasMore'];
+      _invoicesOffset = result['offset'];
+
+      print('✅ Loaded ${result['invoices'].length} more invoices (total: ${visibleInvoices.length})');
+    } catch (e) {
+      print('Error loading more invoices: $e');
+      Get.snackbar(
+        'Error',
+        'Failed to load more invoices',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    } finally {
+      isLoadingMore(false);
+    }
+  }
+
+  /// Load more payments (next 25)
+  Future<void> loadMorePayments() async {
+    if (!hasMorePayments.value || isLoadingMore.value) return;
+
+    isLoadingMore(true);
+
+    try {
+      final result = await LazyLoadingService.loadMorePayments(
+        schoolId: _schoolId,
+        offset: _paymentsOffset,
+      );
+
+      visiblePayments.addAll(result['payments']);
+      hasMorePayments.value = result['hasMore'];
+      _paymentsOffset = result['offset'];
+
+      print('✅ Loaded ${result['payments'].length} more payments (total: ${visiblePayments.length})');
+    } catch (e) {
+      print('Error loading more payments: $e');
+      Get.snackbar(
+        'Error',
+        'Failed to load more payments',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    } finally {
+      isLoadingMore(false);
+    }
+  }
+
+  /// Refresh all data (pull-to-refresh)
+  Future<void> refreshBillingData() async {
+    _invoicesOffset = 0;
+    _paymentsOffset = 0;
+    hasMoreInvoices.value = true;
+    hasMorePayments.value = true;
+
+    await _loadInitialData();
   }
 
   Future<int> insertBillingRecord(BillingRecord billingRecord) async {
@@ -142,8 +309,8 @@ class BillingController extends GetxController {
           // usedLessons: usedLessons,
           );
 
-      invoices[index] = updatedInvoice;
-      invoices.refresh();
+      visibleInvoices[index] = updatedInvoice;
+      visibleInvoices.refresh();
     } catch (e) {
       print('Error updating used lessons: ${e.toString()}');
       throw Exception('Failed to update lesson usage');
@@ -157,90 +324,11 @@ class BillingController extends GetxController {
 
   // Fixed fetchBillingData method in billing_controller.dart
 
+  /// Legacy method - now uses lazy loading under the hood
+  /// For backward compatibility with existing code that calls fetchBillingData()
   Future<void> fetchBillingData() async {
-    try {
-      isLoading(true);
-      print('BillingController: fetchBillingData called');
-
-      // Get fresh data from database
-      final invoicesData = await _dbHelper.getInvoices();
-      final paymentsData = await _dbHelper.getPayments();
-
-      print('BillingController: Raw invoice data: $invoicesData');
-      print('BillingController: Raw payments data: $paymentsData');
-
-      List<Invoice> fetchedInvoices = [];
-
-      // ✅ SIMPLE FIX: Process invoices safely
-      for (var invoiceData in invoicesData) {
-        try {
-          final amountPaid =
-              (invoiceData['amountpaid'] as num?)?.toDouble() ?? 0.0;
-          print(
-              'Invoice ${invoiceData['id']}: amountpaid from DB = $amountPaid');
-
-          // Create invoice with explicit amountPaid value
-          Invoice invoice = Invoice.fromJson(invoiceData);
-          fetchedInvoices.add(invoice);
-        } catch (e) {
-          print('❌ Error parsing invoice ${invoiceData['id']}: $e');
-          // Continue with other invoices
-        }
-      }
-
-      // ✅ SIMPLE FIX: Process payments safely without sanitization
-      List<Payment> fetchedPayments = [];
-      for (var paymentData in paymentsData) {
-        try {
-          print('Processing payment: ${paymentData['id']}');
-          Payment payment = Payment.fromJson(paymentData);
-          fetchedPayments.add(payment);
-        } catch (e) {
-          print('❌ Error parsing payment ${paymentData['id']}: $e');
-          print('🔍 Payment data: $paymentData');
-          // Continue with other payments
-        }
-      }
-
-      // Group payments by invoice
-      for (var invoice in fetchedInvoices) {
-        final invoicePayments = fetchedPayments
-            .where((payment) => payment.invoiceId == invoice.id)
-            .toList();
-
-        // Calculate total payments for this invoice
-        double calculatedAmountPaid =
-            invoicePayments.fold(0.0, (sum, payment) => sum + payment.amount);
-
-        print(
-            'Invoice ${invoice.id}: calculated amount paid from payments = $calculatedAmountPaid');
-        print('Invoice ${invoice.id}: DB amount paid = ${invoice.amountPaid}');
-
-        // If there's a mismatch, prefer the calculated value
-        if ((calculatedAmountPaid - invoice.amountPaid).abs() > 0.01) {
-          print(
-              '⚠️ MISMATCH DETECTED: Updating invoice ${invoice.id} amountpaid from ${invoice.amountPaid} to $calculatedAmountPaid');
-          await _updateInvoiceAmountPaid(invoice.id!, calculatedAmountPaid);
-          invoice = invoice.copyWith(amountPaid: calculatedAmountPaid);
-        }
-
-        invoice.payments = invoicePayments;
-        print(
-            'Final invoice ${invoice.id}: amountPaid = ${invoice.amountPaid}, balance = ${invoice.balance}');
-      }
-
-      // Update observable lists
-      invoices.assignAll(fetchedInvoices);
-      payments.assignAll(fetchedPayments);
-
-      print(
-          'BillingController: Updated ${invoices.length} invoices and ${payments.length} payments');
-    } catch (e) {
-      print('ERROR in fetchBillingData: $e');
-      throw e;
-    } finally {
-      isLoading(false);
-    }
+    print('BillingController: fetchBillingData called (redirecting to lazy loading)');
+    await refreshBillingData();
   }
 
 // Also add a method to verify and fix all invoice payment amounts
@@ -2106,8 +2194,8 @@ ${settingsController.businessEmail.value}
 
       // Add to local list
       final newInvoice = invoice.copyWith(id: invoiceId);
-      invoices.add(newInvoice);
-      invoices.refresh();
+      visibleInvoices.add(newInvoice);
+      visibleInvoices.refresh();
 
       // Log the creation for audit trail
       print('✅ Auto-invoice created during enrollment:');

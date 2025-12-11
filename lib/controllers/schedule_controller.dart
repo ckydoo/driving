@@ -275,6 +275,7 @@ class ScheduleController extends GetxController {
   void refreshData() {
     fetchSchedules();
   }
+
   // Enhanced Schedule Controller with Past Date Validation
   bool _isValidScheduleDate(DateTime selectedDate) {
     final now = DateTime.now();
@@ -439,6 +440,7 @@ class ScheduleController extends GetxController {
       rethrow;
     }
   }
+
   int getEffectiveLessonsUsed(int studentId, int courseId) {
     final settingsController = Get.find<SettingsController>();
 
@@ -769,6 +771,7 @@ class ScheduleController extends GetxController {
           .fold<int>(0, (sum, s) => sum + s.lessonsDeducted);
     }
   }
+
   Future<void> refreshBillingData() async {
     try {
       final billingController = Get.find<BillingController>();
@@ -1350,6 +1353,7 @@ class ScheduleController extends GetxController {
   }
 
 // 9. Enhanced updateLessonProgress method - track status changes
+  // CRITICAL FIX: Never update attended/completed schedules
   Future<void> updateLessonProgress() async {
     try {
       final now = DateTime.now();
@@ -1360,6 +1364,16 @@ class ScheduleController extends GetxController {
         final schedule = schedules[i];
         final currentStatus = schedule.status;
         final correctStatus = schedule.statusDisplay;
+
+        // If a lesson is marked as attended and completed, leave it alone
+        if (schedule.attended && currentStatus == ScheduleStatus.completed) {
+          continue; // Don't touch this schedule!
+        }
+
+        // This prevents changing "Completed" back to "Missed"
+        if (currentStatus == ScheduleStatus.completed) {
+          continue; // Don't touch completed schedules!
+        }
 
         // Only update if status has actually changed
         if (currentStatus != correctStatus) {
@@ -1376,6 +1390,9 @@ class ScheduleController extends GetxController {
           schedules[i] = schedule.copyWith(status: correctStatus);
           updatedSchedules.add(updateData);
           hasUpdates = true;
+
+          print(
+              '🔄 Auto-updated schedule ${schedule.id}: $currentStatus → $correctStatus');
         }
       }
 

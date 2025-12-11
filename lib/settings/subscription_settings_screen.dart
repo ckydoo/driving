@@ -1585,7 +1585,7 @@ class SubscriptionScreen extends StatelessWidget {
             onTap: () async {
               final Uri emailUri = Uri(
                 scheme: 'mailto',
-                path: 'codzlabzim53@gmail.com',
+                path: 'support@drivesyncpro.co.zw',
               );
               if (await canLaunchUrl(emailUri)) {
                 await launchUrl(emailUri);
@@ -1612,7 +1612,7 @@ class SubscriptionScreen extends StatelessWidget {
                   SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'codzlabzim53@gmail.com',
+                      'support@drivesyncpro.co.zw',
                       style: TextStyle(
                         fontSize: 14,
                         color: Colors.blue[700],

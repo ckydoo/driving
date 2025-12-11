@@ -172,7 +172,103 @@ class ProductionSyncEngine {
   }
 
   // ===================================================================
-  // MAIN SYNC METHOD
+  // SMART SYNC - INTELLIGENT SYNC STRATEGY
+  // ===================================================================
+
+  /// Smart sync with intelligent strategy selection
+  /// - Never synced or > 7 days: Full sync
+  /// - < 1 hour: Skip (no changes likely)
+  /// - Otherwise: Incremental sync
+  static Future<SyncResult> smartSync({
+    required String schoolId,
+  }) async {
+    try {
+      print('🧠 Starting smart sync for school: $schoolId');
+
+      final currentState = await _loadSyncState(schoolId);
+      final lastSync = _getLastSyncTime(currentState);
+      final now = DateTime.now().toUtc();
+
+      print('📱 Device: ${currentState.deviceId}');
+      print('🕐 Last sync: ${lastSync ?? "Never"}');
+
+      // Attempt registration (non-blocking)
+      _registerDeviceInBackground(schoolId, currentState.deviceId);
+
+      // INTELLIGENT STRATEGY SELECTION
+
+      // 1. If never synced or > 7 days: FULL SYNC
+      if (lastSync == null || now.difference(lastSync).inDays > 7) {
+        print('🎯 Strategy: FULL SYNC (${lastSync == null ? "Never synced" : "${now.difference(lastSync).inDays} days ago"})');
+        final result = await _executeFullSync(currentState);
+
+        if (result.success) {
+          final updatedState = currentState.copyWith(
+            lastFullSync: now,
+            lastIncrementalSync: now,
+          );
+          await _saveSyncState(updatedState);
+        }
+
+        return result;
+      }
+
+      // 2. If < 1 hour: SKIP (no changes likely)
+      if (now.difference(lastSync).inHours < 1) {
+        print('⏭️ Strategy: SKIP (Last sync was ${now.difference(lastSync).inMinutes} minutes ago)');
+        return SyncResult(
+          true,
+          'Recently synced, skipping',
+          details: {
+            'strategy': 'skip',
+            'last_sync': lastSync.toIso8601String(),
+            'minutes_ago': now.difference(lastSync).inMinutes,
+            'sync_time': now.toIso8601String(),
+          },
+        );
+      }
+
+      // 3. Otherwise: INCREMENTAL SYNC
+      print('🎯 Strategy: INCREMENTAL SYNC (${now.difference(lastSync).inHours} hours ago)');
+      final result = await _executeIncrementalSyncFixed(currentState);
+
+      if (result.success) {
+        final updatedState = currentState.copyWith(
+          lastIncrementalSync: now,
+        );
+        await _saveSyncState(updatedState);
+      }
+
+      return result;
+    } catch (e, stackTrace) {
+      print('💥 Smart sync failed: $e');
+      print('📚 Stack trace: $stackTrace');
+      return SyncResult(false, 'Smart sync failed: ${e.toString()}');
+    }
+  }
+
+  /// Get the most recent sync time (either full or incremental)
+  static DateTime? _getLastSyncTime(DeviceSyncState state) {
+    if (state.lastIncrementalSync == null && state.lastFullSync == null) {
+      return null;
+    }
+
+    if (state.lastIncrementalSync == null) {
+      return state.lastFullSync;
+    }
+
+    if (state.lastFullSync == null) {
+      return state.lastIncrementalSync;
+    }
+
+    // Return the most recent
+    return state.lastIncrementalSync!.isAfter(state.lastFullSync!)
+        ? state.lastIncrementalSync
+        : state.lastFullSync;
+  }
+
+  // ===================================================================
+  // MAIN SYNC METHOD (Legacy - for backward compatibility)
   // ===================================================================
 
   static Future<SyncResult> performProductionSync({

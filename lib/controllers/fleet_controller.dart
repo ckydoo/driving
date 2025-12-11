@@ -1,19 +1,44 @@
+import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/controllers/user_controller.dart';
 import 'package:driving/services/sync_service.dart';
+import 'package:driving/services/lazy_loading_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../models/fleet.dart';
 import '../services/database_helper.dart';
 
 class FleetController extends GetxController {
+  // ============================================================
+  // LAZY LOADING: Paginated lists instead of loading everything
+  // ============================================================
+  final RxList<Fleet> visibleFleet = <Fleet>[].obs;
+  final RxBool hasMore = true.obs;
+  final RxBool isLoadingMore = false.obs;
+  int _currentOffset = 0;
+
+  // School ID for multi-tenant support
+  String? get _schoolId {
+    try {
+      if (Get.isRegistered<AuthController>()) {
+        final auth = Get.find<AuthController>();
+        return auth.currentUser.value?.schoolId;
+      }
+    } catch (e) {
+      print('Error getting school ID: $e');
+    }
+    return null;
+  }
+
+  // Backward compatibility - keep these for existing code
   final RxList<Fleet> _fleet = <Fleet>[].obs;
+  List<Fleet> get fleet => visibleFleet;
+
   final RxBool isLoading = false.obs;
   final RxString error = ''.obs;
   RxList<Fleet> searchedFleet = <Fleet>[].obs;
   RxList<int> selectedFleet = <int>[].obs;
   final searchQuery = ''.obs; // Observable search query
   RxBool isAllSelected = false.obs;
-  List<Fleet> get fleet => _fleet;
   // Pagination variables
   final int _rowsPerPage = 10;
   final RxInt _currentPage = 1.obs;
@@ -25,6 +50,85 @@ class FleetController extends GetxController {
   void onReady() {
     fetchInitialData();
     super.onReady();
+  }
+
+  // ============================================================
+  // LAZY LOADING METHODS
+  // ============================================================
+
+  /// Load initial fleet (first 50 vehicles)
+  Future<void> _loadInitialFleet() async {
+    try {
+      final result = await LazyLoadingService.loadInitialFleet(
+        schoolId: _schoolId,
+      );
+
+      visibleFleet.value = result['fleet'];
+      hasMore.value = result['hasMore'];
+      _currentOffset = result['offset'];
+
+      print('✅ Loaded ${visibleFleet.length} vehicles (hasMore: ${hasMore.value})');
+    } catch (e) {
+      print('Error loading initial fleet: $e');
+      rethrow;
+    }
+  }
+
+  /// Load more vehicles (next 25)
+  Future<void> loadMoreFleet() async {
+    if (!hasMore.value || isLoadingMore.value) return;
+
+    isLoadingMore(true);
+
+    try {
+      final result = await LazyLoadingService.loadMoreFleet(
+        schoolId: _schoolId,
+        offset: _currentOffset,
+      );
+
+      visibleFleet.addAll(result['fleet']);
+      hasMore.value = result['hasMore'];
+      _currentOffset = result['offset'];
+
+      print('✅ Loaded ${result['fleet'].length} more vehicles (total: ${visibleFleet.length})');
+    } catch (e) {
+      print('Error loading more fleet: $e');
+      Get.snackbar(
+        'Error',
+        'Failed to load more vehicles',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    } finally {
+      isLoadingMore(false);
+    }
+  }
+
+  /// Search fleet using lazy loading service
+  Future<void> searchFleetLazy(String query) async {
+    searchQuery.value = query;
+    if (query.isEmpty) {
+      searchedFleet.clear();
+    } else {
+      try {
+        final results = await LazyLoadingService.searchFleet(
+          query: query,
+          schoolId: _schoolId,
+          limit: 50,
+        );
+        searchedFleet.assignAll(results);
+      } catch (e) {
+        print('Error searching fleet: $e');
+      }
+    }
+  }
+
+  /// Refresh all data (pull-to-refresh)
+  Future<void> refreshFleet() async {
+    _currentOffset = 0;
+    hasMore.value = true;
+    await _loadInitialFleet();
   }
 
   // Method to get fleet for the current page
@@ -88,7 +192,7 @@ class FleetController extends GetxController {
       isLoading(true);
       error('');
       await Get.find<UserController>().fetchUsers();
-      await fetchFleet();
+      await _loadInitialFleet();
     } catch (e) {
       error(e.toString());
       Get.snackbar(
@@ -101,13 +205,10 @@ class FleetController extends GetxController {
     }
   }
 
+  /// Legacy method - now uses lazy loading under the hood
   Future<void> fetchFleet() async {
-    try {
-      final data = await DatabaseHelper.instance.getFleet();
-      _fleet.assignAll(data.map((json) => Fleet.fromJson(json)));
-    } catch (e) {
-      throw Exception('Failed to load fleet: ${e.toString()}');
-    }
+    print('FleetController: fetchFleet called (redirecting to lazy loading)');
+    await refreshFleet();
   }
 
   Future<void> handleFleet(Fleet vehicle, {bool isUpdate = false}) async {

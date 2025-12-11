@@ -2,20 +2,50 @@ import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/models/user.dart';
 import 'package:driving/services/database_helper.dart';
 import 'package:driving/services/sync_service.dart';
+import 'package:driving/services/lazy_loading_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 class UserController extends GetxController {
+  // ============================================================
+  // LAZY LOADING: Paginated lists instead of loading everything
+  // ============================================================
+  final RxList<User> visibleUsers = <User>[].obs;
+  final RxBool hasMoreUsers = true.obs;
+  final RxBool isLoadingMore = false.obs;
+  int _usersOffset = 0;
+
+  // Separate pagination for students and instructors
+  final RxList<User> visibleStudents = <User>[].obs;
+  final RxList<User> visibleInstructors = <User>[].obs;
+  final RxBool hasMoreStudents = true.obs;
+  final RxBool hasMoreInstructors = true.obs;
+  int _studentsOffset = 0;
+  int _instructorsOffset = 0;
+
+  // School ID for multi-tenant support
+  String? get _schoolId {
+    try {
+      if (Get.isRegistered<AuthController>()) {
+        final auth = Get.find<AuthController>();
+        return auth.currentUser.value?.schoolId;
+      }
+    } catch (e) {
+      print('Error getting school ID: $e');
+    }
+    return null;
+  }
+
+  // Backward compatibility
   final RxList<User> _users = <User>[].obs;
+  List<User> get users => visibleUsers;
+  List<User> get students => visibleStudents;
+  List<User> get instructors => visibleInstructors;
+
   final RxBool isLoading = false.obs;
   final RxString error = ''.obs;
 
   String? _lastFetchedRole;
-
-  List<User> get users => _users;
-  List<User> get students => _users.where((u) => u.role == 'student').toList();
-  List<User> get instructors =>
-      _users.where((u) => u.role == 'instructor').toList();
 
   RxList<User> searchedUser = <User>[].obs;
   RxList<int> selectedUser = <int>[].obs;
@@ -33,7 +63,7 @@ class UserController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-    ever(_users, (_) => print('Users list updated: ${_users.length} users'));
+    ever(visibleUsers, (_) => print('Users list updated: ${visibleUsers.length} users'));
   }
 
   @override
@@ -42,49 +72,220 @@ class UserController extends GetxController {
     super.onReady();
   }
 
+  // ============================================================
+  // LAZY LOADING METHODS
+  // ============================================================
+
+  /// Load initial users (all roles - first 50)
+  Future<void> _loadInitialUsers() async {
+    try {
+      final result = await LazyLoadingService.loadInitialUsers(
+        schoolId: _schoolId,
+      );
+
+      visibleUsers.value = result['users'];
+      hasMoreUsers.value = result['hasMore'];
+      _usersOffset = result['offset'];
+
+      print('✅ Loaded ${visibleUsers.length} users (hasMore: ${hasMoreUsers.value})');
+    } catch (e) {
+      print('Error loading initial users: $e');
+      rethrow;
+    }
+  }
+
+  /// Load initial students (first 50)
+  Future<void> _loadInitialStudents() async {
+    try {
+      final result = await LazyLoadingService.loadInitialUsers(
+        schoolId: _schoolId,
+        role: 'student',
+      );
+
+      visibleStudents.value = result['users'];
+      hasMoreStudents.value = result['hasMore'];
+      _studentsOffset = result['offset'];
+
+      print('✅ Loaded ${visibleStudents.length} students (hasMore: ${hasMoreStudents.value})');
+    } catch (e) {
+      print('Error loading initial students: $e');
+      rethrow;
+    }
+  }
+
+  /// Load initial instructors (first 50)
+  Future<void> _loadInitialInstructors() async {
+    try {
+      final result = await LazyLoadingService.loadInitialUsers(
+        schoolId: _schoolId,
+        role: 'instructor',
+      );
+
+      visibleInstructors.value = result['users'];
+      hasMoreInstructors.value = result['hasMore'];
+      _instructorsOffset = result['offset'];
+
+      print('✅ Loaded ${visibleInstructors.length} instructors (hasMore: ${hasMoreInstructors.value})');
+    } catch (e) {
+      print('Error loading initial instructors: $e');
+      rethrow;
+    }
+  }
+
+  /// Load more users (next 25)
+  Future<void> loadMoreUsers() async {
+    if (!hasMoreUsers.value || isLoadingMore.value) return;
+
+    isLoadingMore(true);
+
+    try {
+      final result = await LazyLoadingService.loadMoreUsers(
+        schoolId: _schoolId,
+        offset: _usersOffset,
+      );
+
+      visibleUsers.addAll(result['users']);
+      hasMoreUsers.value = result['hasMore'];
+      _usersOffset = result['offset'];
+
+      print('✅ Loaded ${result['users'].length} more users (total: ${visibleUsers.length})');
+    } catch (e) {
+      print('Error loading more users: $e');
+      Get.snackbar(
+        'Error',
+        'Failed to load more users',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    } finally {
+      isLoadingMore(false);
+    }
+  }
+
+  /// Load more students (next 25)
+  Future<void> loadMoreStudents() async {
+    if (!hasMoreStudents.value || isLoadingMore.value) return;
+
+    isLoadingMore(true);
+
+    try {
+      final result = await LazyLoadingService.loadMoreUsers(
+        schoolId: _schoolId,
+        offset: _studentsOffset,
+        role: 'student',
+      );
+
+      visibleStudents.addAll(result['users']);
+      hasMoreStudents.value = result['hasMore'];
+      _studentsOffset = result['offset'];
+
+      print('✅ Loaded ${result['users'].length} more students (total: ${visibleStudents.length})');
+    } catch (e) {
+      print('Error loading more students: $e');
+      Get.snackbar(
+        'Error',
+        'Failed to load more students',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    } finally {
+      isLoadingMore(false);
+    }
+  }
+
+  /// Load more instructors (next 25)
+  Future<void> loadMoreInstructors() async {
+    if (!hasMoreInstructors.value || isLoadingMore.value) return;
+
+    isLoadingMore(true);
+
+    try {
+      final result = await LazyLoadingService.loadMoreUsers(
+        schoolId: _schoolId,
+        offset: _instructorsOffset,
+        role: 'instructor',
+      );
+
+      visibleInstructors.addAll(result['users']);
+      hasMoreInstructors.value = result['hasMore'];
+      _instructorsOffset = result['offset'];
+
+      print('✅ Loaded ${result['users'].length} more instructors (total: ${visibleInstructors.length})');
+    } catch (e) {
+      print('Error loading more instructors: $e');
+      Get.snackbar(
+        'Error',
+        'Failed to load more instructors',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    } finally {
+      isLoadingMore(false);
+    }
+  }
+
+  /// Search users using lazy loading service
+  Future<void> searchUsersLazy(String query, {String? role}) async {
+    searchQuery.value = query;
+    if (query.isEmpty) {
+      searchedUser.clear();
+    } else {
+      try {
+        final results = await LazyLoadingService.searchUsers(
+          query: query,
+          schoolId: _schoolId,
+          role: role,
+          limit: 50,
+        );
+        searchedUser.assignAll(results);
+      } catch (e) {
+        print('Error searching users: $e');
+      }
+    }
+  }
+
+  /// Refresh all users data
+  Future<void> refreshUsers({String? role}) async {
+    if (role == 'student') {
+      _studentsOffset = 0;
+      hasMoreStudents.value = true;
+      await _loadInitialStudents();
+    } else if (role == 'instructor') {
+      _instructorsOffset = 0;
+      hasMoreInstructors.value = true;
+      await _loadInitialInstructors();
+    } else {
+      _usersOffset = 0;
+      hasMoreUsers.value = true;
+      await _loadInitialUsers();
+    }
+  }
+
+  /// Legacy method - now uses lazy loading under the hood
   Future<List<User>> fetchUsers({String? role}) async {
+    print('UserController: fetchUsers called with role: $role (redirecting to lazy loading)');
+
     try {
       isLoading(true);
       error('');
 
-      print('UserController: Fetching users with role: $role');
-
-      // Always fetch fresh data, especially when role changes
-      final data = await DatabaseHelper.instance.getUsers(
-        role: role?.toLowerCase(),
-      );
-      final List<User> users = data.map((json) => User.fromJson(json)).toList();
-
-      print('UserController: Fetched ${users.length} users from database');
-
-      // If a specific role is requested, filter and return only those users
-      List<User> filteredUsers;
-      if (role != null) {
-        filteredUsers = users
-            .where((user) => user.role.toLowerCase() == role.toLowerCase())
-            .toList();
-        print('UserController: Filtered to ${filteredUsers.length} ${role}s');
+      // Load based on role
+      if (role == 'student') {
+        await _loadInitialStudents();
+        _lastFetchedRole = role;
+        return visibleStudents;
+      } else if (role == 'instructor') {
+        await _loadInitialInstructors();
+        _lastFetchedRole = role;
+        return visibleInstructors;
       } else {
-        filteredUsers = users;
+        await _loadInitialUsers();
+        _lastFetchedRole = role;
+        return visibleUsers;
       }
-
-      // Update the observable list with ALL users (for global access)
-      _users.assignAll(users);
-
-      // Update the last fetched role
-      _lastFetchedRole = role;
-
-      // Clear any previous search results when fetching new data
-      searchedUser.clear();
-      selectedUser.clear();
-      isAllSelected(false);
-      isMultiSelectionActive.value = false;
-
-      print(
-        'UserController: Updated observable list with ${_users.length} total users, returning ${filteredUsers.length} filtered users',
-      );
-
-      return filteredUsers;
     } catch (e) {
       error(e.toString());
       print('UserController: Error fetching users - ${e.toString()}');

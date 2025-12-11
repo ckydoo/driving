@@ -1087,7 +1087,7 @@ class _SimplifiedScheduleBookingScreenState
       endHour = 17;
     }
 
-    // Generate time slots (every 30 minutes)
+    // Generate time slots (every 15 minutes)
     List<TimeOfDay> timeSlots = [];
     final now = DateTime.now();
     final isToday = _selectedDate.year == now.year &&

@@ -8,6 +8,11 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 class SubscriptionGuard extends GetMiddleware {
+  // Smart caching to avoid unnecessary API calls
+  static DateTime? _lastCheck;
+  static const Duration CACHE_DURATION = Duration(minutes: 15);
+  static bool _isCurrentlyChecking = false;
+
   @override
   int? get priority => 2;
 
@@ -30,14 +35,39 @@ class SubscriptionGuard extends GetMiddleware {
       }
 
       final authController = Get.find<AuthController>();
-      final subscriptionController = Get.find<SubscriptionController>();
 
       // Only check if user is logged in
       if (!authController.isLoggedIn.value) {
         return page;
       }
 
-      print('🔐 Subscription Guard Check for route: $route');
+      // Check if cache is still valid
+      final now = DateTime.now();
+      if (_lastCheck != null &&
+          !_isCurrentlyChecking &&
+          now.difference(_lastCheck!) < CACHE_DURATION) {
+        print('✅ Using cached subscription status (${now.difference(_lastCheck!).inMinutes}m old)');
+
+        // Quickly check cached status without loading
+        final subscriptionController = Get.find<SubscriptionController>();
+        final status = subscriptionController.subscriptionStatus.value;
+
+        if (status == 'suspended' || status == 'expired') {
+          print('🚫 BLOCKED: Cached status is $status');
+          return GetPage(
+            name: route ?? '/checking',
+            page: () => _SubscriptionCheckingScreen(
+              targetRoute: route ?? '/main',
+              targetPage: page?.page,
+            ),
+          );
+        }
+
+        // Cache valid and status OK - allow immediate access
+        return page;
+      }
+
+      print('🔐 Subscription Guard Check for route: $route (cache expired or first check)');
 
       // Return a loading page that will check subscription and then navigate
       return GetPage(
@@ -51,6 +81,19 @@ class SubscriptionGuard extends GetMiddleware {
       print('❌ Subscription Guard Error: $e');
       return page;
     }
+  }
+
+  /// Mark that subscription check completed
+  static void markCheckCompleted() {
+    _lastCheck = DateTime.now();
+    _isCurrentlyChecking = false;
+    print('✅ Subscription check completed - cache valid for ${CACHE_DURATION.inMinutes} minutes');
+  }
+
+  /// Force refresh on next navigation
+  static void invalidateCache() {
+    _lastCheck = null;
+    print('🔄 Subscription cache invalidated');
   }
 }
 
@@ -83,6 +126,8 @@ class _SubscriptionCheckingScreenState
   Future<void> _checkSubscriptionAndProceed() async {
     try {
       print('🔄 Checking subscription status...');
+      SubscriptionGuard._isCurrentlyChecking = true;
+
       final subscriptionController = Get.find<SubscriptionController>();
 
       // Load subscription data (handles online/offline automatically)
@@ -93,6 +138,9 @@ class _SubscriptionCheckingScreenState
 
       print('📊 Subscription Status: $status');
       print('📊 Trial Days: $trialDays');
+
+      // Mark check as completed for caching
+      SubscriptionGuard.markCheckCompleted();
 
       // Check if access should be blocked
       if (status == 'suspended') {
@@ -128,6 +176,7 @@ class _SubscriptionCheckingScreenState
       });
     } catch (e) {
       print('❌ Error checking subscription: $e');
+      SubscriptionGuard._isCurrentlyChecking = false;
 
       // On any error, check if user is authenticated
       final authController = Get.find<AuthController>();

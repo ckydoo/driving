@@ -389,8 +389,8 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
       final completedSchedules = scheduleController.schedules
           .where((schedule) =>
               schedule.studentId == student.id &&
-              schedule.status == 'Completed' &&
-              schedule.attended == true)
+              (schedule.status.toLowerCase() == 'completed' ||
+                  schedule.attended == true))
           .toList();
 
       final totalLessonsCompleted = completedSchedules.fold<int>(
@@ -403,8 +403,8 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
       final remainingSchedules = scheduleController.schedules
           .where((schedule) =>
               schedule.studentId == student.id &&
-              schedule.status != 'Completed' &&
-              schedule.status != 'Cancelled' &&
+              schedule.status.toLowerCase() != 'completed' &&
+              schedule.status.toLowerCase() != 'cancelled' &&
               schedule.start.isAfter(DateTime.now()))
           .toList();
 

@@ -7,7 +7,6 @@ import 'package:driving/screens/auth/login_screen.dart';
 import 'package:driving/services/school_config_service.dart';
 import 'package:driving/services/subscription_cache.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:get/get.dart';
 import 'package:driving/services/app_bindings.dart';
 import 'package:driving/services/api_service.dart';
@@ -21,7 +20,6 @@ import 'package:driving/theme/app_theme.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await _initializeStripe();
   _initializeDatabaseFactory();
 
   await _initializeCoreDependencies();
@@ -30,34 +28,6 @@ void main() async {
   await AppBindings().dependencies();
 
   runApp(const DrivingSchoolApp());
-}
-
-/// Initialize Stripe with proper configuration
-Future<void> _initializeStripe() async {
-  try {
-    const stripePublishableKey =
-        'pk_test_51SBdNe4IPjryss42NdJPH4l504YGckq7apiZI48usKi0QSRG65E8qEtByVP307sfIJIstrpF3Z17pDjxiz7HoJcK00nwrBuBSx';
-
-    // Validate key exists
-    if (stripePublishableKey.isEmpty) {
-      throw Exception('Stripe key not configured');
-    }
-
-    // Validate key format
-    if (!stripePublishableKey.startsWith('pk_test_') &&
-        !stripePublishableKey.startsWith('pk_live_')) {
-      throw Exception('Invalid Stripe key format');
-    }
-
-    Stripe.publishableKey = stripePublishableKey;
-    if (Platform.isIOS) {
-      Stripe.merchantIdentifier = 'merchant.com.yourdomain.drivesync';
-    }
-  } catch (e) {
-    // Log error silently for developers only
-    debugPrint('Stripe initialization failed: $e');
-    // Don't throw - let app continue but subscriptions won't work
-  }
 }
 
 /// Initialize database factory for different platforms
@@ -208,7 +178,6 @@ class _AuthenticationWrapperState extends State<AuthenticationWrapper> {
       _isNavigating = false;
     }
   }
-
 
   /// Check if any users exist in database
   Future<bool> _checkIfUsersExist() async {

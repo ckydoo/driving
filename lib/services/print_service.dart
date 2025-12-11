@@ -164,6 +164,56 @@ class PrintService {
     }
   }
 
+  // Print Invoice with Balance (Invoice Only - Not Paid)
+  static Future<void> printInvoice({
+    required String invoiceNumber,
+    required User student,
+    required List<ReceiptItem> items,
+    required double total,
+    required double amountPaid,
+    String? notes,
+  }) async {
+    final settingsController = Get.find<SettingsController>();
+
+    try {
+      // Validate printer
+      final printerName = settingsController.printerNameValue;
+      final isReady = await validatePrinterReady(printerName);
+
+      if (!isReady) {
+        throw Exception('Printer not ready');
+      }
+
+      // Get number of copies
+      final copies = settingsController.receiptCopiesValue;
+
+      // Print the specified number of copies
+      for (int i = 0; i < copies; i++) {
+        await _printSingleInvoice(
+          invoiceNumber: invoiceNumber,
+          student: student,
+          items: items,
+          total: total,
+          amountPaid: amountPaid,
+          notes: notes,
+          copyNumber: copies > 1 ? i + 1 : null,
+          totalCopies: copies > 1 ? copies : null,
+        );
+
+        // Small delay between copies
+        if (i < copies - 1) {
+          await Future.delayed(Duration(milliseconds: 500));
+        }
+      }
+
+      print(
+          '✅ Invoice printed successfully (${copies} ${copies > 1 ? 'copies' : 'copy'})');
+    } catch (e) {
+      print('❌ Error printing invoice: $e');
+      throw Exception('Failed to print invoice: $e');
+    }
+  }
+
   static Future<void> _printSingleReceipt({
     required String receiptNumber,
     required User student,
@@ -199,6 +249,49 @@ class PrintService {
       Get.snackbar(
         'Print Error',
         'Failed to print: ${e.toString()}',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+      rethrow;
+    }
+  }
+
+  static Future<void> _printSingleInvoice({
+    required String invoiceNumber,
+    required User student,
+    required List<ReceiptItem> items,
+    required double total,
+    required double amountPaid,
+    String? notes,
+    int? copyNumber,
+    int? totalCopies,
+  }) async {
+    final settingsController = Get.find<SettingsController>();
+
+    // Build invoice content
+    final invoiceContent = _buildInvoiceContent(
+      invoiceNumber: invoiceNumber,
+      student: student,
+      items: items,
+      total: total,
+      amountPaid: amountPaid,
+      notes: notes,
+      copyNumber: copyNumber,
+      totalCopies: totalCopies,
+    );
+
+    try {
+      await platform.invokeMethod('printReceipt', {
+        'content': invoiceContent,
+        'printerName': settingsController.printerNameValue,
+        'paperSize': settingsController.printerPaperSizeValue,
+      });
+    } catch (e) {
+      print('❌ Native printing failed: $e');
+      Get.snackbar(
+        'Print Error',
+        'Failed to print invoice: ${e.toString()}',
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Colors.red,
         colorText: Colors.white,
@@ -314,6 +407,134 @@ class PrintService {
     receipt.writeln();
 
     return receipt.toString();
+  }
+
+  static String _buildInvoiceContent({
+    required String invoiceNumber,
+    required User student,
+    required List<ReceiptItem> items,
+    required double total,
+    required double amountPaid,
+    String? notes,
+    int? copyNumber,
+    int? totalCopies,
+  }) {
+    final settingsController = Get.find<SettingsController>();
+    final now = DateTime.now();
+    final dateFormat = DateFormat('MM/dd/yyyy hh:mm a');
+    final balance = total - amountPaid;
+
+    // Get paper width (58mm = 32 chars, 80mm = 48 chars)
+    final paperWidth = settingsController.printerPaperSizeValue == '58mm'
+        ? 32
+        : settingsController.printerPaperSizeValue == '80mm'
+            ? 48
+            : 32;
+    StringBuffer invoice = StringBuffer();
+
+    // Header
+    invoice.writeln(_center(settingsController.businessNameValue, paperWidth));
+    invoice
+        .writeln(_center(settingsController.businessAddressValue, paperWidth));
+    invoice.writeln(_center(settingsController.businessCityValue, paperWidth));
+    invoice.writeln(
+        _center('Phone: ${settingsController.businessPhoneValue}', paperWidth));
+    invoice.writeln(_divider(paperWidth));
+    invoice.writeln();
+
+    // Invoice Title
+    invoice.writeln(_center('INVOICE', paperWidth));
+    if (settingsController.receiptHeaderValue.isNotEmpty) {
+      invoice
+          .writeln(_center(settingsController.receiptHeaderValue, paperWidth));
+    }
+    invoice.writeln();
+
+    // Invoice Info
+    invoice.writeln('Invoice #: $invoiceNumber');
+    invoice.writeln('Date: ${dateFormat.format(now)}');
+    invoice.writeln('Student: ${student.fullName}');
+    if (student.phone.isNotEmpty) {
+      invoice.writeln('Phone: ${student.phone}');
+    }
+
+    // Copy indication
+    if (copyNumber != null && totalCopies != null) {
+      invoice.writeln('Copy $copyNumber of $totalCopies');
+    }
+
+    invoice.writeln(_divider(paperWidth));
+    invoice.writeln();
+
+    // Items
+    invoice.writeln(_leftRight('ITEM', 'AMOUNT', paperWidth));
+    invoice.writeln(_divider(paperWidth));
+
+    for (var item in items) {
+      // Item name
+      invoice.writeln(item.itemName);
+
+      // Quantity and price
+      final qtyPrice =
+          '${item.quantity} x \$${item.unitPrice.toStringAsFixed(2)}';
+      final itemTotal = '\$${item.totalPrice.toStringAsFixed(2)}';
+      invoice.writeln(_leftRight(qtyPrice, itemTotal, paperWidth));
+    }
+
+    invoice.writeln(_divider(paperWidth));
+    invoice.writeln();
+
+    // Totals
+    invoice.writeln(
+        _leftRight('SUBTOTAL:', '\$${total.toStringAsFixed(2)}', paperWidth));
+    invoice.writeln(_leftRight('TAX:', '\$0.00', paperWidth));
+    invoice.writeln(_divider(paperWidth));
+    invoice.writeln(_leftRight(
+        'TOTAL:', '\$${total.toStringAsFixed(2)}', paperWidth,
+        bold: true));
+    invoice.writeln();
+
+    // Payment Information
+    invoice.writeln(_leftRight(
+        'Amount Paid:', '\$${amountPaid.toStringAsFixed(2)}', paperWidth));
+    invoice.writeln(_divider(paperWidth));
+    invoice.writeln(_leftRight(
+        'BALANCE DUE:', '\$${balance.toStringAsFixed(2)}', paperWidth,
+        bold: true));
+    invoice.writeln(_divider(paperWidth));
+    invoice.writeln();
+
+    // Due Date (30 days from now)
+    final dueDate = now.add(Duration(days: 30));
+    invoice.writeln('Due Date: ${DateFormat('MM/dd/yyyy').format(dueDate)}');
+    invoice.writeln();
+
+    // Notes
+    if (notes?.isNotEmpty ?? false) {
+      invoice.writeln(_divider(paperWidth));
+      invoice.writeln('Notes: $notes');
+      invoice.writeln();
+    }
+
+    // Payment Instructions
+    invoice.writeln(_divider(paperWidth));
+    invoice.writeln(_center('PAYMENT DUE', paperWidth));
+    invoice.writeln('Please make payment before due date');
+    invoice.writeln();
+
+    // Footer
+    invoice.writeln(_divider(paperWidth));
+    if (settingsController.receiptFooterValue.isNotEmpty) {
+      invoice
+          .writeln(_center(settingsController.receiptFooterValue, paperWidth));
+    }
+    invoice.writeln(_center('DriveSync Pro', paperWidth));
+    invoice.writeln(_center('+263784666891', paperWidth));
+    invoice.writeln();
+    invoice.writeln();
+    invoice.writeln();
+
+    return invoice.toString();
   }
 
   // Helper methods for formatting

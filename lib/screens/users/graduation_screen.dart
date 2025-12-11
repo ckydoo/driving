@@ -73,8 +73,8 @@ class _GraduationScreenState extends State<GraduationScreen> {
       final completedSchedules = scheduleController.schedules
           .where((schedule) =>
               schedule.studentId == widget.student.id &&
-              schedule.status == 'Completed' &&
-              schedule.attended == true)
+              (schedule.status.toLowerCase() == 'completed' ||
+                  schedule.attended == true))
           .toList();
 
       _totalLessonsCompleted = completedSchedules.fold<int>(
@@ -87,8 +87,8 @@ class _GraduationScreenState extends State<GraduationScreen> {
       _remainingSchedules = scheduleController.schedules
           .where((schedule) =>
               schedule.studentId == widget.student.id &&
-              schedule.status != 'Completed' &&
-              schedule.status != 'Cancelled' &&
+              schedule.status.toLowerCase() != 'completed' &&
+              schedule.status.toLowerCase() != 'cancelled' &&
               schedule.start.isAfter(DateTime.now()))
           .toList();
 

@@ -14,21 +14,33 @@ import 'package:get/get.dart';
 class AppBindings extends Bindings {
   @override
   Future<void> dependencies() async {
-    print('🚀 === STARTING APP BINDINGS ===');
+    print('🚀 === STARTING APP BINDINGS (PARALLEL MODE) ===');
+    final stopwatch = Stopwatch()..start();
 
     try {
+      // Phase 1: Critical dependencies only (sequential - must complete first)
+      print('⚡ Phase 1: Critical initialization...');
       await _verifyDatabase();
-      await _initializePinAuthentication();
-      await _initializeConfiguration();
-      await _initializeSyncServices();
       await _initializeAuthController();
-      await _initializeDataControllers();
-      await _startBackgroundSync();
-      _printInitializationSummary();
 
-      print('✅ === APP BINDINGS COMPLETED SUCCESSFULLY ===');
+      print('⚡ Phase 2: Parallel initialization...');
+      // Phase 2: Everything else in parallel for maximum speed
+      await Future.wait([
+        _initializePinAuthentication(),
+        _initializeConfiguration(),
+        _initializeSyncServices(),
+        _initializeDataControllers(),
+      ], eagerError: false); // Don't fail if one controller has issues
+
+      // Phase 3: Background tasks (fire and forget - don't wait)
+      _startBackgroundSync();
+
+      stopwatch.stop();
+      print('✅ === APP BINDINGS COMPLETED IN ${stopwatch.elapsedMilliseconds}ms ===');
+      _printInitializationSummary();
     } catch (e) {
-      print('❌ === APP BINDINGS FAILED ===');
+      stopwatch.stop();
+      print('❌ === APP BINDINGS FAILED (${stopwatch.elapsedMilliseconds}ms) ===');
       print('Error: $e');
       await _attemptEmergencyInitialization();
     }
@@ -143,38 +155,42 @@ class AppBindings extends Bindings {
   }
 
   Future<void> _initializeDataControllers() async {
-    print('📊 Initializing data controllers...');
+    print('📊 Initializing data controllers in parallel...');
 
     try {
-      // User Controller
-      if (!Get.isRegistered<UserController>()) {
-        Get.put<UserController>(UserController(), permanent: true);
-        print('✅ UserController initialized');
-      }
-
-      // Course Controller
-      if (!Get.isRegistered<CourseController>()) {
-        Get.put<CourseController>(CourseController(), permanent: true);
-        print('✅ CourseController initialized');
-      }
-
-      // Schedule Controller
-      if (!Get.isRegistered<ScheduleController>()) {
-        Get.put<ScheduleController>(ScheduleController(), permanent: true);
-        print('✅ ScheduleController initialized');
-      }
-
-      // Billing Controller
-      if (!Get.isRegistered<BillingController>()) {
-        Get.put<BillingController>(BillingController(), permanent: true);
-        print('✅ BillingController initialized');
-      }
-
-      // Fleet Controller
-      if (!Get.isRegistered<FleetController>()) {
-        Get.put<FleetController>(FleetController(), permanent: true);
-        print('✅ FleetController initialized');
-      }
+      // Initialize all data controllers in parallel for maximum speed
+      await Future.wait([
+        Future(() {
+          if (!Get.isRegistered<UserController>()) {
+            Get.put<UserController>(UserController(), permanent: true);
+            print('✅ UserController initialized');
+          }
+        }),
+        Future(() {
+          if (!Get.isRegistered<CourseController>()) {
+            Get.put<CourseController>(CourseController(), permanent: true);
+            print('✅ CourseController initialized');
+          }
+        }),
+        Future(() {
+          if (!Get.isRegistered<ScheduleController>()) {
+            Get.put<ScheduleController>(ScheduleController(), permanent: true);
+            print('✅ ScheduleController initialized');
+          }
+        }),
+        Future(() {
+          if (!Get.isRegistered<BillingController>()) {
+            Get.put<BillingController>(BillingController(), permanent: true);
+            print('✅ BillingController initialized');
+          }
+        }),
+        Future(() {
+          if (!Get.isRegistered<FleetController>()) {
+            Get.put<FleetController>(FleetController(), permanent: true);
+            print('✅ FleetController initialized');
+          }
+        }),
+      ], eagerError: false);
 
       print('✅ Data controllers initialization completed');
     } catch (e) {

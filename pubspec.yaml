@@ -66,6 +66,7 @@ dependencies:
   flutter_stripe: ^10.1.1
   url_launcher: ^6.2.0
   permission_handler: ^11.0.1
+  cached_network_image: ^3.3.1  # Image caching for performance
 
 dev_dependencies:
   flutter_test:

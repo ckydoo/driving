@@ -417,7 +417,7 @@ class SyncController extends GetxController {
         Get.snackbar(
           snackPosition: SnackPosition.BOTTOM,
           'Sync Complete',
-          'Data synchronized successfully using ${details['strategy'] ?? 'production'} strategy',
+          'Data synchronized successfully',
           icon: Icon(Icons.sync, color: Colors.white),
           backgroundColor: Colors.green,
           colorText: Colors.white,

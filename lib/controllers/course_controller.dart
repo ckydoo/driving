@@ -1,75 +1,67 @@
+import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/services/sync_service.dart';
+import 'package:driving/services/lazy_loading_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../models/course.dart';
 import '../services/database_helper.dart';
 
 class CourseController extends GetxController {
-  final courses = <Course>[].obs;
+  // ============================================================
+  // LAZY LOADING: Paginated lists instead of loading everything
+  // ============================================================
+  final RxList<Course> visibleCourses = <Course>[].obs;
+  final RxBool hasMore = true.obs;
+  final RxBool isLoadingMore = false.obs;
+  int _currentOffset = 0;
+
+  // School ID for multi-tenant support
+  String? get _schoolId {
+    try {
+      if (Get.isRegistered<AuthController>()) {
+        final auth = Get.find<AuthController>();
+        return auth.currentUser.value?.schoolId;
+      }
+    } catch (e) {
+      print('Error getting school ID: $e');
+    }
+    return null;
+  }
+
+  // Backward compatibility
+  List<Course> get courses => visibleCourses;
+
   final RxBool isLoading = false.obs;
   final RxString error = ''.obs;
 
   @override
   void onReady() {
-    fetchCourses();
+    _loadInitialCourses();
     super.onReady();
   }
 
-  /// ✅ ENHANCED: fetchCourses with better error handling
-  Future<void> fetchCourses() async {
+  // ============================================================
+  // LAZY LOADING METHODS
+  // ============================================================
+
+  /// Load initial courses (first 50)
+  Future<void> _loadInitialCourses() async {
     try {
       isLoading(true);
       error('');
-      print('📚 Fetching courses from database...');
 
-      final data = await DatabaseHelper.instance.getCourses();
-      print('📚 Retrieved ${data.length} course records from database');
+      final result = await LazyLoadingService.loadInitialCourses(
+        schoolId: _schoolId,
+      );
 
-      if (data.isEmpty) {
-        print('⚠️ No courses found in database');
-        courses.clear();
-        return;
-      }
+      visibleCourses.value = result['courses'];
+      hasMore.value = result['hasMore'];
+      _currentOffset = result['offset'];
 
-      final List<Course> parsedCourses = [];
-
-      for (int i = 0; i < data.length; i++) {
-        try {
-          final courseJson = data[i];
-          print('📚 Parsing course $i: $courseJson');
-
-          final course = Course.fromJson(courseJson);
-          parsedCourses.add(course);
-          print(
-              '✅ Successfully parsed course: ${course.name} (\$${course.price})');
-        } catch (e) {
-          print('❌ Error parsing course at index $i: $e');
-          print('🔍 Raw data: ${data[i]}');
-
-          // Try to create a fallback course to prevent total failure
-          try {
-            final fallbackCourse = Course(
-              id: data[i]['id'],
-              name: data[i]['name']?.toString() ?? 'Unknown Course',
-              price: 0,
-              status: data[i]['status']?.toString() ?? 'Active',
-              createdAt: DateTime.now(),
-            );
-            parsedCourses.add(fallbackCourse);
-            print('⚠️ Created fallback course for failed parsing');
-          } catch (fallbackError) {
-            print('❌ Even fallback parsing failed: $fallbackError');
-            // Skip this course entirely
-          }
-        }
-      }
-
-      courses.assignAll(parsedCourses);
-      print('✅ Successfully loaded ${parsedCourses.length} courses');
+      print('✅ Loaded ${visibleCourses.length} courses (hasMore: ${hasMore.value})');
     } catch (e) {
       error('Failed to load courses: ${e.toString()}');
-      print('❌ fetchCourses error: $e');
-
+      print('❌ Error loading initial courses: $e');
       Get.snackbar(
         'Error',
         'Failed to load courses: ${e.toString()}',
@@ -81,6 +73,50 @@ class CourseController extends GetxController {
     } finally {
       isLoading(false);
     }
+  }
+
+  /// Load more courses (next 25)
+  Future<void> loadMoreCourses() async {
+    if (!hasMore.value || isLoadingMore.value) return;
+
+    isLoadingMore(true);
+
+    try {
+      final result = await LazyLoadingService.loadMoreCourses(
+        schoolId: _schoolId,
+        offset: _currentOffset,
+      );
+
+      visibleCourses.addAll(result['courses']);
+      hasMore.value = result['hasMore'];
+      _currentOffset = result['offset'];
+
+      print('✅ Loaded ${result['courses'].length} more courses (total: ${visibleCourses.length})');
+    } catch (e) {
+      print('Error loading more courses: $e');
+      Get.snackbar(
+        'Error',
+        'Failed to load more courses',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    } finally {
+      isLoadingMore(false);
+    }
+  }
+
+  /// Refresh all data (pull-to-refresh)
+  Future<void> refreshCourses() async {
+    _currentOffset = 0;
+    hasMore.value = true;
+    await _loadInitialCourses();
+  }
+
+  /// Legacy method - now uses lazy loading under the hood
+  Future<void> fetchCourses() async {
+    print('CourseController: fetchCourses called (redirecting to lazy loading)');
+    await refreshCourses();
   }
 
   Future<void> handleCourse(Course course, {bool isUpdate = false}) async {
@@ -167,7 +203,7 @@ class CourseController extends GetxController {
       isLoading(true);
 
       // Find the course to get its name for confirmation
-      final course = courses.firstWhere((c) => c.id == id,
+      final course = visibleCourses.firstWhere((c) => c.id == id,
           orElse: () => Course(
               id: id,
               name: 'Unknown Course',
@@ -185,7 +221,7 @@ class CourseController extends GetxController {
       print('📝 Tracked course deletion for sync');
 
       // Remove from local list
-      courses.removeWhere((c) => c.id == id);
+      visibleCourses.removeWhere((c) => c.id == id);
 
       print('✅ Course deleted successfully');
 
@@ -257,24 +293,24 @@ class CourseController extends GetxController {
     await updateCourseField(courseId, 'price', price);
   }
 
-  /// Get course by ID (unchanged)
+  /// Get course by ID
   Course? getCourseById(int id) {
     try {
-      return courses.firstWhere((course) => course.id == id);
+      return visibleCourses.firstWhere((course) => course.id == id);
     } catch (e) {
       print('⚠️ Course not found with ID: $id');
       return null;
     }
   }
 
-  /// Get active courses only (unchanged)
+  /// Get active courses only
   List<Course> get activeCourses {
-    return courses.where((course) => course.isActive).toList();
+    return visibleCourses.where((course) => course.isActive).toList();
   }
 
-  /// Get course options for dropdowns (unchanged)
+  /// Get course options for dropdowns
   List<Map<String, dynamic>> get courseOptions {
-    return courses
+    return visibleCourses
         .map((course) => {
               'value': course.id,
               'label': '${course.name} (${course.formattedPrice})',

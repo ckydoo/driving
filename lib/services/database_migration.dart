@@ -132,10 +132,10 @@ class DatabaseMigration {
 
   /// Create indexes safely (only if columns exist)
   static Future<void> _createSafeIndexes(Database db) async {
-    print('📈 Creating performance indexes...');
+    print('📈 Creating performance indexes for production...');
 
     try {
-      // Index on updated_at for all tables
+      // Index on updated_at for all tables (sync performance)
       final tables = [
         'users',
         'courses',
@@ -155,16 +155,49 @@ class DatabaseMigration {
         }
       }
 
-      // Create other indexes only if columns exist
-      await _createIndexIfColumnExists(db, 'users', 'email', 'idx_users_email');
+      // CRITICAL: Multi-tenant indexes (school_id on all tables)
+      print('📊 Creating multi-tenant indexes...');
       await _createIndexIfColumnExists(
           db, 'users', 'school_id', 'idx_users_school_id');
+      await _createIndexIfColumnExists(
+          db, 'schedules', 'school_id', 'idx_schedules_school_id');
+      await _createIndexIfColumnExists(
+          db, 'invoices', 'school_id', 'idx_invoices_school_id');
+      await _createIndexIfColumnExists(
+          db, 'payments', 'school_id', 'idx_payments_school_id');
+      await _createIndexIfColumnExists(
+          db, 'courses', 'school_id', 'idx_courses_school_id');
+      await _createIndexIfColumnExists(
+          db, 'fleet', 'school_id', 'idx_fleet_school_id');
+
+      // CRITICAL: Query performance indexes
+      print('🚀 Creating query performance indexes...');
+      await _createIndexIfColumnExists(db, 'users', 'email', 'idx_users_email');
       await _createIndexIfColumnExists(
           db, 'schedules', 'lesson_date', 'idx_schedules_date');
       await _createIndexIfColumnExists(
           db, 'schedules', 'start', 'idx_schedules_start');
+      await _createIndexIfColumnExists(
+          db, 'schedules', 'studentId', 'idx_schedules_student_id');
+      await _createIndexIfColumnExists(
+          db, 'schedules', 'status', 'idx_schedules_status');
+      await _createIndexIfColumnExists(
+          db, 'users', 'role', 'idx_users_role');
+      await _createIndexIfColumnExists(
+          db, 'invoices', 'status', 'idx_invoices_status');
+      await _createIndexIfColumnExists(
+          db, 'payments', 'status', 'idx_payments_status');
 
-      print('✅ Performance indexes created successfully');
+      // CRITICAL: Composite indexes for common queries
+      print('⚡ Creating composite indexes...');
+      await _createCompositeIndexIfColumnsExist(
+          db, 'schedules', ['school_id', 'start'], 'idx_schedules_school_date');
+      await _createCompositeIndexIfColumnsExist(
+          db, 'users', ['school_id', 'role'], 'idx_users_school_role');
+      await _createCompositeIndexIfColumnsExist(
+          db, 'schedules', ['start', 'end'], 'idx_schedules_date_range');
+
+      print('✅ All performance indexes created successfully');
     } catch (e) {
       print('❌ Failed to create indexes: $e');
     }
@@ -185,6 +218,30 @@ class DatabaseMigration {
       }
     } catch (e) {
       print('⚠️ Failed to create index $indexName: $e');
+    }
+  }
+
+  /// Helper method to create composite index only if all columns exist
+  static Future<void> _createCompositeIndexIfColumnsExist(
+      Database db, String table, List<String> columns, String indexName) async {
+    try {
+      final tableColumns = await _getTableColumns(db, table);
+
+      // Check if all required columns exist
+      final allColumnsExist = columns.every((col) => tableColumns.contains(col));
+
+      if (allColumnsExist) {
+        final columnList = columns.join(', ');
+        await db.execute(
+            'CREATE INDEX IF NOT EXISTS $indexName ON $table($columnList)');
+        print('✅ Created composite index $indexName on ($columnList)');
+      } else {
+        final missingColumns = columns.where((col) => !tableColumns.contains(col)).toList();
+        print(
+            'ℹ️ Skipping composite index $indexName - missing columns: ${missingColumns.join(", ")}');
+      }
+    } catch (e) {
+      print('⚠️ Failed to create composite index $indexName: $e');
     }
   }
 
