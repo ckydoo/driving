@@ -79,7 +79,7 @@ class SchoolRegistrationScreen extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Text(
-          'Start Your 30-Day Free Trial',
+          'Start Your 7-Day Free Trial',
           style: TextStyle(
             fontSize: 16,
             color: Colors.grey[600],

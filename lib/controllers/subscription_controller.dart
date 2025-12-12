@@ -18,7 +18,7 @@ class SubscriptionController extends GetxController {
       <SubscriptionPackage>[].obs;
   final Rxn<SubscriptionPackage> currentPackage = Rxn<SubscriptionPackage>();
   final RxString subscriptionStatus = 'trial'.obs;
-  final RxInt remainingTrialDays = 30.obs;
+  final RxInt remainingTrialDays = 7.obs;
   final RxString billingPeriod = 'monthly'.obs;
   final RxBool isLoading = false.obs;
   final RxString errorMessage = ''.obs;
@@ -684,7 +684,7 @@ class SubscriptionController extends GetxController {
             // User is authenticated but no cache - assume trial
             print('ℹ️ Authenticated user with no cache - defaulting to trial');
             subscriptionStatus.value = 'trial';
-            remainingTrialDays.value = 30; // Give benefit of doubt
+            remainingTrialDays.value = 7; // Give benefit of doubt
 
             // Show warning
             Get.snackbar(
@@ -748,7 +748,7 @@ class SubscriptionController extends GetxController {
         final authController = Get.find<AuthController>();
         if (authController.isLoggedIn.value) {
           subscriptionStatus.value = 'trial';
-          remainingTrialDays.value = 30;
+          remainingTrialDays.value = 7;
           return;
         }
       }

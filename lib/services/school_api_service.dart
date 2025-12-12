@@ -329,4 +329,58 @@ class SchoolApiService {
       rethrow;
     }
   }
+
+  /// Fetch business settings from server
+  static Future<Map<String, dynamic>> getBusinessSettings(
+      String schoolId) async {
+    try {
+      print('🏢 Fetching business settings for school: $schoolId');
+
+      // Get the API token
+      final token = ApiService.currentToken;
+      if (token == null || token.isEmpty) {
+        throw Exception('Not authenticated. Please login first.');
+      }
+
+      final response = await http.get(
+        Uri.parse('$baseUrl/schools/$schoolId/settings'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      print('📡 Business settings response status: ${response.statusCode}');
+      print('📡 Business settings response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+
+        if (data['success'] == true) {
+          print('✅ Business settings fetched successfully');
+          return data['data'];
+        } else {
+          throw Exception(
+              data['message'] ?? 'Failed to fetch business settings');
+        }
+      } else if (response.statusCode == 401) {
+        throw Exception('Unauthorized. Please login again.');
+      } else if (response.statusCode == 404) {
+        throw Exception('School not found on server.');
+      } else {
+        try {
+          final error = json.decode(response.body);
+          throw Exception(
+              error['message'] ?? 'Failed to fetch business settings');
+        } catch (e) {
+          throw Exception(
+              'Server returned status ${response.statusCode}. Please try again later.');
+        }
+      }
+    } catch (e) {
+      print('❌ Business settings fetch error: $e');
+      rethrow;
+    }
+  }
 }

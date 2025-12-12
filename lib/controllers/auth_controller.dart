@@ -253,10 +253,38 @@ class AuthController extends GetxController {
       // Clear sync auth requirement
       await _setSyncAuthenticationRequired(false);
 
+      // Fetch business settings from server (non-blocking)
+      _fetchBusinessSettingsInBackground();
+
       print('✅ Post-login setup complete');
     } catch (e) {
       print('⚠️ Post-login setup error: $e');
       // Don't fail the login if post-setup fails
+    }
+  }
+
+  /// Fetch business settings from server in background (non-blocking)
+  Future<void> _fetchBusinessSettingsInBackground() async {
+    try {
+      print('🏢 Fetching business settings in background...');
+
+      // Wait a bit to let other login processes complete
+      await Future.delayed(Duration(milliseconds: 500));
+
+      // Get settings controller
+      if (Get.isRegistered<SettingsController>()) {
+        final settingsController = Get.find<SettingsController>();
+
+        // Fetch business settings from server
+        await settingsController.fetchBusinessSettingsFromServer();
+
+        print('✅ Business settings fetched successfully');
+      } else {
+        print('⚠️ SettingsController not registered - skipping business settings fetch');
+      }
+    } catch (e) {
+      print('⚠️ Failed to fetch business settings: $e');
+      // Don't block login if business settings fetch fails
     }
   }
 

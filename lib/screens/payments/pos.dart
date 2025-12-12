@@ -670,8 +670,11 @@ class _POSScreenState extends State<POSScreen> {
   // ENHANCED: Student selection card with height constraints
   Widget _buildStudentSelectionCard() {
     return Container(
-      margin: _responsivePadding,
-      padding: _responsivePadding,
+      margin: EdgeInsets.symmetric(
+        horizontal: _isMobile ? 16 : 24,
+        vertical: _isMobile ? 8 : 16,
+      ),
+      padding: EdgeInsets.all(_isMobile ? 12 : 16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -939,24 +942,31 @@ class _POSScreenState extends State<POSScreen> {
       _isProcessing = true;
     });
 
+    bool paymentSuccessful = false;
+    final receiptNumber = 'RCP-${DateTime.now().toUtc().millisecondsSinceEpoch}';
+    final receiptItems = _cartItems
+        .map((item) => ReceiptItem(
+              itemName: item.course.name,
+              quantity: item.quantity,
+              unitPrice: item.course.price.toDouble(),
+              totalPrice: item.totalPrice,
+            ))
+        .toList();
+
     try {
+      // Process payment
       await _processPayment();
-      final receiptNumber =
-          'RCP-${DateTime.now().toUtc().millisecondsSinceEpoch}';
-      final receiptItems = _cartItems
-          .map((item) => ReceiptItem(
-                itemName: item.course.name,
-                quantity: item.quantity,
-                unitPrice: item.course.price.toDouble(),
-                totalPrice: item.totalPrice,
-              ))
-          .toList();
+      paymentSuccessful = true;
+      print('✅ Payment processed successfully');
+
+      // Attempt to print receipt
       final settingsController = Get.find<SettingsController>();
       final shouldAutoPrint = settingsController.autoPrintReceiptValue;
 
       if (shouldAutoPrint) {
         // Auto-print receipt
         try {
+          print('🖨️ Attempting to print receipt...');
           await PrintService.printReceipt(
             receiptNumber: receiptNumber,
             student: _selectedStudent!,
@@ -966,17 +976,20 @@ class _POSScreenState extends State<POSScreen> {
             notes: _notesController.text.trim(),
           );
 
+          print('✅ Receipt printed successfully');
           _showSuccess('Payment processed and receipt printed successfully!');
-        } catch (e) {
-          print('❌ Print error: $e');
+        } catch (printError) {
+          print('❌ Print error: $printError');
           // Show success for payment but note print issue
-          _showSuccess('Payment processed successfully! (Print failed: $e)');
+          _showSuccess('Payment processed! Print failed - you can print manually from receipts.');
         }
       } else {
         // Show option to print
         _showSuccess('Payment processed successfully!');
         _showPrintDialog(receiptNumber, receiptItems);
       }
+
+      // Clear cart and reset form
       setState(() {
         _cartItems.clear();
         _selectedStudent = null;
@@ -986,6 +999,7 @@ class _POSScreenState extends State<POSScreen> {
       });
     } catch (e) {
       print('❌ Payment Error: $e');
+      print('Stack trace: ${StackTrace.current}');
 
       String errorMessage = 'Payment processing failed: ${e.toString()}';
 
@@ -1163,8 +1177,11 @@ class _POSScreenState extends State<POSScreen> {
   }
 
   Widget _buildCourseCatalog() {
-    return Container(
-      margin: _responsivePadding,
+    return Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: _isMobile ? 16 : 24,
+        vertical: _isMobile ? 4 : 16,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1175,7 +1192,7 @@ class _POSScreenState extends State<POSScreen> {
               fontWeight: FontWeight.bold,
             ),
           ),
-          SizedBox(height: 12),
+          SizedBox(height: 8),
           Expanded(
             child: GridView.builder(
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(

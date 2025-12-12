@@ -435,7 +435,7 @@ class SchoolRegistrationController extends GetxController {
       print('👤 User data: $adminUser');
       print('🏫 School data: $school');
 
-      final trialDays = 30; // Default trial days
+      final trialDays = 7; // Default trial days
 
       // ✅ CRITICAL: Auto-login the user after registration
       if (adminUser != null && school != null) {

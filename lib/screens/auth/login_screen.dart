@@ -2,15 +2,36 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:driving/controllers/auth_controller.dart';
 
-class LoginScreen extends StatelessWidget {
+class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
+
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  late final TextEditingController emailController;
+  late final TextEditingController passwordController;
+  late final RxBool showPassword;
+
+  @override
+  void initState() {
+    super.initState();
+    emailController = TextEditingController();
+    passwordController = TextEditingController();
+    showPassword = false.obs;
+  }
+
+  @override
+  void dispose() {
+    emailController.dispose();
+    passwordController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final controller = Get.put(AuthController());
-    final emailController = TextEditingController();
-    final passwordController = TextEditingController();
-    final showPassword = false.obs;
 
     return Scaffold(
       body: SafeArea(

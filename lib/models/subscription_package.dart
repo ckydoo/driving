@@ -37,7 +37,7 @@ class SubscriptionPackage {
       description: json['description'],
       features: List<String>.from(json['features'] ?? []),
       limits: Map<String, dynamic>.from(json['limits'] ?? {}),
-      trialDays: json['trial_days'] ?? 30,
+      trialDays: json['trial_days'] ?? 7,
       isPopular: json['is_popular'] ?? false,
       yearlyDiscount: json['yearly_discount'] ?? 0,
     );

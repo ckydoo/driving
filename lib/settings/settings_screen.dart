@@ -1,5 +1,6 @@
 import 'package:driving/controllers/sync_controller.dart';
 import 'package:driving/services/print_service.dart';
+import 'package:driving/services/api_service.dart';
 import 'package:driving/settings/subscription_settings_screen.dart';
 import 'package:driving/widgets/sync_status_widget.dart';
 import 'package:flutter/material.dart';
@@ -1831,122 +1832,89 @@ class _SettingsScreenState extends State<SettingsScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Admin Portal Notice
+          _buildAdminPortalNotice(),
+          SizedBox(height: 16),
+
           _buildSectionHeader('Business Information'),
           _buildSettingsCard([
-            _buildTextFieldTile(
+            _buildReadOnlyTextFieldTile(
               'Business Name',
-              'Enter your driving school name',
-              settingsController.businessName,
+              settingsController.businessName.value,
               Icons.business,
             ),
-            _buildTextFieldTile(
+            _buildReadOnlyTextFieldTile(
               'Address',
-              'Street address',
-              settingsController.businessAddress,
+              settingsController.businessAddress.value,
               Icons.location_on,
             ),
-            _buildTextFieldTile(
+            _buildReadOnlyTextFieldTile(
               'City',
-              'City name',
-              settingsController.businessCity,
+              settingsController.businessCity.value,
               Icons.location_city,
             ),
-            _buildDropdownTile(
+            _buildReadOnlyTextFieldTile(
               'Country',
-              'Select your country',
-              settingsController.businessCountry,
-              [
-                'Zimbabwe',
-              ],
-              (value) {
-                settingsController.businessCountry.value = value;
-                settingsController.saveBusinessSettings();
-              },
-              (value) => value,
+              settingsController.businessCountry.value,
+              Icons.flag,
             ),
           ]),
           SizedBox(height: 16),
           _buildSectionHeader('Contact Information'),
           _buildSettingsCard([
-            _buildTextFieldTile(
+            _buildReadOnlyTextFieldTile(
               'Phone Number',
-              'Business phone number',
-              settingsController.businessPhone,
+              settingsController.businessPhone.value,
               Icons.phone,
             ),
-            _buildTextFieldTile(
+            _buildReadOnlyTextFieldTile(
               'Email',
-              'Business email address',
-              settingsController.businessEmail,
+              settingsController.businessEmail.value,
               Icons.email,
             ),
-            _buildTextFieldTile(
+            _buildReadOnlyTextFieldTile(
               'Website',
-              'Business website (optional)',
-              settingsController.businessWebsite,
+              settingsController.businessWebsite.value.isEmpty
+                  ? 'Not set'
+                  : settingsController.businessWebsite.value,
               Icons.language,
             ),
           ]),
           SizedBox(height: 16),
           _buildSectionHeader('Operating Days'),
           _buildSettingsCard([
-            _buildDaysOfWeekSelector(),
+            _buildReadOnlyDaysOfWeekDisplay(),
           ]),
           SizedBox(height: 16),
           _buildSectionHeader('Business Hours'),
           _buildSettingsCard([
-            _buildTimeTile(
+            _buildReadOnlyTextFieldTile(
               'Business Start Time',
-              settingsController.businessStartTime,
-              true,
-              subtitle: 'When your business opens',
+              settingsController.businessStartTime.value,
+              Icons.access_time,
             ),
-            _buildTimeTile(
+            _buildReadOnlyTextFieldTile(
               'Business End Time',
-              settingsController.businessEndTime,
-              false,
-              subtitle: 'When your business closes',
+              settingsController.businessEndTime.value,
+              Icons.access_time,
             ),
           ]),
           SizedBox(height: 24),
-          // Save All Button
+          // Refresh Button
           Center(
             child: ElevatedButton.icon(
               onPressed: () async {
-                print('Save button pressed');
+                print('Refresh button pressed');
 
                 try {
-                  await Future.delayed(Duration(milliseconds: 100));
-
-                  await settingsController.saveAllBusinessSettings();
-
-                  // Then show success message
-                  Get.snackbar(
-                    snackPosition: SnackPosition.BOTTOM,
-                    'Success',
-                    'All business settings saved successfully',
-                    backgroundColor: _colorScheme.secondary,
-                    colorText: Colors.white,
-                    icon: Icon(Icons.check_circle, color: Colors.white),
-                    duration: Duration(seconds: 3),
-                  );
+                  await settingsController.fetchBusinessSettingsFromServer();
                 } catch (e) {
-                  print('Save failed with error: $e');
-
-                  // Then show error message
-                  Get.snackbar(
-                    snackPosition: SnackPosition.BOTTOM,
-                    'Error',
-                    'Failed to save settings: ${e.toString()}',
-                    backgroundColor: _colorScheme.error,
-                    colorText: Colors.white,
-                    icon: Icon(Icons.error, color: Colors.white),
-                    duration: Duration(seconds: 3),
-                  );
+                  print('Refresh failed with error: $e');
+                  // Error snackbar already shown in the controller method
                 }
               },
-              icon: Icon(Icons.save_alt),
-              label: Text('Save All Settings'),
+              icon: Icon(Icons.refresh),
+              label: Text('Refresh from Server'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.blue,
                 foregroundColor: Colors.white,
@@ -1964,6 +1932,250 @@ class _SettingsScreenState extends State<SettingsScreen>
           ]),
           SizedBox(height: 16),
         ],
+      ),
+    );
+  }
+
+  /// Build admin portal notice widget
+  Widget _buildAdminPortalNotice() {
+    return Container(
+      padding: EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.blue.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.info_outline,
+                color: Colors.blue.shade700,
+                size: 24,
+              ),
+              SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Business Information is Read-Only',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: Colors.blue.shade900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 8),
+          Text(
+            'For security, business settings must be updated on the admin portal.',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.blue.shade800,
+            ),
+          ),
+          SizedBox(height: 12),
+          InkWell(
+            onTap: () async {
+              try {
+                // Get the API token
+                final token = ApiService.currentToken;
+
+                if (token == null || token.isEmpty) {
+                  Get.snackbar(
+                    'Error',
+                    'Not authenticated. Please login first.',
+                    snackPosition: SnackPosition.BOTTOM,
+                    backgroundColor: Colors.red.shade100,
+                  );
+                  return;
+                }
+
+                // Build URL with token for auto-login
+                final url = 'https://drivesyncpro.co.zw/login?token=$token';
+
+                final uri = Uri.parse(url);
+
+                if (await canLaunchUrl(uri)) {
+                  await launchUrl(
+                    uri,
+                    mode: LaunchMode.externalApplication,
+                  );
+                } else {
+                  Get.snackbar(
+                    'Error',
+                    'Could not open admin portal. Please visit drivesyncpro.co.zw manually.',
+                    snackPosition: SnackPosition.BOTTOM,
+                    backgroundColor: Colors.red.shade100,
+                  );
+                }
+              } catch (e) {
+                print('Error opening admin portal: $e');
+                Get.snackbar(
+                  'Error',
+                  'Could not open admin portal: ${e.toString()}',
+                  snackPosition: SnackPosition.BOTTOM,
+                  backgroundColor: Colors.red.shade100,
+                );
+              }
+            },
+            child: Container(
+              padding: EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade700,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.open_in_browser,
+                    color: Colors.white,
+                    size: 18,
+                  ),
+                  SizedBox(width: 8),
+                  Text(
+                    'Open Admin Portal',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  SizedBox(width: 4),
+                  Icon(
+                    Icons.arrow_forward,
+                    color: Colors.white,
+                    size: 16,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Build read-only text field tile
+  Widget _buildReadOnlyTextFieldTile(
+    String label,
+    String value,
+    IconData icon,
+  ) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 18, color: Colors.grey.shade600),
+              SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: Text(
+              value.isEmpty ? 'Not set' : value,
+              style: TextStyle(
+                fontSize: 14,
+                color:
+                    value.isEmpty ? Colors.grey.shade500 : Colors.grey.shade800,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Build read-only days of week display
+  Widget _buildReadOnlyDaysOfWeekDisplay() {
+    final daysOfWeek = [
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday'
+    ];
+
+    return Obx(
+      () => Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.calendar_today,
+                    size: 18, color: Colors.grey.shade600),
+                SizedBox(width: 8),
+                Text(
+                  'Operating Days',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey.shade700,
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: daysOfWeek.map((day) {
+                final isOperating =
+                    settingsController.operatingDays.contains(day);
+                return Container(
+                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: isOperating
+                        ? Colors.blue.shade100
+                        : Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: isOperating
+                          ? Colors.blue.shade300
+                          : Colors.grey.shade300,
+                    ),
+                  ),
+                  child: Text(
+                    day.substring(0, 3),
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight:
+                          isOperating ? FontWeight.w600 : FontWeight.normal,
+                      color: isOperating
+                          ? Colors.blue.shade800
+                          : Colors.grey.shade600,
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -2089,124 +2301,6 @@ class _SettingsScreenState extends State<SettingsScreen>
               ),
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDaysOfWeekSelector() {
-    final List<String> daysOfWeek = [
-      'Monday',
-      'Tuesday',
-      'Wednesday',
-      'Thursday',
-      'Friday',
-      'Saturday',
-      'Sunday'
-    ];
-
-    return Padding(
-      padding: EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.calendar_today, size: 20, color: Colors.blue[700]),
-              SizedBox(width: 8),
-              Text(
-                'Operating Days',
-                style: TextStyle(
-                  fontWeight: FontWeight.w500,
-                  fontSize: 16,
-                ),
-              ),
-              Spacer(),
-              TextButton.icon(
-                onPressed: () {
-                  settingsController.saveBusinessSettings();
-                  Get.snackbar(
-                    snackPosition: SnackPosition.BOTTOM,
-                    'Saved',
-                    'Operating days updated',
-                    backgroundColor: Colors.green,
-                    colorText: Colors.white,
-                  );
-                },
-                icon: Icon(Icons.save, size: 16),
-                label: Text('Save'),
-                style: TextButton.styleFrom(
-                  foregroundColor: Colors.blue[700],
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 12),
-          Text(
-            'Select the days your business operates',
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey[600],
-            ),
-          ),
-          SizedBox(height: 16),
-          Obx(() => Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: daysOfWeek.map((day) {
-                  final isSelected =
-                      settingsController.operatingDays.contains(day);
-                  return FilterChip(
-                    label: Text(
-                      day.substring(0, 3),
-                      style: TextStyle(
-                        color: isSelected ? Colors.white : Colors.blue[700],
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    selected: isSelected,
-                    onSelected: (selected) {
-                      if (selected) {
-                        if (!settingsController.operatingDays.contains(day)) {
-                          settingsController.operatingDays.add(day);
-                        }
-                      } else {
-                        settingsController.operatingDays.remove(day);
-                      }
-                    },
-                    selectedColor: Colors.blue[700],
-                    checkmarkColor: Colors.white,
-                    backgroundColor: Colors.blue[50],
-                    side: BorderSide(color: Colors.blue[300]!),
-                  );
-                }).toList(),
-              )),
-          Obx(() => settingsController.operatingDays.isEmpty
-              ? Container(
-                  margin: EdgeInsets.only(top: 8),
-                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.orange[50],
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.orange[200]!),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.warning, size: 16, color: Colors.orange[700]),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Please select at least one operating day',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.orange[700],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              : SizedBox.shrink()),
         ],
       ),
     );

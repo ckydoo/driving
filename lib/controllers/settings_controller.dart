@@ -1,5 +1,6 @@
 import 'package:driving/services/database_helper.dart';
 import 'package:driving/services/school_config_service.dart';
+import 'package:driving/services/school_api_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -980,6 +981,107 @@ class SettingsController extends GetxController {
     } catch (e) {
       print('❌ Error in saveAllBusinessSettings (enhanced): $e');
       rethrow;
+    }
+  }
+
+  /// Fetch business settings from server and cache locally (READ-ONLY)
+  /// This method should be called on login or when refreshing business data
+  Future<void> fetchBusinessSettingsFromServer() async {
+    try {
+      if (schoolId.value.isEmpty) {
+        throw Exception('No school ID found. Cannot fetch business settings.');
+      }
+
+      print('🌐 Fetching business settings from server for school: ${schoolId.value}');
+
+      // Fetch from API
+      final businessData = await SchoolApiService.getBusinessSettings(schoolId.value);
+
+      print('📥 Received business data from server: $businessData');
+
+      // Update local reactive variables (read-only copy)
+      businessName.value = businessData['name'] ?? '';
+      businessAddress.value = businessData['address'] ?? '';
+      businessPhone.value = businessData['phone'] ?? '';
+      businessEmail.value = businessData['email'] ?? '';
+      businessWebsite.value = businessData['website'] ?? '';
+      businessStartTime.value = businessData['start_time'] ?? '08:00';
+      businessEndTime.value = businessData['end_time'] ?? '17:00';
+
+      // Parse operating days if it's a string or list
+      if (businessData['operating_days'] != null) {
+        if (businessData['operating_days'] is String) {
+          final daysString = businessData['operating_days'] as String;
+          operatingDays.value = daysString.split(',').map((e) => e.trim()).toList();
+        } else if (businessData['operating_days'] is List) {
+          operatingDays.value = List<String>.from(businessData['operating_days']);
+        }
+      }
+
+      // Save to local database for offline access
+      await _saveBusinessSettingsToLocalCache(businessData);
+
+      print('✅ Business settings fetched and cached successfully');
+
+      Get.snackbar(
+        'Success',
+        'Business information updated from server',
+        snackPosition: SnackPosition.BOTTOM,
+        duration: Duration(seconds: 2),
+      );
+    } catch (e) {
+      print('❌ Error fetching business settings from server: $e');
+
+      // Show user-friendly error
+      Get.snackbar(
+        'Error',
+        'Could not fetch business settings: ${e.toString().replaceAll('Exception: ', '')}',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red.shade100,
+        duration: Duration(seconds: 4),
+      );
+
+      rethrow;
+    }
+  }
+
+  /// Save business settings to local cache (internal method)
+  Future<void> _saveBusinessSettingsToLocalCache(Map<String, dynamic> businessData) async {
+    try {
+      final db = await _dbHelper.database;
+
+      final businessSettingsMap = {
+        'business_name': businessData['name'] ?? '',
+        'business_address': businessData['address'] ?? '',
+        'business_phone': businessData['phone'] ?? '',
+        'business_email': businessData['email'] ?? '',
+        'business_website': businessData['website'] ?? '',
+        'business_start_time': businessData['start_time'] ?? '08:00',
+        'business_end_time': businessData['end_time'] ?? '17:00',
+      };
+
+      // Handle operating days
+      if (businessData['operating_days'] != null) {
+        if (businessData['operating_days'] is String) {
+          businessSettingsMap['operating_days'] = businessData['operating_days'];
+        } else if (businessData['operating_days'] is List) {
+          businessSettingsMap['operating_days'] = (businessData['operating_days'] as List).join(',');
+        }
+      }
+
+      // Save to settings table
+      for (final entry in businessSettingsMap.entries) {
+        await db.insert(
+          'settings',
+          {'key': entry.key, 'value': entry.value},
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+
+      print('💾 Business settings cached to local database');
+    } catch (e) {
+      print('❌ Error caching business settings: $e');
+      // Don't rethrow - caching failure shouldn't block the main operation
     }
   }
 

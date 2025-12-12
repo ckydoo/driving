@@ -658,9 +658,13 @@ class _SimplifiedScheduleBookingScreenState
       Duration(minutes: (durationInHours * 60).round()),
     );
 
-    // Get all instructors
+    // Get all instructors who have a vehicle assigned
     final allInstructors = _userController.users
         .where((user) => user.role.toLowerCase() == 'instructor')
+        .where((instructor) {
+          // Only include instructors who have a vehicle assigned
+          return _fleetController.fleet.any((v) => v.instructor == instructor.id);
+        })
         .toList();
 
     // Separate available and busy instructors
@@ -1250,9 +1254,13 @@ class _SimplifiedScheduleBookingScreenState
       Duration(minutes: (durationInHours * 60).round()),
     );
 
-    // Get all instructors
+    // Get all instructors who have a vehicle assigned
     final allInstructors = _userController.users
         .where((user) => user.role.toLowerCase() == 'instructor')
+        .where((instructor) {
+          // Only include instructors who have a vehicle assigned
+          return _fleetController.fleet.any((v) => v.instructor == instructor.id);
+        })
         .toList();
 
     // Count available instructors
