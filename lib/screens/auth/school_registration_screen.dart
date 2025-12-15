@@ -97,7 +97,7 @@ class SchoolRegistrationScreen extends StatelessWidget {
         _buildTextField(
           controller: controller.schoolNameController,
           label: 'School Name',
-          hint: 'e.g., ABC Driving School',
+          hint: 'e.g., Myla Driving School',
           icon: Icons.school_outlined,
           validator: (value) {
             if (value?.isEmpty ?? true) {
@@ -112,7 +112,7 @@ class SchoolRegistrationScreen extends StatelessWidget {
         _buildTextField(
           controller: controller.emailController,
           label: 'Email Address',
-          hint: 'your@email.com',
+          hint: 'youremail@gmail.com',
           icon: Icons.email_outlined,
           keyboardType: TextInputType.emailAddress,
           validator: (value) {

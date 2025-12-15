@@ -2208,15 +2208,15 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen>
                   _navigateToGraduation();
                 },
               ),
-            ListTile(
-              leading: Icon(Icons.delete, color: Colors.red),
-              title:
-                  Text('Delete Student', style: TextStyle(color: Colors.red)),
-              onTap: () {
-                Navigator.pop(context);
-                _confirmDelete();
-              },
-            ),
+            // ListTile(
+            //   leading: Icon(Icons.delete, color: Colors.red),
+            //   title:
+            //       Text('Delete Student', style: TextStyle(color: Colors.red)),
+            //   onTap: () {
+            //     Navigator.pop(context);
+            //     _confirmDelete();
+            //   },
+            // ),
           ],
         ),
       ),

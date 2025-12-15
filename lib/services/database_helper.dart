@@ -1415,8 +1415,8 @@ class DatabaseHelper {
           {'key': 'printer_paper_size', 'value': '58mm'},
           {'key': 'auto_print_receipt', 'value': '0'},
           {'key': 'receipt_copies', 'value': '1'},
-          {'key': 'receipt_header', 'value': 'Thank You!'},
-          {'key': 'receipt_footer', 'value': 'Come again'},
+          {'key': 'receipt_header', 'value': ''},
+          {'key': 'receipt_footer', 'value': 'Thank you, Come again'},
         ];
 
         for (var setting in defaultSettings) {

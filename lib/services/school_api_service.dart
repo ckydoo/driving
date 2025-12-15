@@ -342,8 +342,9 @@ class SchoolApiService {
         throw Exception('Not authenticated. Please login first.');
       }
 
+      // FIXED: Use correct endpoint with school ID in path
       final response = await http.get(
-        Uri.parse('$baseUrl/schools/$schoolId/settings'),
+        Uri.parse('$baseUrl/schools/$schoolId/settings'), // Fixed URL
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -366,6 +367,11 @@ class SchoolApiService {
         }
       } else if (response.statusCode == 401) {
         throw Exception('Unauthorized. Please login again.');
+      } else if (response.statusCode == 403) {
+        // FIXED: Handle unauthorized access specifically
+        final data = json.decode(response.body);
+        throw Exception(data['message'] ??
+            'You don\'t have permission to access these settings.');
       } else if (response.statusCode == 404) {
         throw Exception('School not found on server.');
       } else {

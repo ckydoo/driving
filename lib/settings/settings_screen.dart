@@ -1958,7 +1958,7 @@ class _SettingsScreenState extends State<SettingsScreen>
               SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  'Business Information is Read-Only',
+                  'Business Settings',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
@@ -1970,7 +1970,7 @@ class _SettingsScreenState extends State<SettingsScreen>
           ),
           SizedBox(height: 8),
           Text(
-            'For security, business settings must be updated on the admin portal.',
+            'Make sure Business settings are updated in the back office.',
             style: TextStyle(
               fontSize: 12,
               color: Colors.blue.shade800,
@@ -2037,7 +2037,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                   ),
                   SizedBox(width: 8),
                   Text(
-                    'Open Admin Portal',
+                    'Back Office',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 13,

@@ -84,8 +84,8 @@ class SettingsController extends GetxController {
   var printerPaperSize = '58mm'.obs;
   var autoPrintReceipt = false.obs;
   var receiptCopies = '1'.obs;
-  var receiptHeader = 'Thank You!'.obs;
-  var receiptFooter = 'Come again'.obs;
+  var receiptHeader = ''.obs;
+  var receiptFooter = 'Thank you, Come again'.obs;
 
 // ============ PRINTER GETTERS ============
 
@@ -992,10 +992,12 @@ class SettingsController extends GetxController {
         throw Exception('No school ID found. Cannot fetch business settings.');
       }
 
-      print('🌐 Fetching business settings from server for school: ${schoolId.value}');
+      print(
+          '🌐 Fetching business settings from server for school: ${schoolId.value}');
 
       // Fetch from API
-      final businessData = await SchoolApiService.getBusinessSettings(schoolId.value);
+      final businessData =
+          await SchoolApiService.getBusinessSettings(schoolId.value);
 
       print('📥 Received business data from server: $businessData');
 
@@ -1012,9 +1014,11 @@ class SettingsController extends GetxController {
       if (businessData['operating_days'] != null) {
         if (businessData['operating_days'] is String) {
           final daysString = businessData['operating_days'] as String;
-          operatingDays.value = daysString.split(',').map((e) => e.trim()).toList();
+          operatingDays.value =
+              daysString.split(',').map((e) => e.trim()).toList();
         } else if (businessData['operating_days'] is List) {
-          operatingDays.value = List<String>.from(businessData['operating_days']);
+          operatingDays.value =
+              List<String>.from(businessData['operating_days']);
         }
       }
 
@@ -1046,7 +1050,8 @@ class SettingsController extends GetxController {
   }
 
   /// Save business settings to local cache (internal method)
-  Future<void> _saveBusinessSettingsToLocalCache(Map<String, dynamic> businessData) async {
+  Future<void> _saveBusinessSettingsToLocalCache(
+      Map<String, dynamic> businessData) async {
     try {
       final db = await _dbHelper.database;
 
@@ -1063,9 +1068,11 @@ class SettingsController extends GetxController {
       // Handle operating days
       if (businessData['operating_days'] != null) {
         if (businessData['operating_days'] is String) {
-          businessSettingsMap['operating_days'] = businessData['operating_days'];
+          businessSettingsMap['operating_days'] =
+              businessData['operating_days'];
         } else if (businessData['operating_days'] is List) {
-          businessSettingsMap['operating_days'] = (businessData['operating_days'] as List).join(',');
+          businessSettingsMap['operating_days'] =
+              (businessData['operating_days'] as List).join(',');
         }
       }
 
