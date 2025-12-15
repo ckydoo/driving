@@ -1036,14 +1036,38 @@ class SettingsController extends GetxController {
     } catch (e) {
       print('❌ Error fetching business settings from server: $e');
 
-      // Show user-friendly error
-      Get.snackbar(
-        'Error',
-        'Could not fetch business settings: ${e.toString().replaceAll('Exception: ', '')}',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.red.shade100,
-        duration: Duration(seconds: 4),
-      );
+      final errorString = e.toString().toLowerCase();
+
+      // Check if it's a network/connectivity error
+      if (errorString.contains('socketexception') ||
+          errorString.contains('failed host lookup') ||
+          errorString.contains('network') ||
+          errorString.contains('no internet') ||
+          errorString.contains('connection') ||
+          errorString.contains('timeout') ||
+          errorString.contains('timed out')) {
+        // Show friendly offline message
+        Get.snackbar(
+          'No Internet Connection',
+          'Unable to connect to the server. Please check your internet connection and try again.',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Colors.orange.shade100,
+          colorText: Colors.orange.shade900,
+          icon: Icon(Icons.wifi_off, color: Colors.orange.shade700),
+          duration: Duration(seconds: 4),
+        );
+      } else {
+        // Show generic error for other issues
+        Get.snackbar(
+          'Error',
+          'Could not fetch business settings: ${e.toString().replaceAll('Exception: ', '')}',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Colors.red.shade100,
+          colorText: Colors.red.shade900,
+          icon: Icon(Icons.error_outline, color: Colors.red.shade700),
+          duration: Duration(seconds: 4),
+        );
+      }
 
       rethrow;
     }

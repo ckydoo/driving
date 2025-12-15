@@ -1295,18 +1295,83 @@ class DatabaseHelper {
 
   /// Clean up methods for testing/reset
 
-  /// Clear all school data (for testing)
+  /// Clear all school data (for school switching / hard logout)
+  /// This is a COMPLETE wipe of all local data except known_schools
   Future<void> clearAllSchoolData() async {
     try {
       final db = await database;
+
+      print('🗑️ === CLEARING ALL SCHOOL DATA ===');
+
+      // Core tables
       await db.delete('users');
-      await db.delete('schools');
-      await db.delete('settings',
-          where: 'key IN (?, ?)',
-          whereArgs: ['first_run_completed', 'current_school_id']);
-      print('✅ All school data cleared');
+      print('   ✅ users cleared');
+
+      await db.delete('courses');
+      print('   ✅ courses cleared');
+
+      await db.delete('coursesenrolled');
+      print('   ✅ coursesenrolled cleared');
+
+      await db.delete('courseinstructor');
+      print('   ✅ courseinstructor cleared');
+
+      await db.delete('schedules');
+      print('   ✅ schedules cleared');
+
+      await db.delete('fleet');
+      print('   ✅ fleet cleared');
+
+      await db.delete('invoices');
+      print('   ✅ invoices cleared');
+
+      await db.delete('payments');
+      print('   ✅ payments cleared');
+
+      await db.delete('billings');
+      print('   ✅ billings cleared');
+
+      await db.delete('billing_records');
+      print('   ✅ billing_records cleared');
+
+      await db.delete('billing_records_history');
+      print('   ✅ billing_records_history cleared');
+
+      await db.delete('notes');
+      print('   ✅ notes cleared');
+
+      await db.delete('notifications');
+      print('   ✅ notifications cleared');
+
+      await db.delete('reminders');
+      print('   ✅ reminders cleared');
+
+      await db.delete('timeline');
+      print('   ✅ timeline cleared');
+
+      await db.delete('usermessages');
+      print('   ✅ usermessages cleared');
+
+      await db.delete('attachments');
+      print('   ✅ attachments cleared');
+
+      await db.delete('currencies');
+      print('   ✅ currencies cleared');
+
+      await db.delete('subscription_cache');
+      print('   ✅ subscription_cache cleared');
+
+      // Clear ALL settings (this will force re-fetch from server)
+      await db.delete('settings');
+      print('   ✅ settings cleared');
+
+      // IMPORTANT: DO NOT delete known_schools - we want to preserve the list
+      // of schools the user has logged into before
+
+      print('✅ === ALL SCHOOL DATA CLEARED ===');
     } catch (e) {
       print('❌ Error clearing school data: $e');
+      rethrow; // Important: rethrow so calling code knows it failed
     }
   }
 

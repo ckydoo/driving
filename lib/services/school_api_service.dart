@@ -151,13 +151,27 @@ class SchoolApiService {
           final error = json.decode(response.body);
           errorMessage = error['message'] ?? errorMessage;
 
-          // Log validation errors if present
+          // ✅ Extract and format validation errors for user display
           if (error['errors'] != null) {
             print('❌ Validation Errors:');
             final errors = error['errors'] as Map<String, dynamic>;
+
+            // Build simple error message from validation errors
+            List<String> errorMessages = [];
             errors.forEach((field, messages) {
-              print('   $field: ${messages.join(', ')}');
+              if (messages is List && messages.isNotEmpty) {
+                // Get the first error message for this field
+                String message = messages[0].toString();
+                errorMessages.add(message);
+                print('   $field: ${messages.join(', ')}');
+              }
             });
+
+            // If we have validation errors, use them instead of generic message
+            if (errorMessages.isNotEmpty) {
+              // Join multiple errors with line breaks
+              errorMessage = errorMessages.join('\n');
+            }
           }
 
           // Log exception details if present
@@ -174,12 +188,21 @@ class SchoolApiService {
           errorMessage = 'Server returned status ${response.statusCode}';
         }
 
-        // Convert to user-friendly error
-        throw Exception(_getUserFriendlyError(errorMessage));
+        // Throw error with specific validation messages
+        throw Exception(errorMessage);
       }
     } catch (e) {
       print('❌ School registration error: $e');
-      // Return user-friendly error message
+
+      // If it's already an Exception with validation errors, just rethrow it
+      if (e is Exception &&
+          (e.toString().contains('already been taken') ||
+           e.toString().contains('required') ||
+           e.toString().contains('invalid'))) {
+        rethrow;
+      }
+
+      // Otherwise, return user-friendly error message
       final errorMessage = e.toString();
       throw Exception(_getUserFriendlyError(errorMessage));
     }

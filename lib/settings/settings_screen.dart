@@ -266,9 +266,7 @@ class _SettingsScreenState extends State<SettingsScreen>
               Icons.copy_all,
             ),
           ]),
-
           SizedBox(height: 20),
-
           _buildSectionHeader('Receipt Customization'),
           _buildSettingsCard([
             _buildTextFieldTile(
@@ -284,10 +282,7 @@ class _SettingsScreenState extends State<SettingsScreen>
               Icons.text_fields,
             ),
           ]),
-
           SizedBox(height: 20),
-
-          // Test Print Button with status indicator
           Center(
             child: Column(
               children: [

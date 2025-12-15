@@ -1113,19 +1113,21 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout>
               SizedBox(height: 12),
               Row(
                 children: [
-                  Icon(Icons.info_outline, color: Colors.orange, size: 16),
+                  Icon(Icons.warning, color: Colors.orange, size: 16),
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Any unsaved changes will be lost.',
+                      'All local data will be cleared.',
                       style: TextStyle(
                         fontSize: 13,
                         color: Colors.orange,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ),
                 ],
               ),
+              SizedBox(height: 8),
             ],
           ),
           actions: [
@@ -1169,7 +1171,7 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout>
     }
   }
 
-  // 2. Replace your logout execution method:
+  // 2. HARD LOGOUT - Wipes all data for school switching
   Future<void> _executeSimpleLogout() async {
     try {
       // Show simple loading dialog without Obx
@@ -1187,7 +1189,7 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout>
                 CircularProgressIndicator(),
                 SizedBox(height: 16),
                 Text(
-                  'Logging out...',
+                  'Logging out and clearing data...',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w500,
@@ -1202,9 +1204,9 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout>
       // Wait a moment for UI to update
       await Future.delayed(const Duration(milliseconds: 500));
 
-      // Perform the actual logout
+      // ✅ CRITICAL: Use HARD logout to clear ALL data
       final authController = Get.find<AuthController>();
-      await authController.signOut();
+      await authController.signOutAndClearAllData();
 
       // Close loading dialog if still open
       if (Navigator.of(context).canPop()) {
@@ -1219,14 +1221,14 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout>
         Get.snackbar(
           snackPosition: SnackPosition.BOTTOM,
           'Logged Out',
-          'You have been successfully logged out',
+          'All data cleared. You can now log in with a different school.',
           backgroundColor: Colors.green.shade100,
           colorText: Colors.green.shade800,
           icon: Icon(
             Icons.check_circle,
             color: Colors.green.shade600,
           ),
-          duration: const Duration(seconds: 2),
+          duration: const Duration(seconds: 3),
         );
       });
     } catch (e) {

@@ -115,7 +115,8 @@ class AuthController extends GetxController {
 
       return localSuccess;
     } catch (e, stackTrace) {
-      developer.log('Login error', error: e, stackTrace: stackTrace, name: 'AuthController');
+      developer.log('Login error',
+          error: e, stackTrace: stackTrace, name: 'AuthController');
       error.value = ErrorHandler.getFriendlyMessage(e);
       return false;
     } finally {
@@ -125,13 +126,22 @@ class AuthController extends GetxController {
 
   /// Validate email and password inputs
   bool _validateInputs() {
-    if (emailController.text.trim().isEmpty) {
-      error.value = 'Email is required';
+    final email = emailController.text.trim();
+    final password = passwordController.text;
+
+    if (email.isEmpty) {
+      error.value = 'Please enter your email address';
       return false;
     }
 
-    if (passwordController.text.isEmpty) {
-      error.value = 'Password is required';
+    if (!_isValidEmail(email)) {
+      error.value =
+          'Please enter a valid email address (e.g., name@example.com)';
+      return false;
+    }
+
+    if (password.isEmpty) {
+      error.value = 'Please enter your password';
       return false;
     }
 
@@ -192,9 +202,11 @@ class AuthController extends GetxController {
       }
 
       // If we get here, both failed
-      error.value = 'Invalid email or password. Please try again.';
+      error.value =
+          'Login failed. Please check your email and password, or contact your administrator if you forgot your password.';
     } catch (e, stackTrace) {
-      developer.log('Login error', error: e, stackTrace: stackTrace, name: 'AuthController');
+      developer.log('Login error',
+          error: e, stackTrace: stackTrace, name: 'AuthController');
       error.value = ErrorHandler.getFriendlyMessage(e);
     } finally {
       isLoading.value = false;
@@ -280,7 +292,8 @@ class AuthController extends GetxController {
 
         print('✅ Business settings fetched successfully');
       } else {
-        print('⚠️ SettingsController not registered - skipping business settings fetch');
+        print(
+            '⚠️ SettingsController not registered - skipping business settings fetch');
       }
     } catch (e) {
       print('⚠️ Failed to fetch business settings: $e');
@@ -330,7 +343,8 @@ class AuthController extends GetxController {
           .firstOrNull;
 
       if (userData == null) {
-        error.value = 'User not found. Please register first.';
+        error.value =
+            'No account found with this email address. Please check your email or register a new account.';
         return false;
       }
 
@@ -348,7 +362,7 @@ class AuthController extends GetxController {
       }
 
       if (!passwordValid) {
-        error.value = 'Invalid password';
+        error.value = 'Incorrect password. Please try again.';
         return false;
       }
 
@@ -367,7 +381,8 @@ class AuthController extends GetxController {
 
       return true;
     } catch (e, stackTrace) {
-      developer.log('Local login error', error: e, stackTrace: stackTrace, name: 'AuthController');
+      developer.log('Local login error',
+          error: e, stackTrace: stackTrace, name: 'AuthController');
       error.value = ErrorHandler.getFriendlyMessage(e);
       return false;
     } finally {
@@ -386,7 +401,14 @@ class AuthController extends GetxController {
 
       // Validate input
       if (email.isEmpty || password.isEmpty) {
-        error.value = 'Email and password are required';
+        error.value = 'Please enter both email and password to register';
+        return false;
+      }
+
+      // Validate email format
+      if (!_isValidEmail(email)) {
+        error.value =
+            'Please enter a valid email address (e.g., name@example.com)';
         return false;
       }
 
@@ -403,7 +425,8 @@ class AuthController extends GetxController {
           .firstOrNull;
 
       if (existingUser != null) {
-        error.value = 'User with this email already exists';
+        error.value =
+            'An account with this email already exists. Please log in instead or use a different email.';
         return false;
       }
 
@@ -422,7 +445,8 @@ class AuthController extends GetxController {
 
       return true;
     } catch (e, stackTrace) {
-      developer.log('Registration error', error: e, stackTrace: stackTrace, name: 'AuthController');
+      developer.log('Registration error',
+          error: e, stackTrace: stackTrace, name: 'AuthController');
       error.value = ErrorHandler.getFriendlyMessage(e);
       return false;
     } finally {
@@ -501,7 +525,7 @@ class AuthController extends GetxController {
           // Clear stored token
           final prefs = await SharedPreferences.getInstance();
           await prefs.remove('api_token_${user.email}');
-          print('✅ Stored API token cleared');
+          print('✅ Stored token cleared');
         }
       }
 
@@ -548,7 +572,8 @@ class AuthController extends GetxController {
 
       return success;
     } catch (e, stackTrace) {
-      developer.log('PIN setup error', error: e, stackTrace: stackTrace, name: 'AuthController');
+      developer.log('PIN setup error',
+          error: e, stackTrace: stackTrace, name: 'AuthController');
       error.value = 'Failed to set up PIN. Please try again.';
       return false;
     }
@@ -624,7 +649,8 @@ class AuthController extends GetxController {
       print('✅ User profile updated');
       return true;
     } catch (e, stackTrace) {
-      developer.log('Profile update error', error: e, stackTrace: stackTrace, name: 'AuthController');
+      developer.log('Profile update error',
+          error: e, stackTrace: stackTrace, name: 'AuthController');
       error.value = 'Failed to update profile. Please try again.';
       return false;
     } finally {
@@ -682,7 +708,8 @@ class AuthController extends GetxController {
       print('✅ Password changed successfully');
       return true;
     } catch (e, stackTrace) {
-      developer.log('Password change error', error: e, stackTrace: stackTrace, name: 'AuthController');
+      developer.log('Password change error',
+          error: e, stackTrace: stackTrace, name: 'AuthController');
       error.value = 'Failed to change password. Please try again.';
       return false;
     } finally {
@@ -690,7 +717,75 @@ class AuthController extends GetxController {
     }
   }
 
-  /// Sign out
+  /// Sign out and clear ALL data (HARD LOGOUT for switching schools)
+  /// This is a COMPLETE wipe of all local data
+  Future<void> signOutAndClearAllData() async {
+    try {
+      isLoading.value = true;
+
+      print('🚨 === HARD LOGOUT: CLEARING ALL DATA ===');
+
+      // 1. Clear API token first
+      ApiService.clearToken();
+      print('✅ API token cleared');
+
+      // 2. Clear all local database data
+      await DatabaseHelper.instance.clearAllSchoolData();
+      print('✅ All SQLite data cleared');
+
+      // 3. Clear SharedPreferences (except known schools list)
+      final prefs = await SharedPreferences.getInstance();
+      final knownSchoolsKey = 'known_schools';
+      final knownSchoolsData = prefs.getString(knownSchoolsKey);
+
+      await prefs.clear();
+
+      // Restore known schools list if it exists
+      if (knownSchoolsData != null) {
+        await prefs.setString(knownSchoolsKey, knownSchoolsData);
+      }
+      print('✅ SharedPreferences cleared (preserved known_schools)');
+
+      // 4. Clear all GetX controllers state
+      currentUser.value = null;
+      isLoggedIn.value = false;
+      userEmail.value = '';
+      rememberMe.value = false;
+      print('✅ AuthController state cleared');
+
+      // 5. Clear PIN data
+      await _pinController.clearAllPinData();
+      print('✅ PIN data cleared');
+
+      // 6. Clear SettingsController data
+      try {
+        if (Get.isRegistered<SettingsController>()) {
+          final settingsController = Get.find<SettingsController>();
+          settingsController.schoolId.value = '';
+          settingsController.schoolDisplayName.value = '';
+          settingsController.businessName.value = '';
+          settingsController.businessAddress.value = '';
+          settingsController.businessPhone.value = '';
+          settingsController.businessEmail.value = '';
+          print('✅ SettingsController data cleared');
+        }
+      } catch (e) {
+        print('⚠️ Could not clear SettingsController: $e');
+      }
+
+      print('✅ === HARD LOGOUT COMPLETE ===');
+    } catch (e) {
+      print('❌ Hard logout error: $e');
+      // Even on error, force clear critical state
+      currentUser.value = null;
+      isLoggedIn.value = false;
+      ApiService.clearToken();
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  /// Sign out (regular logout - keeps local data)
   Future<void> signOut() async {
     try {
       isLoading.value = true;
@@ -708,6 +803,9 @@ class AuthController extends GetxController {
       if (!_pinController.isPinEnabled()) {
         await _pinController.clearAllPinData();
       }
+
+      // ✅ CRITICAL FIX: Clear API token
+      ApiService.clearToken();
 
       print('✅ User signed out successfully');
     } catch (e) {
@@ -763,7 +861,8 @@ class AuthController extends GetxController {
       print('✅ User account deleted successfully');
       return true;
     } catch (e, stackTrace) {
-      developer.log('Account deletion error', error: e, stackTrace: stackTrace, name: 'AuthController');
+      developer.log('Account deletion error',
+          error: e, stackTrace: stackTrace, name: 'AuthController');
       error.value = 'Failed to delete account. Please try again.';
       return false;
     } finally {
@@ -802,6 +901,18 @@ class AuthController extends GetxController {
       print('❌ Error hashing password: $e');
       return password; // Fallback to plain text (not recommended)
     }
+  }
+
+  /// Validate email format
+  bool _isValidEmail(String email) {
+    if (email.isEmpty) return false;
+
+    // Basic email regex pattern
+    final emailRegex = RegExp(
+      r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
+    );
+
+    return emailRegex.hasMatch(email);
   }
 
   /// Utility getters
@@ -1232,7 +1343,8 @@ class AuthController extends GetxController {
 
       return true;
     } catch (e, stackTrace) {
-      developer.log('API login error', error: e, stackTrace: stackTrace, name: 'AuthController');
+      developer.log('API login error',
+          error: e, stackTrace: stackTrace, name: 'AuthController');
       error.value = ErrorHandler.getFriendlyMessage(e);
 
       // Fallback to local login
@@ -1438,7 +1550,8 @@ class AuthController extends GetxController {
 
       return false;
     } catch (e, stackTrace) {
-      developer.log('PIN authentication error', error: e, stackTrace: stackTrace, name: 'AuthController');
+      developer.log('PIN authentication error',
+          error: e, stackTrace: stackTrace, name: 'AuthController');
       error.value = 'PIN authentication failed. Please try again.';
       return false;
     }

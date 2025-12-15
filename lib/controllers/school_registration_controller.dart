@@ -144,35 +144,41 @@ class SchoolRegistrationController extends GetxController {
 
   /// Register school (INTERNET-FIRST APPROACH)
   Future<void> registerSchool() async {
-    // Validate form first
-    if (!formKey.currentState!.validate()) {
-      return;
-    }
-
-    if (operatingDays.isEmpty) {
-      Get.snackbar(
-        'Error',
-        'Please select at least one operating day',
-        snackPosition: SnackPosition.BOTTOM,
-      );
-      return;
-    }
-
-    // Validate admin information
-    if (!_validateAdminInfo()) {
-      return;
-    }
-
-    // Check internet connection again before proceeding
-    await _checkInternetAndSetMode();
-
-    if (!isOnline.value) {
-      _showNoInternetDialog();
-      return;
-    }
+    // Set loading state immediately for instant UI feedback
+    isLoading(true);
 
     try {
-      isLoading(true);
+      // Validate form first
+      if (!formKey.currentState!.validate()) {
+        isLoading(false);
+        return;
+      }
+
+      if (operatingDays.isEmpty) {
+        isLoading(false);
+        Get.snackbar(
+          'Error',
+          'Please select at least one operating day',
+          snackPosition: SnackPosition.BOTTOM,
+        );
+        return;
+      }
+
+      // Validate admin information
+      if (!_validateAdminInfo()) {
+        isLoading(false);
+        return;
+      }
+
+      // Check internet connection again before proceeding
+      await _checkInternetAndSetMode();
+
+      if (!isOnline.value) {
+        isLoading(false);
+        _showNoInternetDialog();
+        return;
+      }
+
       print('🌐 === INTERNET-FIRST SCHOOL REGISTRATION ===');
       final registrationResult = await _registerSchoolOnline();
       await _downloadAndSaveSchoolData(registrationResult);

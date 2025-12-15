@@ -21,8 +21,7 @@ class ErrorHandler {
   }
 
   /// Show success message to user via snackbar
-  static void showSuccess(String message,
-      {String? title, Duration? duration}) {
+  static void showSuccess(String message, {String? title, Duration? duration}) {
     Get.snackbar(
       title ?? 'Success',
       message,
@@ -37,8 +36,7 @@ class ErrorHandler {
   }
 
   /// Show warning message to user via snackbar
-  static void showWarning(String message,
-      {String? title, Duration? duration}) {
+  static void showWarning(String message, {String? title, Duration? duration}) {
     Get.snackbar(
       title ?? 'Warning',
       message,
@@ -116,8 +114,7 @@ class ErrorHandler {
       return 'Unable to connect to the server. Please check your internet connection.';
     }
 
-    if (errorString.contains('timeout') ||
-        errorString.contains('timed out')) {
+    if (errorString.contains('timeout') || errorString.contains('timed out')) {
       return 'The request took too long. Please try again.';
     }
 
@@ -125,9 +122,32 @@ class ErrorHandler {
       return 'Unable to reach the server. Please try again later.';
     }
 
-    // Authentication errors
-    if (errorString.contains('unauthorized') ||
-        errorString.contains('401')) {
+    // Authentication errors - More specific messages
+    if (errorString.contains('email not found') ||
+        errorString.contains('user not found') ||
+        errorString.contains('no user found')) {
+      return 'No account found with this email address. Please check your email or register.';
+    }
+
+    if (errorString.contains('wrong password') ||
+        errorString.contains('incorrect password') ||
+        errorString.contains('password incorrect') ||
+        errorString.contains('invalid password')) {
+      return 'Incorrect password. Please try again.';
+    }
+
+    if (errorString.contains('email already exists') ||
+        errorString.contains('email already in use') ||
+        errorString.contains('user already exists')) {
+      return 'An account with this email already exists. Please log in instead.';
+    }
+
+    if (errorString.contains('invalid email') ||
+        errorString.contains('email format')) {
+      return 'Please enter a valid email address (e.g., name@example.com)';
+    }
+
+    if (errorString.contains('unauthorized') || errorString.contains('401')) {
       return 'Your session has expired. Please sign in again.';
     }
 
@@ -137,7 +157,7 @@ class ErrorHandler {
 
     if (errorString.contains('authentication') ||
         errorString.contains('invalid credentials')) {
-      return 'Invalid email or password. Please try again.';
+      return 'Invalid email or password. Please check your credentials and try again.';
     }
 
     // Database errors
@@ -151,8 +171,7 @@ class ErrorHandler {
     }
 
     // Validation errors
-    if (errorString.contains('validation') ||
-        errorString.contains('invalid')) {
+    if (errorString.contains('validation') || errorString.contains('invalid')) {
       return 'Please check your input and try again.';
     }
 

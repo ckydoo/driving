@@ -1,9 +1,8 @@
-import 'package:driving/controllers/auth_controller.dart';
-import 'package:driving/controllers/pin_controller.dart';
 import 'package:driving/controllers/settings_controller.dart';
 import 'package:driving/controllers/subscription_controller.dart';
 import 'package:driving/routes/app_routes.dart';
 import 'package:driving/screens/auth/login_screen.dart';
+import 'package:driving/screens/startup/splash_screen.dart';
 import 'package:driving/services/school_config_service.dart';
 import 'package:driving/services/subscription_cache.dart';
 import 'package:flutter/material.dart';
@@ -30,7 +29,6 @@ void main() async {
   runApp(const DrivingSchoolApp());
 }
 
-/// Initialize database factory for different platforms
 void _initializeDatabaseFactory() {
   try {
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
@@ -45,17 +43,14 @@ void _initializeDatabaseFactory() {
 
 Future<void> _initializeCoreDependencies() async {
   try {
-    // Configure API service
     _configureApiService();
 
-    // Initialize database and run migrations
     await _initializeDatabaseAndMigrations();
   } catch (e) {
     debugPrint('Core services initialization failed: $e');
   }
 }
 
-/// Initialize database and run all migrations
 Future<void> _initializeDatabaseAndMigrations() async {
   try {
     final db = await DatabaseHelper.instance.database;
@@ -64,19 +59,15 @@ Future<void> _initializeDatabaseAndMigrations() async {
     await DatabaseHelper.instance.migratePrinterSettings();
   } catch (e) {
     debugPrint('Database/migration initialization failed: $e');
-    // Don't throw - let app continue in degraded mode
   }
 }
 
 void _configureApiService() {
-  // Configure your API base URL here
   const String apiBaseUrl = 'https://drivesyncpro.co.zw/api';
 
-  // Set up API configuration
   ApiService.configure(baseUrl: apiBaseUrl);
 }
 
-/// Driving School App
 class DrivingSchoolApp extends StatelessWidget {
   const DrivingSchoolApp({super.key});
 
@@ -99,101 +90,9 @@ class DrivingSchoolApp extends StatelessWidget {
           name: '/notfound',
           page: () => const LoginScreen(),
         ),
-        home: const AuthenticationWrapper(),
+        home: const SplashScreen(),
       );
     });
-  }
-}
-
-class AuthenticationWrapper extends StatefulWidget {
-  const AuthenticationWrapper({Key? key}) : super(key: key);
-
-  @override
-  State<AuthenticationWrapper> createState() => _AuthenticationWrapperState();
-}
-
-class _AuthenticationWrapperState extends State<AuthenticationWrapper> {
-  bool _isNavigating = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _determineInitialRoute();
-  }
-
-  Future<void> _determineInitialRoute() async {
-    if (_isNavigating) return;
-    _isNavigating = true;
-
-    try {
-      await Future.delayed(const Duration(milliseconds: 300));
-
-      final settingsController = Get.find<SettingsController>();
-      final pinController = Get.find<PinController>();
-      final authController = Get.find<AuthController>();
-
-      await settingsController.loadSettingsFromDatabase();
-      await pinController.isPinEnabled();
-
-      String initialRoute;
-
-      // CRITICAL FIX: Check if users exist FIRST
-      final usersExist = await _checkIfUsersExist();
-
-      // Only use PIN login if:
-      // 1. Users exist in database (not first run)
-      // 2. PIN is set and enabled
-      // 3. User was previously verified
-      if (usersExist &&
-          pinController.isPinSet.value &&
-          pinController.isPinEnabled.value &&
-          await pinController.isUserVerified()) {
-        if (pinController.isLocked.value) {
-          initialRoute = '/login';
-        } else {
-          initialRoute = '/pin-login';
-        }
-      }
-      // User logged in but PIN not set (optional setup)
-      else if (authController.isLoggedIn.value &&
-          !pinController.isPinSet.value) {
-        initialRoute = '/main';
-      }
-      // Users exist locally - show login
-      else if (usersExist) {
-        initialRoute = '/login';
-      }
-      // First time - show login
-      else {
-        initialRoute = '/login';
-      }
-
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        Get.offAllNamed(initialRoute);
-      });
-    } catch (e) {
-      debugPrint('Error determining route: $e');
-      Get.offAllNamed('/login');
-    } finally {
-      _isNavigating = false;
-    }
-  }
-
-  /// Check if any users exist in database
-  Future<bool> _checkIfUsersExist() async {
-    try {
-      final db = await DatabaseHelper.instance.database;
-      final users = await db.query('users', limit: 1);
-      return users.isNotEmpty;
-    } catch (e) {
-      debugPrint('Error checking users: $e');
-      return false;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(body: Center(child: CircularProgressIndicator()));
   }
 }
 
@@ -224,7 +123,6 @@ class MultiTenantRouteObserver extends NavigatorObserver {
       if (routeName != null) {
         debugPrint('Route $action: $routeName');
 
-        // Log with school context if available
         if (Get.isRegistered<SchoolConfigService>()) {
           final schoolConfig = Get.find<SchoolConfigService>();
           if (schoolConfig.isValidConfiguration()) {
@@ -235,7 +133,7 @@ class MultiTenantRouteObserver extends NavigatorObserver {
         }
       }
     } catch (e) {
-      // Ignore errors in logging
+      debugPrint('Error logging route change: $e');
     }
   }
 }

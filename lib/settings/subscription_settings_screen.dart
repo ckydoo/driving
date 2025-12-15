@@ -6,10 +6,8 @@ import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import '../../controllers/subscription_controller.dart';
 import '../../models/subscription_package.dart';
-// ✅ ADD THESE IMPORTS FOR PAYNOW
 import '../../widgets/paynow_button.dart';
 import '../../widgets/paynow_payment_dialog.dart';
-// ✅ ADD THESE IMPORTS FOR API CALLS
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -21,7 +19,7 @@ class SubscriptionScreen extends StatelessWidget {
   final Rx<SubscriptionPackage?> _selectedPackage =
       Rx<SubscriptionPackage?>(null);
   final RxString _selectedBillingPeriod = 'monthly'.obs;
-  final RxString _selectedPaymentMethod = 'paynow'.obs; // Keep this
+  final RxString _selectedPaymentMethod = 'paynow'.obs;
 
   @override
   Widget build(BuildContext context) {
@@ -65,37 +63,37 @@ class SubscriptionScreen extends StatelessWidget {
         ],
       ),
       body: Obx(() {
-        // Show loading spinner
-        if (controller.isLoading.value) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                CircularProgressIndicator(color: Colors.white),
-                SizedBox(height: 16),
-                Text(
-                  'Loading subscription...',
-                  style: TextStyle(color: Colors.white),
-                ),
-              ],
-            ),
-          );
-        }
-
-        // FIXED: Check if offline AND show cached data
+        // ✅ FIX: Check for cached data FIRST to avoid infinite loading
         final isOffline = controller.availablePackages.isEmpty;
         final hasCurrentSubscription =
             controller.subscriptionStatus.value.isNotEmpty &&
                     controller.subscriptionStatus.value != 'trial' ||
                 controller.remainingTrialDays.value > 0;
 
-        if (isOffline && hasCurrentSubscription) {
-          // SHOW CACHED SUBSCRIPTION INFO WHEN OFFLINE
+        // If offline but has subscription data (from cache), show offline view immediately
+        if (isOffline && hasCurrentSubscription && !controller.isLoading.value) {
           return _buildOfflineView();
         }
 
-        // No data at all (not even cache)
-        if (controller.availablePackages.isEmpty) {
+        // Show loading spinner ONLY if actively loading and no cached data yet
+        if (controller.isLoading.value && !hasCurrentSubscription) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircularProgressIndicator(color: Color(0xFF2563EB)),
+                SizedBox(height: 16),
+                Text(
+                  'Loading subscription...',
+                  style: TextStyle(color: Colors.grey[700]),
+                ),
+              ],
+            ),
+          );
+        }
+
+        // If not loading, offline, and NO subscription data - show error screen
+        if (isOffline && !hasCurrentSubscription) {
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -135,14 +133,9 @@ class SubscriptionScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Current Plan Info (if user has one)
               if (controller.currentPackage.value != null)
                 _buildCurrentPlanCard(),
-
-              // ✅ NEW: Pending invoice section with Paynow option
               _buildPendingInvoiceSection(),
-
-              // Choose Subscription Header
               Padding(
                 padding: EdgeInsets.all(20),
                 child: Text(
@@ -154,18 +147,13 @@ class SubscriptionScreen extends StatelessWidget {
                   ),
                 ),
               ),
-
-              // Subscription Options from Server
               ...controller.availablePackages.expand((package) {
                 return [
                   _buildPackageSelectionCard(package),
                   SizedBox(height: 12),
                 ];
               }).toList(),
-
               SizedBox(height: 16),
-
-              // Billing Period Selection
               Padding(
                 padding: EdgeInsets.symmetric(horizontal: 20),
                 child: Text(
@@ -178,7 +166,6 @@ class SubscriptionScreen extends StatelessWidget {
                 ),
               ),
               SizedBox(height: 12),
-
               Padding(
                 padding: EdgeInsets.symmetric(horizontal: 20),
                 child: Obx(() => Row(
@@ -201,10 +188,7 @@ class SubscriptionScreen extends StatelessWidget {
                       ],
                     )),
               ),
-
               SizedBox(height: 24),
-
-              // Payment Methods Header
               Padding(
                 padding: EdgeInsets.symmetric(horizontal: 20),
                 child: Text(
@@ -217,8 +201,6 @@ class SubscriptionScreen extends StatelessWidget {
                 ),
               ),
               SizedBox(height: 16),
-
-              // ✅ MODIFIED: Payment Method Selection with Paynow
               Padding(
                 padding: EdgeInsets.symmetric(horizontal: 20),
                 child: LayoutBuilder(
@@ -247,10 +229,7 @@ class SubscriptionScreen extends StatelessWidget {
                   },
                 ),
               ),
-
               SizedBox(height: 32),
-
-              // Developer Information Section
               Padding(
                 padding: EdgeInsets.symmetric(horizontal: 20),
                 child: Text(
@@ -267,8 +246,7 @@ class SubscriptionScreen extends StatelessWidget {
                 padding: EdgeInsets.symmetric(horizontal: 20),
                 child: _buildDeveloperInfo(),
               ),
-
-              SizedBox(height: 100), // Space for bottom button
+              SizedBox(height: 100),
             ],
           ),
         );
@@ -277,16 +255,12 @@ class SubscriptionScreen extends StatelessWidget {
     );
   }
 
-  // ========================================================================
-  // ✅ NEW METHOD: Show pending subscription invoices with payment options
-  // ========================================================================
   Widget _buildPendingInvoiceSection() {
     return Obx(() {
-      // Check if there's a pending subscription invoice
       final pendingInvoice = controller.pendingSubscriptionInvoice.value;
 
       if (pendingInvoice == null) {
-        return SizedBox.shrink(); // No pending invoice
+        return SizedBox.shrink();
       }
 
       return Container(
@@ -338,7 +312,6 @@ class SubscriptionScreen extends StatelessWidget {
             Divider(color: Colors.orange[200]),
             SizedBox(height: 16),
 
-            // Invoice Details
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -388,10 +361,6 @@ class SubscriptionScreen extends StatelessWidget {
               ),
 
             SizedBox(height: 20),
-
-            // ========================================================================
-            // ✅ PAYMENT OPTIONS:  Paynow (Zimbabwe)
-            // ========================================================================
             Text(
               'Choose Payment Method:',
               style: TextStyle(
@@ -402,10 +371,8 @@ class SubscriptionScreen extends StatelessWidget {
             ),
             SizedBox(height: 12),
 
-            // Payment Method Buttons
             Row(
               children: [
-                // ✅ PAYNOW BUTTON - For Zimbabwe schools
                 Expanded(
                   child: PaynowButton(
                     invoiceId: pendingInvoice.id,
@@ -415,7 +382,6 @@ class SubscriptionScreen extends StatelessWidget {
                     buttonText: 'Paynow',
                     showIcon: true,
                     onPaymentSuccess: () {
-                      // Reload subscription data after successful payment
                       controller.loadSubscriptionData();
 
                       Get.snackbar(
@@ -436,7 +402,6 @@ class SubscriptionScreen extends StatelessWidget {
 
             SizedBox(height: 12),
 
-            // Info text
             Row(
               children: [
                 Icon(Icons.info_outline, size: 16, color: Colors.grey[600]),
@@ -458,7 +423,6 @@ class SubscriptionScreen extends StatelessWidget {
     });
   }
 
-  // Your existing methods continue below...
   Widget _buildCurrentPlanCard() {
     return Obx(() {
       final package = controller.currentPackage.value;
@@ -531,8 +495,6 @@ class SubscriptionScreen extends StatelessWidget {
               ],
             ),
             SizedBox(height: 16),
-
-            // ✅ Package Name
             Text(
               package?.name ?? 'No Package',
               style: TextStyle(
@@ -542,18 +504,14 @@ class SubscriptionScreen extends StatelessWidget {
               ),
             ),
             SizedBox(height: 8),
-
-            // ✅ Price with Billing Period
             Obx(() => Text(
-                  controller.displayPrice, // Uses the computed property
+                  controller.displayPrice,
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.9),
                     fontSize: 18,
                     fontWeight: FontWeight.w600,
                   ),
                 )),
-
-            // ✅ Billing Period Indicator
             if (controller.billingPeriod.value == 'yearly') ...[
               SizedBox(height: 4),
               Container(
@@ -572,12 +530,9 @@ class SubscriptionScreen extends StatelessWidget {
                 ),
               ),
             ],
-
             SizedBox(height: 16),
             Divider(color: Colors.white.withOpacity(0.3)),
             SizedBox(height: 16),
-
-            // ✅ Expiry Information
             Container(
               padding: EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -609,8 +564,7 @@ class SubscriptionScreen extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Obx(() => Text(
-                              controller
-                                  .expiryDisplayText, // Uses the computed property
+                              controller.expiryDisplayText,
                               style: TextStyle(
                                 color: Colors.white,
                                 fontSize: 14,
@@ -639,7 +593,6 @@ class SubscriptionScreen extends StatelessWidget {
     });
   }
 
-  // Keep all your existing helper methods...
   Widget _buildOfflineView() {
     return FutureBuilder<Map<String, dynamic>?>(
       future: SubscriptionCache.getCachedSubscriptionData(),
@@ -655,7 +608,6 @@ class SubscriptionScreen extends StatelessWidget {
         final isActive = status == 'active';
         final isTrial = status == 'trial';
 
-        // Calculate exact time remaining
         DateTime? expiresAt;
         Duration? timeRemaining;
         if (expiresAtStr != null) {
@@ -668,7 +620,6 @@ class SubscriptionScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Offline indicator banner
               Container(
                 width: double.infinity,
                 padding: EdgeInsets.all(16),
@@ -707,10 +658,7 @@ class SubscriptionScreen extends StatelessWidget {
                   ],
                 ),
               ),
-
               SizedBox(height: 24),
-
-              // Current subscription status
               Text(
                 'Current Subscription',
                 style: TextStyle(
@@ -719,10 +667,7 @@ class SubscriptionScreen extends StatelessWidget {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-
               SizedBox(height: 16),
-
-              // Subscription card with detailed time
               Container(
                 width: double.infinity,
                 padding: EdgeInsets.all(24),
@@ -796,14 +741,9 @@ class SubscriptionScreen extends StatelessWidget {
                         ),
                       ],
                     ),
-
                     SizedBox(height: 24),
-
                     Divider(color: Colors.white.withOpacity(0.3), thickness: 1),
-
                     SizedBox(height: 24),
-
-                    // Time remaining with detailed breakdown
                     if (timeRemaining != null &&
                         timeRemaining.inSeconds > 0) ...[
                       Row(
@@ -820,8 +760,6 @@ class SubscriptionScreen extends StatelessWidget {
                         ],
                       ),
                       SizedBox(height: 16),
-
-                      // Large display of days
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.baseline,
                         textBaseline: TextBaseline.alphabetic,
@@ -846,10 +784,7 @@ class SubscriptionScreen extends StatelessWidget {
                           ),
                         ],
                       ),
-
                       SizedBox(height: 16),
-
-                      // Detailed time breakdown
                       Container(
                         padding: EdgeInsets.all(16),
                         decoration: BoxDecoration(
@@ -884,10 +819,7 @@ class SubscriptionScreen extends StatelessWidget {
                           ],
                         ),
                       ),
-
                       SizedBox(height: 16),
-
-                      // Expiry date
                       Container(
                         padding: EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -909,7 +841,6 @@ class SubscriptionScreen extends StatelessWidget {
                         ),
                       ),
                     ] else if (isTrial) ...[
-                      // Fallback to days only if no expiry date
                       Text(
                         '$trialDays',
                         style: TextStyle(
@@ -926,8 +857,6 @@ class SubscriptionScreen extends StatelessWidget {
                         ),
                       ),
                     ],
-
-                    // Active subscription info
                     if (isActive &&
                         controller.currentPackage.value != null) ...[
                       Row(
@@ -956,10 +885,7 @@ class SubscriptionScreen extends StatelessWidget {
                   ],
                 ),
               ),
-
               SizedBox(height: 24),
-
-              // Info message
               Container(
                 padding: EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -983,10 +909,7 @@ class SubscriptionScreen extends StatelessWidget {
                   ],
                 ),
               ),
-
               SizedBox(height: 24),
-
-              // Retry button
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
@@ -1010,7 +933,6 @@ class SubscriptionScreen extends StatelessWidget {
     );
   }
 
-  // Helper: Build time unit widget
   Widget _buildTimeUnit(int value, String unit) {
     return Column(
       children: [
@@ -1034,7 +956,6 @@ class SubscriptionScreen extends StatelessWidget {
     );
   }
 
-  // Helper: Format cache age
   String _formatCacheAge(String? lastSyncedStr) {
     if (lastSyncedStr == null) return 'unknown';
 
@@ -1047,7 +968,6 @@ class SubscriptionScreen extends StatelessWidget {
     return '${diff.inDays} days ago';
   }
 
-  // Helper: Format expiry date
   String _formatExpiryDate(DateTime date) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -1345,9 +1265,6 @@ class SubscriptionScreen extends StatelessWidget {
         : _selectedPackage.value!.monthlyPrice;
   }
 
-  // ========================================================================
-  // ✅ MODIFIED: Handle subscribe with Paynow support
-  // ========================================================================
   void _handleSubscribe() async {
     if (_selectedPackage.value == null) {
       Get.snackbar(
@@ -1361,25 +1278,18 @@ class SubscriptionScreen extends StatelessWidget {
       return;
     }
 
-    // ✅ HANDLE PAYNOW SEPARATELY
     if (_selectedPaymentMethod.value == 'paynow') {
-      // Show Paynow dialog directly
       _showPaynowDialog();
       return;
     }
 
-    // Process paynow payment/upgrade (controller handles confirmation)
     await controller.upgradeToPackage(_selectedPackage.value!);
   }
 
-  // ========================================================================
-  // ✅ NEW: Show Paynow dialog for new subscription (PRODUCTION READY)
-  // ========================================================================
   void _showPaynowDialog() async {
     if (_selectedPackage.value == null) return;
 
     try {
-      // Show loading
       Get.dialog(
         Center(
           child: Card(
@@ -1403,7 +1313,6 @@ class SubscriptionScreen extends StatelessWidget {
         _selectedBillingPeriod.value,
       );
 
-      // Close loading dialog
       Get.back();
 
       if (invoice == null) {
@@ -1422,7 +1331,6 @@ class SubscriptionScreen extends StatelessWidget {
           invoiceNumber: invoice['invoice_number'],
           amount: double.tryParse(invoice['total_amount'].toString()) ?? 0.0,
           onPaymentSuccess: () {
-            // Reload subscription data after successful payment
             controller.loadSubscriptionData();
 
             Get.snackbar(
@@ -1437,7 +1345,6 @@ class SubscriptionScreen extends StatelessWidget {
         ),
       );
     } catch (e) {
-      // Close loading if still open
       if (Get.isDialogOpen ?? false) {
         Get.back();
       }
@@ -1453,9 +1360,6 @@ class SubscriptionScreen extends StatelessWidget {
     }
   }
 
-  // ========================================================================
-  // ✅ NEW: Create subscription invoice via API
-  // ========================================================================
   Future<Map<String, dynamic>?> _createSubscriptionInvoice(
     SubscriptionPackage package,
     String billingPeriod,
@@ -1464,7 +1368,6 @@ class SubscriptionScreen extends StatelessWidget {
       print('🔄 Creating subscription invoice...');
       print('Package: ${package.name}, Period: $billingPeriod');
 
-      // ✅ GET TOKEN THE CORRECT WAY - Same as subscription_service.dart
       String? token;
 
       if (Get.isRegistered<AuthController>()) {
@@ -1487,7 +1390,6 @@ class SubscriptionScreen extends StatelessWidget {
         print('⚠️ AuthController not registered');
       }
 
-      // Fallback: try to get from any stored token
       if (token == null) {
         final prefs = await SharedPreferences.getInstance();
         final keys =
@@ -1525,7 +1427,6 @@ class SubscriptionScreen extends StatelessWidget {
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = json.decode(response.body);
 
-        // Handle different response formats
         if (data['success'] == true && data['invoice'] != null) {
           return data['invoice'];
         } else if (data['invoice'] != null) {
@@ -1546,7 +1447,6 @@ class SubscriptionScreen extends StatelessWidget {
     }
   }
 
-  // Developer Information Widget
   Widget _buildDeveloperInfo() {
     return Container(
       padding: EdgeInsets.all(20),
@@ -1579,8 +1479,7 @@ class SubscriptionScreen extends StatelessWidget {
               ),
             ],
           ),
-          SizedBox(height: 16),
-          // Email
+
           InkWell(
             onTap: () async {
               final Uri emailUri = Uri(
