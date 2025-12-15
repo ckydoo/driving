@@ -1446,6 +1446,20 @@ class SettingsController extends GetxController {
         await _saveAllSettingsToPreferences();
       }
 
+      // Fetch business settings from server if school ID is available
+      if (schoolId.value.isNotEmpty) {
+        print('🌐 School ID found, fetching business settings from server...');
+        try {
+          await fetchBusinessSettingsFromServer();
+          print('✅ Business settings fetched and updated from server');
+        } catch (e) {
+          print('⚠️ Failed to fetch business settings from server: $e');
+          // Don't fail initialization if server fetch fails
+        }
+      } else {
+        print('ℹ️ No school ID yet, skipping server fetch during initialization');
+      }
+
       print('✅ Settings initialized with defaults successfully');
     } catch (e) {
       print('❌ Error initializing settings: $e');

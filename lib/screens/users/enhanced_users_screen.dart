@@ -568,82 +568,77 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
 
     return Scaffold(
       backgroundColor: Colors.grey[50],
-      appBar: AppBar(
-        title: Text(
-          '${widget.role.capitalize}s',
-          style: TextStyle(fontWeight: FontWeight.bold),
+      body: NestedScrollView(
+        headerSliverBuilder: (BuildContext context, bool innerBoxIsScrolled) {
+          return <Widget>[
+            // AppBar
+            SliverAppBar(
+              title: Text(
+                '${widget.role.capitalize}s',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              actions: [
+                if (!_isMultiSelectionActive && widget.role == 'student')
+                  IconButton(
+                    icon: Icon(Icons.upload_file),
+                    onPressed: () => Get.to(() => BulkStudentUploadScreen()),
+                    tooltip: 'Import Students',
+                  ),
+                if (!_isMultiSelectionActive)
+                  IconButton(
+                    icon: Icon(Icons.checklist),
+                    onPressed: _enterMultiSelectionMode,
+                    tooltip: 'Select Multiple',
+                  ),
+                if (_isMultiSelectionActive)
+                  IconButton(
+                    icon: Icon(Icons.close),
+                    onPressed: _exitMultiSelectionMode,
+                    tooltip: 'Cancel Selection',
+                  ),
+                IconButton(
+                  icon: Icon(Icons.refresh),
+                  onPressed: _loadUsers,
+                  tooltip: 'Refresh',
+                ),
+              ],
+              floating: false,
+              pinned: true,
+              snap: false,
+            ),
+
+            // Multi-selection action bar
+            if (_isMultiSelectionActive)
+              SliverToBoxAdapter(
+                child: _buildMultiSelectionBar(isMobile),
+              ),
+
+            // Sticky Search Bar
+            SliverPersistentHeader(
+              pinned: true,
+              delegate: _StickySearchDelegate(
+                child: _buildSearchAndFilters(isMobile),
+              ),
+            ),
+
+            // Tab bar for different views
+            SliverPersistentHeader(
+              pinned: true,
+              delegate: _StickyTabBarDelegate(
+                tabController: _tabController,
+              ),
+            ),
+          ];
+        },
+        body: TabBarView(
+          controller: _tabController,
+          children: [
+            _buildUsersList(isMobile),
+            EnhancedRecommendationsScreen(
+              role: widget.role,
+            ),
+          ],
         ),
-        actions: [
-          if (!_isMultiSelectionActive && widget.role == 'student')
-            IconButton(
-              icon: Icon(Icons.upload_file),
-              onPressed: () => Get.to(() => BulkStudentUploadScreen()),
-              tooltip: 'Import Students',
-            ),
-          if (!_isMultiSelectionActive)
-            IconButton(
-              icon: Icon(Icons.checklist),
-              onPressed: _enterMultiSelectionMode,
-              tooltip: 'Select Multiple',
-            ),
-          if (_isMultiSelectionActive)
-            IconButton(
-              icon: Icon(Icons.close),
-              onPressed: _exitMultiSelectionMode,
-              tooltip: 'Cancel Selection',
-            ),
-          IconButton(
-            icon: Icon(Icons.refresh),
-            onPressed: _loadUsers,
-            tooltip: 'Refresh',
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // Multi-selection action bar
-          if (_isMultiSelectionActive) _buildMultiSelectionBar(isMobile),
-
-          // Search and filters
-          _buildSearchAndFilters(isMobile),
-
-          // Tab bar for different views
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
-            ),
-            child: TabBar(
-              controller: _tabController,
-              labelColor: Colors.blue[600],
-              unselectedLabelColor: Colors.grey[600],
-              indicatorColor: Colors.blue[600],
-              tabs: [
-                Tab(
-                  icon: Icon(Icons.list, size: 20),
-                  text: 'List',
-                ),
-                Tab(
-                  icon: Icon(Icons.bolt, size: 20),
-                  text: 'Quick Actions',
-                ),
-              ],
-            ),
-          ),
-
-          // Main content
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildUsersList(isMobile),
-                EnhancedRecommendationsScreen(
-                  role: widget.role,
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => Get.to(() => AddUserScreen(role: widget.role)),
@@ -755,7 +750,8 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
       );
     }
 
-    return Column(
+    return ListView(
+      padding: EdgeInsets.zero,
       children: [
         // Results summary
         Container(
@@ -784,15 +780,15 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
         ),
 
         // Users list
-        Expanded(
-          child: ListView.separated(
-            padding: EdgeInsets.all(16),
-            itemCount: _getPaginatedResults().length,
-            separatorBuilder: (context, index) => SizedBox(height: 12),
-            itemBuilder: (context, index) {
-              final user = _getPaginatedResults()[index];
-              return _buildUserCard(user, isMobile);
-            },
+        Padding(
+          padding: EdgeInsets.all(16),
+          child: Column(
+            children: [
+              for (int index = 0; index < _getPaginatedResults().length; index++) ...[
+                _buildUserCard(_getPaginatedResults()[index], isMobile),
+                if (index < _getPaginatedResults().length - 1) SizedBox(height: 12),
+              ],
+            ],
           ),
         ),
 
@@ -1093,5 +1089,77 @@ class _EnhancedUsersScreenState extends State<EnhancedUsersScreen>
         ],
       ),
     );
+  }
+}
+
+// Sticky Search Bar Delegate
+class _StickySearchDelegate extends SliverPersistentHeaderDelegate {
+  final Widget child;
+
+  _StickySearchDelegate({required this.child});
+
+  @override
+  double get minExtent => 80.0;
+
+  @override
+  double get maxExtent => 80.0;
+
+  @override
+  Widget build(
+      BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return Container(
+      color: Colors.white,
+      child: child,
+    );
+  }
+
+  @override
+  bool shouldRebuild(_StickySearchDelegate oldDelegate) {
+    return false;
+  }
+}
+
+// Sticky Tab Bar Delegate
+class _StickyTabBarDelegate extends SliverPersistentHeaderDelegate {
+  final TabController tabController;
+
+  _StickyTabBarDelegate({required this.tabController});
+
+  @override
+  double get minExtent => 48.0;
+
+  @override
+  double get maxExtent => 48.0;
+
+  @override
+  Widget build(
+      BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
+      ),
+      child: TabBar(
+        controller: tabController,
+        labelColor: Colors.blue[600],
+        unselectedLabelColor: Colors.grey[600],
+        indicatorColor: Colors.blue[600],
+        tabs: [
+          Tab(
+            icon: Icon(Icons.list, size: 20),
+            text: 'List',
+          ),
+          Tab(
+            icon: Icon(Icons.bolt, size: 20),
+            text: 'Quick Actions',
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  bool shouldRebuild(_StickyTabBarDelegate oldDelegate) {
+    return false;
   }
 }

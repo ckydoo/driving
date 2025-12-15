@@ -298,78 +298,72 @@ class _CourseScreenState extends State<CourseScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[100],
-      body: Column(
-        children: [
-          // Header with stats and controls
-          Container(
-            padding: EdgeInsets.all(_isMobile(context) ? 12 : 16),
-            color: Colors.white,
-            child: Column(
-              children: [
-                // Quick stats cards - responsive
-                Container(
-                  height: _isMobile(context) ? 110 : 130, // Increased by 10px
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: _quickStats.length,
-                    itemBuilder: (context, index) {
-                      final stat = _quickStats[index];
-                      return Container(
-                        width: _isMobile(context) ? 160 : 200,
-                        margin: EdgeInsets.only(right: 12),
-                        child: _buildStatCard(stat),
-                      );
-                    },
+      body: _isLoading
+          ? Center(child: CircularProgressIndicator())
+          : NestedScrollView(
+              headerSliverBuilder:
+                  (BuildContext context, bool innerBoxIsScrolled) {
+                return <Widget>[
+                  // Stats cards that scroll away
+                  SliverToBoxAdapter(
+                    child: Container(
+                      padding: EdgeInsets.all(_isMobile(context) ? 12 : 16),
+                      color: Colors.white,
+                      child: Container(
+                        height: _isMobile(context) ? 110 : 130,
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: _quickStats.length,
+                          itemBuilder: (context, index) {
+                            final stat = _quickStats[index];
+                            return Container(
+                              width: _isMobile(context) ? 160 : 200,
+                              margin: EdgeInsets.only(right: 12),
+                              child: _buildStatCard(stat),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
                   ),
-                ),
-                SizedBox(height: 16),
 
-                // Search and filters - responsive layout
-                _buildResponsiveControls(context),
-              ],
-            ),
-          ),
-
-          // Tab bar
-          Container(
-            color: Colors.white,
-            child: TabBar(
-              controller: _tabController,
-              labelColor: Colors.blue[600],
-              unselectedLabelColor: Colors.grey[600],
-              indicatorColor: Colors.blue[600],
-              isScrollable: _isMobile(context),
-              tabs: [
-                Tab(
-                  icon: Icon(Icons.list, size: _isMobile(context) ? 20 : 24),
-                  text: _isMobile(context) ? 'List' : 'List View',
-                ),
-                Tab(
-                  icon:
-                      Icon(Icons.lightbulb, size: _isMobile(context) ? 20 : 24),
-                  text: _isMobile(context) ? 'Tips' : 'Recommendations',
-                ),
-              ],
-            ),
-          ),
-
-          // Multi-selection bar
-          if (_isMultiSelectionActive) _buildMultiSelectionBar(context),
-
-          // Content
-          Expanded(
-            child: _isLoading
-                ? Center(child: CircularProgressIndicator())
-                : TabBarView(
-                    controller: _tabController,
-                    children: [
-                      _buildListView(),
-                      _buildRecommendationsView(),
-                    ],
+                  // Sticky Search Bar
+                  SliverPersistentHeader(
+                    pinned: true,
+                    delegate: _StickySearchDelegate(
+                      child: Container(
+                        padding: EdgeInsets.all(_isMobile(context) ? 12 : 16),
+                        color: Colors.white,
+                        child: _buildResponsiveControls(context),
+                      ),
+                      isMobile: _isMobile(context),
+                    ),
                   ),
-          ),
-        ],
-      ),
+
+                  // Sticky Tab bar
+                  SliverPersistentHeader(
+                    pinned: true,
+                    delegate: _StickyTabBarDelegate(
+                      tabController: _tabController,
+                      isMobile: _isMobile(context),
+                    ),
+                  ),
+
+                  // Multi-selection bar
+                  if (_isMultiSelectionActive)
+                    SliverToBoxAdapter(
+                      child: _buildMultiSelectionBar(context),
+                    ),
+                ];
+              },
+              body: TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildListView(),
+                  _buildRecommendationsView(),
+                ],
+              ),
+            ),
       floatingActionButton: _buildResponsiveFAB(context),
     );
   }
@@ -663,31 +657,30 @@ class _CourseScreenState extends State<CourseScreen>
   Widget _buildListView() {
     final courses = _getPaginatedCourses();
 
-    return Column(
+    return ListView(
+      padding: EdgeInsets.zero,
       children: [
-        Expanded(
-          child: Container(
-            margin: EdgeInsets.all(_isMobile(context) ? 12 : 16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.grey.withOpacity(0.1),
-                  spreadRadius: 1,
-                  blurRadius: 3,
-                  offset: Offset(0, 1),
-                ),
+        Container(
+          margin: EdgeInsets.all(_isMobile(context) ? 12 : 16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.grey.withOpacity(0.1),
+                spreadRadius: 1,
+                blurRadius: 3,
+                offset: Offset(0, 1),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              for (int index = 0; index < courses.length; index++) ...[
+                _buildCourseListTile(courses[index]),
+                if (index < courses.length - 1) Divider(height: 1),
               ],
-            ),
-            child: ListView.separated(
-              itemCount: courses.length,
-              separatorBuilder: (context, index) => Divider(height: 1),
-              itemBuilder: (context, index) {
-                final course = courses[index];
-                return _buildCourseListTile(course);
-              },
-            ),
+            ],
           ),
         ),
         _buildPagination(),
@@ -1631,5 +1624,77 @@ class _CourseScreenState extends State<CourseScreen>
         ],
       ),
     );
+  }
+}
+
+// Sticky Search Bar Delegate
+class _StickySearchDelegate extends SliverPersistentHeaderDelegate {
+  final Widget child;
+  final bool isMobile;
+
+  _StickySearchDelegate({required this.child, required this.isMobile});
+
+  @override
+  double get minExtent => isMobile ? 70.0 : 80.0;
+
+  @override
+  double get maxExtent => isMobile ? 70.0 : 80.0;
+
+  @override
+  Widget build(
+      BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return child;
+  }
+
+  @override
+  bool shouldRebuild(_StickySearchDelegate oldDelegate) {
+    return false;
+  }
+}
+
+// Sticky Tab Bar Delegate
+class _StickyTabBarDelegate extends SliverPersistentHeaderDelegate {
+  final TabController tabController;
+  final bool isMobile;
+
+  _StickyTabBarDelegate({
+    required this.tabController,
+    required this.isMobile,
+  });
+
+  @override
+  double get minExtent => 48.0;
+
+  @override
+  double get maxExtent => 48.0;
+
+  @override
+  Widget build(
+      BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return Container(
+      color: Colors.white,
+      child: TabBar(
+        controller: tabController,
+        labelColor: Colors.blue[600],
+        unselectedLabelColor: Colors.grey[600],
+        indicatorColor: Colors.blue[600],
+        isScrollable: isMobile,
+        tabs: [
+          Tab(
+            icon: Icon(Icons.list, size: isMobile ? 20 : 24),
+            text: isMobile ? 'List' : 'List View',
+          ),
+          Tab(
+            icon: Icon(Icons.lightbulb, size: isMobile ? 20 : 24),
+            text: isMobile ? 'Tips' : 'Recommendations',
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  bool shouldRebuild(_StickyTabBarDelegate oldDelegate) {
+    return false;
   }
 }

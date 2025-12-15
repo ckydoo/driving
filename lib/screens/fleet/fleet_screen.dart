@@ -266,119 +266,120 @@ class _FleetScreenState extends State<FleetScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[100],
-      body: Column(
-        children: [
-          // Header with stats and controls
-          Container(
-            padding: EdgeInsets.all(16),
-            color: Colors.white,
-            child: Column(
-              children: [
-                // Quick stats cards
-                SizedBox(
-                  height: 120,
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: _quickStats.length,
-                    itemBuilder: (context, index) {
-                      final stat = _quickStats[index];
-                      return Container(
-                        width: MediaQuery.of(context).size.width > 1200
-                            ? 200
-                            : MediaQuery.of(context).size.width > 800
-                                ? 180
-                                : 160,
-                        margin: EdgeInsets.only(right: 16),
-                        child: _buildStatCard(stat),
-                      );
-                    },
+      body: _isLoading
+          ? Center(child: CircularProgressIndicator())
+          : NestedScrollView(
+              headerSliverBuilder:
+                  (BuildContext context, bool innerBoxIsScrolled) {
+                return <Widget>[
+                  // Stats cards that scroll away
+                  SliverToBoxAdapter(
+                    child: Container(
+                      padding: EdgeInsets.all(16),
+                      color: Colors.white,
+                      child: SizedBox(
+                        height: 120,
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: _quickStats.length,
+                          itemBuilder: (context, index) {
+                            final stat = _quickStats[index];
+                            return Container(
+                              width: MediaQuery.of(context).size.width > 1200
+                                  ? 200
+                                  : MediaQuery.of(context).size.width > 800
+                                      ? 180
+                                      : 160,
+                              margin: EdgeInsets.only(right: 16),
+                              child: _buildStatCard(stat),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
                   ),
-                ),
-                SizedBox(height: 16),
 
-                // Search and filters - Make responsive
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    if (constraints.maxWidth > 1200) {
-                      return _buildWideScreenFilters();
-                    } else if (constraints.maxWidth > 800) {
-                      return _buildMediumScreenFilters();
-                    } else {
-                      return _buildNarrowScreenFilters();
-                    }
-                  },
-                ),
-              ],
-            ),
-          ),
+                  // Sticky Search Bar
+                  SliverPersistentHeader(
+                    pinned: true,
+                    delegate: _StickySearchDelegate(
+                      child: Container(
+                        padding: EdgeInsets.all(16),
+                        color: Colors.white,
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            if (constraints.maxWidth > 1200) {
+                              return _buildWideScreenFilters();
+                            } else if (constraints.maxWidth > 800) {
+                              return _buildMediumScreenFilters();
+                            } else {
+                              return _buildNarrowScreenFilters();
+                            }
+                          },
+                        ),
+                      ),
+                    ),
+                  ),
 
-          // Tab bar
-          Container(
-            color: Colors.white,
-            child: TabBar(
-              controller: _tabController,
-              labelColor: Colors.blue[600],
-              unselectedLabelColor: Colors.grey[600],
-              indicatorColor: Colors.blue[600],
-              isScrollable: MediaQuery.of(context).size.width < 600,
-              tabs: [
-                Tab(icon: Icon(Icons.list), text: 'List View'),
-                Tab(icon: Icon(Icons.lightbulb), text: 'Recommendations'),
-              ],
-            ),
-          ),
+                  // Sticky Tab bar
+                  SliverPersistentHeader(
+                    pinned: true,
+                    delegate: _StickyTabBarDelegate(
+                      tabController: _tabController,
+                      isSmallScreen: MediaQuery.of(context).size.width < 600,
+                    ),
+                  ),
 
-          // Multi-selection bar
-          if (_isMultiSelectionActive)
-            Container(
-              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              color: Colors.blue[50],
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Checkbox(
-                      value: _isAllSelected,
-                      onChanged: _toggleSelectAll,
+                  // Multi-selection bar
+                  if (_isMultiSelectionActive)
+                    SliverToBoxAdapter(
+                      child: Container(
+                        padding:
+                            EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        color: Colors.blue[50],
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Checkbox(
+                                value: _isAllSelected,
+                                onChanged: _toggleSelectAll,
+                              ),
+                              Text('${_selectedVehicles.length} selected'),
+                              SizedBox(width: 16),
+                              TextButton.icon(
+                                icon:
+                                    Icon(Icons.assignment_ind, color: Colors.blue),
+                                label: Text('Assign Instructors',
+                                    style: TextStyle(color: Colors.blue)),
+                                onPressed: _selectedVehicles.isNotEmpty
+                                    ? () => _bulkAssignInstructors()
+                                    : null,
+                              ),
+                              TextButton.icon(
+                                icon: Icon(Icons.delete, color: Colors.red),
+                                label: Text('Delete Selected',
+                                    style: TextStyle(color: Colors.red)),
+                                onPressed: _selectedVehicles.isNotEmpty
+                                    ? () => _deleteSelectedVehicles()
+                                    : null,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
-                    Text('${_selectedVehicles.length} selected'),
-                    SizedBox(width: 16),
-                    TextButton.icon(
-                      icon: Icon(Icons.assignment_ind, color: Colors.blue),
-                      label: Text('Assign Instructors',
-                          style: TextStyle(color: Colors.blue)),
-                      onPressed: _selectedVehicles.isNotEmpty
-                          ? () => _bulkAssignInstructors()
-                          : null,
-                    ),
-                    TextButton.icon(
-                      icon: Icon(Icons.delete, color: Colors.red),
-                      label: Text('Delete Selected',
-                          style: TextStyle(color: Colors.red)),
-                      onPressed: _selectedVehicles.isNotEmpty
-                          ? () => _deleteSelectedVehicles()
-                          : null,
-                    ),
-                  ],
-                ),
+                ];
+              },
+              body: TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildListView(),
+                  _buildRecommendationsView(),
+                ],
               ),
             ),
-
-          // Content
-          Expanded(
-            child: _isLoading
-                ? Center(child: CircularProgressIndicator())
-                : TabBarView(
-                    controller: _tabController,
-                    children: [
-                      _buildListView(),
-                      _buildRecommendationsView(),
-                    ],
-                  ),
-          ),
-        ],
-      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
           final result = await Get.dialog<bool>(
@@ -477,31 +478,30 @@ class _FleetScreenState extends State<FleetScreen>
   Widget _buildListView() {
     final vehicles = _getPaginatedVehicles();
 
-    return Column(
+    return ListView(
+      padding: EdgeInsets.zero,
       children: [
-        Expanded(
-          child: Container(
-            margin: EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.grey.withOpacity(0.1),
-                  spreadRadius: 1,
-                  blurRadius: 3,
-                  offset: Offset(0, 1),
-                ),
+        Container(
+          margin: EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.grey.withOpacity(0.1),
+                spreadRadius: 1,
+                blurRadius: 3,
+                offset: Offset(0, 1),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              for (int index = 0; index < vehicles.length; index++) ...[
+                _buildVehicleListTile(vehicles[index]),
+                if (index < vehicles.length - 1) Divider(height: 1),
               ],
-            ),
-            child: ListView.separated(
-              itemCount: vehicles.length,
-              separatorBuilder: (context, index) => Divider(height: 1),
-              itemBuilder: (context, index) {
-                final vehicle = vehicles[index];
-                return _buildVehicleListTile(vehicle);
-              },
-            ),
+            ],
           ),
         ),
         _buildPagination(),
@@ -1507,5 +1507,70 @@ class _FleetScreenState extends State<FleetScreen>
         ],
       ),
     );
+  }
+}
+
+// Sticky Search Bar Delegate
+class _StickySearchDelegate extends SliverPersistentHeaderDelegate {
+  final Widget child;
+
+  _StickySearchDelegate({required this.child});
+
+  @override
+  double get minExtent => 80.0;
+
+  @override
+  double get maxExtent => 80.0;
+
+  @override
+  Widget build(
+      BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return child;
+  }
+
+  @override
+  bool shouldRebuild(_StickySearchDelegate oldDelegate) {
+    return false;
+  }
+}
+
+// Sticky Tab Bar Delegate
+class _StickyTabBarDelegate extends SliverPersistentHeaderDelegate {
+  final TabController tabController;
+  final bool isSmallScreen;
+
+  _StickyTabBarDelegate({
+    required this.tabController,
+    required this.isSmallScreen,
+  });
+
+  @override
+  double get minExtent => 48.0;
+
+  @override
+  double get maxExtent => 48.0;
+
+  @override
+  Widget build(
+      BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return Container(
+      color: Colors.white,
+      child: TabBar(
+        controller: tabController,
+        labelColor: Colors.blue[600],
+        unselectedLabelColor: Colors.grey[600],
+        indicatorColor: Colors.blue[600],
+        isScrollable: isSmallScreen,
+        tabs: [
+          Tab(icon: Icon(Icons.list), text: 'List View'),
+          Tab(icon: Icon(Icons.lightbulb), text: 'Recommendations'),
+        ],
+      ),
+    );
+  }
+
+  @override
+  bool shouldRebuild(_StickyTabBarDelegate oldDelegate) {
+    return false;
   }
 }
