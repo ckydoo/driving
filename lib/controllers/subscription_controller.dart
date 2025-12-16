@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:driving/models/subscription_package.dart';
 import 'package:driving/services/api_service.dart';
+import 'package:driving/services/database_helper.dart';
 import 'package:driving/services/subscription_cache.dart';
 import 'package:driving/services/subscription_service.dart';
 import 'package:flutter/material.dart';
@@ -623,6 +624,8 @@ class SubscriptionController extends GetxController {
             print('ℹ️ No current package found');
           }
 
+          // ✅ SAVE TO CACHE for offline access
+          await _saveToCache();
           print('✅ Subscription data cached successfully');
         }
       } catch (e) {
@@ -709,15 +712,29 @@ class SubscriptionController extends GetxController {
       final status = cachedData['subscription_status'] as String;
       final trialDays = cachedData['remaining_trial_days'] as int;
       final daysSinceSync = cachedData['days_since_sync'] as int;
+      final cachedBillingPeriod = cachedData['billing_period'] as String? ?? 'monthly';
 
       print('✅ Loaded from cache:');
       print('   - Status: $status');
       print('   - Trial days: $trialDays');
+      print('   - Billing period: $cachedBillingPeriod');
       print('   - Days since sync: $daysSinceSync');
 
       // Set values
       subscriptionStatus.value = status;
       remainingTrialDays.value = trialDays;
+      billingPeriod.value = cachedBillingPeriod;
+
+      // Load expiry date if available
+      if (cachedData['subscription_expires_at'] != null) {
+        try {
+          subscriptionExpiresAt.value = DateTime.parse(cachedData['subscription_expires_at'] as String);
+          print('   - Expires at: ${subscriptionExpiresAt.value}');
+        } catch (e) {
+          print('⚠️ Failed to parse cached expiry date: $e');
+          subscriptionExpiresAt.value = null;
+        }
+      }
 
       // Load package info if available
       if (cachedData['current_package'] != null) {
@@ -869,6 +886,55 @@ class SubscriptionController extends GetxController {
     } catch (e) {
       print('❌ Error getting stored auth token: $e');
       return null;
+    }
+  }
+
+  /// Save current subscription data to cache for offline access
+  Future<void> _saveToCache() async {
+    try {
+      print('💾 Saving subscription data to cache...');
+
+      // Save to database cache
+      final db = await DatabaseHelper.instance.database;
+
+      await db.delete('subscription_cache');
+
+      await db.insert('subscription_cache', {
+        'id': 1,
+        'subscription_status': subscriptionStatus.value,
+        'remaining_trial_days': remainingTrialDays.value,
+        'subscription_expires_at': subscriptionExpiresAt.value?.toIso8601String(),
+        'billing_period': billingPeriod.value,
+        'last_synced_at': DateTime.now().toIso8601String(),
+        'current_package_id': currentPackage.value?.id,
+        'current_package_name': currentPackage.value?.name,
+      });
+
+      // Also save to SharedPreferences as backup
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('subscription_status', subscriptionStatus.value);
+      await prefs.setInt('remaining_trial_days', remainingTrialDays.value);
+      await prefs.setString('billing_period', billingPeriod.value);
+
+      if (subscriptionExpiresAt.value != null) {
+        await prefs.setString('subscription_expires_at', subscriptionExpiresAt.value!.toIso8601String());
+      }
+
+      if (currentPackage.value != null) {
+        await prefs.setInt('current_package_id', currentPackage.value!.id);
+        await prefs.setString('current_package_name', currentPackage.value!.name);
+      }
+
+      await prefs.setString('last_synced_at', DateTime.now().toIso8601String());
+
+      print('✅ Subscription data saved to cache successfully');
+      print('   - Status: ${subscriptionStatus.value}');
+      print('   - Trial Days: ${remainingTrialDays.value}');
+      print('   - Billing Period: ${billingPeriod.value}');
+      print('   - Expires At: ${subscriptionExpiresAt.value}');
+    } catch (e) {
+      print('❌ Error saving to cache: $e');
+      // Don't throw - caching failure shouldn't break the app
     }
   }
 }

@@ -266,7 +266,7 @@ class _ScheduleDetailsDialogState extends State<ScheduleDetailsDialog> {
                       _buildInfoSection(
                         'Billing Information',
                         Icons.account_balance_wallet,
-                        Colors.purple,
+                        Colors.blue,
                         [
                           _buildInfoRow('Total Lessons', '${invoice.lessons}'),
                           _buildInfoRow('Used Lessons', '$usedLessons'),
@@ -505,8 +505,8 @@ class _ScheduleDetailsDialogState extends State<ScheduleDetailsDialog> {
                             icon: Icon(Icons.schedule, size: 18),
                             label: Text('Reschedule'),
                             style: OutlinedButton.styleFrom(
-                              side: BorderSide(color: Colors.purple),
-                              foregroundColor: Colors.purple,
+                              side: BorderSide(color: Colors.blue),
+                              foregroundColor: Colors.blue,
                             ),
                           ),
                         ),

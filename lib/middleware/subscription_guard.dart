@@ -41,15 +41,23 @@ class SubscriptionGuard extends GetMiddleware {
         return page;
       }
 
-      // Check if cache is still valid
+      // Check if cache is still valid OR if subscription data already exists
       final now = DateTime.now();
-      if (_lastCheck != null &&
+      final subscriptionController = Get.find<SubscriptionController>();
+      final hasLoadedData = subscriptionController.subscriptionStatus.value.isNotEmpty;
+
+      if ((_lastCheck != null &&
           !_isCurrentlyChecking &&
-          now.difference(_lastCheck!) < CACHE_DURATION) {
-        print('✅ Using cached subscription status (${now.difference(_lastCheck!).inMinutes}m old)');
+          now.difference(_lastCheck!) < CACHE_DURATION) ||
+          hasLoadedData) {
+
+        if (_lastCheck != null) {
+          print('✅ Using cached subscription status (${now.difference(_lastCheck!).inMinutes}m old)');
+        } else {
+          print('✅ Using existing subscription data (already loaded in session)');
+        }
 
         // Quickly check cached status without loading
-        final subscriptionController = Get.find<SubscriptionController>();
         final status = subscriptionController.subscriptionStatus.value;
 
         if (status == 'suspended' || status == 'expired') {
@@ -130,8 +138,18 @@ class _SubscriptionCheckingScreenState
 
       final subscriptionController = Get.find<SubscriptionController>();
 
-      // Load subscription data (handles online/offline automatically)
-      await subscriptionController.loadSubscriptionData();
+      // OPTIMIZATION: Check if we already have recent subscription data
+      // If subscription status is already loaded and valid, skip full reload
+      final hasExistingData = subscriptionController.subscriptionStatus.value.isNotEmpty &&
+          subscriptionController.subscriptionStatus.value != '';
+
+      if (hasExistingData) {
+        print('✅ Using existing subscription data (already loaded)');
+      } else {
+        print('📡 Loading fresh subscription data...');
+        // Load subscription data (handles online/offline automatically)
+        await subscriptionController.loadSubscriptionData();
+      }
 
       final status = subscriptionController.subscriptionStatus.value;
       final trialDays = subscriptionController.remainingTrialDays.value;

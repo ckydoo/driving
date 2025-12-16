@@ -215,7 +215,7 @@ class SchoolInfoWidget extends StatelessWidget {
                     _buildFeatureChip(
                         'Multi-Tenant', Icons.business, Colors.blue),
                     const SizedBox(width: 8),
-                    _buildFeatureChip('Cloud Sync', Icons.cloud, Colors.purple),
+                    _buildFeatureChip('Cloud Sync', Icons.cloud, Colors.blue),
                   ],
                 ),
               ],

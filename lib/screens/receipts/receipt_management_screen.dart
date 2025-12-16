@@ -27,17 +27,7 @@ class _ReceiptManagementScreenState extends State<ReceiptManagementScreen> {
   final AuthController authController = Get.find<AuthController>();
   final TextEditingController _searchController = TextEditingController();
 
-  String _sortBy = 'date';
-  bool _sortAscending = false;
-  String _filterStatus = 'all';
   String _searchQuery = '';
-  bool _isSearchActive = false;
-
-  // Date filtering variables
-  DateTime? _startDate;
-  DateTime? _endDate;
-  String _dateFilter =
-      'all'; // 'all', 'today', 'this_week', 'this_month', 'custom'
 
   @override
   void initState() {
@@ -58,30 +48,37 @@ class _ReceiptManagementScreenState extends State<ReceiptManagementScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Column(
-        children: [
-          if (!_isSearchActive) _buildResponsiveFilterHeader(),
-          if (_isSearchActive) _buildResponsiveSearchSummary(),
-          if (_hasActiveDateFilter()) _buildResponsiveDateFilterSummary(),
-          Expanded(
-            child: Obx(() {
-              if (billingController.isLoading.value) {
-                return const Center(child: CircularProgressIndicator());
-              }
+      body: Obx(() {
+        if (billingController.isLoading.value) {
+          return const Center(child: CircularProgressIndicator());
+        }
 
-              final payments = _getFilteredPayments();
+        final payments = _getFilteredPayments();
 
-              if (payments.isEmpty) {
-                return _buildResponsiveEmptyState();
-              }
+        return CustomScrollView(
+          slivers: [
+            // Sticky Filter Header (search bar + items count)
+            SliverPersistentHeader(
+              pinned: true,
+              delegate: _StickyFilterHeaderDelegate(
+                child: _buildResponsiveFilterHeader(),
+              ),
+            ),
 
-              return context.isMobile
-                  ? _buildMobileReceiptList(payments)
-                  : _buildDesktopReceiptList(payments);
-            }),
-          ),
-        ],
-      ),
+            // Content
+            if (payments.isEmpty)
+              SliverFillRemaining(
+                child: _buildResponsiveEmptyState(),
+              )
+            else
+              SliverToBoxAdapter(
+                child: context.isMobile
+                    ? _buildMobileReceiptList(payments)
+                    : _buildDesktopReceiptList(payments),
+              ),
+          ],
+        );
+      }),
       floatingActionButton: _hasActiveFilters()
           ? FloatingActionButton.extended(
               onPressed: _clearAllFilters,
@@ -117,26 +114,37 @@ class _ReceiptManagementScreenState extends State<ReceiptManagementScreen> {
       ),
       child: Column(
         children: [
-          // Quick Search Bar
+          // Search Bar
           _buildResponsiveSearchField(),
           SizedBox(
               height: ResponsiveUtils.getValue(context,
                   mobile: 12.0, tablet: 14.0, desktop: 16.0)),
 
-          // Date Filter Chips
-          _buildResponsiveDateFilters(),
-          SizedBox(
-              height: ResponsiveUtils.getValue(context,
-                  mobile: 12.0, tablet: 14.0, desktop: 16.0)),
-
-          // Status Filter Chips
-          _buildResponsiveStatusFilters(),
-          SizedBox(
-              height: ResponsiveUtils.getValue(context,
-                  mobile: 8.0, tablet: 10.0, desktop: 12.0)),
-
-          // Sort Options
-          _buildResponsiveSortOptions(),
+          // Items count display
+          Row(
+            children: [
+              Icon(Icons.receipt_long, size: 20, color: Colors.grey[600]),
+              SizedBox(width: 8),
+              Text(
+                '${_getFilteredPayments().length} receipts',
+                style: TextStyle(
+                  fontSize: ResponsiveUtils.getValue(context,
+                      mobile: 14.0, tablet: 15.0, desktop: 16.0),
+                  fontWeight: FontWeight.w500,
+                  color: Colors.grey[700],
+                ),
+              ),
+              Spacer(),
+              if (_searchQuery.isNotEmpty)
+                TextButton.icon(
+                  onPressed: _clearAllFilters,
+                  icon: Icon(Icons.clear, size: 16, color: Colors.orange[600]),
+                  label: Text('Clear Search',
+                      style: TextStyle(
+                          fontSize: 12, color: Colors.orange[600])),
+                ),
+            ],
+          ),
         ],
       ),
     );
@@ -189,425 +197,6 @@ class _ReceiptManagementScreenState extends State<ReceiptManagementScreen> {
     );
   }
 
-  Widget _buildResponsiveDateFilters() {
-    final dateFilters = [
-      {'label': 'All Time', 'value': 'all'},
-      {'label': 'Today', 'value': 'today'},
-      {'label': 'This Week', 'value': 'this_week'},
-      {'label': 'This Month', 'value': 'this_month'},
-      {'label': 'Custom', 'value': 'custom'},
-    ];
-
-    if (context.isMobile) {
-      return SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: dateFilters.asMap().entries.map((entry) {
-            final index = entry.key;
-            final filter = entry.value;
-            return Padding(
-              padding: EdgeInsets.only(
-                  right: index < dateFilters.length - 1 ? 8 : 0),
-              child: _buildResponsiveDateFilterChip(
-                  filter['label']!, filter['value']!),
-            );
-          }).toList(),
-        ),
-      );
-    } else {
-      return Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: dateFilters
-            .map((filter) => _buildResponsiveDateFilterChip(
-                filter['label']!, filter['value']!))
-            .toList(),
-      );
-    }
-  }
-
-  Widget _buildResponsiveDateFilterChip(String label, String value) {
-    final isSelected = _dateFilter == value;
-    return GestureDetector(
-      onTap: () => _handleDateFilterTap(value),
-      child: Container(
-        padding: EdgeInsets.symmetric(
-          horizontal: ResponsiveUtils.getValue(context,
-              mobile: 12.0, tablet: 14.0, desktop: 16.0),
-          vertical: ResponsiveUtils.getValue(context,
-              mobile: 6.0, tablet: 7.0, desktop: 8.0),
-        ),
-        decoration: BoxDecoration(
-          color: isSelected ? Colors.green.shade600 : Colors.grey.shade100,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isSelected ? Colors.green.shade600 : Colors.grey.shade300,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              value == 'custom' ? Icons.date_range : Icons.calendar_today,
-              size: ResponsiveUtils.getValue(context,
-                  mobile: 14.0, tablet: 15.0, desktop: 16.0),
-              color: isSelected ? Colors.white : Colors.grey.shade600,
-            ),
-            const SizedBox(width: 6),
-            ResponsiveText(
-              style: TextStyle(),
-              label,
-              fontSize: ResponsiveUtils.getValue(context,
-                  mobile: 11.0, tablet: 12.0, desktop: 12.0),
-              fontWeight: FontWeight.w500,
-              color: isSelected ? Colors.white : Colors.grey.shade700,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildResponsiveStatusFilters() {
-    final statusFilters = [
-      {'label': 'All Receipts', 'value': 'all'},
-      {'label': 'Generated', 'value': 'generated'},
-      {'label': 'Not Generated', 'value': 'not_generated'},
-    ];
-
-    if (context.isMobile) {
-      return Column(
-        children: statusFilters
-            .map((filter) => Container(
-                  width: double.infinity,
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: _buildResponsiveFilterChip(
-                    filter['label']!,
-                    filter['value']!,
-                    _filterStatus,
-                    (value) => setState(() => _filterStatus = value),
-                  ),
-                ))
-            .toList(),
-      );
-    } else {
-      return Row(
-        children: statusFilters.asMap().entries.map((entry) {
-          final index = entry.key;
-          final filter = entry.value;
-          return Expanded(
-            child: Padding(
-              padding: EdgeInsets.only(
-                  right: index < statusFilters.length - 1 ? 8 : 0),
-              child: _buildResponsiveFilterChip(
-                filter['label']!,
-                filter['value']!,
-                _filterStatus,
-                (value) => setState(() => _filterStatus = value),
-              ),
-            ),
-          );
-        }).toList(),
-      );
-    }
-  }
-
-  Widget _buildResponsiveFilterChip(String label, String value,
-      String currentValue, Function(String) onChanged) {
-    final isSelected = currentValue == value;
-    return GestureDetector(
-      onTap: () => onChanged(value),
-      child: Container(
-        padding: EdgeInsets.symmetric(
-          horizontal: ResponsiveUtils.getValue(context,
-              mobile: 8.0, tablet: 10.0, desktop: 12.0),
-          vertical: ResponsiveUtils.getValue(context,
-              mobile: 8.0, tablet: 9.0, desktop: 8.0),
-        ),
-        decoration: BoxDecoration(
-          color: isSelected ? Colors.blue.shade600 : Colors.grey.shade100,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isSelected ? Colors.blue.shade600 : Colors.grey.shade300,
-          ),
-        ),
-        child: ResponsiveText(
-          style: TextStyle(),
-          label,
-          fontSize: ResponsiveUtils.getValue(context,
-              mobile: 11.0, tablet: 12.0, desktop: 12.0),
-          fontWeight: FontWeight.w500,
-          color: isSelected ? Colors.white : Colors.grey.shade700,
-          textAlign: TextAlign.center,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildResponsiveSortOptions() {
-    return context.isMobile
-        ? Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ResponsiveText(
-                style: TextStyle(),
-                'Sort by:',
-                fontSize: ResponsiveUtils.getValue(context,
-                    mobile: 12.0, tablet: 13.0, desktop: 14.0),
-                fontWeight: FontWeight.w600,
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  _buildResponsiveSortButton(
-                      'Date', 'date', Icons.calendar_today),
-                  const SizedBox(width: 8),
-                  _buildResponsiveSortButton(
-                      'Amount', 'amount', Icons.attach_money),
-                  const SizedBox(width: 8),
-                  _buildResponsiveSortButton('Method', 'method', Icons.payment),
-                  const Spacer(),
-                  if (_hasActiveFilters())
-                    TextButton.icon(
-                      onPressed: _clearAllFilters,
-                      icon: const Icon(Icons.clear_all, size: 16),
-                      label:
-                          const Text('Clear', style: TextStyle(fontSize: 11)),
-                      style: TextButton.styleFrom(
-                        foregroundColor: Colors.orange.shade600,
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                      ),
-                    ),
-                ],
-              ),
-            ],
-          )
-        : Row(
-            children: [
-              ResponsiveText(
-                style: TextStyle(),
-                'Sort by:',
-                fontSize: ResponsiveUtils.getValue(context,
-                    mobile: 12.0, tablet: 13.0, desktop: 14.0),
-                fontWeight: FontWeight.w600,
-              ),
-              const SizedBox(width: 12),
-              _buildResponsiveSortButton('Date', 'date', Icons.calendar_today),
-              const SizedBox(width: 8),
-              _buildResponsiveSortButton(
-                  'Amount', 'amount', Icons.attach_money),
-              const SizedBox(width: 8),
-              _buildResponsiveSortButton('Method', 'method', Icons.payment),
-              const Spacer(),
-              if (_hasActiveFilters())
-                TextButton.icon(
-                  onPressed: _clearAllFilters,
-                  icon: const Icon(Icons.clear_all, size: 16),
-                  label:
-                      const Text('Clear All', style: TextStyle(fontSize: 12)),
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.orange.shade600,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                  ),
-                ),
-            ],
-          );
-  }
-
-  Widget _buildResponsiveSortButton(String label, String value, IconData icon) {
-    final isSelected = _sortBy == value;
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          if (_sortBy == value) {
-            _sortAscending = !_sortAscending;
-          } else {
-            _sortBy = value;
-            _sortAscending = false;
-          }
-        });
-      },
-      child: Container(
-        padding: EdgeInsets.symmetric(
-          horizontal: ResponsiveUtils.getValue(context,
-              mobile: 6.0, tablet: 7.0, desktop: 8.0),
-          vertical: ResponsiveUtils.getValue(context,
-              mobile: 3.0, tablet: 3.5, desktop: 4.0),
-        ),
-        decoration: BoxDecoration(
-          color: isSelected ? Colors.blue.shade100 : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: ResponsiveUtils.getValue(context,
-                  mobile: 14.0, tablet: 15.0, desktop: 16.0),
-              color: isSelected ? Colors.blue.shade600 : Colors.grey.shade600,
-            ),
-            const SizedBox(width: 4),
-            ResponsiveText(
-              style: TextStyle(),
-              label,
-              fontSize: ResponsiveUtils.getValue(context,
-                  mobile: 11.0, tablet: 11.5, desktop: 12.0),
-              fontWeight: FontWeight.w500,
-              color: isSelected ? Colors.blue.shade600 : Colors.grey.shade600,
-            ),
-            if (isSelected) ...[
-              const SizedBox(width: 2),
-              Icon(
-                _sortAscending ? Icons.arrow_upward : Icons.arrow_downward,
-                size: ResponsiveUtils.getValue(context,
-                    mobile: 10.0, tablet: 11.0, desktop: 12.0),
-                color: Colors.blue.shade600,
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildResponsiveSearchSummary() {
-    return Container(
-      padding: ResponsiveUtils.getValue(
-        context,
-        mobile: const EdgeInsets.all(16),
-        tablet: const EdgeInsets.all(18),
-        desktop: const EdgeInsets.all(20),
-      ),
-      decoration: BoxDecoration(
-        color: Colors.blue.shade50,
-        border: Border(
-          bottom: BorderSide(color: Colors.grey.shade300),
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.search, color: Colors.blue.shade600, size: 20),
-          const SizedBox(width: 8),
-          Expanded(
-            child: ResponsiveText(
-              style: TextStyle(),
-              _searchQuery.isEmpty
-                  ? 'Type to search receipts...'
-                  : 'Searching for "${_searchQuery}"',
-              fontSize: ResponsiveUtils.getValue(context,
-                  mobile: 13.0, tablet: 14.0, desktop: 14.0),
-              color: Colors.blue.shade700,
-              fontWeight: FontWeight.w500,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          if (_searchQuery.isNotEmpty)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.blue.shade600,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                '${_getFilteredPayments().length} found',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildResponsiveDateFilterSummary() {
-    String dateText = '';
-
-    switch (_dateFilter) {
-      case 'today':
-        dateText = 'Today';
-        break;
-      case 'this_week':
-        dateText = 'This Week';
-        break;
-      case 'this_month':
-        dateText = 'This Month';
-        break;
-      case 'custom':
-        if (_startDate != null && _endDate != null) {
-          dateText =
-              '${DateFormat('MMM dd, yyyy').format(_startDate!)} - ${DateFormat('MMM dd, yyyy').format(_endDate!)}';
-        } else if (_startDate != null) {
-          dateText = 'From ${DateFormat('MMM dd, yyyy').format(_startDate!)}';
-        } else if (_endDate != null) {
-          dateText = 'Until ${DateFormat('MMM dd, yyyy').format(_endDate!)}';
-        }
-        break;
-    }
-
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: ResponsiveUtils.getValue(context,
-            mobile: 16.0, tablet: 18.0, desktop: 20.0),
-        vertical: ResponsiveUtils.getValue(context,
-            mobile: 6.0, tablet: 7.0, desktop: 8.0),
-      ),
-      decoration: BoxDecoration(
-        color: Colors.green.shade50,
-        border: Border(
-          bottom: BorderSide(color: Colors.grey.shade300),
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.date_range, color: Colors.green.shade600, size: 20),
-          const SizedBox(width: 8),
-          Expanded(
-            child: ResponsiveText(
-              style: TextStyle(),
-              'Filtered by: $dateText',
-              fontSize: ResponsiveUtils.getValue(context,
-                  mobile: 12.0, tablet: 13.0, desktop: 14.0),
-              color: Colors.green.shade700,
-              fontWeight: FontWeight.w500,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.green.shade600,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              '${_getFilteredPayments().length} found',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          GestureDetector(
-            onTap: _clearDateFilter,
-            child: Icon(
-              Icons.close,
-              color: Colors.green.shade600,
-              size: 20,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildResponsiveEmptyState() {
     final hasActiveFilters = _hasActiveFilters();
@@ -662,24 +251,29 @@ class _ReceiptManagementScreenState extends State<ReceiptManagementScreen> {
   }
 
   Widget _buildMobileReceiptList(List<Payment> payments) {
-    return ListView.builder(
+    return Padding(
       padding: ResponsiveUtils.getPadding(context),
-      itemCount: payments.length,
-      itemBuilder: (context, index) => _buildMobileReceiptCard(payments[index]),
+      child: Column(
+        children: payments
+            .map((payment) => _buildMobileReceiptCard(payment))
+            .toList(),
+      ),
     );
   }
 
   Widget _buildDesktopReceiptList(List<Payment> payments) {
-    return ListView.builder(
+    return Padding(
       padding: ResponsiveUtils.getValue(
         context,
         mobile: const EdgeInsets.all(16),
         tablet: const EdgeInsets.all(18),
         desktop: const EdgeInsets.all(20),
       ),
-      itemCount: payments.length,
-      itemBuilder: (context, index) =>
-          _buildDesktopReceiptCard(payments[index]),
+      child: Column(
+        children: payments
+            .map((payment) => _buildDesktopReceiptCard(payment))
+            .toList(),
+      ),
     );
   }
 
@@ -1251,7 +845,7 @@ class _ReceiptManagementScreenState extends State<ReceiptManagementScreen> {
     );
   }
 
-  // Original logic methods (unchanged)
+  // Simplified filtering - only search
   List<Payment> _getFilteredPayments() {
     List<Payment> filteredPayments = billingController.payments.toList();
 
@@ -1278,143 +872,21 @@ class _ReceiptManagementScreenState extends State<ReceiptManagementScreen> {
       }).toList();
     }
 
-    // Apply status filter
-    if (_filterStatus != 'all') {
-      filteredPayments = filteredPayments.where((payment) {
-        switch (_filterStatus) {
-          case 'generated':
-            return payment.receiptGenerated;
-          case 'not_generated':
-            return !payment.receiptGenerated;
-          default:
-            return true;
-        }
-      }).toList();
-    }
-
-    // Apply date filter
-    if (_dateFilter != 'all') {
-      final now = DateTime.now();
-      DateTime? filterStart;
-      DateTime? filterEnd;
-
-      switch (_dateFilter) {
-        case 'today':
-          filterStart = DateTime(now.year, now.month, now.day);
-          filterEnd = DateTime(now.year, now.month, now.day, 23, 59, 59);
-          break;
-        case 'this_week':
-          final weekday = now.weekday;
-          filterStart = now.subtract(Duration(days: weekday - 1));
-          filterStart =
-              DateTime(filterStart.year, filterStart.month, filterStart.day);
-          filterEnd = DateTime(now.year, now.month, now.day, 23, 59, 59);
-          break;
-        case 'this_month':
-          filterStart = DateTime(now.year, now.month, 1);
-          filterEnd = DateTime(now.year, now.month + 1, 0, 23, 59, 59);
-          break;
-        case 'custom':
-          filterStart = _startDate;
-          filterEnd = _endDate;
-          break;
-      }
-
-      if (filterStart != null || filterEnd != null) {
-        filteredPayments = filteredPayments.where((payment) {
-          if (filterStart != null &&
-              payment.paymentDate.isBefore(filterStart)) {
-            return false;
-          }
-          if (filterEnd != null && payment.paymentDate.isAfter(filterEnd)) {
-            return false;
-          }
-          return true;
-        }).toList();
-      }
-    }
-
-    // Apply sorting
-    filteredPayments.sort((a, b) {
-      int comparison = 0;
-
-      switch (_sortBy) {
-        case 'date':
-          comparison = a.paymentDate.compareTo(b.paymentDate);
-          break;
-        case 'amount':
-          comparison = a.amount.compareTo(b.amount);
-          break;
-        case 'method':
-          comparison = a.method.compareTo(b.method);
-          break;
-      }
-
-      return _sortAscending ? comparison : -comparison;
-    });
+    // Sort by date (newest first)
+    filteredPayments.sort((a, b) => b.paymentDate.compareTo(a.paymentDate));
 
     return filteredPayments;
   }
 
   bool _hasActiveFilters() {
-    return _searchQuery.isNotEmpty ||
-        _filterStatus != 'all' ||
-        _dateFilter != 'all';
-  }
-
-  bool _hasActiveDateFilter() {
-    return _dateFilter != 'all';
+    return _searchQuery.isNotEmpty;
   }
 
   void _clearAllFilters() {
     setState(() {
       _searchController.clear();
       _searchQuery = '';
-      _filterStatus = 'all';
-      _dateFilter = 'all';
-      _startDate = null;
-      _endDate = null;
-      _isSearchActive = false;
     });
-  }
-
-  void _clearDateFilter() {
-    setState(() {
-      _dateFilter = 'all';
-      _startDate = null;
-      _endDate = null;
-    });
-  }
-
-  void _handleDateFilterTap(String value) {
-    if (value == 'custom') {
-      _showCustomDateRangePicker();
-    } else {
-      setState(() {
-        _dateFilter = value;
-        _startDate = null;
-        _endDate = null;
-      });
-    }
-  }
-
-  Future<void> _showCustomDateRangePicker() async {
-    final DateTimeRange? picked = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
-      initialDateRange: _startDate != null && _endDate != null
-          ? DateTimeRange(start: _startDate!, end: _endDate!)
-          : null,
-    );
-
-    if (picked != null) {
-      setState(() {
-        _dateFilter = 'custom';
-        _startDate = picked.start;
-        _endDate = picked.end;
-      });
-    }
   }
 
   // Action methods (maintain original functionality)
@@ -1618,5 +1090,32 @@ class _ReceiptManagementScreenState extends State<ReceiptManagementScreen> {
         duration: const Duration(seconds: 2),
       ),
     );
+  }
+}
+
+// Sticky Filter Header Delegate
+class _StickyFilterHeaderDelegate extends SliverPersistentHeaderDelegate {
+  final Widget child;
+
+  _StickyFilterHeaderDelegate({required this.child});
+
+  @override
+  double get minExtent => 120.0; // Height for search bar + items count
+
+  @override
+  double get maxExtent => 120.0;
+
+  @override
+  Widget build(
+      BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return Container(
+      color: Colors.white,
+      child: child,
+    );
+  }
+
+  @override
+  bool shouldRebuild(_StickyFilterHeaderDelegate oldDelegate) {
+    return false;
   }
 }

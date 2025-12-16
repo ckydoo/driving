@@ -6,8 +6,6 @@ import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/controllers/pin_controller.dart';
 import 'package:driving/controllers/settings_controller.dart';
 
-/// Professional splash screen with progress tracking
-/// Shows loading progress while initializing app dependencies
 class SplashScreen extends StatefulWidget {
   const SplashScreen({Key? key}) : super(key: key);
 

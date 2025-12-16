@@ -24,12 +24,33 @@ class DatabaseHelper {
     final directory = await getApplicationDocumentsDirectory();
     final path = join(directory.path, 'driving_school.db');
 
-    return await openDatabase(path, version: 1, onCreate: _onCreate);
+    return await openDatabase(
+      path,
+      version: 2, // Updated to version 2 for subscription cache migration
+      onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
+    );
   }
 
   Future<void> _onCreate(Database db, int version) async {
     await _createAllTables(db);
     print('Database tables created');
+  }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    print('🔄 Upgrading database from version $oldVersion to $newVersion');
+
+    if (oldVersion < 2) {
+      // Migration to version 2: Add billing_period column to subscription_cache
+      try {
+        await db.execute('''
+          ALTER TABLE subscription_cache ADD COLUMN billing_period TEXT
+        ''');
+        print('✅ Added billing_period column to subscription_cache table');
+      } catch (e) {
+        print('⚠️ Error adding billing_period column (may already exist): $e');
+      }
+    }
   }
 
   Future<void> _createAllTables(Database db) async {

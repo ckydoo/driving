@@ -191,7 +191,7 @@ class AutoAttendanceSettings extends StatelessWidget {
                     'Pending',
                     '${stats['pendingAutoMark']}',
                     Icons.pending,
-                    Colors.purple,
+                    Colors.blue,
                   ),
                 ),
               ],

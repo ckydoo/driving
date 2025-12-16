@@ -264,7 +264,7 @@ class _QuickSearchScreenState extends State<QuickSearchScreen> {
             children: [
               Icon(
                 Icons.calendar_today,
-                color: Colors.purple[700],
+                color: Colors.blue[700],
                 size: 24,
               ),
               SizedBox(width: 10),

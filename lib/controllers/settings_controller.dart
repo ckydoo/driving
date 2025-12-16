@@ -1,3 +1,4 @@
+import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/services/database_helper.dart';
 import 'package:driving/services/school_config_service.dart';
 import 'package:driving/services/school_api_service.dart';
@@ -984,6 +985,37 @@ class SettingsController extends GetxController {
     }
   }
 
+  /// Check if we have a valid API token (for server authentication)
+  Future<bool> _hasValidApiToken() async {
+    try {
+      // Check if AuthController exists and user is logged in with API
+      if (Get.isRegistered<AuthController>()) {
+        final authController = Get.find<AuthController>();
+
+        // User must be logged in
+        if (!authController.isLoggedIn.value) {
+          return false;
+        }
+
+        // Check if we have a stored API token
+        final user = authController.currentUser.value;
+        if (user != null && user.email != null) {
+          final prefs = await SharedPreferences.getInstance();
+          final key = 'api_token_${user.email}';
+          final token = prefs.getString(key);
+
+          // Return true only if we have a non-empty token
+          return token != null && token.isNotEmpty;
+        }
+      }
+
+      return false;
+    } catch (e) {
+      print('⚠️ Error checking API token: $e');
+      return false;
+    }
+  }
+
   /// Fetch business settings from server and cache locally (READ-ONLY)
   /// This method should be called on login or when refreshing business data
   Future<void> fetchBusinessSettingsFromServer() async {
@@ -1038,8 +1070,16 @@ class SettingsController extends GetxController {
 
       final errorString = e.toString().toLowerCase();
 
+      // Check if it's an authentication error - don't show notification
+      // (this shouldn't happen since we check for token before calling this method)
+      if (errorString.contains('not authenticated') ||
+          errorString.contains('unauthorized') ||
+          errorString.contains('please login')) {
+        print('ℹ️ Authentication required - skipping error notification');
+        // Don't show error notification for auth issues during initialization
+      }
       // Check if it's a network/connectivity error
-      if (errorString.contains('socketexception') ||
+      else if (errorString.contains('socketexception') ||
           errorString.contains('failed host lookup') ||
           errorString.contains('network') ||
           errorString.contains('no internet') ||
@@ -1470,18 +1510,30 @@ class SettingsController extends GetxController {
         await _saveAllSettingsToPreferences();
       }
 
-      // Fetch business settings from server if school ID is available
+      // Fetch business settings from server ONLY if:
+      // 1. School ID is available
+      // 2. User is authenticated with API token (not just PIN)
       if (schoolId.value.isNotEmpty) {
-        print('🌐 School ID found, fetching business settings from server...');
-        try {
-          await fetchBusinessSettingsFromServer();
-          print('✅ Business settings fetched and updated from server');
-        } catch (e) {
-          print('⚠️ Failed to fetch business settings from server: $e');
-          // Don't fail initialization if server fetch fails
+        // Check if we have an API token before attempting to fetch
+        final hasApiToken = await _hasValidApiToken();
+
+        if (hasApiToken) {
+          print(
+              '🌐 School ID and API token found, fetching business settings from server...');
+          try {
+            await fetchBusinessSettingsFromServer();
+            print('✅ Business settings fetched and updated from server');
+          } catch (e) {
+            print('⚠️ Failed to fetch business settings from server: $e');
+            // Don't fail initialization if server fetch fails
+          }
+        } else {
+          print(
+              'ℹ️ No API token (PIN login?), skipping server fetch during initialization');
         }
       } else {
-        print('ℹ️ No school ID yet, skipping server fetch during initialization');
+        print(
+            'ℹ️ No school ID yet, skipping server fetch during initialization');
       }
 
       print('✅ Settings initialized with defaults successfully');

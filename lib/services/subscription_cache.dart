@@ -17,11 +17,23 @@ class SubscriptionCache {
           subscription_status TEXT NOT NULL,
           remaining_trial_days INTEGER NOT NULL,
           subscription_expires_at TEXT,
+          billing_period TEXT,
           last_synced_at TEXT NOT NULL,
           current_package_id INTEGER,
           current_package_name TEXT
         )
       ''');
+
+      // Add billing_period column if it doesn't exist (for existing databases)
+      try {
+        await db.execute('''
+          ALTER TABLE $_tableName ADD COLUMN billing_period TEXT
+        ''');
+        print('✅ Added billing_period column to existing table');
+      } catch (e) {
+        // Column already exists or table was just created - ignore
+        print('ℹ️ billing_period column already exists or table just created');
+      }
 
       print('✅ Subscription cache table initialized');
     } catch (e) {
@@ -146,6 +158,7 @@ class SubscriptionCache {
         'subscription_status': cachedStatus,
         'remaining_trial_days': adjustedTrialDays,
         'subscription_expires_at': cache['subscription_expires_at'],
+        'billing_period': cache['billing_period'] ?? 'monthly',
         'last_synced_at': cache['last_synced_at'],
         'current_package': cache['current_package_id'] != null
             ? {

@@ -174,7 +174,7 @@ class QuickSearchWidget extends StatelessWidget {
                   'Schedule Lesson',
                   'Quick lesson booking',
                   Icons.schedule,
-                  Colors.purple,
+                  Colors.blue,
                   () {
                     navigationController.navigateToPage('schedules');
                   },

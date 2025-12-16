@@ -1,4 +1,3 @@
-// COMPLETE VERSION WITH PAYNOW INTEGRATION
 import 'package:driving/controllers/auth_controller.dart';
 import 'package:driving/services/subscription_cache.dart';
 import 'package:flutter/material.dart';
@@ -63,19 +62,18 @@ class SubscriptionScreen extends StatelessWidget {
         ],
       ),
       body: Obx(() {
-        // ✅ FIX: Check for cached data FIRST to avoid infinite loading
         final isOffline = controller.availablePackages.isEmpty;
         final hasCurrentSubscription =
             controller.subscriptionStatus.value.isNotEmpty &&
                     controller.subscriptionStatus.value != 'trial' ||
                 controller.remainingTrialDays.value > 0;
 
-        // If offline but has subscription data (from cache), show offline view immediately
-        if (isOffline && hasCurrentSubscription && !controller.isLoading.value) {
+        if (isOffline &&
+            hasCurrentSubscription &&
+            !controller.isLoading.value) {
           return _buildOfflineView();
         }
 
-        // Show loading spinner ONLY if actively loading and no cached data yet
         if (controller.isLoading.value && !hasCurrentSubscription) {
           return Center(
             child: Column(
