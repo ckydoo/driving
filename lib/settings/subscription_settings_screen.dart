@@ -20,9 +20,9 @@ class SubscriptionScreen extends StatelessWidget {
   final RxString _selectedBillingPeriod = 'monthly'.obs;
   final RxString _selectedPaymentMethod = 'paynow'.obs;
 
-  @override
-  Widget build(BuildContext context) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+  SubscriptionScreen() {
+    // ✅ FIXED: Set up reactive listener to auto-select package when available
+    ever(controller.availablePackages, (_) {
       if (_selectedPackage.value == null &&
           controller.availablePackages.isNotEmpty) {
         final firstPaidPackage = controller.availablePackages.firstWhere(
@@ -35,6 +35,23 @@ class SubscriptionScreen extends StatelessWidget {
         }
       }
     });
+
+    // ✅ Also try selecting immediately if packages already loaded
+    if (_selectedPackage.value == null &&
+        controller.availablePackages.isNotEmpty) {
+      final firstPaidPackage = controller.availablePackages.firstWhere(
+        (pkg) => pkg.slug != 'trial',
+        orElse: () => controller.availablePackages.first,
+      );
+      _selectedPackage.value = firstPaidPackage;
+      if (_selectedPackage.value!.hasYearlyPricing) {
+        _selectedBillingPeriod.value = 'yearly';
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -62,7 +79,9 @@ class SubscriptionScreen extends StatelessWidget {
         ],
       ),
       body: Obx(() {
-        final isOffline = controller.availablePackages.isEmpty;
+        // ✅ FIXED: Use proper connectivity tracking instead of availablePackages
+        final isOffline = !controller.hasInternetConnection.value ||
+                         controller.isUsingCachedData.value;
         final hasCurrentSubscription =
             controller.subscriptionStatus.value.isNotEmpty &&
                     controller.subscriptionStatus.value != 'trial' ||
@@ -1197,6 +1216,9 @@ class SubscriptionScreen extends StatelessWidget {
   }
 
   Widget _buildBottomButton() {
+    // ✅ FIXED: Don't call _ensurePackageSelected here - it modifies state during build
+    // Selection happens in build() method before Obx is called
+
     final selectedPrice = _getSelectedPrice();
     final isTrialUser = controller.subscriptionStatus.value == 'trial';
     final isCurrentPackage =

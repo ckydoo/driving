@@ -150,8 +150,8 @@ class _SplashScreenState extends State<SplashScreen>
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Theme.of(context).primaryColor,
-              Theme.of(context).primaryColor.withOpacity(0.8),
+              Colors.blue,
+              Colors.blue.withOpacity(0.8),
             ],
           ),
         ),
@@ -186,10 +186,10 @@ class _SplashScreenState extends State<SplashScreen>
                 ),
               ],
             ),
-            child: Icon(
-              Icons.drive_eta,
-              size: 80,
-              color: Colors.white,
+            child: Image.asset(
+              'assets/images/logo.png',
+              width: 80,
+              height: 80,
             ),
           ),
         ),

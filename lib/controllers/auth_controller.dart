@@ -1,5 +1,6 @@
 import 'package:crypto/crypto.dart';
 import 'package:driving/controllers/settings_controller.dart';
+import 'package:driving/controllers/subscription_controller.dart';
 import 'package:driving/controllers/sync_controller.dart';
 import 'package:driving/models/user.dart';
 import 'package:driving/screens/auth/initial_sync_screen.dart';
@@ -101,6 +102,9 @@ class AuthController extends GetxController {
       final localSuccess = await login(email, password);
 
       if (localSuccess) {
+        // Fetch business settings from server (non-blocking)
+        _fetchBusinessSettingsInBackground();
+
         // Same logic for local login
         final prefs = await SharedPreferences.getInstance();
         final hasCompletedSync =
@@ -368,6 +372,14 @@ class AuthController extends GetxController {
 
       // Set user as logged in
       final user = User.fromJson(userData);
+
+      // ✅ ADMIN-ONLY CHECK
+      if (user.role.toLowerCase() != 'admin') {
+        error.value = 'Access restricted. Only administrators can sign in at this time.';
+        print('🚫 Non-admin user blocked: ${user.email} (${user.role})');
+        return false;
+      }
+
       currentUser.value = user;
       isLoggedIn.value = true;
 
@@ -442,6 +454,9 @@ class AuthController extends GetxController {
 
       print('✅ User registered locally with ID: $userId');
       print('✅ User: ${user.fname} ${user.lname} (${user.role})');
+
+      // Fetch business settings from server (non-blocking)
+      _fetchBusinessSettingsInBackground();
 
       return true;
     } catch (e, stackTrace) {
@@ -1300,6 +1315,14 @@ class AuthController extends GetxController {
 
       // Set user as logged in
       final user = User.fromJson(userData);
+
+      // ✅ ADMIN-ONLY CHECK
+      if (user.role.toLowerCase() != 'admin') {
+        error.value = 'Access restricted. Only administrators can sign in at this time.';
+        print('🚫 Non-admin user blocked: ${user.email} (${user.role})');
+        return false;
+      }
+
       currentUser.value = user;
       isLoggedIn.value = true;
 
@@ -1322,6 +1345,9 @@ class AuthController extends GetxController {
         // If school data not in response but we have school_id, fetch it
         await _fetchAndSaveSchoolData(user.schoolId!);
       }
+
+      // Fetch business settings from server (non-blocking)
+      _fetchBusinessSettingsInBackground();
 
       await _triggerPostLoginSync();
 
@@ -1522,11 +1548,35 @@ class AuthController extends GetxController {
           return false;
         }
 
+        // ✅ ADMIN-ONLY CHECK
+        if (currentUser.value!.role.toLowerCase() != 'admin') {
+          error.value = 'Access restricted. Only administrators can sign in at this time.';
+          print('🚫 Non-admin user blocked via PIN: ${currentUser.value!.email} (${currentUser.value!.role})');
+          currentUser.value = null;
+          isLoggedIn.value = false;
+          return false;
+        }
+
         print('✅ User loaded: ${currentUser.value!.email}');
         print('✅ Authentication state set - isLoggedIn: ${isLoggedIn.value}');
 
         // Restore API token if available for sync
         await _restoreApiTokenForSync(pinUserEmail);
+
+        // ✅ NEW: PRE-LOAD SUBSCRIPTION CACHE BEFORE NAVIGATION
+        print('📦 Pre-loading subscription cache...');
+        if (Get.isRegistered<SubscriptionController>()) {
+          final subscriptionController = Get.find<SubscriptionController>();
+
+          // Load from cache immediately (instant, no API call)
+          try {
+            await subscriptionController.loadFromCache();
+            print('✅ Subscription cache pre-loaded');
+          } catch (e) {
+            print('⚠️ Failed to pre-load subscription cache: $e');
+            // Continue anyway - not critical for login
+          }
+        }
 
         // NEW: Check if sync needed
         final prefs = await SharedPreferences.getInstance();

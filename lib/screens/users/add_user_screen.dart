@@ -766,9 +766,8 @@ class _AddUserScreenState extends State<AddUserScreen> {
         SizedBox(height: 16),
         _buildTextField(
           controller: _idNumberController,
-          label: 'ID Number',
+          label: 'ID Number (Optional)',
           icon: Icons.badge,
-          validator: (value) => value!.isEmpty ? 'Required' : null,
         ),
         SizedBox(height: 16),
         if (isSmallScreen)
@@ -828,24 +827,30 @@ class _AddUserScreenState extends State<AddUserScreen> {
         SizedBox(height: isSmallScreen ? 24 : 32),
         _buildTextField(
           controller: _emailController,
-          label: 'Email Address',
+          label: 'Email Address (Optional)',
           icon: Icons.email,
           keyboardType: TextInputType.emailAddress,
           validator: (value) {
-            if (value!.isEmpty) return 'Please enter an email address';
-            if (!GetUtils.isEmail(value))
+            if (value!.isNotEmpty && !GetUtils.isEmail(value))
               return 'Please enter a valid email address';
             return null;
           },
         ),
         SizedBox(height: 16),
-        _buildTextField(
+        TextFormField(
           controller: _phoneController,
-          label: 'Phone Number',
-          icon: Icons.phone,
           keyboardType: TextInputType.phone,
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'^[\+]?\d*$')),
+          ],
           validator: (value) {
             if (value!.isEmpty) return 'Please enter a phone number';
+
+            // Check if the format is valid: optional + followed by digits only
+            if (!RegExp(r'^\+?\d+$').hasMatch(value)) {
+              return 'Phone number can only contain numbers and optional + at the start';
+            }
+
             String digitsOnly = value.replaceAll(RegExp(r'[^\d]'), '');
             if (digitsOnly.length > 15) {
               return 'Phone number is too long (maximum 15 digits)';
@@ -855,6 +860,25 @@ class _AddUserScreenState extends State<AddUserScreen> {
             }
             return null;
           },
+          decoration: InputDecoration(
+            labelText: 'Phone Number',
+            prefixIcon: Icon(Icons.phone, color: Colors.grey[600]),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.blue[600]!),
+            ),
+            filled: true,
+            fillColor: Colors.grey[50],
+            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          ),
         ),
         SizedBox(height: 16),
         _buildTextField(
@@ -884,25 +908,34 @@ class _AddUserScreenState extends State<AddUserScreen> {
           ),
         ),
         Text(
-          'Account settings and security',
+          widget.role == 'admin'
+              ? 'Account settings and security'
+              : 'Account settings',
           style: TextStyle(color: Colors.grey[600]),
         ),
         SizedBox(height: isSmallScreen ? 24 : 32),
-        _buildTextField(
-          controller: _passwordController,
-          label: 'Password',
-          icon: Icons.lock,
-          obscureText: true,
-          validator: (value) {
-            if (value!.isEmpty) return 'Please enter a password';
-            if (value.length != 8) return 'Password must be exactly 8 digits';
-            if (!RegExp(r'^\d{8}$').hasMatch(value)) {
-              return 'Password can only contain numbers (8 digits)';
-            }
-            return null;
-          },
-        ),
-        SizedBox(height: 16),
+        if (widget.role == 'admin')
+          Column(
+            children: [
+              _buildTextField(
+                controller: _passwordController,
+                label: 'Password (Optional)',
+                icon: Icons.lock,
+                obscureText: true,
+                validator: (value) {
+                  if (value!.isNotEmpty) {
+                    if (value.length != 8)
+                      return 'Password must be exactly 8 digits';
+                    if (!RegExp(r'^\d{8}$').hasMatch(value)) {
+                      return 'Password can only contain numbers (8 digits)';
+                    }
+                  }
+                  return null;
+                },
+              ),
+              SizedBox(height: 16),
+            ],
+          ),
         _buildDropdownField(
           value: _status,
           items: ['Active', 'Inactive'],
@@ -1165,7 +1198,6 @@ class _AddUserScreenState extends State<AddUserScreen> {
     return TextFormField(
       controller: _dateOfBirthController,
       readOnly: true,
-      validator: (value) => value!.isEmpty ? 'Required' : null,
       onTap: () async {
         final DateTime? picked = await showDatePicker(
           context: context,
@@ -1196,7 +1228,7 @@ class _AddUserScreenState extends State<AddUserScreen> {
         }
       },
       decoration: InputDecoration(
-        labelText: 'Date of Birth',
+        labelText: 'Date of Birth (Optional)',
         prefixIcon: Icon(Icons.calendar_today, color: Colors.grey[600]),
         suffixIcon: Icon(Icons.arrow_drop_down, color: Colors.grey[600]),
         border: OutlineInputBorder(
@@ -1316,33 +1348,16 @@ class _AddUserScreenState extends State<AddUserScreen> {
             },
           ),
           SizedBox(height: 16),
-
           TextFormField(
             readOnly: true,
-            onTap: () async {
-              final DateTime? picked = await showDatePicker(
-                context: context,
-                initialDate:
-                    _invoiceDueDate ?? DateTime.now().add(Duration(days: 30)),
-                firstDate: DateTime.now(),
-                lastDate: DateTime.now().add(Duration(days: 365)),
-              );
-              if (picked != null) {
-                setState(() {
-                  _invoiceDueDate = picked;
-                });
-                _updateBillingPreview();
-              }
-            },
             decoration: InputDecoration(
               labelText: 'Invoice Due Date',
               prefixIcon: Icon(Icons.schedule, color: Colors.grey[600]),
-              suffixIcon: Icon(Icons.calendar_today, color: Colors.grey[600]),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
               filled: true,
-              fillColor: Colors.white,
+              fillColor: Colors.grey[100],
             ),
             controller: TextEditingController(
               text: _invoiceDueDate != null
@@ -1350,7 +1365,6 @@ class _AddUserScreenState extends State<AddUserScreen> {
                   : '',
             ),
           ),
-
           if (_selectedCourse != null) ...[
             SizedBox(height: 16),
             Container(
@@ -1497,43 +1511,11 @@ class _AddUserScreenState extends State<AddUserScreen> {
           );
           return false;
         }
-        if (_idNumberController.text.isEmpty) {
-          Get.snackbar(
-            snackPosition: SnackPosition.BOTTOM,
-            'Missing Information',
-            'Please enter an ID number',
-            backgroundColor: Colors.red[100],
-            colorText: Colors.red[800],
-            icon: Icon(Icons.error, color: Colors.red),
-          );
-          return false;
-        }
-        if (_selectedDate == null) {
-          Get.snackbar(
-            snackPosition: SnackPosition.BOTTOM,
-            'Missing Information',
-            'Please select a date of birth',
-            backgroundColor: Colors.red[100],
-            colorText: Colors.red[800],
-            icon: Icon(Icons.error, color: Colors.red),
-          );
-          return false;
-        }
         return true;
 
       case 1:
-        if (_emailController.text.isEmpty) {
-          Get.snackbar(
-            snackPosition: SnackPosition.BOTTOM,
-            'Missing Information',
-            'Please enter an email address',
-            backgroundColor: Colors.red[100],
-            colorText: Colors.red[800],
-            icon: Icon(Icons.error, color: Colors.red),
-          );
-          return false;
-        }
-        if (!GetUtils.isEmail(_emailController.text)) {
+        if (_emailController.text.isNotEmpty &&
+            !GetUtils.isEmail(_emailController.text)) {
           Get.snackbar(
             snackPosition: SnackPosition.BOTTOM,
             'Invalid Email',
@@ -1569,18 +1551,9 @@ class _AddUserScreenState extends State<AddUserScreen> {
         return true;
 
       case 2:
-        if (_passwordController.text.isEmpty) {
-          Get.snackbar(
-            snackPosition: SnackPosition.BOTTOM,
-            'Missing Information',
-            'Please enter a password',
-            backgroundColor: Colors.red[100],
-            colorText: Colors.red[800],
-            icon: Icon(Icons.error, color: Colors.red),
-          );
-          return false;
-        }
-        if (_passwordController.text.length != 8) {
+        if (widget.role == 'admin' &&
+            _passwordController.text.isNotEmpty &&
+            _passwordController.text.length != 8) {
           Get.snackbar(
             snackPosition: SnackPosition.BOTTOM,
             'Invalid Password',
@@ -1624,7 +1597,9 @@ class _AddUserScreenState extends State<AddUserScreen> {
         fname: _fnameController.text.trim(),
         lname: _lnameController.text.trim(),
         email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
+        password: _passwordController.text.trim().isEmpty
+            ? _generateRandomPassword()
+            : _passwordController.text.trim(),
         phone: _phoneController.text.trim(),
         address: _addressController.text.trim(),
         idnumber: _idNumberController.text.trim(),

@@ -19,7 +19,7 @@ android {
     applicationId = "com.codzlabzim.driving"
     minSdkVersion = flutter.minSdkVersion
     targetSdk = 35
-    versionCode = 4
+    versionCode = 5
     versionName = "1.0.1"
 }
 

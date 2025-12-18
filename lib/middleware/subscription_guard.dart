@@ -41,27 +41,21 @@ class SubscriptionGuard extends GetMiddleware {
         return page;
       }
 
-      // Check if cache is still valid OR if subscription data already exists
-      final now = DateTime.now();
       final subscriptionController = Get.find<SubscriptionController>();
-      final hasLoadedData = subscriptionController.subscriptionStatus.value.isNotEmpty;
+      final now = DateTime.now();
 
-      if ((_lastCheck != null &&
-          !_isCurrentlyChecking &&
-          now.difference(_lastCheck!) < CACHE_DURATION) ||
-          hasLoadedData) {
+      // ✅ FIX: More lenient data check - allow any valid status
+      final hasLoadedData = subscriptionController.subscriptionStatus.value.isNotEmpty &&
+          subscriptionController.subscriptionStatus.value != '' &&
+          subscriptionController.subscriptionStatus.value != 'loading';
 
-        if (_lastCheck != null) {
-          print('✅ Using cached subscription status (${now.difference(_lastCheck!).inMinutes}m old)');
-        } else {
-          print('✅ Using existing subscription data (already loaded in session)');
-        }
-
-        // Quickly check cached status without loading
+      // ✅ FIX: If data exists, trust it and allow navigation immediately
+      if (hasLoadedData) {
         final status = subscriptionController.subscriptionStatus.value;
 
+        // Only block if definitely invalid
         if (status == 'suspended' || status == 'expired') {
-          print('🚫 BLOCKED: Cached status is $status');
+          print('🚫 BLOCKED: Status is $status');
           return GetPage(
             name: route ?? '/checking',
             page: () => _SubscriptionCheckingScreen(
@@ -71,13 +65,17 @@ class SubscriptionGuard extends GetMiddleware {
           );
         }
 
-        // Cache valid and status OK - allow immediate access
+        // ✅ Allow immediate access
+        print('✅ Subscription OK ($status) - allowing access to: $route');
+
+        // Refresh in background if cache is old
+        _refreshInBackgroundIfNeeded(subscriptionController, now);
+
         return page;
       }
 
-      print('🔐 Subscription Guard Check for route: $route (cache expired or first check)');
-
-      // Return a loading page that will check subscription and then navigate
+      // ✅ No data - need to check (but try to be fast)
+      print('⚠️ No subscription data - checking...');
       return GetPage(
         name: route ?? '/checking',
         page: () => _SubscriptionCheckingScreen(
@@ -87,7 +85,24 @@ class SubscriptionGuard extends GetMiddleware {
       );
     } catch (e) {
       print('❌ Subscription Guard Error: $e');
+      // Fail open - allow access
       return page;
+    }
+  }
+
+  /// Refresh in background if cache is old
+  void _refreshInBackgroundIfNeeded(SubscriptionController controller, DateTime now) {
+    // Don't block navigation - refresh in background
+    if (_lastCheck == null || now.difference(_lastCheck!) > CACHE_DURATION) {
+      Future.delayed(Duration(milliseconds: 500), () async {
+        try {
+          print('🔄 Refreshing subscription in background...');
+          await controller.loadSubscriptionData();
+          _lastCheck = DateTime.now();
+        } catch (e) {
+          print('⚠️ Background refresh failed: $e');
+        }
+      });
     }
   }
 
@@ -138,38 +153,47 @@ class _SubscriptionCheckingScreenState
 
       final subscriptionController = Get.find<SubscriptionController>();
 
-      // OPTIMIZATION: Check if we already have recent subscription data
-      // If subscription status is already loaded and valid, skip full reload
+      // ✅ FIX: Check if data exists first
       final hasExistingData = subscriptionController.subscriptionStatus.value.isNotEmpty &&
-          subscriptionController.subscriptionStatus.value != '';
+          subscriptionController.subscriptionStatus.value != '' &&
+          subscriptionController.subscriptionStatus.value != 'loading';
 
-      if (hasExistingData) {
-        print('✅ Using existing subscription data (already loaded)');
+      if (!hasExistingData) {
+        print('📡 No data - loading...');
+
+        // ✅ Try cache first (instant)
+        try {
+          await subscriptionController.loadFromCache();
+        } catch (e) {
+          print('⚠️ Cache load failed: $e');
+        }
+
+        // ✅ If still empty, try server (but timeout fast)
+        if (subscriptionController.subscriptionStatus.value.isEmpty ||
+            subscriptionController.subscriptionStatus.value == '') {
+          try {
+            await subscriptionController.loadSubscriptionData()
+                .timeout(Duration(seconds: 3)); // ✅ Fast timeout
+          } catch (e) {
+            print('⚠️ Server load failed/timeout: $e');
+            // Continue with whatever we have
+          }
+        }
       } else {
-        print('📡 Loading fresh subscription data...');
-        // Load subscription data (handles online/offline automatically)
-        await subscriptionController.loadSubscriptionData();
+        print('✅ Using existing subscription data');
       }
 
       final status = subscriptionController.subscriptionStatus.value;
       final trialDays = subscriptionController.remainingTrialDays.value;
 
-      print('📊 Subscription Status: $status');
-      print('📊 Trial Days: $trialDays');
+      print('📊 Status: $status, Trial: $trialDays');
 
-      // Mark check as completed for caching
       SubscriptionGuard.markCheckCompleted();
 
-      // Check if access should be blocked
-      if (status == 'suspended') {
-        print('🚫 BLOCKED: Subscription suspended');
-        _showBlockedScreen('suspended');
-        return;
-      }
-
-      if (status == 'expired') {
-        print('🚫 BLOCKED: Subscription expired');
-        _showBlockedScreen('expired');
+      // ✅ Only block for definite invalid states
+      if (status == 'suspended' || status == 'expired') {
+        print('🚫 BLOCKED: $status');
+        _showBlockedScreen(status);
         return;
       }
 
@@ -179,54 +203,43 @@ class _SubscriptionCheckingScreenState
         return;
       }
 
-      // Allow access
+      // ✅ Allow access
       print('✅ ALLOWED: Proceeding to ${widget.targetRoute}');
 
       if (!mounted) return;
 
-      // Navigate to the target page
+      // Navigate immediately
       Future.microtask(() {
         if (widget.targetPage != null) {
           Get.off(() => widget.targetPage!());
         } else {
-          Get.offNamed(widget.targetRoute);
+          Get.offAllNamed(widget.targetRoute);
         }
       });
     } catch (e) {
-      print('❌ Error checking subscription: $e');
+      print('❌ Error: $e');
       SubscriptionGuard._isCurrentlyChecking = false;
 
-      // On any error, check if user is authenticated
-      final authController = Get.find<AuthController>();
+      // ✅ On error, allow access with warning
+      if (!mounted) return;
 
-      if (authController.isLoggedIn.value &&
-          authController.currentUser.value != null) {
-        // User is logged in - allow access with warning
-        print('⚠️ Error but user authenticated - allowing access');
+      Get.snackbar(
+        'Offline Mode',
+        'Using cached subscription',
+        backgroundColor: Colors.orange[100],
+        duration: Duration(seconds: 2),
+      );
 
-        Get.snackbar(
-          'Offline Mode',
-          'Unable to verify subscription. Please connect to internet.',
-          backgroundColor: Colors.orange[700],
-          colorText: Colors.white,
-          icon: Icon(Icons.cloud_off, color: Colors.white),
-          duration: Duration(seconds: 5),
-        );
-
-        // Allow access
-        Future.delayed(Duration(milliseconds: 500), () {
-          if (!mounted) return;
-          if (widget.targetPage != null) {
-            Get.off(() => widget.targetPage!());
-          } else {
-            Get.offNamed(widget.targetRoute);
-          }
-        });
-      } else {
-        // Not authenticated - redirect to login
-        print('❌ Not authenticated - redirecting to login');
-        Get.offAllNamed('/login');
-      }
+      Future.delayed(Duration(milliseconds: 300), () {
+        if (!mounted) return;
+        if (widget.targetPage != null) {
+          Get.off(() => widget.targetPage!());
+        } else {
+          Get.offAllNamed(widget.targetRoute);
+        }
+      });
+    } finally {
+      SubscriptionGuard._isCurrentlyChecking = false;
     }
   }
 

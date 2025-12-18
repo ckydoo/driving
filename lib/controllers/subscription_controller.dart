@@ -26,6 +26,8 @@ class SubscriptionController extends GetxController {
   final RxBool canStartTrial = false.obs;
   final RxBool hasUsedTrial = false.obs;
   final Rxn<dynamic> pendingSubscriptionInvoice = Rxn<dynamic>();
+  final RxBool hasInternetConnection = true.obs; // ✅ NEW: Track connectivity
+  final RxBool isUsingCachedData = false.obs; // ✅ NEW: Track if using cached data
 
   final SubscriptionService _subscriptionService = SubscriptionService();
   final Rx<DateTime?> subscriptionExpiresAt = Rx<DateTime?>(null);
@@ -77,22 +79,41 @@ class SubscriptionController extends GetxController {
   Future<void> _initializeWithAuth() async {
     print('🔐 Initializing subscription controller...');
 
-    // Wait a bit for AuthController to be ready
-    await Future.delayed(Duration(milliseconds: 500));
+    // ✅ FIXED: Load cache FIRST (instant, no delay)
+    print('📦 Loading subscription from cache immediately...');
+    await _loadFromCache();
+    isUsingCachedData.value = true; // Mark as using cached data initially
 
-    // Check if user is authenticated
-    if (Get.isRegistered<AuthController>()) {
-      final authController = Get.find<AuthController>();
-      if (authController.isLoggedIn.value) {
-        print('✅ User is authenticated, loading subscription data');
-        await loadSubscriptionData();
-      } else {
-        print('⚠️ User not authenticated, skipping subscription load');
-        errorMessage.value = 'Please login to view subscriptions';
+    // ✅ REMOVED: No delay needed - just refresh in background
+    _refreshFromServerInBackground();
+  }
+
+  // ✅ NEW: Refresh in background without blocking initialization
+  Future<void> _refreshFromServerInBackground() async {
+    try {
+      bool hasInternet = await _checkInternetConnection();
+      hasInternetConnection.value = hasInternet;
+
+      if (!hasInternet) {
+        print('📡 No internet - using cached subscription');
+        return;
       }
-    } else {
-      print('⚠️ AuthController not registered');
-      errorMessage.value = 'Authentication service not available';
+
+      if (Get.isRegistered<AuthController>()) {
+        final authController = Get.find<AuthController>();
+        if (authController.isLoggedIn.value) {
+          print('✅ User is authenticated, refreshing from server in background');
+          await loadSubscriptionData(); // Refresh from server
+          isUsingCachedData.value = false; // ✅ Now using fresh data
+        } else {
+          print('⚠️ User not authenticated via API, using cached data');
+        }
+      } else {
+        print('⚠️ AuthController not registered, using cached data');
+      }
+    } catch (e) {
+      print('⚠️ Background refresh failed: $e');
+      // Don't throw - cache is already loaded
     }
   }
 
@@ -513,6 +534,56 @@ class SubscriptionController extends GetxController {
     }
   }
 
+  /// ✅ NEW: Force refresh subscription (call when user comes back online)
+  Future<void> forceRefreshSubscription() async {
+    print('🔄 Force refreshing subscription...');
+    errorMessage.value = '';
+    isLoading.value = true;
+
+    try {
+      // Check connectivity first
+      bool hasInternet = await _checkInternetConnection();
+      hasInternetConnection.value = hasInternet;
+
+      if (!hasInternet) {
+        Get.snackbar(
+          'No Internet',
+          'Please check your internet connection and try again.',
+          backgroundColor: Colors.orange[100],
+          colorText: Colors.orange[900],
+          icon: Icon(Icons.wifi_off, color: Colors.orange[700]),
+          duration: Duration(seconds: 3),
+        );
+        isLoading.value = false;
+        return;
+      }
+
+      await loadSubscriptionData();
+      print('✅ Force refresh completed');
+
+      Get.snackbar(
+        'Subscription Updated',
+        'Your subscription status has been refreshed',
+        backgroundColor: Colors.green[100],
+        colorText: Colors.green[900],
+        icon: Icon(Icons.check_circle, color: Colors.green[700]),
+        duration: Duration(seconds: 2),
+      );
+    } catch (e) {
+      print('❌ Force refresh failed: $e');
+      Get.snackbar(
+        'Refresh Failed',
+        'Could not refresh subscription. Using cached data.',
+        backgroundColor: Colors.orange[100],
+        colorText: Colors.orange[900],
+        icon: Icon(Icons.warning, color: Colors.orange[700]),
+        duration: Duration(seconds: 3),
+      );
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
   /// Load subscription data with better error handling
   Future<void> loadSubscriptionData() async {
     try {
@@ -521,9 +592,11 @@ class SubscriptionController extends GetxController {
 
       print('\n🔄 === LOADING SUBSCRIPTION DATA ===');
       bool hasInternet = await _checkInternetConnection();
+      hasInternetConnection.value = hasInternet; // ✅ Update connectivity status
 
       if (!hasInternet) {
         print('📡 No internet - loading from cache directly');
+        isUsingCachedData.value = true; // ✅ Mark as using cached data
         await _loadFromCacheWithValidation();
         return;
       }
@@ -627,18 +700,19 @@ class SubscriptionController extends GetxController {
           // ✅ SAVE TO CACHE for offline access
           await _saveToCache();
           print('✅ Subscription data cached successfully');
+          isUsingCachedData.value = false; // ✅ Successfully loaded fresh data
         }
       } catch (e) {
         // Network error or timeout - use cached data
         print('⚠️ Failed to load from server: $e');
         print('📦 Falling back to cached subscription data');
-
+        isUsingCachedData.value = true; // ✅ Mark as using cached data
         await _loadFromCacheWithValidation();
       }
     } catch (e) {
       print('❌ Error loading subscription data: $e');
       errorMessage.value = 'Failed to load subscription data: ${e.toString()}';
-
+      isUsingCachedData.value = true; // ✅ Mark as using cached data
       // Try cache as last resort
       await _loadFromCacheWithValidation();
     } finally {
@@ -833,18 +907,37 @@ class SubscriptionController extends GetxController {
     }
   }
 
+  /// Public method to load from cache (can be called externally)
+  Future<void> loadFromCache() async {
+    await _loadFromCache();
+  }
+
   /// Load from cached data
   Future<void> _loadFromCache() async {
     try {
       final cachedData = await SubscriptionCache.getCachedSubscriptionData();
 
       if (cachedData != null) {
-        subscriptionStatus.value = cachedData['status'] ?? 'trial';
-        remainingTrialDays.value = cachedData['trial_days'] ?? 0;
+        // ✅ FIXED: Use correct field names
+        subscriptionStatus.value = cachedData['subscription_status'] ?? 'trial';
+        remainingTrialDays.value = cachedData['remaining_trial_days'] ?? 0;
+        billingPeriod.value = cachedData['billing_period'] ?? 'monthly';
 
         print('✅ Loaded from cache:');
         print('   - Status: ${subscriptionStatus.value}');
         print('   - Trial days: ${remainingTrialDays.value}');
+        print('   - Billing period: ${billingPeriod.value}');
+
+        // Load expiry date if available
+        if (cachedData['subscription_expires_at'] != null) {
+          try {
+            subscriptionExpiresAt.value = DateTime.parse(cachedData['subscription_expires_at']);
+            print('   - Expires at: ${subscriptionExpiresAt.value}');
+          } catch (e) {
+            print('⚠️ Failed to parse cached expiry date: $e');
+            subscriptionExpiresAt.value = null;
+          }
+        }
 
         // Check cache age
         if (cachedData['synced_at'] != null) {
