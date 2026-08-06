@@ -1,0 +1,2462 @@
+import 'dart:io';
+
+import 'package:csv/csv.dart';
+import 'package:driving/controllers/schedule_controller.dart';
+import 'package:driving/controllers/settings_controller.dart';
+import 'package:driving/controllers/user_controller.dart';
+import 'package:driving/models/billing_record.dart';
+import 'package:driving/models/course.dart';
+import 'package:driving/models/invoice.dart';
+import 'package:driving/models/payment.dart';
+import 'package:driving/models/user.dart';
+import 'package:driving/services/receipt_service.dart';
+import 'package:driving/services/sync_service.dart';
+import 'package:driving/services/lazy_loading_service.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import 'package:pdf/pdf.dart';
+import 'package:path_provider/path_provider.dart';
+import '../services/database_helper.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:intl/intl.dart';
+import 'package:driving/controllers/auth_controller.dart';
+
+class BillingController extends GetxController {
+  // ============================================================
+  // LAZY LOADING: Paginated lists instead of loading everything
+  // ============================================================
+  final RxList<Invoice> visibleInvoices = <Invoice>[].obs;
+  final RxList<Payment> visiblePayments = <Payment>[].obs;
+
+  // Pagination state
+  final RxBool hasMoreInvoices = true.obs;
+  final RxBool hasMorePayments = true.obs;
+  final RxBool isLoadingMore = false.obs;
+  final RxBool isLoading = false.obs;
+
+  int _invoicesOffset = 0;
+  int _paymentsOffset = 0;
+
+  // School ID for multi-tenant support
+  String? get _schoolId {
+    try {
+      if (Get.isRegistered<AuthController>()) {
+        final auth = Get.find<AuthController>();
+        return auth.currentUser.value?.schoolId;
+      }
+    } catch (e) {
+      debugPrint('Error getting school ID: $e');
+    }
+    return null;
+  }
+
+  // Backward compatibility - keep these for existing code
+  List<Invoice> get invoices => visibleInvoices;
+  List<Payment> get payments => visiblePayments;
+
+  var courses = <Course>[].obs;
+  final DatabaseHelper _dbHelper = Get.find();
+
+  @override
+  void onInit() {
+    super.onInit();
+    // LAZY LOADING: Load only initial data instead of everything
+    _loadInitialData();
+  }
+
+  // ============================================================
+  // LAZY LOADING METHODS
+  // ============================================================
+
+  /// Load initial invoices and payments (50 each)
+  Future<void> _loadInitialData() async {
+    isLoading(true);
+
+    try {
+      // Load invoices and payments in parallel for better performance
+      await Future.wait([
+        _loadInitialInvoices(),
+        _loadInitialPayments(),
+      ]);
+    } catch (e) {
+      debugPrint('Error loading initial billing data: $e');
+      Get.snackbar(
+        'Error',
+        'Failed to load billing data: ${e.toString()}',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    } finally {
+      isLoading(false);
+    }
+  }
+
+  /// Load initial invoices (first 50)
+  Future<void> _loadInitialInvoices() async {
+    try {
+      final result = await LazyLoadingService.loadInitialInvoices(
+        schoolId: _schoolId,
+      );
+
+      visibleInvoices.value = result['invoices'];
+      hasMoreInvoices.value = result['hasMore'];
+      _invoicesOffset = result['offset'];
+
+      debugPrint(
+          '✅ Loaded ${visibleInvoices.length} invoices (hasMore: ${hasMoreInvoices.value})');
+    } catch (e) {
+      debugPrint('Error loading initial invoices: $e');
+      rethrow;
+    }
+  }
+
+  /// Load initial payments (first 50)
+  Future<void> _loadInitialPayments() async {
+    try {
+      final result = await LazyLoadingService.loadInitialPayments(
+        schoolId: _schoolId,
+      );
+
+      visiblePayments.value = result['payments'];
+      hasMorePayments.value = result['hasMore'];
+      _paymentsOffset = result['offset'];
+
+      debugPrint(
+          '✅ Loaded ${visiblePayments.length} payments (hasMore: ${hasMorePayments.value})');
+    } catch (e) {
+      debugPrint('Error loading initial payments: $e');
+      rethrow;
+    }
+  }
+
+  /// Load more invoices (next 25)
+  Future<void> loadMoreInvoices() async {
+    if (!hasMoreInvoices.value || isLoadingMore.value) return;
+
+    isLoadingMore(true);
+
+    try {
+      final result = await LazyLoadingService.loadMoreInvoices(
+        schoolId: _schoolId,
+        offset: _invoicesOffset,
+      );
+
+      visibleInvoices.addAll(result['invoices']);
+      hasMoreInvoices.value = result['hasMore'];
+      _invoicesOffset = result['offset'];
+
+      debugPrint(
+          '✅ Loaded ${result['invoices'].length} more invoices (total: ${visibleInvoices.length})');
+    } catch (e) {
+      debugPrint('Error loading more invoices: $e');
+      Get.snackbar(
+        'Error',
+        'Failed to load more invoices',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    } finally {
+      isLoadingMore(false);
+    }
+  }
+
+  /// Load more payments (next 25)
+  Future<void> loadMorePayments() async {
+    if (!hasMorePayments.value || isLoadingMore.value) return;
+
+    isLoadingMore(true);
+
+    try {
+      final result = await LazyLoadingService.loadMorePayments(
+        schoolId: _schoolId,
+        offset: _paymentsOffset,
+      );
+
+      visiblePayments.addAll(result['payments']);
+      hasMorePayments.value = result['hasMore'];
+      _paymentsOffset = result['offset'];
+
+      debugPrint(
+          '✅ Loaded ${result['payments'].length} more payments (total: ${visiblePayments.length})');
+    } catch (e) {
+      debugPrint('Error loading more payments: $e');
+      Get.snackbar(
+        'Error',
+        'Failed to load more payments',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    } finally {
+      isLoadingMore(false);
+    }
+  }
+
+  /// Refresh all data (pull-to-refresh)
+  Future<void> refreshBillingData() async {
+    _invoicesOffset = 0;
+    _paymentsOffset = 0;
+    hasMoreInvoices.value = true;
+    hasMorePayments.value = true;
+
+    await _loadInitialData();
+  }
+
+  Future<int> insertBillingRecord(BillingRecord billingRecord) async {
+    final db = await DatabaseHelper.instance.database;
+    return await db.insert('billing_records', billingRecord.toJson());
+  }
+
+  Future<List<Payment>> getPaymentsForInvoice(int invoiceId) async {
+    final db = await _dbHelper.database;
+    final List<Map<String, dynamic>> results = await db.query(
+      'payments',
+      where: 'invoiceId = ?',
+      whereArgs: [invoiceId],
+    );
+    return results.map((json) => Payment.fromJson(json)).toList();
+  }
+
+  Future<List<BillingRecord>> getBillingRecordsForInvoice(int invoiceId) async {
+    final db = await DatabaseHelper.instance.database;
+    final List<Map<String, dynamic>> results = await db.query(
+      'billing_records',
+      where: 'invoiceId = ?',
+      whereArgs: [invoiceId],
+    );
+    return results.map((json) => BillingRecord.fromJson(json)).toList();
+  }
+
+  Future<void> updateBillingRecordStatus(
+      int billingRecordId, String status) async {
+    final db = await DatabaseHelper.instance.database;
+    await db.update(
+      'billing_records',
+      {'status': status},
+      where: 'id = ?',
+      whereArgs: [billingRecordId],
+    );
+  }
+
+  Future<int> insertBillingRecordHistory(BillingRecord billingRecord) async {
+    final db = await DatabaseHelper.instance.database;
+    return await db.insert('billing_records_history', billingRecord.toJson());
+  }
+
+  Future<String> getCourseName(int courseId) async {
+    try {
+      debugPrint('Getting course name for courseId: $courseId');
+      final course = await DatabaseHelper.instance.getCourseById(courseId);
+      final courseName = course?['name'] ?? 'Course ID: $courseId';
+      debugPrint('Course name found: $courseName');
+      return courseName;
+    } catch (e) {
+      debugPrint('Error getting course name for ID $courseId: $e');
+      return 'Course ID: $courseId';
+    }
+  }
+
+  Future<void> fetchBillingDataForStudent(int studentId) async {
+    try {
+      isLoading(true);
+      debugPrint(
+          'BillingController: fetchBillingDataForStudent called for studentId: $studentId');
+      final data = await _dbHelper.getBillingForStudent(studentId);
+      debugPrint(
+          'BillingController: Data from _dbHelper.getBillingForStudent: $data');
+      invoices.assignAll(data.map((json) => Invoice.fromJson(json)));
+      debugPrint('BillingController: Invoices after assignAll: $invoices');
+    } finally {
+      isLoading(false);
+    }
+  }
+
+  Future<String> _generateInvoiceNumber() async {
+    final db = await DatabaseHelper().database;
+
+    // Get current date for prefix
+    final now = DateTime.now();
+    final datePrefix = '${now.year}${now.month.toString().padLeft(2, '0')}';
+
+    // Get count of invoices for this month
+    final result = await db.rawQuery(
+        "SELECT COUNT(*) as count FROM invoices WHERE invoice_number LIKE ?",
+        ['INV-$datePrefix-%']);
+
+    final count = result.first['count'] as int;
+    final sequenceNumber = (count + 1).toString().padLeft(4, '0');
+
+    return 'INV-$datePrefix-$sequenceNumber';
+  }
+
+  Future<void> updateUsedLessons(int invoiceId, int usedLessons) async {
+    try {
+      final index = invoices.indexWhere((inv) => inv.id == invoiceId);
+      if (index == -1) {
+        throw Exception('Invoice not found');
+      }
+
+      final invoice = invoices[index];
+
+      // Update in the database
+      await _dbHelper.updateInvoice({
+        'id': invoiceId,
+        'used_lessons': usedLessons,
+      });
+
+      // For now, we'll track it through the existing lessons field relationship
+      final updatedInvoice = invoice.copyWith(
+          // If you have a usedLessons field in Invoice model, update it here
+          // usedLessons: usedLessons,
+          );
+
+      visibleInvoices[index] = updatedInvoice;
+      visibleInvoices.refresh();
+    } catch (e) {
+      debugPrint('Error updating used lessons: ${e.toString()}');
+      throw Exception('Failed to update lesson usage');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getPayments() async {
+    final db = await _dbHelper.database;
+    return await db.query('payments');
+  }
+
+  // Fixed fetchBillingData method in billing_controller.dart
+
+  /// Legacy method - now uses lazy loading under the hood
+  /// For backward compatibility with existing code that calls fetchBillingData()
+  Future<void> fetchBillingData() async {
+    debugPrint(
+        'BillingController: fetchBillingData called (redirecting to lazy loading)');
+    await refreshBillingData();
+  }
+
+// Also add a method to verify and fix all invoice payment amounts
+  Future<void> repairAllInvoicePayments() async {
+    try {
+      debugPrint('Starting invoice payment repair...');
+
+      final invoicesData = await _dbHelper.getInvoices();
+      final paymentsData = await _dbHelper.getPayments();
+
+      for (var invoiceData in invoicesData) {
+        final invoiceId = invoiceData['id'] as int;
+        final dbAmountPaid =
+            (invoiceData['amountpaid'] as num?)?.toDouble() ?? 0.0;
+
+        // Calculate actual amount paid from payments
+        final invoicePayments = paymentsData
+            .where((payment) => payment['invoiceId'] == invoiceId)
+            .toList();
+
+        double actualAmountPaid = 0.0;
+        for (var payment in invoicePayments) {
+          actualAmountPaid += (payment['amount'] as num).toDouble();
+        }
+
+        // Check if there's a mismatch
+        if ((actualAmountPaid - dbAmountPaid).abs() > 0.01) {
+          debugPrint(
+              'Repairing invoice $invoiceId: DB shows $dbAmountPaid, actual is $actualAmountPaid');
+          await _updateInvoiceAmountPaid(invoiceId, actualAmountPaid);
+        }
+      }
+
+      // Refresh data after repair
+      await fetchBillingData();
+
+      debugPrint('Invoice payment repair completed');
+    } catch (e) {
+      debugPrint('ERROR in repairAllInvoicePayments: $e');
+    }
+  }
+
+  Future<void> fixInvoicePaymentSync() async {
+    try {
+      debugPrint('Starting invoice payment sync fix...');
+
+      final db = await _dbHelper.database;
+
+      // Get all invoices
+      final invoices = await db.query('invoices');
+
+      for (var invoice in invoices) {
+        final invoiceId = invoice['id'] as int;
+
+        // Calculate total payments for this invoice
+        final paymentsResult = await db.query(
+          'payments',
+          where: 'invoiceId = ?',
+          whereArgs: [invoiceId],
+        );
+
+        double totalPaid = 0.0;
+        for (var payment in paymentsResult) {
+          totalPaid += (payment['amount'] as num).toDouble();
+        }
+
+        debugPrint(
+            'Invoice $invoiceId: Current amountpaid = ${invoice['amountpaid']}, Calculated = $totalPaid');
+
+        // Update if different
+        if (totalPaid != (invoice['amountpaid'] as num?)?.toDouble()) {
+          final totalAmount = (invoice['total_amount'] as num?)?.toDouble() ??
+              ((invoice['lessons'] as num).toDouble() *
+                  (invoice['price_per_lesson'] as num).toDouble());
+
+          String newStatus;
+          if (totalPaid >= totalAmount) {
+            newStatus = 'paid';
+          } else if (totalPaid > 0) {
+            newStatus = 'partial';
+          } else {
+            newStatus = 'unpaid';
+          }
+
+          await db.update(
+            'invoices',
+            {
+              'amountpaid': totalPaid,
+              'status': newStatus,
+            },
+            where: 'id = ?',
+            whereArgs: [invoiceId],
+          );
+
+          debugPrint(
+              '✓ Fixed invoice $invoiceId: amountpaid updated to $totalPaid, status: $newStatus');
+        }
+      }
+
+      // Refresh billing data
+      await fetchBillingData();
+
+      Get.snackbar(
+        'Sync Fixed',
+        'Invoice payment sync has been repaired',
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+        snackPosition: SnackPosition.BOTTOM,
+      );
+    } catch (e) {
+      debugPrint('Error fixing invoice payment sync: $e');
+      Get.snackbar(
+        'Error',
+        'Failed to fix sync: ${e.toString()}',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+        snackPosition: SnackPosition.BOTTOM,
+      );
+    }
+  }
+
+  /// Creates an invoice directly (used during student enrollment)
+  Future<void> createInvoice(Invoice invoice) async {
+    try {
+      isLoading(true);
+      final invoiceData = Map<String, dynamic>.from(invoice.toMap());
+      if (_schoolId != null && _schoolId!.isNotEmpty) {
+        invoiceData['school_id'] = _schoolId;
+      }
+
+      final id = await _dbHelper.insertInvoice(invoiceData);
+
+      // Track the change for sync
+      final invoiceWithId = invoice.copyWith(id: id);
+      final syncData = Map<String, dynamic>.from(invoiceWithId.toMap());
+      if (_schoolId != null && _schoolId!.isNotEmpty) {
+        syncData['school_id'] = _schoolId;
+      }
+      await SyncService.trackChange('invoices', syncData, 'create');
+
+      await fetchBillingData(); // Refresh UI
+      Get.snackbar('Success', 'Invoice created successfully',
+          snackPosition: SnackPosition.BOTTOM, backgroundColor: Colors.green);
+    } catch (e) {
+      debugPrint('Error creating invoice: $e');
+      Get.snackbar('Error', 'Failed to create invoice: ${e.toString()}',
+          snackPosition: SnackPosition.BOTTOM, backgroundColor: Colors.red);
+    } finally {
+      isLoading(false);
+    }
+  }
+
+// Also add this helper method to DatabaseHelper if not already present
+  Future<int> insertInvoice(Map<String, dynamic> invoice) async {
+    final invoiceData = Map<String, dynamic>.from(invoice);
+    if (_schoolId != null && _schoolId!.isNotEmpty) {
+      invoiceData['school_id'] = _schoolId;
+    }
+    return await _dbHelper.insertInvoice(invoiceData);
+  }
+
+  Future<void> updateInvoicePayment({
+    required int invoiceId,
+    required double paymentAmount,
+    required String paymentMethod,
+    required String notes,
+  }) async {
+    final payment = Payment(
+      invoiceId: invoiceId,
+      amount: paymentAmount,
+      paymentDate: DateTime.now(),
+      notes: notes,
+      method: paymentMethod,
+    );
+    await recordPayment(payment);
+  }
+
+  Future<void> processBulkPayment({
+    required List<Map<String, dynamic>> studentsData,
+    required double paymentAmount,
+    required String paymentMethod,
+    required String notes,
+  }) async {
+    try {
+      // Calculate total outstanding amount
+      double totalOutstanding =
+          studentsData.fold(0.0, (sum, data) => sum + data['balance']);
+
+      // Determine payment distribution
+      for (var studentData in studentsData) {
+        final List<Invoice> invoices = studentData['invoices'];
+        final double studentBalance = studentData['balance'];
+
+        // Calculate proportional payment for this student
+        double studentPayment =
+            (studentBalance / totalOutstanding) * paymentAmount;
+
+        // Apply payment to student's invoices (oldest first)
+        double remainingPayment = studentPayment;
+
+        for (var invoice in invoices) {
+          if (remainingPayment <= 0) break;
+
+          double invoiceBalance =
+              invoice.totalAmountCalculated - invoice.amountPaid;
+          if (invoiceBalance <= 0) continue;
+
+          double paymentForInvoice = remainingPayment > invoiceBalance
+              ? invoiceBalance
+              : remainingPayment;
+
+          // Update invoice payment
+          await updateInvoicePayment(
+            invoiceId: invoice.id!,
+            paymentAmount: paymentForInvoice,
+            paymentMethod: paymentMethod,
+            notes: notes.isNotEmpty ? notes : 'Bulk payment',
+          );
+
+          remainingPayment -= paymentForInvoice;
+        }
+      }
+
+      // Refresh billing data
+      await fetchBillingData();
+    } catch (e) {
+      throw Exception('Failed to process bulk payment: $e');
+    }
+  }
+
+  Future<void> updateInvoice(Map<String, dynamic> invoiceData) async {
+    try {
+      isLoading(true);
+      await _dbHelper.updateInvoice(invoiceData);
+
+      // Track the change for sync
+      await SyncService.trackChange('invoices', invoiceData, 'update');
+
+      await fetchBillingData(); // Refresh UI
+      Get.snackbar('Success', 'Invoice updated successfully',
+          snackPosition: SnackPosition.BOTTOM, backgroundColor: Colors.green);
+    } catch (e) {
+      debugPrint('Error updating invoice: $e');
+      Get.snackbar('Error', 'Failed to update invoice: ${e.toString()}',
+          snackPosition: SnackPosition.BOTTOM, backgroundColor: Colors.red);
+    } finally {
+      isLoading(false);
+    }
+  }
+
+// Enhanced CSV export with course details
+  Future<void> exportAllInvoicesCSV() async {
+    try {
+      isLoading(true);
+
+      await fetchBillingData();
+
+      if (invoices.isEmpty) {
+        Get.snackbar(
+          'No Data',
+          'No invoices found to export',
+          snackPosition: SnackPosition.BOTTOM,
+        );
+        return;
+      }
+
+      // Prepare enhanced CSV data with course information
+      List<List<dynamic>> csvData = [
+        [
+          'Invoice Number',
+          'Student ID',
+          'Student Name',
+          'Student Email',
+          'Course ID',
+          'Course Name',
+          'Date Created',
+          'Due Date',
+          'Lessons Purchased',
+          'Price Per Lesson',
+          'Total Amount',
+          'Amount Paid',
+          'Balance',
+          'Status',
+          'Payment Count',
+          'Last Payment Date',
+          'Days Overdue',
+          'Course Total Value',
+          'Payment Percentage'
+        ],
+      ];
+
+      // Process each invoice with detailed course information
+      for (var invoice in invoices) {
+        try {
+          // Get student details
+          final student = await _dbHelper.getUserById(invoice.studentId);
+          final studentName = student != null
+              ? '${student['fname']} ${student['lname']}'
+              : 'Unknown';
+          final studentEmail = student?['email'] ?? 'Unknown';
+
+          // Get course name
+          final courseName = await getCourseName(invoice.courseId);
+
+          // Get payment information
+          final payments = await getPaymentsForInvoice(invoice.id!);
+          final lastPaymentDate = payments.isNotEmpty
+              ? payments
+                  .map((p) => p.paymentDate)
+                  .reduce((a, b) => a.isAfter(b) ? a : b)
+              : null;
+
+          // Calculate additional metrics
+          final daysOverdue =
+              invoice.balance > 0 && invoice.dueDate.isBefore(DateTime.now())
+                  ? DateTime.now().difference(invoice.dueDate).inDays
+                  : 0;
+
+          final courseTotal = invoice.lessons * invoice.pricePerLesson;
+          final paymentPercentage =
+              courseTotal > 0 ? (invoice.amountPaid / courseTotal * 100) : 0.0;
+
+          csvData.add([
+            invoice.invoiceNumber,
+            invoice.studentId,
+            studentName,
+            studentEmail,
+            invoice.courseId,
+            courseName,
+            DateFormat('yyyy-MM-dd').format(invoice.createdAt),
+            DateFormat('yyyy-MM-dd').format(invoice.dueDate),
+            invoice.lessons,
+            invoice.pricePerLesson.toStringAsFixed(2),
+            invoice.totalAmountCalculated.toStringAsFixed(2),
+            invoice.amountPaid.toStringAsFixed(2),
+            invoice.balance.toStringAsFixed(2),
+            invoice.status,
+            payments.length,
+            lastPaymentDate != null
+                ? DateFormat('yyyy-MM-dd').format(lastPaymentDate)
+                : '',
+            daysOverdue > 0 ? daysOverdue.toString() : '0',
+            courseTotal.toStringAsFixed(2),
+            paymentPercentage.toStringAsFixed(1)
+          ]);
+        } catch (e) {
+          debugPrint('Error processing invoice ${invoice.id}: $e');
+          // Continue with next invoice
+        }
+      }
+
+      // Convert to CSV string
+      String csvString = const ListToCsvConverter().convert(csvData);
+
+      // Generate filename with timestamp
+      final timestamp =
+          DateTime.now().toIso8601String().replaceAll(RegExp(r'[:\.]'), '_');
+      final fileName = 'detailed_invoices_export_$timestamp.csv';
+
+      // Save file using file picker
+      final String? filePath = await FilePicker.platform.saveFile(
+        dialogTitle: 'Save Detailed Invoices Export',
+        fileName: fileName,
+        allowedExtensions: ['csv'],
+      );
+
+      if (filePath != null) {
+        final file = File(filePath);
+        await file.writeAsString(csvString);
+
+        Get.snackbar(
+          'Export Successful',
+          'Detailed invoices with course information exported to $filePath',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+          duration: Duration(seconds: 3),
+        );
+      } else {
+        Get.snackbar(
+          'Export Cancelled',
+          'No file path selected',
+          snackPosition: SnackPosition.BOTTOM,
+        );
+      }
+    } catch (e) {
+      Get.snackbar(
+        'Export Failed',
+        'Failed to export detailed invoices: ${e.toString()}',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    } finally {
+      isLoading(false);
+    }
+  }
+
+// Generate comprehensive billing report PDF with enhanced course information
+  Future<void> generateBillingReportPDF({
+    DateTime? startDate,
+    DateTime? endDate,
+    int? studentId,
+    String? status,
+  }) async {
+    try {
+      isLoading(true);
+
+      // Set default date range if not provided
+      startDate ??= DateTime.now().subtract(Duration(days: 30));
+      endDate ??= DateTime.now();
+
+      // Filter invoices based on criteria
+      List<Invoice> filteredInvoices = invoices.where((invoice) {
+        bool matchesDate = invoice.createdAt.isAfter(startDate!) &&
+            invoice.createdAt.isBefore(endDate!.add(Duration(days: 1)));
+        bool matchesStudent =
+            studentId == null || invoice.studentId == studentId;
+        bool matchesStatus = status == null || invoice.status == status;
+
+        return matchesDate && matchesStudent && matchesStatus;
+      }).toList();
+
+      if (filteredInvoices.isEmpty) {
+        Get.snackbar(
+          'No Data',
+          'No invoices found for the specified criteria',
+          snackPosition: SnackPosition.BOTTOM,
+        );
+        return;
+      }
+
+      final pdf = pw.Document();
+
+      // Pre-fetch all course names to avoid async issues in PDF generation
+      Map<int, String> courseNames = {};
+      Map<int, double> coursePrices = {};
+
+      for (var invoice in filteredInvoices) {
+        if (!courseNames.containsKey(invoice.courseId)) {
+          try {
+            final course =
+                await DatabaseHelper.instance.getCourseById(invoice.courseId);
+            courseNames[invoice.courseId] = course?['name'] ?? 'Unknown Course';
+            coursePrices[invoice.courseId] =
+                course?['price']?.toDouble() ?? invoice.pricePerLesson;
+            debugPrint(
+                'Cached course: ${courseNames[invoice.courseId]} (ID: ${invoice.courseId})');
+          } catch (e) {
+            debugPrint('Error fetching course ${invoice.courseId}: $e');
+            courseNames[invoice.courseId] = 'Course ID: ${invoice.courseId}';
+            coursePrices[invoice.courseId] = invoice.pricePerLesson;
+          }
+        }
+      }
+
+      // Pre-fetch all student names
+      Map<int, String> studentNames = {};
+      for (var invoice in filteredInvoices) {
+        if (!studentNames.containsKey(invoice.studentId)) {
+          try {
+            final student = await _dbHelper.getUserById(invoice.studentId);
+            studentNames[invoice.studentId] = student != null
+                ? '${student['fname']} ${student['lname']}'
+                : 'Unknown Student';
+          } catch (e) {
+            studentNames[invoice.studentId] =
+                'Student ID: ${invoice.studentId}';
+          }
+        }
+      }
+
+      // Calculate comprehensive statistics
+      double totalRevenue = 0;
+      double totalPaid = 0;
+      double totalOutstanding = 0;
+      int totalLessons = 0;
+      int paidInvoices = 0;
+      int overdueInvoices = 0;
+      Map<String, int> statusCounts = {};
+      Map<String, double> courseRevenue = {};
+      Map<String, int> courseLessons = {};
+      Map<String, List<Invoice>> courseInvoicesMap = {};
+
+      for (var invoice in filteredInvoices) {
+        totalRevenue += invoice.totalAmountCalculated;
+        totalPaid += invoice.amountPaid;
+        totalOutstanding += invoice.balance;
+        totalLessons += invoice.lessons;
+
+        if (invoice.status == 'paid') paidInvoices++;
+        if (invoice.balance > 0 && invoice.dueDate.isBefore(DateTime.now())) {
+          overdueInvoices++;
+        }
+
+        // Count by status
+        statusCounts[invoice.status] = (statusCounts[invoice.status] ?? 0) + 1;
+
+        // Revenue and lessons by course using cached names
+        String courseName = courseNames[invoice.courseId] ?? 'Unknown Course';
+        courseRevenue[courseName] =
+            (courseRevenue[courseName] ?? 0) + invoice.totalAmountCalculated;
+        courseLessons[courseName] =
+            (courseLessons[courseName] ?? 0) + invoice.lessons;
+
+        // Group invoices by course for detailed breakdown
+        if (!courseInvoicesMap.containsKey(courseName)) {
+          courseInvoicesMap[courseName] = [];
+        }
+        courseInvoicesMap[courseName]!.add(invoice);
+      }
+
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(20),
+          build: (pw.Context context) {
+            return [
+              // Header
+              pw.Container(
+                alignment: pw.Alignment.center,
+                child: pw.Column(
+                  children: [
+                    pw.Text(
+                      'COMPREHENSIVE BILLING REPORT',
+                      style: pw.TextStyle(
+                        fontSize: 24,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.blue800,
+                      ),
+                    ),
+                    pw.SizedBox(height: 10),
+                    pw.Text(
+                      'Period: ${DateFormat('MMM dd, yyyy').format(startDate!)} - ${DateFormat('MMM dd, yyyy').format(endDate!)}',
+                      style: pw.TextStyle(
+                          fontSize: 14, fontWeight: pw.FontWeight.bold),
+                    ),
+                    pw.Text(
+                      'Generated: ${DateFormat('MMM dd, yyyy HH:mm').format(DateTime.now())}',
+                      style: const pw.TextStyle(fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+
+              pw.SizedBox(height: 20),
+
+              // Executive Summary
+              pw.Container(
+                padding: const pw.EdgeInsets.all(15),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.blue50,
+                  border: pw.Border.all(color: PdfColors.blue200),
+                  borderRadius: pw.BorderRadius.circular(8),
+                ),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'EXECUTIVE SUMMARY',
+                      style: pw.TextStyle(
+                        fontSize: 18,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.blue800,
+                      ),
+                    ),
+                    pw.SizedBox(height: 15),
+                    pw.Row(
+                      children: [
+                        pw.Expanded(
+                          child: pw.Column(
+                            crossAxisAlignment: pw.CrossAxisAlignment.start,
+                            children: [
+                              pw.Text(
+                                  'Total Invoices: ${filteredInvoices.length}'),
+                              pw.Text('Paid Invoices: $paidInvoices'),
+                              pw.Text('Overdue Invoices: $overdueInvoices'),
+                              pw.Text('Total Lessons: $totalLessons'),
+                              pw.Text(
+                                  'Avg Lessons/Invoice: ${(totalLessons / filteredInvoices.length).toStringAsFixed(1)}'),
+                            ],
+                          ),
+                        ),
+                        pw.Expanded(
+                          child: pw.Column(
+                            crossAxisAlignment: pw.CrossAxisAlignment.end,
+                            children: [
+                              pw.Text(
+                                  'Total Revenue: \$${totalRevenue.toStringAsFixed(2)}'),
+                              pw.Text(
+                                  'Amount Collected: \$${totalPaid.toStringAsFixed(2)}'),
+                              pw.Text(
+                                  'Outstanding: \$${totalOutstanding.toStringAsFixed(2)}'),
+                              pw.Text(
+                                  'Collection Rate: ${((totalPaid / totalRevenue) * 100).toStringAsFixed(1)}%'),
+                              pw.Text(
+                                  'Avg Invoice Value: \$${(totalRevenue / filteredInvoices.length).toStringAsFixed(2)}'),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
+              pw.SizedBox(height: 20),
+
+              // Enhanced Course Revenue Breakdown with Pricing Details
+              pw.Text(
+                'COURSE REVENUE & PRICING BREAKDOWN',
+                style: pw.TextStyle(
+                  fontSize: 16,
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfColors.blue800,
+                ),
+              ),
+              pw.SizedBox(height: 10),
+              pw.Container(
+                padding: const pw.EdgeInsets.all(10),
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(color: PdfColors.grey300),
+                  borderRadius: pw.BorderRadius.circular(5),
+                ),
+                child: pw.Table(
+                  border: pw.TableBorder.all(color: PdfColors.grey300),
+                  columnWidths: {
+                    0: const pw.FlexColumnWidth(3),
+                    1: const pw.FlexColumnWidth(2),
+                    2: const pw.FlexColumnWidth(2),
+                    3: const pw.FlexColumnWidth(2),
+                    4: const pw.FlexColumnWidth(2),
+                  },
+                  children: [
+                    pw.TableRow(
+                      decoration:
+                          const pw.BoxDecoration(color: PdfColors.grey200),
+                      children: [
+                        _buildTableCell('Course Name', isHeader: true),
+                        _buildTableCell('Total Lessons', isHeader: true),
+                        _buildTableCell('Avg Price/Lesson', isHeader: true),
+                        _buildTableCell('Total Revenue', isHeader: true),
+                        _buildTableCell('% of Total', isHeader: true),
+                      ],
+                    ),
+                    ...courseRevenue.entries.map((entry) {
+                      String courseName = entry.key;
+                      double revenue = entry.value;
+                      int lessons = courseLessons[courseName] ?? 0;
+                      double avgPricePerLesson =
+                          lessons > 0 ? revenue / lessons : 0;
+                      double percentage = (revenue / totalRevenue) * 100;
+
+                      return pw.TableRow(
+                        children: [
+                          _buildTableCell(courseName),
+                          _buildTableCell(lessons.toString()),
+                          _buildTableCell(
+                              '\$${avgPricePerLesson.toStringAsFixed(2)}'),
+                          _buildTableCell('\$${revenue.toStringAsFixed(2)}'),
+                          _buildTableCell('${percentage.toStringAsFixed(1)}%'),
+                        ],
+                      );
+                    }).toList(),
+                  ],
+                ),
+              ),
+
+              pw.SizedBox(height: 20),
+
+              // Status Breakdown
+              pw.Text(
+                'INVOICE STATUS BREAKDOWN',
+                style: pw.TextStyle(
+                  fontSize: 16,
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfColors.blue800,
+                ),
+              ),
+              pw.SizedBox(height: 10),
+              pw.Container(
+                padding: const pw.EdgeInsets.all(10),
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(color: PdfColors.grey300),
+                  borderRadius: pw.BorderRadius.circular(5),
+                ),
+                child: pw.Column(
+                  children: statusCounts.entries.map((entry) {
+                    double percentage =
+                        (entry.value / filteredInvoices.length) * 100;
+                    return pw.Padding(
+                      padding: const pw.EdgeInsets.symmetric(vertical: 2),
+                      child: pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                        children: [
+                          pw.Text('${entry.key.toUpperCase()}: ${entry.value}'),
+                          pw.Text('${percentage.toStringAsFixed(1)}%'),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+
+              pw.SizedBox(height: 20),
+
+              // Detailed Invoice List with Course Information
+              pw.Text(
+                'DETAILED INVOICE LIST WITH COURSE INFORMATION',
+                style: pw.TextStyle(
+                  fontSize: 16,
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfColors.blue800,
+                ),
+              ),
+
+              pw.SizedBox(height: 10),
+
+              pw.Table(
+                border: pw.TableBorder.all(color: PdfColors.grey300),
+                columnWidths: {
+                  0: const pw.FixedColumnWidth(50), // Invoice #
+                  1: const pw.FixedColumnWidth(75), // Student
+                  2: const pw.FixedColumnWidth(90), // Course (increased width)
+                  3: const pw.FixedColumnWidth(30), // Lessons
+                  4: const pw.FixedColumnWidth(35), // Price/Lesson
+                  5: const pw.FixedColumnWidth(40), // Total
+                  6: const pw.FixedColumnWidth(40), // Paid
+                  7: const pw.FixedColumnWidth(40), // Balance
+                  8: const pw.FixedColumnWidth(35), // Status
+                },
+                children: [
+                  // Header row
+                  pw.TableRow(
+                    decoration:
+                        const pw.BoxDecoration(color: PdfColors.grey200),
+                    children: [
+                      _buildTableCell('Invoice #', isHeader: true),
+                      _buildTableCell('Student', isHeader: true),
+                      _buildTableCell('Course', isHeader: true),
+                      _buildTableCell('Lessons', isHeader: true),
+                      _buildTableCell('Price/Lesson', isHeader: true),
+                      _buildTableCell('Total', isHeader: true),
+                      _buildTableCell('Paid', isHeader: true),
+                      _buildTableCell('Balance', isHeader: true),
+                      _buildTableCell('Status', isHeader: true),
+                    ],
+                  ),
+                  // Data rows using cached names
+                  ...filteredInvoices.map((invoice) {
+                    final studentName =
+                        studentNames[invoice.studentId] ?? 'Unknown';
+                    final courseName =
+                        courseNames[invoice.courseId] ?? 'Unknown Course';
+
+                    return pw.TableRow(
+                      children: [
+                        _buildTableCell(invoice.invoiceNumber),
+                        _buildTableCell(studentName),
+                        _buildTableCell(courseName),
+                        _buildTableCell(invoice.lessons.toString()),
+                        _buildTableCell(
+                            '\$${invoice.pricePerLesson.toStringAsFixed(2)}'),
+                        _buildTableCell(
+                            '\$${invoice.totalAmountCalculated.toStringAsFixed(2)}'),
+                        _buildTableCell(
+                            '\$${invoice.amountPaid.toStringAsFixed(2)}'),
+                        _buildTableCell(
+                          '\$${invoice.balance.toStringAsFixed(2)}',
+                          textColor: invoice.balance > 0
+                              ? PdfColors.red
+                              : PdfColors.green,
+                        ),
+                        _buildTableCell(
+                          invoice.status.toUpperCase(),
+                          textColor: invoice.status == 'paid'
+                              ? PdfColors.green
+                              : invoice.balance > 0 &&
+                                      invoice.dueDate.isBefore(DateTime.now())
+                                  ? PdfColors.red
+                                  : PdfColors.blue,
+                        ),
+                      ],
+                    );
+                  }).toList(),
+                ],
+              ),
+
+              pw.SizedBox(height: 20),
+
+              // Payment Breakdown by Course using pre-grouped data
+              pw.Text(
+                'PAYMENT BREAKDOWN BY COURSE',
+                style: pw.TextStyle(
+                  fontSize: 16,
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfColors.blue800,
+                ),
+              ),
+              pw.SizedBox(height: 10),
+
+              ...courseInvoicesMap.entries.map((entry) {
+                String courseName = entry.key;
+                List<Invoice> courseInvoices = entry.value;
+
+                double courseTotalBilled = courseInvoices.fold(
+                    0.0, (sum, inv) => sum + inv.totalAmountCalculated);
+                double courseTotalPaid = courseInvoices.fold(
+                    0.0, (sum, inv) => sum + inv.amountPaid);
+                double courseBalance = courseTotalBilled - courseTotalPaid;
+                int totalCourseLessons =
+                    courseInvoices.fold(0, (sum, inv) => sum + inv.lessons);
+
+                // Get typical course price (from first invoice or course data)
+                double typicalPrice = courseInvoices.isNotEmpty
+                    ? courseInvoices.first.pricePerLesson
+                    : 0.0;
+
+                return pw.Container(
+                  margin: const pw.EdgeInsets.only(bottom: 15),
+                  padding: const pw.EdgeInsets.all(10),
+                  decoration: pw.BoxDecoration(
+                    color: PdfColors.grey50,
+                    border: pw.Border.all(color: PdfColors.grey300),
+                    borderRadius: pw.BorderRadius.circular(5),
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        '$courseName (${courseInvoices.length} invoices)',
+                        style: pw.TextStyle(
+                          fontSize: 14,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.blue800,
+                        ),
+                      ),
+                      pw.SizedBox(height: 8),
+                      pw.Row(
+                        children: [
+                          pw.Expanded(
+                            child: pw.Column(
+                              crossAxisAlignment: pw.CrossAxisAlignment.start,
+                              children: [
+                                pw.Text('Total Lessons: $totalCourseLessons'),
+                                pw.Text(
+                                    'Standard Price/Lesson: \$${typicalPrice.toStringAsFixed(2)}'),
+                                pw.Text(
+                                    'Avg Price/Lesson: \$${totalCourseLessons > 0 ? (courseTotalBilled / totalCourseLessons).toStringAsFixed(2) : "0.00"}'),
+                              ],
+                            ),
+                          ),
+                          pw.Expanded(
+                            child: pw.Column(
+                              crossAxisAlignment: pw.CrossAxisAlignment.end,
+                              children: [
+                                pw.Text(
+                                    'Total Billed: \$${courseTotalBilled.toStringAsFixed(2)}'),
+                                pw.Text(
+                                    'Total Paid: \$${courseTotalPaid.toStringAsFixed(2)}'),
+                                pw.Text(
+                                  'Balance: \$${courseBalance.toStringAsFixed(2)}',
+                                  style: pw.TextStyle(
+                                    color: courseBalance > 0
+                                        ? PdfColors.red
+                                        : PdfColors.green,
+                                    fontWeight: pw.FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+
+              pw.SizedBox(height: 30),
+
+              // Footer
+              pw.Container(
+                alignment: pw.Alignment.center,
+                child: pw.Column(
+                  children: [
+                    pw.Divider(),
+                    pw.Text(
+                      'This report was generated automatically by the  System',
+                      style: pw.TextStyle(
+                        fontSize: 10,
+                        fontStyle: pw.FontStyle.italic,
+                        color: PdfColors.grey600,
+                      ),
+                    ),
+                    pw.SizedBox(height: 5),
+                    pw.Text(
+                      'All amounts are in USD. Course pricing reflects actual billed rates.',
+                      style: pw.TextStyle(
+                        fontSize: 9,
+                        color: PdfColors.grey600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ];
+          },
+        ),
+      );
+
+      // Generate filename with timestamp
+      final timestamp =
+          DateTime.now().toIso8601String().replaceAll(RegExp(r'[:\.]'), '_');
+      final fileName = 'billing_report_detailed_$timestamp.pdf';
+
+      // Save file using file picker
+      final String? filePath = await FilePicker.platform.saveFile(
+        dialogTitle: 'Save Detailed Billing Report',
+        fileName: fileName,
+        allowedExtensions: ['pdf'],
+      );
+
+      if (filePath != null) {
+        final file = File(filePath);
+        await file.writeAsBytes(await pdf.save());
+
+        Get.snackbar(
+          'Report Generated',
+          'Detailed billing report with course information saved to $filePath',
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+          snackPosition: SnackPosition.BOTTOM,
+          duration: Duration(seconds: 3),
+        );
+      } else {
+        Get.snackbar(
+          'Export Cancelled',
+          'No file path selected',
+          snackPosition: SnackPosition.BOTTOM,
+        );
+      }
+    } catch (e) {
+      debugPrint('Error in generateBillingReportPDF: $e');
+      Get.snackbar(
+        'Report Failed',
+        'Failed to generate detailed report: ${e.toString()}',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    } finally {
+      isLoading(false);
+    }
+  }
+
+// Helper method for PDF table cells
+  pw.Widget _buildTableCell(String text,
+      {bool isHeader = false, PdfColor? textColor}) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.all(6),
+      alignment: pw.Alignment.centerLeft,
+      child: pw.Text(
+        text,
+        style: pw.TextStyle(
+          fontSize: isHeader ? 10 : 8,
+          fontWeight: isHeader ? pw.FontWeight.bold : pw.FontWeight.normal,
+          color: textColor ?? (isHeader ? PdfColors.black : PdfColors.grey800),
+        ),
+      ),
+    );
+  }
+
+// Get student name by ID (helper method)
+  Future<String> getStudentName(int studentId) async {
+    try {
+      final student = await _dbHelper.getUserById(studentId);
+      return student != null
+          ? '${student['fname']} ${student['lname']}'
+          : 'Unknown Student';
+    } catch (e) {
+      return 'Unknown Student';
+    }
+  }
+
+// Export overdue invoices specifically
+  Future<void> exportOverdueInvoicesCSV() async {
+    try {
+      isLoading(true);
+
+      await fetchBillingData();
+
+      // Filter overdue invoices
+      List<Invoice> overdueInvoices = invoices.where((invoice) {
+        return invoice.balance > 0 && invoice.dueDate.isBefore(DateTime.now());
+      }).toList();
+
+      if (overdueInvoices.isEmpty) {
+        Get.snackbar(
+          'No Data',
+          'No overdue invoices found',
+          snackPosition: SnackPosition.BOTTOM,
+        );
+        return;
+      }
+
+      // Sort by days overdue (most overdue first)
+      overdueInvoices.sort((a, b) {
+        int aDaysOverdue = DateTime.now().difference(a.dueDate).inDays;
+        int bDaysOverdue = DateTime.now().difference(b.dueDate).inDays;
+        return bDaysOverdue.compareTo(aDaysOverdue);
+      });
+
+      // Prepare CSV data
+      List<List<dynamic>> csvData = [
+        [
+          'Invoice Number',
+          'Student ID',
+          'Student Name',
+          'Student Email',
+          'Student Phone',
+          'Course Name',
+          'Due Date',
+          'Days Overdue',
+          'Total Amount',
+          'Amount Paid',
+          'Balance Due',
+          'Original Lessons',
+          'Last Payment Date',
+          'Contact Priority'
+        ],
+      ];
+
+      // Process each overdue invoice
+      for (var invoice in overdueInvoices) {
+        try {
+          final student = await _dbHelper.getUserById(invoice.studentId);
+          final studentName = student != null
+              ? '${student['fname']} ${student['lname']}'
+              : 'Unknown';
+          final studentEmail = student?['email'] ?? 'Unknown';
+          final studentPhone = student?['phone'] ?? 'Unknown';
+
+          final courseName = await getCourseName(invoice.courseId);
+          final payments = await getPaymentsForInvoice(invoice.id!);
+          final lastPaymentDate = payments.isNotEmpty
+              ? payments
+                  .map((p) => p.paymentDate)
+                  .reduce((a, b) => a.isAfter(b) ? a : b)
+              : null;
+
+          final daysOverdue = DateTime.now().difference(invoice.dueDate).inDays;
+
+          // Determine contact priority based on days overdue and amount
+          String priority = 'LOW';
+          if (daysOverdue > 60 || invoice.balance > 500) {
+            priority = 'HIGH';
+          } else if (daysOverdue > 30 || invoice.balance > 200) {
+            priority = 'MEDIUM';
+          }
+
+          csvData.add([
+            invoice.invoiceNumber,
+            invoice.studentId,
+            studentName,
+            studentEmail,
+            studentPhone,
+            courseName,
+            DateFormat('yyyy-MM-dd').format(invoice.dueDate),
+            daysOverdue,
+            invoice.totalAmountCalculated.toStringAsFixed(2),
+            invoice.amountPaid.toStringAsFixed(2),
+            invoice.balance.toStringAsFixed(2),
+            invoice.lessons,
+            lastPaymentDate != null
+                ? DateFormat('yyyy-MM-dd').format(lastPaymentDate)
+                : 'No payments',
+            priority
+          ]);
+        } catch (e) {
+          debugPrint('Error processing overdue invoice ${invoice.id}: $e');
+        }
+      }
+
+      // Convert to CSV string
+      String csvString = const ListToCsvConverter().convert(csvData);
+
+      // Generate filename with timestamp
+      final timestamp =
+          DateTime.now().toIso8601String().replaceAll(RegExp(r'[:\.]'), '_');
+      final fileName = 'overdue_invoices_$timestamp.csv';
+
+      // Save file using file picker
+      final String? filePath = await FilePicker.platform.saveFile(
+        dialogTitle: 'Save Overdue Invoices Export',
+        fileName: fileName,
+        allowedExtensions: ['csv'],
+      );
+
+      if (filePath != null) {
+        final file = File(filePath);
+        await file.writeAsString(csvString);
+
+        Get.snackbar(
+          'Export Successful',
+          'Overdue invoices exported to $filePath\n${overdueInvoices.length} overdue invoices found',
+          backgroundColor: Colors.orange,
+          colorText: Colors.white,
+          snackPosition: SnackPosition.BOTTOM,
+          duration: Duration(seconds: 4),
+        );
+      } else {
+        Get.snackbar(
+          'Export Cancelled',
+          'No file path selected',
+          snackPosition: SnackPosition.BOTTOM,
+        );
+      }
+    } catch (e) {
+      Get.snackbar(
+        'Export Failed',
+        'Failed to export overdue invoices: ${e.toString()}',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    } finally {
+      isLoading(false);
+    }
+  }
+
+  // Enhanced receipt generation method
+  Future<String> generateEnhancedReceipt(Payment payment) async {
+    try {
+      // Find the invoice for this payment
+      final invoice = invoices.firstWhere(
+        (inv) => inv.id == payment.invoiceId,
+        orElse: () => throw Exception('Invoice not found for payment'),
+      );
+
+      // Find the student for this invoice
+      final userController = Get.find<UserController>();
+      final student = userController.users.firstWhere(
+        (user) => user.id == invoice.studentId,
+        orElse: () => throw Exception('Student not found for invoice'),
+      );
+
+      // Generate receipt using enhanced service
+      final receiptPath = await ReceiptService.generateAndUploadReceipt(
+        payment,
+        invoice,
+        student,
+      );
+
+      // Update payment with receipt info
+      await _updatePaymentWithReceipt(payment, receiptPath);
+
+      // Refresh data
+      await fetchBillingData();
+
+      return receiptPath;
+    } catch (e) {
+      debugPrint('Error generating enhanced receipt: $e');
+      rethrow;
+    }
+  }
+
+  // Batch receipt generation
+  Future<List<String>> generateReceiptsForInvoice(int invoiceId) async {
+    try {
+      final paymentsForInvoice =
+          payments.where((p) => p.invoiceId == invoiceId).toList();
+      final invoice = invoices.firstWhere((inv) => inv.id == invoiceId);
+      final userController = Get.find<UserController>();
+      final student = userController.users
+          .firstWhere((user) => user.id == invoice.studentId);
+
+      final List<String> receiptPaths = [];
+
+      for (final payment in paymentsForInvoice) {
+        if (!payment.receiptGenerated) {
+          final receiptPath = await ReceiptService.generateAndUploadReceipt(
+            payment,
+            invoice,
+            student,
+          );
+
+          await _updatePaymentWithReceipt(payment, receiptPath);
+          receiptPaths.add(receiptPath);
+        }
+      }
+
+      await fetchBillingData();
+      return receiptPaths;
+    } catch (e) {
+      debugPrint('Error generating receipts for invoice: $e');
+      rethrow;
+    }
+  }
+
+  // Generate receipts for all payments missing receipts
+  Future<int> generateMissingReceipts() async {
+    try {
+      isLoading.value = true;
+      int generatedCount = 0;
+
+      final paymentsWithoutReceipts =
+          payments.where((p) => !p.receiptGenerated).toList();
+
+      for (final payment in paymentsWithoutReceipts) {
+        try {
+          await generateEnhancedReceipt(payment);
+          generatedCount++;
+        } catch (e) {
+          debugPrint(
+              'Failed to generate receipt for payment ${payment.id}: $e');
+        }
+      }
+
+      await fetchBillingData();
+      return generatedCount;
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  // Validate business settings before receipt generation
+  Future<bool> validateBusinessSettingsForReceipts() async {
+    final settingsController = Get.find<SettingsController>();
+
+    final missingFields = <String>[];
+
+    if (settingsController.businessName.value.isEmpty)
+      missingFields.add('Business Name');
+    if (settingsController.businessAddress.value.isEmpty)
+      missingFields.add('Business Address');
+    if (settingsController.businessPhone.value.isEmpty)
+      missingFields.add('Business Phone');
+    if (settingsController.businessEmail.value.isEmpty)
+      missingFields.add('Business Email');
+
+    if (missingFields.isNotEmpty) {
+      Get.snackbar(
+        'Missing Business Information',
+        'Please complete the following in Settings: ${missingFields.join(', ')}',
+        duration: const Duration(seconds: 5),
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.orange.shade100,
+        colorText: Colors.orange.shade800,
+      );
+      return false;
+    }
+
+    return true;
+  }
+
+  // Enhanced receipt generation with validation
+  Future<String?> generateReceiptWithValidation(Payment payment) async {
+    // Check if business settings are complete
+    if (!await validateBusinessSettingsForReceipts()) {
+      return null;
+    }
+
+    try {
+      return await generateEnhancedReceipt(payment);
+    } catch (e) {
+      Get.snackbar(
+        'Receipt Generation Failed',
+        'Failed to generate receipt: ${e.toString()}',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red.shade100,
+        colorText: Colors.red.shade800,
+      );
+      return null;
+    }
+  }
+
+  // Print receipt directly
+  Future<void> printReceipt(Payment payment) async {
+    try {
+      String? receiptPath = payment.receiptPath;
+
+      // Generate receipt if it doesn't exist
+      if (receiptPath == null || !payment.receiptGenerated) {
+        receiptPath = await generateReceiptWithValidation(payment);
+        if (receiptPath == null) return;
+      }
+
+      await ReceiptService.printReceiptFromCloud(receiptPath);
+
+      Get.snackbar(
+        'Receipt Sent to Printer',
+        'Receipt for ${payment.reference} has been sent to printer',
+        backgroundColor: Colors.green.shade100,
+        snackPosition: SnackPosition.BOTTOM,
+        colorText: Colors.green.shade800,
+      );
+    } catch (e) {
+      Get.snackbar(
+        'Print Failed',
+        'Failed to print receipt: ${e.toString()}',
+        backgroundColor: Colors.red.shade100,
+        colorText: Colors.red.shade800,
+        snackPosition: SnackPosition.BOTTOM,
+      );
+    }
+  }
+
+  // Share receipt
+  Future<void> shareReceipt(Payment payment) async {
+    try {
+      String? receiptPath = payment.receiptPath;
+
+      // Generate receipt if it doesn't exist
+      if (receiptPath == null || !payment.receiptGenerated) {
+        receiptPath = await generateReceiptWithValidation(payment);
+        if (receiptPath == null) return;
+      }
+
+      await ReceiptService.shareReceiptFromCloud(receiptPath);
+    } catch (e) {
+      Get.snackbar(
+        'Share Failed',
+        'Failed to share receipt: ${e.toString()}',
+        backgroundColor: Colors.red.shade100,
+        snackPosition: SnackPosition.BOTTOM,
+        colorText: Colors.red.shade800,
+      );
+    }
+  }
+
+  // Get receipt statistics
+  Map<String, int> getReceiptStatistics() {
+    final totalPayments = payments.length;
+    final paymentsWithReceipts =
+        payments.where((p) => p.receiptGenerated).length;
+    final paymentsWithoutReceipts = totalPayments - paymentsWithReceipts;
+
+    return {
+      'total_payments': totalPayments,
+      'receipts_generated': paymentsWithReceipts,
+      'receipts_missing': paymentsWithoutReceipts,
+      'generation_rate': totalPayments > 0
+          ? ((paymentsWithReceipts / totalPayments) * 100).round()
+          : 0,
+    };
+  }
+
+  // Email receipt (if email functionality is available)
+  Future<void> emailReceipt(Payment payment, String recipientEmail) async {
+    try {
+      String? receiptPath = payment.receiptPath;
+
+      // Generate receipt if it doesn't exist
+      if (receiptPath == null || !payment.receiptGenerated) {
+        receiptPath = await generateReceiptWithValidation(payment);
+        if (receiptPath == null) return;
+      }
+
+      // Find invoice and student details
+      final invoice = invoices.firstWhere((inv) => inv.id == payment.invoiceId);
+      final userController = Get.find<UserController>();
+      final student = userController.users
+          .firstWhere((user) => user.id == invoice.studentId);
+      final settingsController = Get.find<SettingsController>();
+
+      // You would integrate with your email service here
+      // This is a placeholder for the email functionality
+      final emailSubject = 'Payment Receipt - ${payment.reference}';
+      final emailBody = '''
+Dear ${student.fname} ${student.lname},
+
+Thank you for your payment. Please find your receipt attached.
+
+Payment Details:
+- Receipt #: ${payment.reference}
+- Amount: \${payment.amount.toStringAsFixed(2)}
+- Date: ${DateFormat('MMMM dd, yyyy').format(payment.paymentDate)}
+- Invoice #: ${invoice.invoiceNumber}
+
+Best regards,
+${settingsController.businessName.value}
+${settingsController.businessPhone.value}
+${settingsController.businessEmail.value}
+      ''';
+      debugPrint(
+          'Prepared receipt email payload: $emailSubject (${emailBody.length} chars)');
+
+      // Implement your email service here
+      // await EmailService.sendEmailWithAttachment(
+      //   to: recipientEmail,
+      //   subject: emailSubject,
+      //   body: emailBody,
+      //   attachmentPath: receiptPath,
+      // );
+
+      Get.snackbar(
+        'Receipt Emailed',
+        'Receipt has been sent to $recipientEmail',
+        backgroundColor: Colors.green.shade100,
+        snackPosition: SnackPosition.BOTTOM,
+        colorText: Colors.green.shade800,
+      );
+    } catch (e) {
+      Get.snackbar(
+        'Email Failed',
+        'Failed to email receipt: ${e.toString()}',
+        backgroundColor: Colors.red.shade100,
+        snackPosition: SnackPosition.BOTTOM,
+        colorText: Colors.red.shade800,
+      );
+    }
+  }
+
+  // Regenerate receipt with updated business information
+  Future<String?> regenerateReceipt(Payment payment) async {
+    try {
+      // Delete old receipt file if it exists
+      if (payment.receiptPath != null) {
+        final oldFile = File(payment.receiptPath!);
+        if (await oldFile.exists()) {
+          await oldFile.delete();
+        }
+      }
+
+      // Generate new receipt
+      final receiptPath = await generateReceiptWithValidation(payment);
+
+      if (receiptPath != null) {
+        Get.snackbar(
+          'Receipt Regenerated',
+          'Receipt has been updated with current business information',
+          backgroundColor: Colors.green.shade100,
+          colorText: Colors.green.shade800,
+          snackPosition: SnackPosition.BOTTOM,
+        );
+      }
+
+      return receiptPath;
+    } catch (e) {
+      Get.snackbar(
+        'Regeneration Failed',
+        'Failed to regenerate receipt: ${e.toString()}',
+        backgroundColor: Colors.red.shade100,
+        colorText: Colors.red.shade800,
+        snackPosition: SnackPosition.BOTTOM,
+      );
+      return null;
+    }
+  }
+
+  // Bulk operations for receipts
+  Future<void> bulkGenerateReceipts(List<int> paymentIds) async {
+    try {
+      isLoading.value = true;
+      int successCount = 0;
+      int failCount = 0;
+
+      for (final paymentId in paymentIds) {
+        final payment = payments.firstWhere((p) => p.id == paymentId);
+        try {
+          await generateEnhancedReceipt(payment);
+          successCount++;
+        } catch (e) {
+          failCount++;
+          debugPrint('Failed to generate receipt for payment $paymentId: $e');
+        }
+      }
+
+      await fetchBillingData();
+
+      Get.snackbar(
+        'Bulk Generation Complete',
+        'Generated $successCount receipts successfully${failCount > 0 ? ', $failCount failed' : ''}',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor:
+            successCount > 0 ? Colors.green.shade100 : Colors.orange.shade100,
+        colorText:
+            successCount > 0 ? Colors.green.shade800 : Colors.orange.shade800,
+      );
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  // Export receipts data to CSV
+  Future<String> exportReceiptsData() async {
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      final reportsDir = Directory('${directory.path}/reports');
+      if (!await reportsDir.exists()) {
+        await reportsDir.create(recursive: true);
+      }
+
+      final fileName =
+          'receipts_export_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.csv';
+      final file = File('${reportsDir.path}/$fileName');
+
+      // Prepare CSV data
+      final List<List<String>> csvData = [
+        // Header row
+        [
+          'Receipt Reference',
+          'Payment Date',
+          'Student Name',
+          'Invoice Number',
+          'Amount',
+          'Payment Method',
+          'Receipt Generated',
+          'Receipt Path',
+          'Notes'
+        ]
+      ];
+
+      // Data rows
+      for (final payment in payments) {
+        final invoice =
+            invoices.firstWhereOrNull((inv) => inv.id == payment.invoiceId);
+        final userController = Get.find<UserController>();
+        final student = userController.users
+            .firstWhereOrNull((user) => user.id == invoice?.studentId);
+
+        csvData.add([
+          payment.reference ?? 'N/A',
+          DateFormat('yyyy-MM-dd HH:mm').format(payment.paymentDate),
+          student != null ? '${student.fname} ${student.lname}' : 'Unknown',
+          invoice?.invoiceNumber ?? 'N/A',
+          payment.amount.toStringAsFixed(2),
+          payment.method,
+          payment.receiptGenerated ? 'Yes' : 'No',
+          payment.receiptPath ?? 'N/A',
+          payment.notes ?? ''
+        ]);
+      }
+
+      // Write CSV file
+      final csv = const ListToCsvConverter().convert(csvData);
+      await file.writeAsString(csv);
+
+      return file.path;
+    } catch (e) {
+      debugPrint('Error exporting receipts data: $e');
+      rethrow;
+    }
+  }
+
+  // Key methods that need SyncService.trackChange integration:
+
+// 1. In recordPayment method - track payment creation
+  Future<void> recordPayment(Payment payment, {bool silent = false}) async {
+    debugPrint('=== STARTING recordPayment ===');
+    debugPrint(
+        'Payment details: Invoice ID: ${payment.invoiceId}, Amount: ${payment.amount}');
+
+    try {
+      if (payment.amount <= 0) {
+        throw Exception('Payment amount must be greater than zero');
+      }
+
+      isLoading(true);
+      debugPrint('Setting isLoading to true');
+
+      // Insert payment with debug
+      debugPrint('About to insert payment into database...');
+      debugPrint('Payment data to insert: ${payment.toJson()}');
+
+      final paymentId = await _dbHelper.insertPayment(payment.toJson());
+      debugPrint('✅ Payment inserted successfully with ID: $paymentId');
+
+      // 🔄 TRACK THE PAYMENT CREATION FOR SYNC
+      final paymentWithId = payment.copyWith(id: paymentId);
+      final paymentSyncData = Map<String, dynamic>.from(paymentWithId.toJson());
+      if (_schoolId != null && _schoolId!.isNotEmpty) {
+        paymentSyncData['school_id'] = _schoolId;
+      }
+      // Include invoice_number so server can find invoice by number (cross-device ID mismatch fallback)
+      final db2 = await _dbHelper.database;
+      final invoiceRows = await db2.query(
+        'invoices',
+        columns: ['invoice_number'],
+        where: 'id = ?',
+        whereArgs: [payment.invoiceId],
+      );
+      if (invoiceRows.isNotEmpty) {
+        paymentSyncData['invoice_number'] = invoiceRows.first['invoice_number'];
+      }
+      await SyncService.trackChange('payments', paymentSyncData, 'create');
+      debugPrint('📝 Tracked payment creation for sync');
+
+      // Verify payment was inserted
+      final db = await _dbHelper.database;
+      final insertedPayment =
+          await db.query('payments', where: 'id = ?', whereArgs: [paymentId]);
+      debugPrint('✅ Verified inserted payment: $insertedPayment');
+
+      // Update invoice status with debug
+      debugPrint('About to call _updateInvoiceStatus...');
+      await _updateInvoiceStatus(payment.invoiceId, payment.amount);
+      debugPrint('✅ _updateInvoiceStatus completed successfully');
+
+      // Refresh billing data
+      debugPrint('About to refresh billing data...');
+      await fetchBillingData();
+      debugPrint('✅ Billing data refreshed');
+
+      debugPrint('=== recordPayment COMPLETED SUCCESSFULLY ===');
+      if (!silent) {
+        Get.snackbar(
+          'Payment Recorded',
+          'Payment of \$${payment.amount.toStringAsFixed(2)} recorded successfully',
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+          snackPosition: SnackPosition.BOTTOM,
+        );
+      }
+    } catch (e) {
+      debugPrint('=== ERROR in recordPayment ===');
+      if (!silent) {
+        Get.snackbar(
+          'Error',
+          'Failed to record payment: ${e.toString()}',
+          snackPosition: SnackPosition.BOTTOM,
+        );
+      }
+      throw e;
+    } finally {
+      isLoading(false);
+      debugPrint('Setting isLoading to false');
+    }
+  }
+
+// 2. In _updateInvoiceStatus method - track invoice updates
+  Future<void> _updateInvoiceStatus(int invoiceId, double amount) async {
+    debugPrint('=== STARTING _updateInvoiceStatus ===');
+    debugPrint('Invoice ID: $invoiceId, Payment Amount: $amount');
+
+    try {
+      if (amount <= 0) {
+        throw Exception('Payment amount must be greater than zero');
+      }
+
+      final db = await _dbHelper.database;
+
+      // Get current invoice data from database (not memory)
+      final invoiceResults = await db.query(
+        'invoices',
+        where: 'id = ?',
+        whereArgs: [invoiceId],
+      );
+
+      if (invoiceResults.isEmpty) {
+        throw Exception('Invoice $invoiceId not found in database');
+      }
+
+      final invoiceData = invoiceResults.first;
+      debugPrint('Current invoice data from DB: $invoiceData');
+
+      // Get current amount paid
+      final currentAmountPaid =
+          (invoiceData['amountpaid'] as num?)?.toDouble() ?? 0.0;
+      debugPrint('Current amount paid: $currentAmountPaid');
+
+      // Calculate new amounts
+      final newAmountPaid = currentAmountPaid + amount;
+      debugPrint('New amount paid will be: $newAmountPaid');
+
+      // Calculate total amount
+      final totalAmount = (invoiceData['total_amount'] as num?)?.toDouble() ??
+          ((invoiceData['lessons'] as num).toDouble() *
+              (invoiceData['price_per_lesson'] as num).toDouble());
+      debugPrint('Total amount: $totalAmount');
+
+      final outstandingAmount = totalAmount - currentAmountPaid;
+      if (outstandingAmount <= 0) {
+        throw Exception('Invoice is already fully paid');
+      }
+
+      if ((amount - outstandingAmount) > 0.01) {
+        throw Exception(
+            'Payment exceeds outstanding balance (${outstandingAmount.toStringAsFixed(2)})');
+      }
+
+      final safeNewAmountPaid =
+          (currentAmountPaid + amount).clamp(0.0, totalAmount).toDouble();
+
+      // Determine new status
+      String newStatus;
+      if (safeNewAmountPaid >= (totalAmount - 0.01)) {
+        newStatus = 'paid';
+      } else if (safeNewAmountPaid > 0) {
+        newStatus = 'partial';
+      } else {
+        newStatus = 'unpaid';
+      }
+
+      debugPrint('New status will be: $newStatus');
+
+      // Update the invoice
+      final updateData = {
+        'id': invoiceId,
+        'invoice_number': invoiceData[
+            'invoice_number'], // ✅ Fallback key for cross-device ID mismatch
+        'amountpaid': safeNewAmountPaid,
+        'status': newStatus,
+        'school_id': _schoolId,
+      };
+
+      debugPrint('Updating invoice with data: $updateData');
+
+      final rowsUpdated = await db.update(
+        'invoices',
+        {'amountpaid': safeNewAmountPaid, 'status': newStatus},
+        where: 'id = ?',
+        whereArgs: [invoiceId],
+      );
+
+      debugPrint('✅ Database update completed. Rows affected: $rowsUpdated');
+
+      // 🔄 TRACK THE INVOICE UPDATE FOR SYNC
+      await SyncService.trackChange('invoices', updateData, 'update');
+      debugPrint('📝 Tracked invoice update for sync');
+
+      // Verify the update
+      final verifyResults = await db.query(
+        'invoices',
+        where: 'id = ?',
+        whereArgs: [invoiceId],
+      );
+
+      if (verifyResults.isNotEmpty) {
+        final updatedData = verifyResults.first;
+        debugPrint(
+            '✅ Verification - Updated invoice: amountpaid = ${updatedData['amountpaid']}, status = ${updatedData['status']}');
+      }
+
+      debugPrint('=== _updateInvoiceStatus COMPLETED ===');
+    } catch (e) {
+      debugPrint('=== ERROR in _updateInvoiceStatus ===');
+      debugPrint('Error: $e');
+      rethrow;
+    }
+  }
+
+// 3. In recordPaymentWithReceipt method - track payment creation
+  Future<void> recordPaymentWithReceipt(
+      Payment payment, Invoice invoice, User student) async {
+    debugPrint('=== STARTING recordPaymentWithReceipt ===');
+
+    try {
+      isLoading(true);
+
+      // Generate reference if not provided
+      final reference = payment.reference ?? ReceiptService.generateReference();
+
+      // Create payment with reference
+      final paymentWithReference = payment.copyWith(reference: reference);
+
+      // Insert payment
+      final paymentId =
+          await _dbHelper.insertPayment(paymentWithReference.toJson());
+      debugPrint('✅ Payment inserted with ID: $paymentId');
+
+      // 🔄 TRACK THE PAYMENT CREATION FOR SYNC
+      final paymentWithId = paymentWithReference.copyWith(id: paymentId);
+      final paymentSyncData = Map<String, dynamic>.from(paymentWithId.toJson());
+      if (_schoolId != null && _schoolId!.isNotEmpty) {
+        paymentSyncData['school_id'] = _schoolId;
+      }
+      // Include invoice_number so server can find invoice by number (cross-device ID mismatch fallback)
+      if (invoice.invoiceNumber.isNotEmpty) {
+        paymentSyncData['invoice_number'] = invoice.invoiceNumber;
+      }
+      await SyncService.trackChange('payments', paymentSyncData, 'create');
+      debugPrint('📝 Tracked payment creation for sync');
+
+      // Update invoice status
+      await _updateInvoiceStatus(payment.invoiceId, payment.amount);
+      debugPrint('✅ Invoice status updated');
+
+      // Generate receipt
+      try {
+        final receiptPath = await ReceiptService.generateAndUploadReceipt(
+          paymentWithReference.copyWith(id: paymentId),
+          invoice,
+          student,
+        );
+
+        // Update payment with receipt path
+        await _dbHelper.updatePayment({
+          'id': paymentId,
+          'receipt_path': receiptPath,
+          'receipt_generated': 1,
+        });
+
+        // 🔄 TRACK THE PAYMENT UPDATE FOR SYNC (receipt info)
+        await SyncService.trackChange(
+            'payments',
+            {
+              'id': paymentId,
+              'receipt_path': receiptPath,
+              'receipt_generated': 1,
+              'school_id': _schoolId,
+            },
+            'update');
+        debugPrint('📝 Tracked payment receipt update for sync');
+
+        debugPrint('✅ Receipt generated at: $receiptPath');
+
+        // Refresh billing data
+        await fetchBillingData();
+
+        // Show success with receipt options
+        Get.snackbar(
+          'Payment Recorded',
+          'Payment recorded and receipt generated successfully',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Colors.green.shade600,
+          colorText: Colors.white,
+          duration: const Duration(seconds: 5),
+          mainButton: TextButton(
+            onPressed: () => ReceiptService.printReceiptFromCloud(receiptPath),
+            child: const Text('Print Receipt',
+                style: TextStyle(color: Colors.white)),
+          ),
+        );
+      } catch (receiptError) {
+        debugPrint('Warning: Receipt generation failed: $receiptError');
+        // Still refresh data even if receipt fails
+        await fetchBillingData();
+
+        Get.snackbar(
+          'Payment Recorded',
+          'Payment recorded but receipt generation failed',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Colors.orange.shade600,
+          colorText: Colors.white,
+        );
+      }
+    } catch (e) {
+      debugPrint('ERROR in recordPaymentWithReceipt: $e');
+      rethrow;
+    } finally {
+      isLoading(false);
+    }
+  }
+
+// 4. In generateInvoice method - track invoice creation
+  Future<void> generateInvoice({
+    required int studentId,
+    required int courseId,
+    required int lessons,
+    required double pricePerLesson,
+  }) async {
+    try {
+      // Generate a unique invoice number
+      String invoiceNumber = await _generateInvoiceNumber();
+
+      final invoiceData = {
+        'invoice_number': invoiceNumber,
+        'student': studentId,
+        'course': courseId,
+        'lessons': lessons,
+        'price_per_lesson': pricePerLesson,
+        'amountpaid': 0.0,
+        'created_at': DateTime.now().toIso8601String(),
+        'due_date': DateTime.now().add(Duration(days: 30)).toIso8601String(),
+        'status': 'unpaid',
+        'total_amount': lessons * pricePerLesson,
+        'school_id': _schoolId,
+      };
+
+      final invoiceId = await _dbHelper.insertInvoice(invoiceData);
+
+      // 🔄 TRACK THE INVOICE CREATION FOR SYNC
+      final invoiceWithId = {...invoiceData, 'id': invoiceId};
+      await SyncService.trackChange('invoices', invoiceWithId, 'create');
+      debugPrint('📝 Tracked invoice creation for sync');
+
+      // Refresh the invoice list
+      await fetchBillingData();
+    } catch (e) {
+      Get.snackbar(
+        'Error',
+        'Failed to create invoice: ${e.toString()}',
+        snackPosition: SnackPosition.BOTTOM,
+      );
+      throw e;
+    }
+  }
+
+// 5. In createInvoiceWithCourse method - track invoice creation
+  Future<int> createInvoiceWithCourse(
+      int studentId, Course course, int lessons, DateTime dueDate) async {
+    try {
+      isLoading(true);
+
+      final invoice = Invoice(
+        studentId: studentId,
+        courseId: course.id!,
+        lessons: lessons,
+        pricePerLesson: course.price.toDouble(),
+        createdAt: DateTime.now(),
+        dueDate: dueDate,
+        status: 'unpaid',
+        invoiceNumber: await _generateInvoiceNumber(),
+        amountPaid: 0.0,
+        totalAmount: lessons * course.price.toDouble(),
+      );
+
+      final invoiceData = Map<String, dynamic>.from(invoice.toJson());
+      if (_schoolId != null && _schoolId!.isNotEmpty) {
+        invoiceData['school_id'] = _schoolId;
+      }
+
+      final invoiceId = await _dbHelper.insertInvoice(invoiceData);
+
+      // 🔄 TRACK THE INVOICE CREATION FOR SYNC
+      final invoiceWithId = invoice.copyWith(id: invoiceId);
+      final syncData = Map<String, dynamic>.from(invoiceWithId.toJson());
+      if (_schoolId != null && _schoolId!.isNotEmpty) {
+        syncData['school_id'] = _schoolId;
+      }
+      await SyncService.trackChange('invoices', syncData, 'create');
+      debugPrint('📝 Tracked invoice creation for sync');
+
+      // Add to local list
+      final newInvoice = invoice.copyWith(id: invoiceId);
+      visibleInvoices.add(newInvoice);
+      visibleInvoices.refresh();
+
+      // Log the creation for audit trail
+      debugPrint('✅ Auto-invoice created during enrollment:');
+      debugPrint('  Student ID: $studentId');
+      debugPrint('  Course: ${course.name}');
+      debugPrint('  Lessons: $lessons');
+      debugPrint('  Price per lesson: \$${course.price}');
+      debugPrint('  Total: \$${invoice.totalAmountCalculated}');
+      debugPrint('  Due date: ${dueDate.toString().split(' ')[0]}');
+
+      return invoiceId;
+    } catch (e) {
+      debugPrint('ERROR in createInvoiceWithCourse: $e');
+      Get.snackbar(
+        'Invoice Creation Failed',
+        'Student was created but invoice creation failed: ${e.toString()}',
+        backgroundColor: Colors.orange,
+        colorText: Colors.white,
+        snackPosition: SnackPosition.BOTTOM,
+        duration: Duration(seconds: 5),
+      );
+      rethrow;
+    } finally {
+      isLoading(false);
+    }
+  }
+
+// 6. In deleteInvoice method - track invoice deletion
+  Future<void> deleteInvoice(int invoiceId) async {
+    // 🔄 TRACK THE INVOICE DELETION FOR SYNC
+    await SyncService.trackChange('invoices', {'id': invoiceId}, 'delete');
+    debugPrint('📝 Tracked invoice deletion for sync');
+
+    await DatabaseHelper.instance.deleteInvoice(invoiceId);
+    fetchBillingData(); // Refresh the list of invoices
+  }
+
+// 7. In editInvoice method - track invoice updates
+  Future<void> editInvoice(Invoice invoice) async {
+    await DatabaseHelper.instance.updateInvoice(invoice.toMap());
+
+    // 🔄 TRACK THE INVOICE UPDATE FOR SYNC
+    await SyncService.trackChange('invoices', invoice.toMap(), 'update');
+    debugPrint('📝 Tracked invoice update for sync');
+
+    fetchBillingData(); // Refresh the list of invoices
+  }
+
+// 8. In _updateInvoiceAmountPaid method - track invoice updates
+  Future<void> _updateInvoiceAmountPaid(
+      int invoiceId, double correctAmountPaid) async {
+    try {
+      final db = await _dbHelper.database;
+
+      // Calculate new status
+      final invoiceResults = await db.query(
+        'invoices',
+        where: 'id = ?',
+        whereArgs: [invoiceId],
+      );
+
+      if (invoiceResults.isNotEmpty) {
+        final invoiceData = invoiceResults.first;
+        final totalAmount = (invoiceData['total_amount'] as num?)?.toDouble() ??
+            ((invoiceData['lessons'] as num).toDouble() *
+                (invoiceData['price_per_lesson'] as num).toDouble());
+
+        String newStatus;
+        if (correctAmountPaid >= totalAmount) {
+          newStatus = 'paid';
+        } else if (correctAmountPaid > 0) {
+          newStatus = 'partial';
+        } else {
+          newStatus = 'unpaid';
+        }
+
+        // Update the database
+        final updateData = {
+          'id': invoiceId,
+          'amountpaid': correctAmountPaid,
+          'status': newStatus,
+        };
+
+        await db.update(
+          'invoices',
+          {
+            'amountpaid': correctAmountPaid,
+            'status': newStatus,
+          },
+          where: 'id = ?',
+          whereArgs: [invoiceId],
+        );
+
+        // 🔄 TRACK THE INVOICE UPDATE FOR SYNC
+        await SyncService.trackChange('invoices', updateData, 'update');
+        debugPrint('📝 Tracked invoice amount correction for sync');
+
+        debugPrint(
+            '✅ Fixed invoice $invoiceId: amountpaid = $correctAmountPaid, status = $newStatus');
+      }
+    } catch (e) {
+      debugPrint('ERROR updating invoice amount paid: $e');
+    }
+  }
+
+// 9. In addLessonsBack method - track invoice updates
+  Future<void> addLessonsBack(int studentId, int lessonsToAdd) async {
+    try {
+      debugPrint(
+          'BillingController: addLessonsBack called with studentId: $studentId, lessonsToAdd: $lessonsToAdd');
+
+      final index = invoices.indexWhere((inv) => inv.studentId == studentId);
+      debugPrint('BillingController: index of invoice: $index');
+
+      if (index == -1) {
+        debugPrint(
+            'BillingController: Invoice not found for studentId: $studentId');
+        Get.snackbar(
+          'Error',
+          'No invoice found for this student',
+          snackPosition: SnackPosition.BOTTOM,
+        );
+        return;
+      }
+
+      final invoice = invoices[index];
+      debugPrint(
+          'BillingController: Found invoice with ${invoice.lessons} lessons');
+
+      final updatedLessons = invoice.lessons + lessonsToAdd;
+      debugPrint('BillingController: Updated lessons count: $updatedLessons');
+
+      // Update in the database
+      final updateData = {
+        'id': invoice.id,
+        'lessons': updatedLessons,
+      };
+
+      await _dbHelper.updateInvoice(updateData);
+      debugPrint('✅ Invoice updated in DB');
+
+      // 🔄 TRACK THE INVOICE UPDATE FOR SYNC
+      await SyncService.trackChange('invoices', updateData, 'update');
+      debugPrint('📝 Tracked invoice lessons update for sync');
+
+      // Force refresh all data instead of just local update
+      await fetchBillingData();
+      debugPrint('✅ Billing data refreshed');
+
+      // Notify schedule controller
+      Get.find<ScheduleController>().refreshBillingData();
+
+      Get.snackbar(
+        'Success',
+        'Added $lessonsToAdd lessons. Total now: $updatedLessons',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
+    } catch (e) {
+      debugPrint('BillingController: Error in addLessonsBack: ${e.toString()}');
+      Get.snackbar(
+        'Error',
+        'Failed to update billing info: ${e.toString()}',
+        snackPosition: SnackPosition.BOTTOM,
+      );
+    }
+  }
+
+// 10. In _updatePaymentWithReceipt method - track payment updates
+  Future<void> _updatePaymentWithReceipt(
+      Payment payment, String receiptPath) async {
+    final db = await _dbHelper.database;
+
+    final updateData = {
+      'id': payment.id,
+      'receipt_path': receiptPath,
+      'receipt_generated': 1,
+      'receipt_generated_at': DateTime.now().toIso8601String(),
+    };
+
+    await db.update(
+      'payments',
+      {
+        'receipt_path': receiptPath,
+        'receipt_generated': 1,
+        'receipt_generated_at': DateTime.now().toIso8601String(),
+      },
+      where: 'id = ?',
+      whereArgs: [payment.id],
+    );
+
+    // 🔄 TRACK THE PAYMENT UPDATE FOR SYNC
+    await SyncService.trackChange('payments', updateData, 'update');
+    debugPrint('📝 Tracked payment receipt update for sync');
+  }
+}

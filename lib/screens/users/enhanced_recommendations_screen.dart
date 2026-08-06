@@ -1,0 +1,737 @@
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import '../../controllers/navigation_controller.dart';
+import '../../controllers/user_controller.dart';
+import '../../controllers/course_controller.dart';
+import '../../controllers/fleet_controller.dart';
+import '../../controllers/billing_controller.dart';
+import '../../controllers/schedule_controller.dart';
+
+class EnhancedRecommendationsScreen extends StatefulWidget {
+  final String role;
+
+  const EnhancedRecommendationsScreen({Key? key, required this.role})
+      : super(key: key);
+
+  @override
+  _EnhancedRecommendationsScreenState createState() =>
+      _EnhancedRecommendationsScreenState();
+}
+
+class _EnhancedRecommendationsScreenState
+    extends State<EnhancedRecommendationsScreen> {
+  final UserController userController = Get.find<UserController>();
+  final CourseController courseController = Get.find<CourseController>();
+  final FleetController fleetController = Get.find<FleetController>();
+  final BillingController billingController = Get.find<BillingController>();
+  final ScheduleController scheduleController = Get.find<ScheduleController>();
+
+  List<Map<String, dynamic>> _smartRecommendations = [];
+  List<Map<String, dynamic>> _insights = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _generateRecommendations();
+  }
+
+  void _generateRecommendations() {
+    _generateSmartRecommendations();
+    _generateQuickActions();
+    _generateInsights();
+  }
+
+  void _generateSmartRecommendations() {
+    _smartRecommendations.clear();
+
+    final users =
+        userController.users.where((u) => u.role == widget.role).toList();
+    final activeUsers = users.where((u) => u.status == 'Active').length;
+    final inactiveUsers = users.length - activeUsers;
+
+    // Smart recommendations based on data analysis
+    if (users.isEmpty) {
+      _smartRecommendations.add({
+        'type': 'urgent',
+        'title': 'No ${widget.role}s in system',
+        'description':
+            'Start by adding your first ${widget.role} to begin operations',
+        'action': 'Add ${widget.role.capitalize}',
+        'icon': Icons.person_add,
+        'color': Colors.red,
+        'priority': 'high',
+        'onTap': () =>
+            Get.find<NavigationController>().openAddUser(widget.role),
+      });
+    } else {
+      // Data-driven recommendations
+      if (inactiveUsers > 0) {
+        _smartRecommendations.add({
+          'type': 'warning',
+          'title': 'Inactive ${widget.role}s detected',
+          'description':
+              '$inactiveUsers ${widget.role}s are inactive. Review and reactivate or remove them.',
+          'action': 'Review Inactive ${widget.role.capitalize}s',
+          'icon': Icons.person_off,
+          'color': Colors.orange,
+          'priority': 'medium',
+        });
+      }
+
+      if (widget.role == 'student') {
+        _generateStudentRecommendations(users);
+      } else if (widget.role == 'instructor') {
+        _generateInstructorRecommendations(users);
+      }
+
+      // General recommendations
+      if (users.length < 5) {
+        _smartRecommendations.add({
+          'type': 'suggestion',
+          'title': 'Grow your ${widget.role} base',
+          'description':
+              'You have ${users.length} ${widget.role}s. Consider marketing to attract more.',
+          'action': 'Marketing Tips',
+          'icon': Icons.trending_up,
+          'color': Colors.blue,
+          'priority': 'low',
+        });
+      }
+    }
+
+    // Performance recommendations
+    final recentUsers = users
+        .where((u) => DateTime.now().difference(u.created_at).inDays <= 30)
+        .length;
+
+    if (recentUsers > 0) {
+      _smartRecommendations.add({
+        'type': 'success',
+        'title': 'Great growth this month!',
+        'description':
+            '$recentUsers new ${widget.role}s joined this month. Keep up the momentum!',
+        'action': 'View Growth Analytics',
+        'icon': Icons.celebration,
+        'color': Colors.green,
+        'priority': 'info',
+      });
+    }
+  }
+
+  void _generateStudentRecommendations(List users) {
+    // Student-specific recommendations
+    final studentsWithoutInvoices = users
+        .where((student) => !billingController.invoices
+            .any((invoice) => invoice.studentId == student.id))
+        .length;
+
+    if (studentsWithoutInvoices > 0) {
+      _smartRecommendations.add({
+        'type': 'urgent',
+        'title': 'Students without invoices',
+        'description':
+            '$studentsWithoutInvoices students don\'t have invoices. Create invoices to track payments.',
+        'action': 'Create Missing Invoices',
+        'icon': Icons.receipt_long,
+        'color': Colors.red,
+        'priority': 'high',
+      });
+    }
+
+    final studentsWithoutSchedules = users
+        .where((student) => !scheduleController.schedules
+            .any((schedule) => schedule.studentId == student.id))
+        .length;
+
+    if (studentsWithoutSchedules > 0) {
+      _smartRecommendations.add({
+        'type': 'warning',
+        'title': 'Students need scheduling',
+        'description':
+            '$studentsWithoutSchedules students haven\'t been scheduled for lessons.',
+        'action': 'Schedule Lessons',
+        'icon': Icons.schedule,
+        'color': Colors.orange,
+        'priority': 'medium',
+      });
+    }
+  }
+
+  void _generateInstructorRecommendations(List users) {
+    // Instructor-specific recommendations
+    final instructorsWithoutVehicles = users
+        .where((instructor) => !fleetController.fleet
+            .any((vehicle) => vehicle.instructor == instructor.id))
+        .length;
+
+    if (instructorsWithoutVehicles > 0) {
+      _smartRecommendations.add({
+        'type': 'warning',
+        'title': 'Instructors need vehicles',
+        'description':
+            '$instructorsWithoutVehicles instructors don\'t have assigned vehicles.',
+        'action': 'Assign Vehicles',
+        'icon': Icons.directions_car,
+        'color': Colors.orange,
+        'priority': 'medium',
+      });
+    }
+
+    // Check instructor workload
+    final instructorWorkload = users.map((instructor) {
+      final scheduleCount = scheduleController.schedules
+          .where((s) =>
+              s.instructorId == instructor.id &&
+              s.start.isAfter(DateTime.now()) &&
+              s.start.isBefore(DateTime.now().add(Duration(days: 7))))
+          .length;
+      return {'instructor': instructor, 'schedules': scheduleCount};
+    }).toList();
+
+    final overloadedInstructors =
+        instructorWorkload.where((item) => item['schedules'] > 20).length;
+    final underutilizedInstructors =
+        instructorWorkload.where((item) => item['schedules'] < 5).length;
+
+    if (overloadedInstructors > 0) {
+      _smartRecommendations.add({
+        'type': 'urgent',
+        'title': 'Instructor overload detected',
+        'description':
+            '$overloadedInstructors instructors have heavy schedules this week.',
+        'action': 'Balance Workload',
+        'icon': Icons.warning,
+        'color': Colors.red,
+        'priority': 'high',
+      });
+    }
+
+    if (underutilizedInstructors > 0) {
+      _smartRecommendations.add({
+        'type': 'suggestion',
+        'title': 'Optimize instructor usage',
+        'description':
+            '$underutilizedInstructors instructors have light schedules. Consider reassigning lessons.',
+        'action': 'Optimize Schedules',
+        'icon': Icons.schedule,
+        'color': Colors.blue,
+        'priority': 'low',
+      });
+    }
+  }
+
+  void _generateQuickActions() {}
+
+  void _generateInsights() {
+    final users =
+        userController.users.where((u) => u.role == widget.role).toList();
+
+    _insights = [
+      {
+        'title': 'Total ${widget.role.capitalize}s',
+        'value': '${users.length}',
+        'icon': Icons.people,
+        'color': Colors.blue,
+        'trend': _calculateGrowthTrend(users),
+      },
+      {
+        'title': 'Active ${widget.role.capitalize}s',
+        'value': '${users.where((u) => u.status == 'Active').length}',
+        'icon': Icons.check_circle,
+        'color': Colors.green,
+        'trend': null,
+      },
+      {
+        'title': 'This Month',
+        'value':
+            '${users.where((u) => DateTime.now().difference(u.created_at).inDays <= 30).length}',
+        'icon': Icons.calendar_month,
+        'color': Colors.orange,
+        'trend': null,
+      },
+      if (widget.role == 'student') ...[
+        {
+          'title': 'With Active Invoices',
+          'value':
+              '${users.where((u) => billingController.invoices.any((i) => i.studentId == u.id && i.balance > 0)).length}',
+          'icon': Icons.receipt,
+          'color': Colors.red,
+          'trend': null,
+        },
+        {
+          'title': 'Scheduled This Week',
+          'value': '${_getStudentsScheduledThisWeek()}',
+          'icon': Icons.schedule,
+          'color': Colors.purple,
+          'trend': null,
+        },
+      ],
+      if (widget.role == 'instructor') ...[
+        {
+          'title': 'With Vehicles',
+          'value':
+              '${users.where((u) => fleetController.fleet.any((v) => v.instructor == u.id)).length}',
+          'icon': Icons.directions_car,
+          'color': Colors.teal,
+          'trend': null,
+        },
+        {
+          'title': 'Active This Week',
+          'value': '${_getActiveInstructorsThisWeek()}',
+          'icon': Icons.work,
+          'color': Colors.indigo,
+          'trend': null,
+        },
+      ],
+    ];
+  }
+
+  String? _calculateGrowthTrend(List users) {
+    final thisMonth = users
+        .where((u) => DateTime.now().difference(u.created_at).inDays <= 30)
+        .length;
+
+    final lastMonth = users.where((u) {
+      final daysDiff = DateTime.now().difference(u.created_at).inDays;
+      return daysDiff > 30 && daysDiff <= 60;
+    }).length;
+
+    if (lastMonth == 0) return null;
+
+    final growth = ((thisMonth - lastMonth) / lastMonth * 100).round();
+    return growth > 0 ? '+$growth%' : '$growth%';
+  }
+
+  int _getStudentsScheduledThisWeek() {
+    final weekStart =
+        DateTime.now().subtract(Duration(days: DateTime.now().weekday - 1));
+    final weekEnd = weekStart.add(Duration(days: 7));
+
+    return scheduleController.schedules
+        .where((s) => s.start.isAfter(weekStart) && s.start.isBefore(weekEnd))
+        .map((s) => s.studentId)
+        .toSet()
+        .length;
+  }
+
+  int _getActiveInstructorsThisWeek() {
+    final weekStart =
+        DateTime.now().subtract(Duration(days: DateTime.now().weekday - 1));
+    final weekEnd = weekStart.add(Duration(days: 7));
+
+    return scheduleController.schedules
+        .where((s) => s.start.isAfter(weekStart) && s.start.isBefore(weekEnd))
+        .map((s) => s.instructorId)
+        .toSet()
+        .length;
+  }
+
+  // Helper method to determine number of columns based on screen width
+  int _getGridCrossAxisCount(double screenWidth) {
+    if (screenWidth < 600) return 2; // Mobile
+    if (screenWidth < 900) return 3; // Tablet
+    if (screenWidth < 1200) return 4; // Small desktop
+    return 5; // Large desktop
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: constraints.maxWidth < 600 ? 12 : 16,
+              vertical: 16,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildInsightsSection(constraints),
+                  SizedBox(height: 24),
+                  _buildSmartRecommendationsSection(constraints),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildInsightsSection(BoxConstraints constraints) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: EdgeInsets.only(bottom: 16),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              '${widget.role.capitalize} Insights',
+              style: TextStyle(
+                fontSize: constraints.maxWidth < 600 ? 18 : 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[800],
+              ),
+            ),
+          ),
+        ),
+        LayoutBuilder(
+          builder: (context, gridConstraints) {
+            final crossAxisCount =
+                _getGridCrossAxisCount(gridConstraints.maxWidth);
+            final aspectRatio = gridConstraints.maxWidth < 600 ? 1.1 : 1.2;
+
+            return GridView.builder(
+              shrinkWrap: true,
+              physics: NeverScrollableScrollPhysics(),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: crossAxisCount,
+                childAspectRatio: aspectRatio,
+                crossAxisSpacing: constraints.maxWidth < 600 ? 8 : 12,
+                mainAxisSpacing: constraints.maxWidth < 600 ? 8 : 12,
+              ),
+              itemCount: _insights.length,
+              itemBuilder: (context, index) {
+                final insight = _insights[index];
+                return _buildInsightCard(insight, constraints);
+              },
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInsightCard(
+      Map<String, dynamic> insight, BoxConstraints constraints) {
+    final isSmallScreen = constraints.maxWidth < 600;
+
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Container(
+        padding: EdgeInsets.all(isSmallScreen ? 12 : 16),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Icon(
+                insight['icon'],
+                size: isSmallScreen ? 20 : 24,
+                color: insight['color'],
+              ),
+            ),
+            SizedBox(height: isSmallScreen ? 6 : 8),
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  insight['value'],
+                  style: TextStyle(
+                    fontSize: isSmallScreen ? 18 : 20,
+                    fontWeight: FontWeight.bold,
+                    color: insight['color'],
+                  ),
+                ),
+              ),
+            ),
+            SizedBox(height: 4),
+            Flexible(
+              flex: 2,
+              child: Text(
+                insight['title'],
+                style: TextStyle(
+                  fontSize: isSmallScreen ? 10 : 11,
+                  color: Colors.grey[600],
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (insight['trend'] != null) ...[
+              SizedBox(height: 4),
+              Flexible(
+                child: Container(
+                  padding: EdgeInsets.symmetric(
+                      horizontal: isSmallScreen ? 4 : 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: insight['trend'].startsWith('+')
+                        ? Colors.green[100]
+                        : Colors.red[100],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    insight['trend'],
+                    style: TextStyle(
+                      fontSize: isSmallScreen ? 9 : 10,
+                      fontWeight: FontWeight.bold,
+                      color: insight['trend'].startsWith('+')
+                          ? Colors.green[800]
+                          : Colors.red[800],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSmartRecommendationsSection(BoxConstraints constraints) {
+    if (_smartRecommendations.isEmpty) {
+      return SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: EdgeInsets.only(bottom: 16),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Smart Recommendations',
+              style: TextStyle(
+                fontSize: constraints.maxWidth < 600 ? 18 : 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[800],
+              ),
+            ),
+          ),
+        ),
+        ListView.builder(
+          shrinkWrap: true,
+          physics: NeverScrollableScrollPhysics(),
+          itemCount: _smartRecommendations.length,
+          itemBuilder: (context, index) {
+            final recommendation = _smartRecommendations[index];
+            return _buildRecommendationCard(recommendation, constraints);
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRecommendationCard(
+      Map<String, dynamic> recommendation, BoxConstraints constraints) {
+    Color borderColor;
+    Color backgroundColor;
+
+    switch (recommendation['type']) {
+      case 'urgent':
+        borderColor = Colors.red;
+        backgroundColor = Colors.red[50]!;
+        break;
+      case 'warning':
+        borderColor = Colors.orange;
+        backgroundColor = Colors.orange[50]!;
+        break;
+      case 'suggestion':
+        borderColor = Colors.blue;
+        backgroundColor = Colors.blue[50]!;
+        break;
+      case 'success':
+        borderColor = Colors.green;
+        backgroundColor = Colors.green[50]!;
+        break;
+      default:
+        borderColor = Colors.grey;
+        backgroundColor = Colors.grey[50]!;
+    }
+
+    final isSmallScreen = constraints.maxWidth < 600;
+    final isTablet = constraints.maxWidth >= 600 && constraints.maxWidth < 900;
+
+    return Card(
+      margin: EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: borderColor, width: 1),
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          color: backgroundColor,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: isSmallScreen
+            ? _buildMobileRecommendationLayout(recommendation, borderColor)
+            : _buildDesktopRecommendationLayout(recommendation, isTablet),
+      ),
+    );
+  }
+
+  Widget _buildMobileRecommendationLayout(
+      Map<String, dynamic> recommendation, Color borderColor) {
+    return Padding(
+      padding: EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: recommendation['color'].withOpacity(0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  recommendation['icon'],
+                  color: recommendation['color'],
+                  size: 20,
+                ),
+              ),
+              SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      recommendation['title'],
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    SizedBox(height: 4),
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: recommendation['color'].withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        recommendation['priority'].toUpperCase(),
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                          color: recommendation['color'],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 12),
+          Text(
+            recommendation['description'],
+            style: TextStyle(fontSize: 13),
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+          ),
+          SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: recommendation['onTap'],
+              style: ElevatedButton.styleFrom(
+                backgroundColor: recommendation['color'],
+                foregroundColor: Colors.white,
+                padding: EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  recommendation['action'],
+                  style: TextStyle(fontSize: 13),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDesktopRecommendationLayout(
+      Map<String, dynamic> recommendation, bool isTablet) {
+    return ListTile(
+      contentPadding: EdgeInsets.all(16),
+      leading: Container(
+        padding: EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: recommendation['color'].withOpacity(0.2),
+          shape: BoxShape.circle,
+        ),
+        child: Icon(
+          recommendation['icon'],
+          color: recommendation['color'],
+          size: 24,
+        ),
+      ),
+      title: Text(
+        recommendation['title'],
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: isTablet ? 15 : 16,
+        ),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      ),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(height: 4),
+          Text(
+            recommendation['description'],
+            style: TextStyle(fontSize: isTablet ? 13 : 14),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          SizedBox(height: 8),
+          Wrap(
+            children: [
+              ElevatedButton(
+                onPressed: recommendation['onTap'],
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: recommendation['color'],
+                  foregroundColor: Colors.white,
+                  padding: EdgeInsets.symmetric(
+                      horizontal: isTablet ? 12 : 16, vertical: 8),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: Text(
+                  recommendation['action'],
+                  style: TextStyle(fontSize: isTablet ? 12 : 13),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+      trailing: Container(
+        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: recommendation['color'].withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(
+          recommendation['priority'].toUpperCase(),
+          style: TextStyle(
+            fontSize: isTablet ? 9 : 10,
+            fontWeight: FontWeight.bold,
+            color: recommendation['color'],
+          ),
+        ),
+      ),
+    );
+  }
+}

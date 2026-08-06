@@ -1,0 +1,11 @@
+{
+ 
+
+  "permissions": {
+    "allow": [
+      "Bash(grep -c \"TODO\\\\|FIXME\" /d/driving/lib/**/*.dart)",
+      "Read(//d/driving/**)",
+      "Bash(flutter analyze --no-fatal-infos)"
+    ]
+  }
+}

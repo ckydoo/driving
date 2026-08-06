@@ -1,0 +1,121 @@
+class Fleet {
+  final int? id;
+  final String carPlate;
+  final String make;
+  final String model;
+  final String modelYear;
+  final int instructor;
+  final String status;
+  DateTime? created_at;
+  DateTime? updated_at;
+
+  Fleet({
+    this.id,
+    required this.carPlate,
+    required this.make,
+    required this.model,
+    required this.modelYear,
+    required this.instructor,
+    required this.status,
+    this.created_at,
+    this.updated_at,
+  });
+  // Convert a Fleet object into a Map
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'make': make,
+      'model': model,
+      'carplate': carPlate,
+      'instructor': instructor,
+      'modelyear': modelYear,
+      'status': status,
+      'created_at': created_at?.toIso8601String(),
+      'updated_at': updated_at?.toIso8601String(),
+    };
+  }
+
+  // Create a Fleet object from a Map
+  factory Fleet.fromMap(Map<String, dynamic> map) {
+    return Fleet(
+      id: map['id'],
+      make: map['make'],
+      model: map['model'],
+      carPlate: (map['carplate'] ?? map['carPlate'] ?? '').toString(),
+      instructor: map['instructor'] ?? 0,
+      modelYear: (map['modelyear'] ?? map['modelYear'] ?? '').toString(),
+      status: map['status'] ?? 'available',
+      created_at: map['created_at'] != null
+          ? DateTime.tryParse(map['created_at'].toString())
+          : null,
+      updated_at: map['updated_at'] != null
+          ? DateTime.tryParse(map['updated_at'].toString())
+          : null,
+    );
+  }
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'carplate': carPlate, // ✅ Use database field name
+      'make': make,
+      'model': model,
+      'modelyear': modelYear,
+      'status': status,
+      'instructor': instructor == 0 ? null : instructor,
+      'created_at': created_at?.toIso8601String(),
+      'updated_at': updated_at?.toIso8601String(),
+    };
+  }
+
+// And update the fromJson constructor to handle null instructor
+  factory Fleet.fromJson(Map<String, dynamic> json) {
+    return Fleet(
+      id: json['id'],
+      carPlate: json['carplate'] ??
+          json['carPlate'] ??
+          '', // ✅ Check 'carplate' first (database field)
+      make: json['make'] ?? '',
+      model: json['model'] ?? '',
+      modelYear: json['modelyear'] ?? json['modelYear'] ?? '',
+      status: json['status'] ?? 'available',
+      instructor: json['instructor'] ?? 0,
+      created_at: json['created_at'] != null
+          ? DateTime.parse(json['created_at'])
+          : null,
+      updated_at: json['updated_at'] != null
+          ? DateTime.parse(json['updated_at'])
+          : null,
+    );
+  }
+  copyWith({
+    int? id,
+    String? carPlate,
+    String? make,
+    String? model,
+    String? modelYear,
+    String? status,
+    int? instructor,
+  }) {
+    return Fleet(
+      id: id ?? this.id,
+      carPlate: carPlate ?? this.carPlate,
+      make: make ?? this.make,
+      model: model ?? this.model,
+      modelYear: modelYear ?? this.modelYear,
+      status: status ?? this.status,
+      instructor: instructor ?? this.instructor,
+    );
+  }
+
+  Fleet to({int? id}) {
+    return Fleet(
+      id: id ?? this.id,
+      carPlate: carPlate,
+      make: make,
+      model: model,
+      modelYear: modelYear,
+      status: status,
+      instructor: instructor,
+    );
+  }
+}

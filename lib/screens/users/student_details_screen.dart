@@ -1,0 +1,2386 @@
+import 'package:driving/controllers/auth_controller.dart';
+import 'package:driving/controllers/navigation_controller.dart';
+import 'package:driving/controllers/settings_controller.dart';
+import 'package:driving/screens/schedule/schedule_screen.dart';
+import 'package:driving/screens/simplified_schedule_booking_screen.dart';
+import 'package:driving/services/lesson_counting_service.dart';
+import 'package:flutter/material.dart';
+import 'package:driving/controllers/billing_controller.dart';
+import 'package:driving/controllers/course_controller.dart';
+import 'package:driving/controllers/schedule_controller.dart';
+import 'package:driving/controllers/user_controller.dart';
+import 'package:driving/models/user.dart';
+import 'package:driving/services/database_helper.dart';
+import 'package:get/get.dart';
+import 'package:intl/intl.dart';
+import 'package:file_picker/file_picker.dart';
+
+class StudentDetailsScreen extends StatefulWidget {
+  final int studentId;
+  final bool embeddedInShell;
+  final VoidCallback? onClose;
+
+  const StudentDetailsScreen({
+    Key? key,
+    required this.studentId,
+    this.embeddedInShell = false,
+    this.onClose,
+  }) : super(key: key);
+
+  @override
+  _StudentDetailsScreenState createState() => _StudentDetailsScreenState();
+}
+
+class _StudentDetailsScreenState extends State<StudentDetailsScreen>
+    with SingleTickerProviderStateMixin {
+  final UserController userController = Get.find<UserController>();
+  final CourseController courseController = Get.find<CourseController>();
+  final ScheduleController scheduleController = Get.find<ScheduleController>();
+  final BillingController billingController = Get.find<BillingController>();
+  final AuthController authController = Get.find<AuthController>();
+
+  User? student;
+  final TextEditingController _noteController = TextEditingController();
+  List<Map<String, dynamic>> _studentNotes = [];
+  List<Map<String, dynamic>> _studentAttachments = [];
+  bool _isLoading = true;
+
+  // Enhanced UX properties
+  late TabController _tabController;
+  bool _showPaymentReminder = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 6, vsync: this);
+    _tabController.addListener(() {
+      setState(() {});
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadStudentData();
+    });
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    _noteController.dispose();
+    super.dispose();
+  }
+
+  void _closeScreen() {
+    if (widget.embeddedInShell && widget.onClose != null) {
+      widget.onClose!();
+      return;
+    }
+
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
+  }
+
+  Future<void> _fetchStudentNotes() async {
+    final notes =
+        await DatabaseHelper.instance.getNotesForStudent(widget.studentId);
+    setState(() {
+      _studentNotes = notes;
+    });
+  }
+
+  Future<void> _fetchStudentAttachments() async {
+    final attachments = await DatabaseHelper.instance
+        .getAttachmentsForStudent(widget.studentId);
+    setState(() {
+      _studentAttachments = attachments;
+    });
+  }
+
+  Future<void> _loadStudentData() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final existingStudent = userController.users
+          .firstWhereOrNull((user) => user.id == widget.studentId);
+
+      if (existingStudent == null || userController.users.isEmpty) {
+        await userController.fetchUsers();
+      }
+
+      await Future.wait([
+        courseController.fetchCourses(),
+        scheduleController.fetchSchedules(),
+        billingController.fetchBillingData(),
+        _fetchStudentNotes(),
+        _fetchStudentAttachments(),
+      ]);
+
+      setState(() {
+        student = userController.users
+            .firstWhereOrNull((user) => user.id == widget.studentId);
+        _isLoading = false;
+        _showPaymentReminder = _checkPaymentReminder();
+      });
+
+      if (student == null) {
+        Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
+          'Error',
+          'Student not found',
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
+        'Error',
+        'Failed to load student data: ${e.toString()}',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    }
+  }
+
+  bool _checkPaymentReminder() {
+    final studentInvoices = billingController.invoices
+        .where((invoice) => invoice.studentId == widget.studentId)
+        .toList();
+
+    final totalBalance = studentInvoices.fold<double>(
+        0.0, (sum, invoice) => sum + invoice.balance);
+
+    return totalBalance > 0;
+  }
+
+  Future<void> _addNote() async {
+    if (_noteController.text.isNotEmpty) {
+      try {
+        await DatabaseHelper.instance.insertNote({
+          'note_for': widget.studentId,
+          'note': _noteController.text,
+          'note_by': authController.currentUser.value?.id ?? 0,
+        });
+        _noteController.clear();
+        await _fetchStudentNotes();
+        Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
+          'Success',
+          'Note added successfully',
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+        );
+      } catch (e) {
+        Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
+          'Error',
+          'Failed to add note: ${e.toString()}',
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+        );
+      }
+    }
+  }
+
+  Widget _buildLoadingState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade600),
+          ),
+          SizedBox(height: 16),
+          Text(
+            'Loading student details...',
+            style: TextStyle(
+              fontSize: 16,
+              color: Colors.grey.shade600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.error_outline, size: 64, color: Colors.red.shade400),
+          SizedBox(height: 16),
+          Text(
+            'Student not found',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Colors.red.shade600,
+            ),
+          ),
+          SizedBox(height: 8),
+          Text(
+            'The student you\'re looking for doesn\'t exist.',
+            style: TextStyle(color: Colors.grey.shade600),
+          ),
+          SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: _closeScreen,
+            icon: Icon(Icons.arrow_back),
+            label: Text('Go Back'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue.shade600,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEnhancedHeader() {
+    return Container(
+      constraints: BoxConstraints(
+        minHeight: 250, // Match SliverAppBar's expandedHeight
+        maxHeight: 250, // Match SliverAppBar's expandedHeight
+      ),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Colors.blue.shade600, Colors.blue.shade800],
+        ),
+      ),
+      child: SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // App Bar Section (Fixed height)
+            SizedBox(
+              height: 60, // Fixed height for app bar section
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  children: [
+                    if (!widget.embeddedInShell)
+                      IconButton(
+                        icon: Icon(Icons.arrow_back, color: Colors.white),
+                        onPressed: _closeScreen,
+                      ),
+                    Expanded(
+                      child: Text(
+                        'Student Details',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.more_vert, color: Colors.white),
+                      onPressed: () => _showOptionsMenu(),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Profile Section (Flexible but constrained)
+            Expanded(
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // Avatar with Progress Ring
+                    SizedBox(
+                      width: 70,
+                      height: 70,
+                      child: Stack(
+                        children: [
+                          // ... your existing avatar stack content
+                        ],
+                      ),
+                    ),
+                    SizedBox(width: 14),
+                    // Student Info
+                    Expanded(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${student!.fname} ${student!.lname}',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            'ID: ${student!.idnumber}',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.white.withOpacity(0.8),
+                            ),
+                          ),
+                          SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 4,
+                            children: [
+                              // ... your status chips
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            SizedBox(
+              height: 80,
+              child: Padding(
+                padding: EdgeInsets.symmetric(
+                    horizontal: 8, vertical: 4), // Reduced padding
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    return Row(
+                      children: [
+                        Expanded(
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(
+                                horizontal: 4), // Added inner padding
+                            child: _buildQuickStat(
+                              'Progress',
+                              '${(_getProgressPercentage() * 100).toInt()}%',
+                              Icons.trending_up,
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: 4), // Reduced spacing
+                        Expanded(
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 4),
+                            child: _buildQuickStat(
+                              'Lessons',
+                              '${_getCompletedLessonsCount()}/${_getTotalLessonsCount()}',
+                              Icons.school,
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: 4), // Reduced spacing
+                        Expanded(
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 4),
+                            child: _buildQuickStat(
+                              'Next Lesson',
+                              _getNextLessonDate(),
+                              Icons.schedule,
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuickStat(String label, String value, IconData icon) {
+    return Container(
+      padding: EdgeInsets.symmetric(
+          vertical: 8, horizontal: 4), // Added horizontal padding
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, color: Colors.white, size: 16), // Reduced icon size
+          SizedBox(height: 4),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 12, // Reduced font size
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10, // Reduced font size
+              color: Colors.white.withOpacity(0.8),
+            ),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEnhancedTabBar() {
+    return Container(
+      color: Colors.white,
+      child: TabBar(
+        controller: _tabController,
+        isScrollable: true,
+        labelColor: Colors.blue.shade600,
+        unselectedLabelColor: Colors.grey.shade600,
+        indicatorColor: Colors.blue.shade600,
+        indicatorWeight: 3,
+        labelStyle: TextStyle(fontWeight: FontWeight.w600),
+        tabs: [
+          Tab(
+            icon: Icon(Icons.dashboard),
+            text: 'Overview',
+          ),
+          Tab(
+            icon: Icon(Icons.schedule),
+            text: 'Schedule (${_getUpcomingLessonsCount()})',
+          ),
+          Tab(
+            icon: Icon(Icons.trending_up),
+            text: 'Progress',
+          ),
+          Tab(
+            icon: Icon(Icons.payment),
+            text: 'Billing',
+          ),
+          Tab(
+            icon: Icon(Icons.note),
+            text: 'Notes (${_studentNotes.length})',
+          ),
+          Tab(
+            icon: Icon(Icons.attach_file),
+            text: 'Files (${_studentAttachments.length})',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOverviewTab() {
+    return SingleChildScrollView(
+      padding: EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildPersonalInfoCard(),
+          SizedBox(height: 12),
+          _buildLearningStatsCard(),
+          SizedBox(height: 12),
+          _buildRecentActivityCard(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPersonalInfoCard() {
+    return Card(
+      elevation: 2,
+      margin: EdgeInsets.only(bottom: 12), // Add bottom margin
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: ExpansionTile(
+        leading: Icon(Icons.person, color: Colors.blue.shade600),
+        title: Text(
+          'Personal Information',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Colors.blue.shade800,
+          ),
+        ),
+        initiallyExpanded: true,
+        childrenPadding: EdgeInsets.only(bottom: 12), // Add children padding
+
+        children: [
+          Padding(
+            padding: EdgeInsets.all(16),
+            child: Column(
+              children: [
+                _buildInfoRow(Icons.email, 'Email', student!.email),
+                _buildInfoRow(Icons.phone, 'Phone', student!.phone),
+                _buildInfoRow(Icons.location_on, 'Address', student!.address),
+                _buildInfoRow(Icons.calendar_today, 'Date of Birth',
+                    DateFormat('MMM dd, yyyy').format(student!.date_of_birth)),
+                _buildInfoRow(Icons.wc, 'Gender', student!.gender),
+                _buildInfoRow(Icons.schedule, 'Member Since',
+                    DateFormat('MMM dd, yyyy').format(student!.created_at)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(IconData icon, String label, String value) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: Colors.grey.shade600),
+          SizedBox(width: 16),
+          Expanded(
+            flex: 2,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontWeight: FontWeight.w500,
+                color: Colors.grey.shade700,
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 3,
+            child: Text(
+              value,
+              style: TextStyle(color: Colors.grey.shade800),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLearningStatsCard() {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.analytics, color: Colors.blue.shade600),
+                SizedBox(width: 8),
+                Text(
+                  'Learning Progress',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue.shade800,
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 16),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                // Calculate the available width for metrics
+                final availableWidth = constraints.maxWidth;
+                final isWide = availableWidth > 400;
+
+                return Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildMetricCard(
+                            'Completed Lessons',
+                            _getCompletedLessonsCount().toString(),
+                            Icons.check_circle,
+                            Colors.green,
+                          ),
+                        ),
+                        SizedBox(width: isWide ? 16 : 8),
+                        Expanded(
+                          child: _buildMetricCard(
+                            'Remaining Lessons',
+                            _getRemainingLessonsCount().toString(),
+                            Icons.schedule,
+                            Colors.orange,
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: isWide ? 16 : 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildMetricCard(
+                            'Attendance Rate',
+                            '${_getAttendanceRate()}%',
+                            Icons.person_pin_circle,
+                            Colors.purple,
+                          ),
+                        ),
+                        SizedBox(width: isWide ? 16 : 8),
+                        Expanded(
+                          child: _buildMetricCard(
+                            'Overall Progress',
+                            '${(_getProgressPercentage() * 100).toInt()}%',
+                            Icons.trending_up,
+                            Colors.blue,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMetricCard(
+      String title, String value, IconData icon, Color color) {
+    return Container(
+      padding: EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 28),
+          SizedBox(height: 8),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey.shade600,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRecentActivityCard() {
+    final recentSchedules = scheduleController.schedules
+        .where((s) => s.studentId == widget.studentId)
+        .take(3)
+        .toList();
+
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.history, color: Colors.blue.shade600),
+                SizedBox(width: 8),
+                Text(
+                  'Recent Activity',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue.shade800,
+                  ),
+                ),
+                Spacer(),
+                TextButton(
+                  onPressed: () => _tabController.animateTo(1),
+                  child: Text('View All'),
+                ),
+              ],
+            ),
+            SizedBox(height: 12),
+            if (recentSchedules.isEmpty)
+              Center(
+                child: Padding(
+                  padding: EdgeInsets.all(20),
+                  child: Text(
+                    'No recent activity',
+                    style: TextStyle(color: Colors.grey.shade600),
+                  ),
+                ),
+              )
+            else
+              ...recentSchedules
+                  .map((schedule) => _buildActivityItem(schedule)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActivityItem(schedule) {
+    final instructor = userController.users.firstWhereOrNull(
+      (user) => user.id == schedule.instructorId,
+    );
+
+    return Container(
+      padding: EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: _getScheduleStatusColor(schedule.status),
+            ),
+          ),
+          SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  schedule.classType ?? 'Lesson',
+                  style: TextStyle(fontWeight: FontWeight.w500),
+                ),
+                Text(
+                  'with ${instructor?.fname ?? 'Unknown'} ${instructor?.lname ?? 'Instructor'}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Text(
+            DateFormat('MMM dd').format(schedule.start),
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey.shade600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildScheduleTab() {
+    final studentSchedules = scheduleController.schedules
+        .where((schedule) => schedule.studentId == widget.studentId)
+        .toList();
+
+    return Column(
+      children: [
+        // Search and Filter Bar
+        Container(
+          padding: EdgeInsets.all(16),
+          color: Colors.grey.shade50,
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  decoration: InputDecoration(
+                    hintText: 'Search schedules...',
+                    prefixIcon: Icon(Icons.search),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(25),
+                      borderSide: BorderSide.none,
+                    ),
+                    filled: true,
+                    fillColor: Colors.white,
+                    contentPadding: EdgeInsets.symmetric(horizontal: 16),
+                  ),
+                  onChanged: (value) {
+                    setState(() {});
+                  },
+                ),
+              ),
+              SizedBox(width: 16),
+              PopupMenuButton<String>(
+                icon: Icon(Icons.filter_list),
+                onSelected: (value) {
+                  setState(() {});
+                },
+                itemBuilder: (context) => [
+                  PopupMenuItem(value: 'all', child: Text('All')),
+                  PopupMenuItem(value: 'scheduled', child: Text('Scheduled')),
+                  PopupMenuItem(value: 'completed', child: Text('Completed')),
+                  PopupMenuItem(value: 'cancelled', child: Text('Cancelled')),
+                ],
+              ),
+            ],
+          ),
+        ),
+
+        Expanded(
+          child: studentSchedules.isEmpty
+              ? _buildEmptyState(
+                  'No schedules found',
+                  'This student has no scheduled lessons yet.',
+                  Icons.schedule,
+                )
+              : ListView.builder(
+                  padding: EdgeInsets.all(16),
+                  itemCount: studentSchedules.length,
+                  itemBuilder: (context, index) {
+                    final schedule = studentSchedules[index];
+                    return _buildEnhancedScheduleCard(schedule);
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEnhancedScheduleCard(schedule) {
+    final instructor = userController.users.firstWhereOrNull(
+      (user) => user.id == schedule.instructorId,
+    );
+
+    return Card(
+      elevation: 2,
+      margin: EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => (),
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: _getScheduleStatusColor(schedule.status),
+                    ),
+                  ),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      schedule.classType ?? 'Driving Lesson',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: _getScheduleStatusColor(schedule.status)
+                          .withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      schedule.status,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: _getScheduleStatusColor(schedule.status),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 12),
+              Row(
+                children: [
+                  Icon(Icons.access_time,
+                      size: 16, color: Colors.grey.shade600),
+                  SizedBox(width: 8),
+                  Text(
+                    '${DateFormat.yMd().add_jm().format(schedule.start)} - ${DateFormat.jm().format(schedule.end)}',
+                    style: TextStyle(color: Colors.grey.shade700),
+                  ),
+                ],
+              ),
+              SizedBox(height: 4),
+              Row(
+                children: [
+                  Icon(Icons.person, size: 16, color: Colors.grey.shade600),
+                  SizedBox(width: 8),
+                  Text(
+                    'Instructor: ${instructor?.fname ?? 'Unknown'} ${instructor?.lname ?? 'Instructor'}',
+                    style: TextStyle(color: Colors.grey.shade700),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _navigateToGraduation() {
+    if (student == null) return;
+    Get.find<NavigationController>().openStudentGraduation(student!);
+  }
+
+  final SettingsController settingsController = Get.find<SettingsController>();
+  final LessonCountingService lessonService = LessonCountingService.instance;
+
+  Widget _buildProgressOverviewCard() {
+    final studentInvoices = billingController.invoices
+        .where((invoice) => invoice.studentId == widget.studentId)
+        .toList();
+
+    if (studentInvoices.isEmpty) {
+      return Card(
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Padding(
+          padding: EdgeInsets.all(20),
+          child: Column(
+            children: [
+              Icon(Icons.school_outlined,
+                  size: 64, color: Colors.grey.shade400),
+              SizedBox(height: 16),
+              Text(
+                'No Course Enrollments',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Student is not enrolled in any courses yet.',
+                style: TextStyle(color: Colors.grey.shade500),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Calculate overall progress using centralized service
+    int totalLessons = 0;
+    int totalUsed = 0;
+    int totalAttended = 0;
+    int totalScheduled = 0;
+
+    for (final invoice in studentInvoices) {
+      final stats =
+          lessonService.getLessonUsageStats(widget.studentId, invoice.courseId);
+      totalLessons += stats['total']!;
+      totalUsed += stats['used']!;
+      totalAttended += stats['attended']!;
+      totalScheduled += stats['scheduled']!;
+    }
+
+    final progressPercentage =
+        totalLessons > 0 ? (totalUsed / totalLessons) : 0.0;
+    final attendanceRate = totalScheduled > 0
+        ? ((totalAttended / totalScheduled) * 100).round()
+        : 0;
+
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.trending_up, color: Colors.blue.shade600),
+                SizedBox(width: 8),
+                Text(
+                  'Learning Progress',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue.shade800,
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 24),
+
+            // Progress circle
+            Center(
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  SizedBox(
+                    width: 120,
+                    height: 120,
+                    child: CircularProgressIndicator(
+                      value: progressPercentage,
+                      strokeWidth: 8,
+                      backgroundColor: Colors.grey.shade200,
+                      valueColor:
+                          AlwaysStoppedAnimation<Color>(Colors.blue.shade600),
+                    ),
+                  ),
+                  Column(
+                    children: [
+                      Text(
+                        '${(progressPercentage * 100).toInt()}%',
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue.shade800,
+                        ),
+                      ),
+                      Text(
+                        _getProgressStatus(progressPercentage),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: 24),
+
+            // Statistics row
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildProgressStat('Used', totalUsed.toString(), Colors.blue),
+                _buildProgressStat('Remaining',
+                    (totalLessons - totalUsed).toString(), Colors.orange),
+                _buildProgressStat(
+                    'Attendance', '$attendanceRate%', Colors.purple),
+              ],
+            ),
+
+            SizedBox(height: 16),
+
+            // Settings-aware explanation
+            Container(
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Calculation Method',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue.shade700,
+                    ),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    settingsController.countScheduledLessons.value
+                        ? 'Progress based on scheduled lessons (including future lessons)'
+                        : 'Progress based on attended/completed lessons only',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.blue.shade600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Course breakdown if multiple courses
+            if (studentInvoices.length > 1) ...[
+              SizedBox(height: 24),
+              Divider(),
+              SizedBox(height: 16),
+              Text(
+                'Course Breakdown',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+              SizedBox(height: 16),
+              ...studentInvoices
+                  .map((invoice) => _buildCourseProgressItem(invoice)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCourseProgressItem(invoice) {
+    final course = courseController.courses
+        .firstWhereOrNull((c) => c.id == invoice.courseId);
+
+    final stats =
+        lessonService.getLessonUsageStats(widget.studentId, invoice.courseId);
+    final progressPercentage =
+        stats['total']! > 0 ? (stats['used']! / stats['total']!) : 0.0;
+
+    return Container(
+      margin: EdgeInsets.only(bottom: 12),
+      padding: EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  course?.name ?? 'Unknown Course',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey.shade800,
+                  ),
+                ),
+              ),
+              Text(
+                '${(progressPercentage * 100).toInt()}%',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blue.shade600,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 8),
+          LinearProgressIndicator(
+            value: progressPercentage,
+            backgroundColor: Colors.grey.shade200,
+            valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade600),
+          ),
+          SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '${stats['used']} / ${stats['total']} lessons used',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+              Text(
+                '${stats['remaining']} remaining',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: _getRemainingLessonsColor(stats['remaining']!),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProgressStat(String label, String value, Color color) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+        SizedBox(height: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.grey.shade600,
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _getProgressStatus(double progressPercentage) {
+    if (progressPercentage >= 1.0) {
+      return settingsController.countScheduledLessons.value
+          ? 'Fully Scheduled'
+          : 'Course Complete';
+    } else if (progressPercentage >= 0.8) {
+      return 'Nearly Complete';
+    } else if (progressPercentage >= 0.5) {
+      return 'In Progress';
+    } else if (progressPercentage > 0) {
+      return 'Getting Started';
+    } else {
+      return 'Not Started';
+    }
+  }
+
+  Color _getRemainingLessonsColor(int remaining) {
+    if (remaining <= 0) return Colors.red;
+    if (remaining <= settingsController.lowLessonThreshold.value)
+      return Colors.orange;
+    return Colors.green;
+  }
+
+// UPDATE the _buildProgressTab method if it exists, or ADD it:
+  Widget _buildProgressTab() {
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(16),
+      child: Column(
+        children: [
+          _buildProgressOverviewCard(),
+          SizedBox(height: 16),
+          _buildLessonHistoryCard(),
+        ],
+      ),
+    );
+  }
+
+// KEEP your existing _buildLearningStatsCard method but update the calls:
+// In _buildLearningStatsCard, you can now use the corrected calculation methods
+// The methods above will now return consistent data with your settings
+
+// UPDATE any existing _buildLessonHistoryCard method to use proper filtering:
+  Widget _buildLessonHistoryCard() {
+    final recentLessons = scheduleController.schedules
+        .where((s) =>
+            s.studentId == widget.studentId &&
+            (s.status.toLowerCase() == 'completed' || s.attended))
+        .toList()
+      ..sort((a, b) => b.start.compareTo(a.start)) // Most recent first
+      ..take(5).toList();
+
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.history, color: Colors.green.shade600),
+                SizedBox(width: 8),
+                Text(
+                  'Recent Lessons',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green.shade800,
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 16),
+            if (recentLessons.isEmpty)
+              _buildEmptyState(
+                'No Completed Lessons',
+                'This student hasn\'t completed any lessons yet.',
+                Icons.schedule,
+              )
+            else
+              ...recentLessons.map((lesson) => _buildLessonHistoryItem(lesson)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLessonHistoryItem(lesson) {
+    final instructor = userController.users.firstWhereOrNull(
+      (user) => user.id == lesson.instructorId,
+    );
+
+    return Container(
+      padding: EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: Colors.grey.shade200),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: Colors.green.shade100,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              Icons.check_circle,
+              color: Colors.green.shade600,
+              size: 20,
+            ),
+          ),
+          SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  lesson.classType ?? 'Driving Lesson',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey.shade800,
+                  ),
+                ),
+                Text(
+                  'with ${instructor?.fname ?? 'Unknown'} ${instructor?.lname ?? 'Instructor'}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                DateFormat('MMM dd').format(lesson.start),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+              Text(
+                '${lesson.lessonsDeducted ?? 1} lesson${lesson.lessonsDeducted == 1 ? '' : 's'}',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBillingTab() {
+    final studentInvoices = billingController.invoices
+        .where((invoice) => invoice.studentId == widget.studentId)
+        .toList();
+
+    final totalBalance = studentInvoices.fold<double>(
+        0.0, (sum, invoice) => sum + invoice.balance);
+    final totalPaid = studentInvoices.fold<double>(
+        0.0,
+        (sum, invoice) =>
+            sum + (invoice.totalAmountCalculated - invoice.balance));
+    final totalAmount = studentInvoices.fold<double>(
+        0.0, (sum, invoice) => sum + invoice.totalAmountCalculated);
+
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Billing Summary
+          Card(
+            elevation: 2,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: Padding(
+              padding: EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.account_balance_wallet,
+                          color: Colors.blue.shade600),
+                      SizedBox(width: 8),
+                      Text(
+                        'Billing Summary',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue.shade800,
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 20),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final isWide = constraints.maxWidth > 400;
+
+                      return Column(
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _buildBillingSummaryItem(
+                                  'Total Amount',
+                                  '\$${totalAmount.toStringAsFixed(2)}',
+                                  Colors.blue,
+                                  Icons.receipt_long,
+                                ),
+                              ),
+                              SizedBox(width: isWide ? 16 : 8),
+                              Expanded(
+                                child: _buildBillingSummaryItem(
+                                  'Paid',
+                                  '\$${totalPaid.toStringAsFixed(2)}',
+                                  Colors.green,
+                                  Icons.check_circle,
+                                ),
+                              ),
+                            ],
+                          ),
+                          SizedBox(height: isWide ? 16 : 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _buildBillingSummaryItem(
+                                  'Outstanding',
+                                  '\$${totalBalance.toStringAsFixed(2)}',
+                                  totalBalance > 0 ? Colors.red : Colors.green,
+                                  totalBalance > 0
+                                      ? Icons.warning
+                                      : Icons.check_circle,
+                                ),
+                              ),
+                              SizedBox(width: isWide ? 16 : 8),
+                              Expanded(
+                                child: Container(
+                                  padding: EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.shade50,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      CircularProgressIndicator(
+                                        value: totalAmount > 0
+                                            ? totalPaid / totalAmount
+                                            : 0,
+                                        backgroundColor: Colors.grey.shade300,
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                                Colors.blue.shade600),
+                                      ),
+                                      SizedBox(height: 8),
+                                      Text(
+                                        '${totalAmount > 0 ? ((totalPaid / totalAmount) * 100).toInt() : 0}%',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.blue.shade800,
+                                        ),
+                                      ),
+                                      Text(
+                                        'Paid',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey.shade600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          SizedBox(height: 16),
+
+          // Payment Reminder
+          if (totalBalance > 0)
+            Card(
+              elevation: 2,
+              color: Colors.red.shade50,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+              child: Padding(
+                padding: EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Icon(Icons.warning, color: Colors.red.shade600),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Payment Reminder',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.red.shade800,
+                            ),
+                          ),
+                          Text(
+                            'Outstanding balance of \$${totalBalance.toStringAsFixed(2)} needs to be cleared.',
+                            style: TextStyle(color: Colors.red.shade700),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+          if (totalBalance > 0) SizedBox(height: 16),
+
+          // Invoice Details
+          Card(
+            elevation: 2,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.receipt, color: Colors.blue.shade600),
+                      SizedBox(width: 8),
+                      Text(
+                        'Invoice Details',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue.shade800,
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 16),
+                  if (studentInvoices.isEmpty)
+                    Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(20),
+                        child: Text(
+                          'No invoices found',
+                          style: TextStyle(color: Colors.grey.shade600),
+                        ),
+                      ),
+                    )
+                  else
+                    ...studentInvoices
+                        .map((invoice) => _buildInvoiceItem(invoice)),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBillingSummaryItem(
+      String label, String value, Color color, IconData icon) {
+    return Container(
+      padding: EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 28),
+          SizedBox(height: 8),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey.shade600,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInvoiceItem(invoice) {
+    final course = courseController.courses.firstWhereOrNull(
+      (c) => c.id == invoice.courseId,
+    );
+
+    return Container(
+      margin: EdgeInsets.only(bottom: 12),
+      padding: EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade200),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                course?.name ?? 'Unknown Course',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey.shade800,
+                ),
+              ),
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: invoice.balance > 0
+                      ? Colors.red.shade100
+                      : Colors.green.shade100,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  invoice.balance > 0 ? 'Pending' : 'Paid',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: invoice.balance > 0
+                        ? Colors.red.shade800
+                        : Colors.green.shade800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Total Amount:',
+                  style: TextStyle(color: Colors.grey.shade600)),
+              Text('\$${invoice.totalAmountCalculated.toStringAsFixed(2)}',
+                  style: TextStyle(fontWeight: FontWeight.w500)),
+            ],
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Balance:', style: TextStyle(color: Colors.grey.shade600)),
+              Text('\$${invoice.balance.toStringAsFixed(2)}',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w500,
+                    color: invoice.balance > 0 ? Colors.red : Colors.green,
+                  )),
+            ],
+          ),
+          SizedBox(height: 8),
+          LinearProgressIndicator(
+            value: invoice.totalAmountCalculated > 0
+                ? (invoice.totalAmountCalculated - invoice.balance) /
+                    invoice.totalAmountCalculated
+                : 0,
+            backgroundColor: Colors.grey.shade200,
+            valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade600),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNotesTab() {
+    return Column(
+      children: [
+        // Add Note Section
+        Container(
+          padding: EdgeInsets.all(16),
+          color: Colors.grey.shade50,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Add New Note',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blue.shade800,
+                ),
+              ),
+              SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _noteController,
+                      decoration: InputDecoration(
+                        hintText: 'Enter your note here...',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                        filled: true,
+                        fillColor: Colors.white,
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                      ),
+                      maxLines: 2,
+                    ),
+                  ),
+                  SizedBox(width: 12),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade600,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: IconButton(
+                      icon: Icon(Icons.send, color: Colors.white),
+                      onPressed: _addNote,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+
+        // Notes List
+        Expanded(
+          child: _studentNotes.isEmpty
+              ? _buildEmptyState(
+                  'No notes yet',
+                  'Add your first note about this student.',
+                  Icons.note_add,
+                )
+              : ListView.builder(
+                  padding: EdgeInsets.all(16),
+                  itemCount: _studentNotes.length,
+                  itemBuilder: (context, index) {
+                    final note = _studentNotes[index];
+                    return _buildNoteCard(note);
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildNoteCard(Map<String, dynamic> note) {
+    return Card(
+      elevation: 2,
+      margin: EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade100,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Icon(
+                    Icons.note,
+                    color: Colors.blue.shade600,
+                    size: 20,
+                  ),
+                ),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        note['note'],
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue.shade800,
+                        ),
+                      ),
+                      Text(
+                        DateFormat('MMM dd, yyyy • hh:mm a').format(
+                          DateTime.parse(note['created_at']),
+                        ),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                PopupMenuButton(
+                  icon: Icon(Icons.more_vert, color: Colors.grey.shade600),
+                  itemBuilder: (context) => [
+                    PopupMenuItem(
+                      value: 'edit',
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit, size: 16),
+                          SizedBox(width: 8),
+                          Text('Edit'),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete, size: 16, color: Colors.red),
+                          SizedBox(width: 8),
+                          Text('Delete', style: TextStyle(color: Colors.red)),
+                        ],
+                      ),
+                    ),
+                  ],
+                  onSelected: (value) {
+                    if (value == 'delete') {
+                      _deleteNote(note['id']);
+                    } else if (value == 'edit') {
+                      _editNote(note);
+                    }
+                  },
+                ),
+              ],
+            ),
+            SizedBox(height: 12),
+            Text(
+              note['content'] ?? '',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey.shade800,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAttachmentsTab() {
+    return Column(
+      children: [
+        // Upload Section
+        Container(
+          padding: EdgeInsets.all(16),
+          color: Colors.grey.shade50,
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Attachments (${_studentAttachments.length})',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue.shade800,
+                  ),
+                ),
+              ),
+              ElevatedButton.icon(
+                onPressed: _uploadFile,
+                icon: Icon(Icons.upload_file, size: 16),
+                label: Text('Upload'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue.shade600,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Attachments List
+        Expanded(
+          child: _studentAttachments.isEmpty
+              ? _buildEmptyState(
+                  'No attachments',
+                  'Upload documents, images, or other files.',
+                  Icons.attach_file,
+                )
+              : ListView.builder(
+                  padding: EdgeInsets.all(16),
+                  itemCount: _studentAttachments.length,
+                  itemBuilder: (context, index) {
+                    final attachment = _studentAttachments[index];
+                    return _buildAttachmentCard(attachment);
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAttachmentCard(Map<String, dynamic> attachment) {
+    final fileName = attachment['file_name'] ?? 'Unknown File';
+    final fileExtension = fileName.split('.').last.toLowerCase();
+
+    return Card(
+      elevation: 2,
+      margin: EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: ListTile(
+        leading: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: _getFileTypeColor(fileExtension).withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(
+            _getFileTypeIcon(fileExtension),
+            color: _getFileTypeColor(fileExtension),
+          ),
+        ),
+        title: Text(
+          fileName,
+          style: TextStyle(fontWeight: FontWeight.w500),
+        ),
+        subtitle: Text(
+          'Uploaded on ${DateFormat('MMM dd, yyyy').format(
+            DateTime.parse(attachment['created_at']),
+          )}',
+          style: TextStyle(fontSize: 12),
+        ),
+        trailing: PopupMenuButton(
+          itemBuilder: (context) => [
+            PopupMenuItem(
+              value: 'download',
+              child: Row(
+                children: [
+                  Icon(Icons.download, size: 16),
+                  SizedBox(width: 8),
+                  Text('Download'),
+                ],
+              ),
+            ),
+            PopupMenuItem(
+              value: 'delete',
+              child: Row(
+                children: [
+                  Icon(Icons.delete, size: 16, color: Colors.red),
+                  SizedBox(width: 8),
+                  Text('Delete', style: TextStyle(color: Colors.red)),
+                ],
+              ),
+            ),
+          ],
+          onSelected: (value) {
+            if (value == 'download') {
+              _downloadFile(attachment);
+            } else if (value == 'delete') {
+              _deleteAttachment(attachment['id']);
+            }
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(String title, String subtitle, IconData icon) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            icon,
+            size: 64,
+            color: Colors.grey.shade400,
+          ),
+          SizedBox(height: 16),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey.shade600,
+            ),
+          ),
+          SizedBox(height: 8),
+          Text(
+            subtitle,
+            style: TextStyle(color: Colors.grey.shade500),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Helper methods for calculations
+  double _getProgressPercentage() {
+    final studentInvoices = billingController.invoices
+        .where((invoice) => invoice.studentId == widget.studentId)
+        .toList();
+
+    if (studentInvoices.isEmpty) return 0.0;
+
+    int totalLessons = 0;
+    int totalUsed = 0;
+
+    for (final invoice in studentInvoices) {
+      final stats =
+          lessonService.getLessonUsageStats(widget.studentId, invoice.courseId);
+      totalLessons += stats['total']!;
+      totalUsed += stats['used']!;
+    }
+
+    return totalLessons > 0 ? (totalUsed / totalLessons) : 0.0;
+  }
+
+  int _getCompletedLessonsCount() {
+    return scheduleController.schedules
+        .where((s) =>
+            s.studentId == widget.studentId &&
+            s.status.toLowerCase() == 'completed')
+        .fold<int>(0, (sum, s) => sum + (s.lessonsDeducted));
+  }
+
+  int _getTotalLessonsCount() {
+    final studentInvoices = billingController.invoices
+        .where((invoice) => invoice.studentId == widget.studentId)
+        .toList();
+
+    return studentInvoices.fold<int>(
+        0, (sum, invoice) => sum + invoice.lessons);
+  }
+
+  int _getRemainingLessonsCount() {
+    return _getTotalLessonsCount() - _getCompletedLessonsCount();
+  }
+
+  int _getAttendanceRate() {
+    final totalScheduled = scheduleController.schedules
+        .where((s) => s.studentId == widget.studentId)
+        .length;
+
+    if (totalScheduled == 0) return 100;
+
+    final attended = scheduleController.schedules
+        .where((s) => s.studentId == widget.studentId && s.attended == true)
+        .length;
+
+    return ((attended / totalScheduled) * 100).round();
+  }
+
+  int _getUpcomingLessonsCount() {
+    final now = DateTime.now();
+    return scheduleController.schedules
+        .where((s) => s.studentId == widget.studentId && s.start.isAfter(now))
+        .length;
+  }
+
+  String _getNextLessonDate() {
+    final now = DateTime.now();
+    final nextLesson = scheduleController.schedules
+        .where((s) => s.studentId == widget.studentId && s.start.isAfter(now))
+        .fold<DateTime?>(null, (earliest, s) {
+      if (earliest == null || s.start.isBefore(earliest)) {
+        return s.start;
+      }
+      return earliest;
+    });
+
+    if (nextLesson == null) return '0';
+
+    final difference = nextLesson.difference(now).inDays;
+    if (difference == 0) return 'Today';
+    if (difference == 1) return 'Tomorrow';
+    return DateFormat('MMM dd').format(nextLesson);
+  }
+
+  Color _getScheduleStatusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'completed':
+        return Colors.green;
+      case 'scheduled':
+        return Colors.blue;
+      case 'cancelled':
+        return Colors.red;
+      case 'in_progress':
+        return Colors.orange;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  IconData _getFileTypeIcon(String extension) {
+    switch (extension) {
+      case 'pdf':
+        return Icons.picture_as_pdf;
+      case 'doc':
+      case 'docx':
+        return Icons.description;
+      case 'jpg':
+      case 'jpeg':
+      case 'png':
+        return Icons.image;
+      case 'xls':
+      case 'xlsx':
+        return Icons.table_chart;
+      default:
+        return Icons.insert_drive_file;
+    }
+  }
+
+  Color _getFileTypeColor(String extension) {
+    switch (extension) {
+      case 'pdf':
+        return Colors.red;
+      case 'doc':
+      case 'docx':
+        return Colors.blue;
+      case 'jpg':
+      case 'jpeg':
+        return Colors.green;
+      case 'png':
+        return Colors.green;
+      case 'xls':
+      case 'xlsx':
+        return Colors.orange;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  // Action methods
+  void _showOptionsMenu() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Container(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (student?.role == 'student') // Only show for active students
+              ListTile(
+                leading: Icon(Icons.grade, color: Colors.blue),
+                title: Text('Graduate', style: TextStyle(color: Colors.blue)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _navigateToGraduation();
+                },
+              ),
+            // ListTile(
+            //   leading: Icon(Icons.delete, color: Colors.red),
+            //   title:
+            //       Text('Delete Student', style: TextStyle(color: Colors.red)),
+            //   onTap: () {
+            //     Navigator.pop(context);
+            //     _confirmDelete();
+            //   },
+            // ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _confirmDelete() {
+    // Show delete confirmation dialog
+    Get.dialog(
+      AlertDialog(
+        title: Text('Delete Student'),
+        content: Text(
+            'Are you sure you want to delete this student? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back(),
+            child: Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Get.back();
+              _deleteStudent();
+            },
+            child: Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _deleteStudent() {
+    // Delete student logic
+    Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM, 'Info', 'Student deleted');
+  }
+
+  void _uploadFile() async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles();
+      if (result != null) {
+        // Handle file upload
+        Get.snackbar(
+            snackPosition: SnackPosition.BOTTOM,
+            'Success',
+            'File uploaded successfully');
+        await _fetchStudentAttachments();
+      }
+    } catch (e) {
+      Get.snackbar(
+          snackPosition: SnackPosition.BOTTOM,
+          'Error',
+          'Failed to upload file');
+    }
+  }
+
+  void _downloadFile(Map<String, dynamic> attachment) {
+    // Download file logic
+    Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM,
+        'Info',
+        'Downloading ${attachment['file_name']}');
+  }
+
+  void _deleteAttachment(int attachmentId) {
+    // Delete attachment logic
+    Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM, 'Info', 'Attachment deleted');
+  }
+
+  void _editNote(Map<String, dynamic> note) {
+    // Edit note logic
+    Get.snackbar(
+        snackPosition: SnackPosition.BOTTOM, 'Info', 'Edit note functionality');
+  }
+
+  void _deleteNote(int noteId) {
+    // Delete note logic
+    Get.snackbar(snackPosition: SnackPosition.BOTTOM, 'Info', 'Note deleted');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: _isLoading
+          ? _buildLoadingState()
+          : student == null
+              ? _buildErrorState()
+              : NestedScrollView(
+                  physics: ClampingScrollPhysics(),
+                  headerSliverBuilder:
+                      (BuildContext context, bool innerBoxIsScrolled) {
+                    return <Widget>[
+                      SliverAppBar(
+                        expandedHeight: 250.0,
+                        floating: false,
+                        pinned: false,
+                        flexibleSpace: FlexibleSpaceBar(
+                          background: _buildEnhancedHeader(),
+                        ),
+                      ),
+                      SliverPersistentHeader(
+                        pinned: true,
+                        delegate: _SliverAppBarDelegate(
+                          child: _buildEnhancedTabBar(),
+                        ),
+                      ),
+                    ];
+                  },
+                  body: Container(
+                    padding: EdgeInsets.only(bottom: 12), // Add bottom padding
+                    child: TabBarView(
+                      controller: _tabController,
+                      children: [
+                        _buildOverviewTab(),
+                        _buildScheduleTab(),
+                        _buildProgressTab(),
+                        _buildBillingTab(),
+                        _buildNotesTab(),
+                        _buildAttachmentsTab(),
+                      ],
+                    ),
+                  ),
+                ),
+    );
+  }
+}
+
+class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
+  final Widget child;
+
+  _SliverAppBarDelegate({required this.child});
+
+  @override
+  double get minExtent => 60.0;
+
+  @override
+  double get maxExtent => 60.0;
+
+  @override
+  Widget build(
+      BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return Container(
+      color: Colors.white,
+      child: child,
+    );
+  }
+
+  @override
+  bool shouldRebuild(_SliverAppBarDelegate oldDelegate) {
+    return oldDelegate.child != child;
+  }
+}
